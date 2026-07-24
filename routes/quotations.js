@@ -4,7 +4,7 @@ const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
 const { createTransfer } = require('../lib/transfers');
-const { feeFor, buildRentalLines, revalidateQuoteLines, insertPendingAgreement } = require('../lib/rentals');
+const { feeFor, buildRentalLines, revalidateQuoteLines, insertPendingAgreement, assertRentalCustomerEligible } = require('../lib/rentals');
 
 router.use(requirePermission('quotations'));
 
@@ -495,6 +495,13 @@ router.post('/:id/convert', async (req, res) => {
       if (!targetBranchId) return res.status(400).json({ error: 'A branch/location is required to convert this rental quote' });
       if (!quote.due_date) return res.status(400).json({ error: 'This rental quote has no due date set' });
       if (!quote.customer_id) return res.status(400).json({ error: 'A customer is required to convert this rental quote' });
+
+      // Only gates converting to a real agreement — the quote itself (and any
+      // already-converted agreement) is untouched by this rule.
+      try {
+        const { rows: [customer] } = await db.execute({ sql: 'SELECT * FROM customers WHERE id = ?', args: [quote.customer_id] });
+        assertRentalCustomerEligible(customer);
+      } catch(e) { return res.status(400).json({ error: e.message }); }
 
       // Stock may have shifted since the quote was drafted — re-check now.
       // Unlike retail, rentals have no PR/purchase fallback for an

@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
 const { getOutstandingQty } = require('../lib/rentalAvailability');
-const { getBranchStock, feeFor, buildRentalLines, insertPendingAgreement } = require('../lib/rentals');
+const { getBranchStock, feeFor, buildRentalLines, insertPendingAgreement, assertRentalCustomerEligible } = require('../lib/rentals');
 const { requirePermission, requireAnyPermission } = require('../lib/permissions');
 const { runCreditCheck } = require('./customers');
 const { nextNumber } = require('../lib/nextNumber');
@@ -114,6 +114,12 @@ router.post('/agreements', requirePermission('rentals_checkout'), async (req, re
     if (!branch_id) return res.status(400).json({ error: 'A branch/location is required for rental checkout' });
     if (!due_date) return res.status(400).json({ error: 'Due date is required' });
     if (!items || !items.length) return res.status(400).json({ error: 'At least one rental item is required' });
+
+    // Only gates the creation of NEW agreements — existing ones are untouched.
+    try {
+      const { rows: [customer] } = await db.execute({ sql: 'SELECT * FROM customers WHERE id = ?', args: [customer_id] });
+      assertRentalCustomerEligible(customer);
+    } catch(e) { return res.status(400).json({ error: e.message }); }
 
     let lines;
     try {

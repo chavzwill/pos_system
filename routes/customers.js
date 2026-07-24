@@ -3,6 +3,16 @@ const router = express.Router();
 const { db } = require('../database');
 const { requireAuth, requirePermission } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
+const multer = require('multer');
+const path = require('path');
+const fs = require('fs');
+const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
+
+const upload = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 5 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => cb(null, /^image\//.test(file.mimetype)),
+});
 
 // Check if a credit customer has exceeded their payment terms and block/unblock accordingly
 async function runCreditCheck(customerId) {
@@ -102,7 +112,11 @@ router.get('/:id/transactions', requireAuth, async (req, res) => {
 });
 
 router.post('/', requirePermission('customers'), async (req, res) => {
-  const { first_name, last_name, email, phone, address, city, state, zip, notes, customer_type, credit_terms_days, credit_limit, tax_exempt, tax_exemption_number } = req.body;
+  const {
+    first_name, last_name, email, phone, address, city, state, zip, notes, customer_type, credit_terms_days, credit_limit, tax_exempt, tax_exemption_number,
+    is_rental_customer, rental_id_type, rental_id_number, rental_address_proof_type, rental_address_proof_details,
+    rental_reference_name, rental_reference_phone, rental_reference_relationship,
+  } = req.body;
   if (!first_name || !last_name) return res.status(400).json({ error: 'First and last name required' });
   try {
     const customer_number = await nextNumber(db, 'customers', 'customer_number', 'CUST-', 4);
@@ -111,7 +125,14 @@ router.post('/', requirePermission('customers'), async (req, res) => {
     const terms = parseInt(credit_terms_days) || 30;
     const limit = parseFloat(credit_limit) || 0;
     const taxExempt = tax_exempt ? 1 : 0;
-    const result = await db.execute({ sql: `INSERT INTO customers (customer_number,first_name,last_name,email,phone,address,city,state,zip,notes,customer_type,credit_terms_days,credit_limit,credit_enabled,tax_exempt,tax_exemption_number) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [customer_number, first_name, last_name, email||null, phone||null, address||null, city||null, state||null, zip||null, notes||null, type, terms, limit, creditEnabled, taxExempt, tax_exemption_number||null] });
+    const isRentalCust = is_rental_customer ? 1 : 0;
+    const result = await db.execute({ sql: `INSERT INTO customers
+      (customer_number,first_name,last_name,email,phone,address,city,state,zip,notes,customer_type,credit_terms_days,credit_limit,credit_enabled,tax_exempt,tax_exemption_number,
+       is_rental_customer,rental_id_type,rental_id_number,rental_address_proof_type,rental_address_proof_details,rental_reference_name,rental_reference_phone,rental_reference_relationship)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+      args: [customer_number, first_name, last_name, email||null, phone||null, address||null, city||null, state||null, zip||null, notes||null, type, terms, limit, creditEnabled, taxExempt, tax_exemption_number||null,
+        isRentalCust, isRentalCust ? (rental_id_type||null) : null, isRentalCust ? (rental_id_number||null) : null, isRentalCust ? (rental_address_proof_type||null) : null, isRentalCust ? (rental_address_proof_details||null) : null,
+        isRentalCust ? (rental_reference_name||null) : null, isRentalCust ? (rental_reference_phone||null) : null, isRentalCust ? (rental_reference_relationship||null) : null] });
     const { rows: [row] } = await db.execute({ sql: 'SELECT * FROM customers WHERE id = ?', args: [Number(result.lastInsertRowid)] });
     res.status(201).json(row);
   } catch (e) {
@@ -120,14 +141,23 @@ router.post('/', requirePermission('customers'), async (req, res) => {
 });
 
 router.put('/:id', requirePermission('customers'), async (req, res) => {
-  const { first_name, last_name, email, phone, address, city, state, zip, notes, active, customer_type, credit_terms_days, credit_limit, tax_exempt, tax_exemption_number } = req.body;
+  const {
+    first_name, last_name, email, phone, address, city, state, zip, notes, active, customer_type, credit_terms_days, credit_limit, tax_exempt, tax_exemption_number,
+    is_rental_customer, rental_id_type, rental_id_number, rental_address_proof_type, rental_address_proof_details,
+    rental_reference_name, rental_reference_phone, rental_reference_relationship,
+  } = req.body;
   try {
     const type = customer_type || 'cash';
     const creditEnabled = type === 'credit' ? 1 : 0;
     const terms = parseInt(credit_terms_days) || 30;
     const limit = parseFloat(credit_limit) || 0;
     const taxExempt = tax_exempt ? 1 : 0;
-    await db.execute({ sql: `UPDATE customers SET first_name=?,last_name=?,email=?,phone=?,address=?,city=?,state=?,zip=?,notes=?,active=?,customer_type=?,credit_terms_days=?,credit_limit=?,credit_enabled=?,tax_exempt=?,tax_exemption_number=? WHERE id=?`, args: [first_name, last_name, email||null, phone||null, address||null, city||null, state||null, zip||null, notes||null, active??1, type, terms, limit, creditEnabled, taxExempt, tax_exemption_number||null, req.params.id] });
+    const isRentalCust = is_rental_customer ? 1 : 0;
+    await db.execute({ sql: `UPDATE customers SET first_name=?,last_name=?,email=?,phone=?,address=?,city=?,state=?,zip=?,notes=?,active=?,customer_type=?,credit_terms_days=?,credit_limit=?,credit_enabled=?,tax_exempt=?,tax_exemption_number=?,
+      is_rental_customer=?,rental_id_type=?,rental_id_number=?,rental_address_proof_type=?,rental_address_proof_details=?,rental_reference_name=?,rental_reference_phone=?,rental_reference_relationship=? WHERE id=?`,
+      args: [first_name, last_name, email||null, phone||null, address||null, city||null, state||null, zip||null, notes||null, active??1, type, terms, limit, creditEnabled, taxExempt, tax_exemption_number||null,
+        isRentalCust, isRentalCust ? (rental_id_type||null) : null, isRentalCust ? (rental_id_number||null) : null, isRentalCust ? (rental_address_proof_type||null) : null, isRentalCust ? (rental_address_proof_details||null) : null,
+        isRentalCust ? (rental_reference_name||null) : null, isRentalCust ? (rental_reference_phone||null) : null, isRentalCust ? (rental_reference_relationship||null) : null, req.params.id] });
     if (type === 'cash') {
       await db.execute({ sql: 'UPDATE customers SET account_blocked = 0 WHERE id = ?', args: [req.params.id] });
     } else {
@@ -141,6 +171,63 @@ router.put('/:id', requirePermission('customers'), async (req, res) => {
 router.delete('/:id', requirePermission('customers'), async (req, res) => {
   try {
     await db.execute({ sql: 'UPDATE customers SET active = 0 WHERE id = ?', args: [req.params.id] });
+    res.json({ success: true });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// POST upload rental customer's ID scan — same Cloudinary-or-local fallback
+// pattern as product images (see routes/products.js POST /:id/image).
+router.post('/:id/id-scan', requirePermission('customers'), upload.single('id_scan'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
+  try {
+    const { rows: [existing] } = await db.execute({ sql: 'SELECT rental_id_scan_path FROM customers WHERE id = ?', args: [req.params.id] });
+    if (existing?.rental_id_scan_path) {
+      if (existing.rental_id_scan_path.startsWith('https://')) {
+        await cloudDestroy(existing.rental_id_scan_path);
+      } else {
+        const old = path.join(__dirname, '..', existing.rental_id_scan_path);
+        if (fs.existsSync(old)) fs.unlinkSync(old);
+      }
+    }
+
+    const result = await cloudUpload(req.file.buffer, {
+      folder: 'pos-system/customer-ids',
+      public_id: `customer-${req.params.id}`,
+      overwrite: true,
+      resource_type: 'image',
+    });
+
+    let scanPath;
+    if (result) {
+      scanPath = result.secure_url;
+    } else {
+      // Cloudinary not configured — save locally
+      const dir = path.join(__dirname, '../uploads/customer-ids');
+      fs.mkdirSync(dir, { recursive: true });
+      const ext = path.extname(req.file.originalname).toLowerCase();
+      const filename = `customer-${req.params.id}-${Date.now()}${ext}`;
+      fs.writeFileSync(path.join(dir, filename), req.file.buffer);
+      scanPath = `/uploads/customer-ids/${filename}`;
+    }
+
+    await db.execute({ sql: 'UPDATE customers SET rental_id_scan_path = ? WHERE id = ?', args: [scanPath, req.params.id] });
+    res.json({ rental_id_scan_path: scanPath });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// DELETE rental customer's ID scan
+router.delete('/:id/id-scan', requirePermission('customers'), async (req, res) => {
+  try {
+    const { rows: [customer] } = await db.execute({ sql: 'SELECT rental_id_scan_path FROM customers WHERE id = ?', args: [req.params.id] });
+    if (customer?.rental_id_scan_path) {
+      if (customer.rental_id_scan_path.startsWith('https://')) {
+        await cloudDestroy(customer.rental_id_scan_path);
+      } else {
+        const filePath = path.join(__dirname, '..', customer.rental_id_scan_path);
+        if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
+      }
+      await db.execute({ sql: 'UPDATE customers SET rental_id_scan_path = NULL WHERE id = ?', args: [req.params.id] });
+    }
     res.json({ success: true });
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

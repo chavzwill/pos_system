@@ -5887,6 +5887,7 @@ const App = {
     const c = id ? await this.api('GET', `/customers/${id}`) : {};
     const isCredit = (c.customer_type || 'cash') === 'credit';
     const isTaxExempt = c.tax_exempt ? true : false;
+    const isRentalCust = c.is_rental_customer ? true : false;
     this.showModal(`
       <div class="modal">
         <div class="modal-header"><span class="modal-title">${id ? 'Edit Customer' : 'Add Customer'}</span><button class="modal-close">✕</button></div>
@@ -5929,6 +5930,52 @@ const App = {
               <div class="form-group"><label>Tax Exemption Reference #</label><input id="cf-tax-ref" value="${c.tax_exemption_number||''}" placeholder="e.g. EX-123456"></div>
             </div>
           </div>
+          <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
+            <label style="display:flex;align-items:center;gap:4px;font-weight:600;cursor:pointer">
+              Rental Customer
+              <input type="checkbox" id="cf-rental-customer" ${isRentalCust?'checked':''} onchange="App.toggleRentalCustomerFields()" style="margin:0">
+            </label>
+            <p style="font-size:11px;color:var(--text-muted);margin:2px 0 0">Required for anyone renting equipment — a valid photo ID, proof of address, and a reference on file.</p>
+            <div id="cf-rental-customer-fields" style="display:${isRentalCust?'block':'none'};margin-top:10px">
+              <strong style="font-size:12px;color:var(--text-muted);text-transform:uppercase">Photo ID</strong>
+              <div class="input-row" style="margin-top:6px">
+                <div class="form-group"><label>ID Type</label>
+                  <select id="cf-id-type">
+                    <option value="">-- Select --</option>
+                    ${['Driver\'s License','Passport','National ID','Voter ID','Other'].map(t => `<option value="${t}" ${c.rental_id_type===t?'selected':''}>${t}</option>`).join('')}
+                  </select>
+                </div>
+                <div class="form-group"><label>ID Number</label><input id="cf-id-number" value="${c.rental_id_number||''}"></div>
+              </div>
+              ${id ? `<div class="form-group" style="margin-top:4px"><label>ID Scan</label>
+                <div style="display:flex;align-items:center;gap:10px;margin-top:4px">
+                  ${c.rental_id_scan_path ? `<img src="${c.rental_id_scan_path}" class="prod-img-thumb" id="cf-id-scan-preview" alt="">` : `<div class="prod-img-placeholder" id="cf-id-scan-preview" onclick="document.getElementById('cf-id-scan-input').click()">📷</div>`}
+                  <div>
+                    <label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0">Upload Scan<input type="file" id="cf-id-scan-input" accept="image/*" style="display:none" onchange="App.uploadCustomerIdScan(${id},this)"></label>
+                    ${c.rental_id_scan_path ? `<button class="btn btn-danger btn-sm" style="margin-left:6px" onclick="App.deleteCustomerIdScan(${id})">Remove</button>` : ''}
+                  </div>
+                </div>
+              </div>` : `<p style="font-size:11px;color:var(--text-muted);margin-top:6px">Save the customer first to upload an ID scan.</p>`}
+              <hr style="margin:12px 0">
+              <strong style="font-size:12px;color:var(--text-muted);text-transform:uppercase">Proof of Address</strong>
+              <div class="input-row" style="margin-top:6px">
+                <div class="form-group"><label>Document Type</label>
+                  <select id="cf-address-proof-type">
+                    <option value="">-- Select --</option>
+                    ${['Utility Bill','Bank Statement','Lease Agreement','Government Letter','Other'].map(t => `<option value="${t}" ${c.rental_address_proof_type===t?'selected':''}>${t}</option>`).join('')}
+                  </select>
+                </div>
+                <div class="form-group"><label>Details</label><input id="cf-address-proof-details" value="${c.rental_address_proof_details||''}" placeholder="e.g. account #, statement date"></div>
+              </div>
+              <hr style="margin:12px 0">
+              <strong style="font-size:12px;color:var(--text-muted);text-transform:uppercase">Reference</strong>
+              <div class="input-row" style="margin-top:6px">
+                <div class="form-group"><label>Name</label><input id="cf-ref-name" value="${c.rental_reference_name||''}"></div>
+                <div class="form-group"><label>Phone</label><input id="cf-ref-phone" value="${c.rental_reference_phone||''}"></div>
+              </div>
+              <div class="form-group"><label>Relationship</label><input id="cf-ref-relationship" value="${c.rental_reference_relationship||''}" placeholder="e.g. Employer, Family, Friend"></div>
+            </div>
+          </div>
         </div>
         <div class="modal-footer">
           ${id ? `<button class="btn btn-danger" onclick="App.deleteCustomer(${id})">Delete</button>` : ''}
@@ -5950,9 +5997,38 @@ const App = {
     if (panel) panel.style.display = checked ? 'block' : 'none';
   },
 
+  toggleRentalCustomerFields() {
+    const checked = document.getElementById('cf-rental-customer')?.checked;
+    const panel = document.getElementById('cf-rental-customer-fields');
+    if (panel) panel.style.display = checked ? 'block' : 'none';
+  },
+
+  async uploadCustomerIdScan(customerId, input) {
+    const file = input.files[0];
+    if (!file) return;
+    const fd = new FormData();
+    fd.append('id_scan', file);
+    try {
+      const res = await fetch(`/api/customers/${customerId}/id-scan`, { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Upload failed');
+      this.alert('ID scan uploaded');
+      this.showCustomerForm(customerId);
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  async deleteCustomerIdScan(customerId) {
+    if (!confirm('Remove this ID scan?')) return;
+    try {
+      await this.api('DELETE', `/customers/${customerId}/id-scan`);
+      this.showCustomerForm(customerId);
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
   async saveCustomer(id) {
     const customerType = document.getElementById('cf-type')?.value || 'cash';
     const taxExempt = document.getElementById('cf-tax-exempt')?.checked ? 1 : 0;
+    const isRentalCustomer = document.getElementById('cf-rental-customer')?.checked ? 1 : 0;
     const data = {
       first_name: document.getElementById('cf-first').value.trim(),
       last_name: document.getElementById('cf-last').value.trim(),
@@ -5968,6 +6044,14 @@ const App = {
       credit_limit: parseFloat(document.getElementById('cf-limit')?.value) || 0,
       tax_exempt: taxExempt,
       tax_exemption_number: taxExempt ? (document.getElementById('cf-tax-ref')?.value.trim() || null) : null,
+      is_rental_customer: isRentalCustomer,
+      rental_id_type: isRentalCustomer ? (document.getElementById('cf-id-type')?.value || null) : null,
+      rental_id_number: isRentalCustomer ? (document.getElementById('cf-id-number')?.value.trim() || null) : null,
+      rental_address_proof_type: isRentalCustomer ? (document.getElementById('cf-address-proof-type')?.value || null) : null,
+      rental_address_proof_details: isRentalCustomer ? (document.getElementById('cf-address-proof-details')?.value.trim() || null) : null,
+      rental_reference_name: isRentalCustomer ? (document.getElementById('cf-ref-name')?.value.trim() || null) : null,
+      rental_reference_phone: isRentalCustomer ? (document.getElementById('cf-ref-phone')?.value.trim() || null) : null,
+      rental_reference_relationship: isRentalCustomer ? (document.getElementById('cf-ref-relationship')?.value.trim() || null) : null,
     };
     if (!data.first_name || !data.last_name) { this.alert('First and last name required', 'error'); return; }
     if (data.customer_type === 'credit' && data.credit_terms_days < 1) { this.alert('Credit terms must be at least 1 day', 'error'); return; }

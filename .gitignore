@@ -6,9 +6,11 @@ pos-turso-snapshot.db*
 uploads/products/*
 uploads/po-attachments/*
 uploads/branding/*
+uploads/customer-ids/*
 !uploads/products/.gitkeep
 !uploads/po-attachments/.gitkeep
 !uploads/branding/.gitkeep
+!uploads/customer-ids/.gitkeep
 .env
 .vercel
 test-results/

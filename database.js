@@ -923,6 +923,21 @@ async function _init() {
     'ALTER TABLE quotations ADD COLUMN pickup_cost REAL DEFAULT 0',
     'ALTER TABLE quotations ADD COLUMN operator_required INTEGER DEFAULT 0',
     'ALTER TABLE quotations ADD COLUMN operator_fee REAL DEFAULT 0',
+    // Rental customer compliance docs — only meaningful when
+    // is_rental_customer is set; captured on the same Add/Edit Customer form
+    // (checking "Rental Customer" reveals these fields). The ID scan is an
+    // uploaded file (POST /customers/:id/id-scan, same Cloudinary-or-local
+    // pattern as product images); proof of address and the reference are
+    // plain data entry — no upload requested for those.
+    'ALTER TABLE customers ADD COLUMN is_rental_customer INTEGER DEFAULT 0',
+    'ALTER TABLE customers ADD COLUMN rental_id_type TEXT',
+    'ALTER TABLE customers ADD COLUMN rental_id_number TEXT',
+    'ALTER TABLE customers ADD COLUMN rental_id_scan_path TEXT',
+    'ALTER TABLE customers ADD COLUMN rental_address_proof_type TEXT',
+    'ALTER TABLE customers ADD COLUMN rental_address_proof_details TEXT',
+    'ALTER TABLE customers ADD COLUMN rental_reference_name TEXT',
+    'ALTER TABLE customers ADD COLUMN rental_reference_phone TEXT',
+    'ALTER TABLE customers ADD COLUMN rental_reference_relationship TEXT',
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch(e) {}
