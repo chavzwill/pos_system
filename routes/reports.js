@@ -23,13 +23,18 @@ router.get('/sales', requirePermission('reports'), async (req, res) => {
 // Top selling products
 router.get('/top-products', requirePermission('reports'), async (req, res) => {
   try {
-    const { start, end, limit = 10, branch_id } = req.query;
+    const { start, end, limit = 10, branch_id, category_id } = req.query;
     const s = start || new Date(Date.now() - 30 * 86400000).toISOString().slice(0, 10);
     const e = end || new Date().toISOString().slice(0, 10);
     const bf = branch_id ? ' AND t.branch_id = ?' : '';
     const bp = branch_id ? [branch_id] : [];
+    // Filtering by category requires joining products — this also has the side
+    // effect of excluding non-product line items (deposits, fees) that carry
+    // no product_id, which is desirable for a "top selling products" report.
+    const cf = category_id ? ' AND p.category_id = ?' : '';
+    const cp = category_id ? [category_id] : [];
 
-    const { rows: products } = await db.execute({ sql: `SELECT ti.product_name, ti.sku, SUM(ti.quantity) as units_sold, SUM(ti.total) as revenue, COUNT(DISTINCT ti.transaction_id) as transactions FROM transaction_items ti JOIN transactions t ON ti.transaction_id = t.id WHERE t.status='completed' AND date(t.created_at) BETWEEN date(?) AND date(?)${bf} GROUP BY ti.product_id ORDER BY units_sold DESC LIMIT ?`, args: [s, e, ...bp, parseInt(limit)] });
+    const { rows: products } = await db.execute({ sql: `SELECT ti.product_name, ti.sku, SUM(ti.quantity) as units_sold, SUM(ti.total) as revenue, COUNT(DISTINCT ti.transaction_id) as transactions FROM transaction_items ti JOIN transactions t ON ti.transaction_id = t.id JOIN products p ON ti.product_id = p.id WHERE t.status='completed' AND date(t.created_at) BETWEEN date(?) AND date(?)${bf}${cf} GROUP BY ti.product_id ORDER BY units_sold DESC LIMIT ?`, args: [s, e, ...bp, ...cp, parseInt(limit)] });
     res.json(products);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -51,12 +56,26 @@ router.get('/by-category', requirePermission('reports'), async (req, res) => {
 // Inventory value report
 router.get('/inventory', requirePermission('reports'), async (req, res) => {
   try {
-    const { branch_id } = req.query;
+    const { branch_id, category_id } = req.query;
     const bf = branch_id ? ' AND bi.branch_id = ?' : '';
     const bp = branch_id ? [branch_id] : [];
+    const catFilterP = category_id ? ' AND p.category_id = ?' : '';
+    const catFilterNoAlias = category_id ? ' AND category_id = ?' : '';
+    const catP = category_id ? [category_id] : [];
 
-    const { rows: [summary] } = await db.execute({ sql: `SELECT COUNT(*) as total_products, SUM(stock_qty) as total_units, SUM(stock_qty * cost) as cost_value, SUM(stock_qty * price) as retail_value FROM products WHERE active = 1`, args: [] });
-    const { rows: lowStock } = await db.execute({ sql: `SELECT p.sku, p.name, c.name as category_name, b.name as branch_name, bi.stock_qty, bi.min_stock FROM branch_inventory bi JOIN products p ON bi.product_id = p.id JOIN branches b ON bi.branch_id = b.id LEFT JOIN categories c ON p.category_id = c.id WHERE p.active=1 AND b.active=1 AND bi.stock_qty <= bi.min_stock${bf} ORDER BY bi.stock_qty ASC, b.name ASC`, args: [...bp] });
+    // When a branch is given, totals come from that branch's branch_inventory
+    // rows instead of the global products.stock_qty column, same scoping the
+    // low-stock list below already uses — otherwise the branch filter would
+    // visibly do nothing to these stat cards.
+    let summary;
+    if (branch_id) {
+      const { rows: [row] } = await db.execute({ sql: `SELECT COUNT(DISTINCT p.id) as total_products, SUM(bi.stock_qty) as total_units, SUM(bi.stock_qty * p.cost) as cost_value, SUM(bi.stock_qty * p.price) as retail_value FROM branch_inventory bi JOIN products p ON bi.product_id = p.id WHERE p.active = 1 AND bi.branch_id = ?${catFilterP}`, args: [branch_id, ...catP] });
+      summary = row;
+    } else {
+      const { rows: [row] } = await db.execute({ sql: `SELECT COUNT(*) as total_products, SUM(stock_qty) as total_units, SUM(stock_qty * cost) as cost_value, SUM(stock_qty * price) as retail_value FROM products WHERE active = 1${catFilterNoAlias}`, args: [...catP] });
+      summary = row;
+    }
+    const { rows: lowStock } = await db.execute({ sql: `SELECT p.sku, p.name, c.name as category_name, b.name as branch_name, bi.stock_qty, bi.min_stock FROM branch_inventory bi JOIN products p ON bi.product_id = p.id JOIN branches b ON bi.branch_id = b.id LEFT JOIN categories c ON p.category_id = c.id WHERE p.active=1 AND b.active=1 AND bi.stock_qty <= bi.min_stock${bf}${catFilterP} ORDER BY bi.stock_qty ASC, b.name ASC`, args: [...bp, ...catP] });
     const { rows: byCategory } = await db.execute({ sql: `SELECT c.name as category, COUNT(p.id) as products, SUM(p.stock_qty) as units, SUM(p.stock_qty * p.cost) as cost_value FROM products p JOIN categories c ON p.category_id = c.id WHERE p.active=1 GROUP BY c.id`, args: [] });
     // Warehouses carry no sales, so they're excluded from the sales-report branch
     // filter above — but their stock still has real value, tracked separately here.

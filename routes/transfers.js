@@ -3,16 +3,18 @@ const router = express.Router();
 const { db } = require('../database');
 const { syncBinQty } = require('../lib/binSync');
 const { createTransfer } = require('../lib/transfers');
-const { requirePermission } = require('../lib/permissions');
+const { requirePermission, requireAuth } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
 
-router.use(requirePermission('transfers'));
+router.use(requireAuth);
 
 // GET all transfers
-router.get('/', async (req, res) => {
+router.get('/', requirePermission('transfers'), async (req, res) => {
   try {
     const { status, from_branch_id, to_branch_id, limit = 100 } = req.query;
-    let sql = `SELECT t.*, fb.name as from_branch_name, tb.name as to_branch_name, e.first_name || ' ' || e.last_name as employee_name FROM branch_transfers t LEFT JOIN branches fb ON t.from_branch_id = fb.id LEFT JOIN branches tb ON t.to_branch_id = tb.id LEFT JOIN employees e ON t.employee_id = e.id WHERE 1=1`;
+    let sql = `SELECT t.*, fb.name as from_branch_name, tb.name as to_branch_name, e.first_name || ' ' || e.last_name as employee_name,
+      (SELECT GROUP_CONCAT(product_name || ' x' || quantity_requested, ', ') FROM branch_transfer_items WHERE transfer_id = t.id) as item_summary
+      FROM branch_transfers t LEFT JOIN branches fb ON t.from_branch_id = fb.id LEFT JOIN branches tb ON t.to_branch_id = tb.id LEFT JOIN employees e ON t.employee_id = e.id WHERE 1=1`;
     const params = [];
     if (status) { sql += ' AND t.status = ?'; params.push(status); }
     if (from_branch_id) { sql += ' AND t.from_branch_id = ?'; params.push(from_branch_id); }
@@ -25,7 +27,7 @@ router.get('/', async (req, res) => {
 });
 
 // GET single transfer with items
-router.get('/:id', async (req, res) => {
+router.get('/:id', requirePermission('transfers'), async (req, res) => {
   try {
     const { rows: [transfer] } = await db.execute({ sql: `SELECT t.*, fb.name as from_branch_name, tb.name as to_branch_name, e.first_name || ' ' || e.last_name as employee_name FROM branch_transfers t LEFT JOIN branches fb ON t.from_branch_id = fb.id LEFT JOIN branches tb ON t.to_branch_id = tb.id LEFT JOIN employees e ON t.employee_id = e.id WHERE t.id = ?`, args: [req.params.id] });
     if (!transfer) return res.status(404).json({ error: 'Not found' });
@@ -36,7 +38,7 @@ router.get('/:id', async (req, res) => {
 });
 
 // POST create transfer — deducts qty from source branch immediately
-router.post('/', async (req, res) => {
+router.post('/', requirePermission('transfers'), async (req, res) => {
   try {
     const { from_branch_id, to_branch_id, employee_id, items, notes } = req.body;
     if (!from_branch_id || !to_branch_id) return res.status(400).json({ error: 'Both from and to branches are required' });
@@ -62,8 +64,8 @@ router.post('/', async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-// PATCH dispatch — mark as in_transit
-router.patch('/:id/dispatch', async (req, res) => {
+// PATCH dispatch — mark as in_transit (a.k.a. "picked up" from the source branch)
+router.patch('/:id/dispatch', requirePermission('transfers_pickup'), async (req, res) => {
   try {
     const { rows: [transfer] } = await db.execute({ sql: 'SELECT * FROM branch_transfers WHERE id = ?', args: [req.params.id] });
     if (!transfer) return res.status(404).json({ error: 'Not found' });
@@ -75,7 +77,8 @@ router.patch('/:id/dispatch', async (req, res) => {
 });
 
 // PATCH receive — receive items at destination, add to destination branch_inventory
-router.patch('/:id/receive', async (req, res) => {
+// (a.k.a. "dropped off" at the destination branch)
+router.patch('/:id/receive', requirePermission('transfers_dropoff'), async (req, res) => {
   try {
     const { items } = req.body;
     const { rows: [transfer] } = await db.execute({ sql: 'SELECT * FROM branch_transfers WHERE id = ?', args: [req.params.id] });
@@ -122,7 +125,7 @@ router.patch('/:id/receive', async (req, res) => {
 });
 
 // PATCH cancel — restore unreceived qty back to source branch
-router.patch('/:id/cancel', async (req, res) => {
+router.patch('/:id/cancel', requirePermission('transfers'), async (req, res) => {
   try {
     const { rows: [transfer] } = await db.execute({ sql: 'SELECT * FROM branch_transfers WHERE id = ?', args: [req.params.id] });
     if (!transfer) return res.status(404).json({ error: 'Not found' });

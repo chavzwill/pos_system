@@ -13,11 +13,17 @@ router.get('/agreements', requirePermission('rentals'), async (req, res) => {
   try {
     const { customer_id, branch_id, view } = req.query;
     let sql = `SELECT ra.*, c.first_name || ' ' || c.last_name as customer_name,
-      b.name as branch_name, e.first_name || ' ' || e.last_name as employee_name,
+      c.address as customer_address, c.city as customer_city, c.state as customer_state, c.zip as customer_zip,
+      b.name as branch_name, b.address as branch_address, b.city as branch_city, b.state as branch_state, b.zip as branch_zip,
+      e.first_name || ' ' || e.last_name as employee_name,
       q.quote_number as source_quote_number,
       co.payment_method as checkout_payment_method,
       se.total as settlement_total,
+      dd.first_name || ' ' || dd.last_name as delivery_driver_name,
+      pd.first_name || ' ' || pd.last_name as pickup_driver_name,
+      op.first_name || ' ' || op.last_name as operator_name,
       (SELECT COUNT(*) FROM rental_agreement_items WHERE agreement_id = ra.id AND parent_item_id IS NULL) as item_count,
+      (SELECT GROUP_CONCAT(product_name || ' x' || quantity, ', ') FROM rental_agreement_items WHERE agreement_id = ra.id AND parent_item_id IS NULL) as item_summary,
       CASE WHEN ra.status = 'active' AND ra.due_date < date('now') THEN 'overdue' ELSE ra.status END as display_status
       FROM rental_agreements ra
       LEFT JOIN customers c ON ra.customer_id = c.id
@@ -26,6 +32,9 @@ router.get('/agreements', requirePermission('rentals'), async (req, res) => {
       LEFT JOIN quotations q ON q.converted_to_agreement_id = ra.id
       LEFT JOIN transactions co ON ra.checkout_transaction_id = co.id
       LEFT JOIN transactions se ON ra.settlement_transaction_id = se.id
+      LEFT JOIN employees dd ON ra.delivery_driver_id = dd.id
+      LEFT JOIN employees pd ON ra.pickup_driver_id = pd.id
+      LEFT JOIN employees op ON ra.operator_id = op.id
       WHERE 1=1`;
     const params = [];
     if (customer_id) { sql += ' AND ra.customer_id = ?'; params.push(customer_id); }

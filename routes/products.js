@@ -277,6 +277,117 @@ router.post('/import', requirePermission('inventory'), async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// GET export rental items as CSV — same shared shape/escaping as the general
+// product export above, but scoped to is_rental=1 with rental-specific
+// columns (rates, classification, replacement value) instead of cost/supplier.
+router.get('/export/rentals', requirePermission('rentals_manage_items'), async (req, res) => {
+  try {
+    const { rows: rentals } = await db.execute({ sql: `SELECT p.sku, p.name, p.description, c.name as category_name,
+      (SELECT b.name FROM branch_inventory bi JOIN branches b ON bi.branch_id = b.id WHERE bi.product_id = p.id LIMIT 1) as branch_name,
+      p.stock_qty, p.min_stock, p.tax_rate, p.rental_classification,
+      p.rental_rate as daily_rate, p.rental_weekly_rate as weekly_rate, p.rental_monthly_rate as monthly_rate, p.rental_hourly_rate as hourly_rate,
+      p.replacement_value, p.is_accessory, p.active
+      FROM products p LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.is_rental = 1 ORDER BY p.name`, args: [] });
+
+    const escape = v => {
+      if (v == null) return '';
+      const s = String(v);
+      return s.includes(',') || s.includes('"') || s.includes('\n') ? `"${s.replace(/"/g, '""')}"` : s;
+    };
+
+    const headers = ['sku','name','description','category_name','branch_name','stock_qty','min_stock','tax_rate','rental_classification','daily_rate','weekly_rate','monthly_rate','hourly_rate','replacement_value','is_accessory','active'];
+    const csvRows = [headers.join(',')];
+    for (const p of rentals) csvRows.push(headers.map(h => escape(p[h])).join(','));
+
+    const timestamp = new Date().toISOString().slice(0, 10);
+    res.setHeader('Content-Type', 'text/csv');
+    res.setHeader('Content-Disposition', `attachment; filename="rental_items_export_${timestamp}.csv"`);
+    res.send(csvRows.join('\r\n'));
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// GET CSV template for bulk rental item import
+router.get('/export/rentals/template', requirePermission('rentals_manage_items'), (req, res) => {
+  const headers = ['sku','name','description','category_name','branch_name','stock_qty','min_stock','tax_rate','rental_classification','daily_rate','weekly_rate','monthly_rate','hourly_rate','replacement_value','is_accessory','active'];
+  const example = ['RENT-001','Example Drill','18V cordless drill','Tools','Drax Hall','5','1','8.5','tool','15.00','80.00','300.00','0','200.00','0','1'];
+  const csv = [headers.join(','), example.join(',')].join('\r\n');
+  res.setHeader('Content-Type', 'text/csv');
+  res.setHeader('Content-Disposition', 'attachment; filename="rental_items_import_template.csv"');
+  res.send(csv);
+});
+
+// POST import rental items from CSV rows — upserts by SKU, same single-branch
+// move semantics as PUT /:id (a branch_name here reassigns/moves the item's
+// stock the same way changing the dropdown in the rental item form does).
+router.post('/import/rentals', requirePermission('rentals_manage_items'), async (req, res) => {
+  try {
+    const { rows } = req.body;
+    if (!Array.isArray(rows) || !rows.length) return res.status(400).json({ error: 'No rows provided' });
+
+    const { rows: catRows } = await db.execute({ sql: 'SELECT id, name FROM categories', args: [] });
+    const { rows: branchRows } = await db.execute({ sql: 'SELECT id, name FROM branches', args: [] });
+    const catMap = Object.fromEntries(catRows.map(c => [c.name.toLowerCase(), c.id]));
+    const branchMap = Object.fromEntries(branchRows.map(b => [b.name.toLowerCase(), b.id]));
+
+    let created = 0, updated = 0;
+    const errors = [];
+
+    for (let i = 0; i < rows.length; i++) {
+      const row = rows[i];
+      const rowNum = i + 2;
+      const {
+        sku, name, description, category_name, branch_name,
+        stock_qty, min_stock, tax_rate, rental_classification,
+        daily_rate, weekly_rate, monthly_rate, hourly_rate,
+        replacement_value, is_accessory, active,
+      } = row;
+      if (!sku || !name) { errors.push(`Row ${rowNum}: SKU and name are required`); continue; }
+      const category_id = category_name ? (catMap[category_name.toLowerCase()] ?? null) : null;
+      const branch_id = branch_name ? (branchMap[branch_name.toLowerCase()] ?? null) : null;
+      if (branch_name && !branch_id) { errors.push(`Row ${rowNum} (${sku}): branch "${branch_name}" not found`); continue; }
+      const classification = (rental_classification || '').toLowerCase() === 'equipment' ? 'equipment' : 'tool';
+      const qty = parseInt(stock_qty) || 0;
+      const minStk = parseInt(min_stock) || 5;
+
+      try {
+        const { rows: [existing] } = await db.execute({ sql: 'SELECT id FROM products WHERE sku = ?', args: [sku] });
+        const vals = [
+          name, description||null, category_id, parseFloat(tax_rate)??8.5, qty, minStk,
+          classification, parseFloat(daily_rate)||0, parseFloat(weekly_rate)||0, parseFloat(monthly_rate)||0, parseFloat(hourly_rate)||0,
+          parseFloat(replacement_value)||0, parseInt(is_accessory) ? 1 : 0, active === '' || active == null ? 1 : (parseInt(active) ? 1 : 0),
+        ];
+        let productId;
+        if (existing) {
+          productId = existing.id;
+          await db.execute({ sql: `UPDATE products SET name=?,description=?,category_id=?,tax_rate=?,stock_qty=?,min_stock=?,
+            rental_classification=?,rental_rate=?,rental_weekly_rate=?,rental_monthly_rate=?,rental_hourly_rate=?,
+            replacement_value=?,is_accessory=?,active=?,is_rental=1 WHERE id=?`, args: [...vals, productId] });
+          updated++;
+        } else {
+          const result = await db.execute({ sql: `INSERT INTO products (sku,name,description,category_id,tax_rate,stock_qty,min_stock,
+            rental_classification,rental_rate,rental_weekly_rate,rental_monthly_rate,rental_hourly_rate,
+            replacement_value,is_accessory,active,is_rental,price) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,1,0)`, args: [sku, ...vals] });
+          productId = Number(result.lastInsertRowid);
+          created++;
+        }
+
+        // Single-branch move model — same as PUT /:id's branch_id handling.
+        await db.execute({ sql: 'DELETE FROM branch_inventory WHERE product_id = ? AND branch_id != ?', args: [productId, branch_id || 0] });
+        if (branch_id) {
+          await db.execute({
+            sql: `INSERT INTO branch_inventory (product_id, branch_id, stock_qty, min_stock) VALUES (?, ?, ?, ?)
+                  ON CONFLICT(product_id, branch_id) DO UPDATE SET stock_qty = ?, min_stock = ?, updated_at = CURRENT_TIMESTAMP`,
+            args: [productId, branch_id, qty, minStk, qty, minStk],
+          });
+        }
+      } catch (e) { errors.push(`Row ${rowNum} (${sku}): ${e.message}`); }
+    }
+
+    res.json({ created, updated, errors, total: rows.length });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 // GET per-product stock movement history (sales, transfers, adjustments)
 router.get('/:id/movements', requirePermission('inventory'), async (req, res) => {
   try {

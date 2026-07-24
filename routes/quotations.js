@@ -295,7 +295,10 @@ async function processQuoteAcceptance(quote) {
 
 router.post('/', async (req, res) => {
   try {
-    const { customer_id, employee_id, branch_id, items, discount_amount, notes, valid_until, quote_type, due_date } = req.body;
+    const {
+      customer_id, employee_id, branch_id, items, discount_amount, notes, valid_until, quote_type, due_date,
+      delivery_required, delivery_cost, delivery_address, pickup_required, pickup_cost, operator_required, operator_fee,
+    } = req.body;
     if (!items || items.length === 0) return res.status(400).json({ error: 'No items in quotation' });
     const isRental = quote_type === 'rental';
 
@@ -313,7 +316,14 @@ router.post('/', async (req, res) => {
     const tx = await db.transaction('write');
     let committed = false;
     try {
-      const result = await tx.execute({ sql: 'INSERT INTO quotations (quote_number,customer_id,employee_id,branch_id,subtotal,tax_amount,discount_amount,total,notes,valid_until,quote_type,due_date) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', args: [quote_number, customer_id||null, employee_id||null, branch_id||null, subtotal, tax_amount, disc, total, notes||null, valid_until||null, isRental ? 'rental' : 'retail', isRental ? due_date : null] });
+      const result = await tx.execute({ sql: `INSERT INTO quotations
+        (quote_number,customer_id,employee_id,branch_id,subtotal,tax_amount,discount_amount,total,notes,valid_until,quote_type,due_date,
+         delivery_required,delivery_cost,delivery_address,pickup_required,pickup_cost,operator_required,operator_fee)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+        args: [quote_number, customer_id||null, employee_id||null, branch_id||null, subtotal, tax_amount, disc, total, notes||null, valid_until||null, isRental ? 'rental' : 'retail', isRental ? due_date : null,
+          isRental && delivery_required ? 1 : 0, isRental && delivery_required ? parseFloat(delivery_cost||0) : 0, isRental && delivery_required ? (delivery_address||null) : null,
+          isRental && pickup_required ? 1 : 0, isRental && pickup_required ? parseFloat(pickup_cost||0) : 0,
+          isRental && operator_required ? 1 : 0, isRental && operator_required ? parseFloat(operator_fee||0) : 0] });
       const quoteId = Number(result.lastInsertRowid);
       if (isRental) {
         // No sources/branch-split concept for rentals — a rental quote only
@@ -365,7 +375,10 @@ router.put('/:id', async (req, res) => {
     if (!quote) return res.status(404).json({ error: 'Not found' });
     if (quote.status === 'converted') return res.status(400).json({ error: 'Cannot edit a quotation already converted to an invoice' });
 
-    const { customer_id, employee_id, branch_id, items, discount_amount, notes, valid_until, due_date } = req.body;
+    const {
+      customer_id, employee_id, branch_id, items, discount_amount, notes, valid_until, due_date,
+      delivery_required, delivery_cost, delivery_address, pickup_required, pickup_cost, operator_required, operator_fee,
+    } = req.body;
     if (!items || items.length === 0) return res.status(400).json({ error: 'No items in quotation' });
     const isRental = quote.quote_type === 'rental'; // quote_type is fixed at creation — never taken from req.body here
 
@@ -381,7 +394,12 @@ router.put('/:id', async (req, res) => {
     const tx = await db.transaction('write');
     let committed = false;
     try {
-      await tx.execute({ sql: 'UPDATE quotations SET customer_id=?, employee_id=?, branch_id=?, subtotal=?, tax_amount=?, discount_amount=?, total=?, notes=?, valid_until=?, due_date=? WHERE id=?', args: [customer_id||null, employee_id||quote.employee_id||null, branch_id||null, subtotal, tax_amount, disc, total, notes||null, valid_until||null, isRental ? (due_date || quote.due_date) : null, quote.id] });
+      await tx.execute({ sql: `UPDATE quotations SET customer_id=?, employee_id=?, branch_id=?, subtotal=?, tax_amount=?, discount_amount=?, total=?, notes=?, valid_until=?, due_date=?,
+        delivery_required=?, delivery_cost=?, delivery_address=?, pickup_required=?, pickup_cost=?, operator_required=?, operator_fee=? WHERE id=?`,
+        args: [customer_id||null, employee_id||quote.employee_id||null, branch_id||null, subtotal, tax_amount, disc, total, notes||null, valid_until||null, isRental ? (due_date || quote.due_date) : null,
+          isRental && delivery_required ? 1 : 0, isRental && delivery_required ? parseFloat(delivery_cost||0) : 0, isRental && delivery_required ? (delivery_address||null) : null,
+          isRental && pickup_required ? 1 : 0, isRental && pickup_required ? parseFloat(pickup_cost||0) : 0,
+          isRental && operator_required ? 1 : 0, isRental && operator_required ? parseFloat(operator_fee||0) : 0, quote.id] });
       await tx.execute({ sql: 'DELETE FROM quotation_items WHERE quote_id = ?', args: [quote.id] });
       if (isRental) {
         for (const item of processedItems) {
@@ -494,6 +512,9 @@ router.post('/:id/convert', async (req, res) => {
           agreement_number, customer_id: quote.customer_id, employee_id: employee_id || quote.employee_id || null,
           branch_id: targetBranchId, due_date: quote.due_date,
           notes: `Converted from quotation ${quote.quote_number}`, lines,
+          delivery_required: quote.delivery_required, delivery_cost: quote.delivery_cost, delivery_address: quote.delivery_address,
+          pickup_required: quote.pickup_required, pickup_cost: quote.pickup_cost,
+          operator_required: quote.operator_required, operator_fee: quote.operator_fee,
         });
         await tx.execute({ sql: 'UPDATE quotations SET status = ?, converted_to_agreement_id = ? WHERE id = ?', args: ['converted', agreementId, quote.id] });
         await tx.commit();
