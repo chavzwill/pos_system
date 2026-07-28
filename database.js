@@ -941,6 +941,12 @@ async function _init() {
     'ALTER TABLE products ADD COLUMN model_number TEXT',
     'ALTER TABLE products ADD COLUMN size TEXT',
     'ALTER TABLE products ADD COLUMN taxable INTEGER DEFAULT 1',
+    // Explicit "the customer will collect this themselves" flag on the New
+    // Rental form — mutually exclusive with delivery_required in the UI, but
+    // stored as its own column rather than inferred from delivery being off,
+    // so dispatch/issue screens can show a deliberate "Customer Pickup" state
+    // instead of just blank/not-applicable.
+    'ALTER TABLE rental_agreements ADD COLUMN customer_pickup INTEGER DEFAULT 0',
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch(e) {}

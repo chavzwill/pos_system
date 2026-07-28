@@ -742,7 +742,7 @@ router.get('/:id/accessories', requireAuth, async (req, res) => {
   try {
     const { rows } = await db.execute({ sql: `SELECT pa.id, pa.product_id, pa.accessory_product_id, pa.is_mandatory,
       p.sku, p.name, p.rental_classification, p.rental_rate, p.rental_weekly_rate, p.rental_monthly_rate, p.rental_hourly_rate,
-      p.stock_qty
+      p.tax_rate, p.stock_qty
       FROM product_accessories pa JOIN products p ON pa.accessory_product_id = p.id
       WHERE pa.product_id = ? ORDER BY pa.is_mandatory DESC, p.name`, args: [req.params.id] });
     res.json(rows);

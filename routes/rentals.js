@@ -108,7 +108,7 @@ router.post('/agreements', requirePermission('rentals_checkout'), async (req, re
     const {
       customer_id, employee_id, branch_id, due_date, items, notes,
       delivery_required, delivery_cost, delivery_address, pickup_required, pickup_cost,
-      operator_required, operator_fee,
+      operator_required, operator_fee, customer_pickup,
     } = req.body;
     if (!customer_id) return res.status(400).json({ error: 'A customer is required for rental checkout' });
     if (!branch_id) return res.status(400).json({ error: 'A branch/location is required for rental checkout' });
@@ -143,6 +143,7 @@ router.post('/agreements', requirePermission('rentals_checkout'), async (req, re
         delivery_address: delivery_required ? (delivery_address || null) : null,
         pickup_required: pickup_required ? 1 : 0, pickup_cost: pickup_required ? parseFloat(pickup_cost || 0) : 0,
         operator_required: operator_required ? 1 : 0, operator_fee: operator_required ? parseFloat(operator_fee || 0) : 0,
+        customer_pickup: customer_pickup ? 1 : 0,
       });
 
       await tx.commit();
@@ -297,12 +298,22 @@ router.patch('/agreements/:id/issue', requirePermission('rentals_issue'), async 
     // decided (and charged for) when the rental was created — this step only
     // assigns WHO does it, for whichever of those the agreement already flags
     // as required.
-    const { employee_id, delivery_driver_id, operator_id } = req.body;
+    const { employee_id, delivery_driver_id, operator_id, issued_at } = req.body;
     const { rows: [agreement] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
     if (!agreement) return res.status(404).json({ error: 'Not found' });
     if (agreement.status !== 'awaiting_issue') return res.status(400).json({ error: `This agreement is ${agreement.status}, not awaiting issue` });
 
-    const issuedAt = new Date();
+    // Defaults to the moment this request is processed, but staff can back-date
+    // it to when the item actually went out (e.g. it sat ready at the counter
+    // for a while first) — same pattern as the return endpoint's returned_at,
+    // since this is what the rental clock and all fee calculations run from.
+    let issuedAt = new Date();
+    if (issued_at) {
+      const parsed = new Date(issued_at);
+      if (isNaN(parsed.getTime())) return res.status(400).json({ error: 'Invalid start date/time' });
+      if (parsed.getTime() > Date.now() + 5 * 60000) return res.status(400).json({ error: 'Start date/time cannot be in the future' });
+      issuedAt = parsed;
+    }
     const today = issuedAt.toISOString().slice(0, 10);
 
     await db.execute({

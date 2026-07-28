@@ -2659,13 +2659,16 @@ const App = {
 
   // ─── Inventory ────────────────────────────────────────────
   async renderInventory() {
-    const [products, categories, movements] = await Promise.all([
+    const [products, categories, movements, branches] = await Promise.all([
       this.api('GET', '/products?is_service=0&is_rental=0'),
       this.api('GET', '/categories'),
       this.api('GET', '/products/movements?limit=30'),
+      // All branches, not just the ones this employee is individually assigned
+      // to (this.currentUser.branches) — this is a browse/oversight filter, not
+      // an operational "which branch am I working from" picker like POS's.
+      this.api('GET', '/branches'),
     ]);
     if (this.section !== 'inventory') return;
-    const branches = this.currentUser.branches || [];
 
     document.getElementById('content').innerHTML = `
       <div class="section-header">
@@ -2689,7 +2692,7 @@ const App = {
         <button class="btn btn-secondary btn-sm" onclick="App.showCategoriesManager()">Categories</button>
       </div>
       <div class="card">
-        <div class="table-wrap" id="inv-table-wrap">
+        <div class="table-wrap" id="inv-table-wrap" style="max-height:65vh;overflow-y:auto">
           ${this.buildProductTable(products)}
         </div>
       </div>
@@ -2771,7 +2774,7 @@ const App = {
   buildProductTable(products, branchName = '', branchId = '') {
     if (!products.length) return '<div class="empty-state"><p>No products found</p></div>';
     const stockHeader = branchName ? `Stock (${branchName})` : 'Stock';
-    return `<table>
+    return `<table class="sticky-table">
       <thead><tr><th></th><th>SKU</th><th>Name</th><th>Category</th><th>Price</th><th>Cost</th><th>${stockHeader}</th><th>Status</th><th>Actions</th></tr></thead>
       <tbody>
         ${products.map(p => `<tr id="inv-row-${p.id}">
@@ -3468,16 +3471,18 @@ const App = {
     const sc = { awaiting_issue:'badge-warning', active:'badge-info' };
     const notAssigned = '<span style="color:var(--text-muted)">Not yet assigned</span>';
     const notApplicable = '<span style="color:var(--text-muted)">—</span>';
+    const customerPickupTag = '<span class="badge-pill badge-secondary" style="font-size:11px">Customer Pickup</span>';
     document.getElementById('dispatch-content').innerHTML = !agreements.length ? '<div class="empty-state"><p>Nothing here.</p></div>' : `
+      <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Agreement #</th><th>Customer</th><th>Branch</th><th>Deposit Collected</th><th>Due Date</th><th>Driver</th><th>Operator</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Agreement #</th><th>Customer</th><th>Branch</th><th>Deposit Collected</th><th>Due Date</th><th>Delivery</th><th>Operator</th><th>Status</th><th></th></tr></thead>
         <tbody>${agreements.map(a => `<tr>
           <td class="fw-600">${a.agreement_number}</td>
           <td>${a.customer_name||'—'}</td>
           <td>${a.branch_name||'—'}</td>
           <td>${a.deposit_total ? this.fmt(a.deposit_total) : '—'}</td>
           <td>${this.fmtDate(a.due_date)}</td>
-          <td>${a.delivery_required ? (a.delivery_driver_name || notAssigned) : notApplicable}</td>
+          <td>${a.delivery_required ? (a.delivery_driver_name || notAssigned) : (a.customer_pickup ? customerPickupTag : notApplicable)}</td>
           <td>${a.operator_required ? (a.operator_name || notAssigned) : notApplicable}</td>
           <td><span class="badge-pill ${sc[a.display_status]||'badge-secondary'}">${a.display_status}</span></td>
           <td style="text-align:right;white-space:nowrap">
@@ -3486,12 +3491,17 @@ const App = {
             <button class="btn btn-sm btn-outline" onclick="App.viewRentalAgreement(${a.id})">View</button>
           </td>
         </tr>`).join('')}</tbody>
-      </table>`;
+      </table>
+      </div>`;
   },
 
-  // Route sheet for whoever's driving — every delivery-required job still
-  // relevant to dispatch (paid-and-waiting, or already handed over), with
-  // the from/to addresses and item list needed to actually run the delivery.
+  // Route sheet for whoever's driving/operating — every job still relevant
+  // to dispatch (paid-and-waiting, or already handed over) that needs
+  // delivery, pickup (return leg), or an operator, with the from/to addresses
+  // and item list needed to actually run it. Delivery Date mirrors the
+  // agreement's checkout_date (when the item goes/went out); Pickup Date
+  // mirrors due_date (when it's scheduled to be collected back) — same
+  // fields the rental agreement itself is billed against.
   async loadDeliveriesTab() {
     const el = document.getElementById('dispatch-content');
     if (!el) return;
@@ -3499,22 +3509,27 @@ const App = {
       this.api('GET', '/rentals/agreements?view=awaiting_issue'),
       this.api('GET', '/rentals/agreements?view=active'),
     ]);
-    const deliveries = [...awaitingIssue, ...active].filter(a => a.delivery_required);
+    const deliveries = [...awaitingIssue, ...active].filter(a => a.delivery_required || a.pickup_required || a.operator_required);
     if (!document.getElementById('dispatch-content')) return;
     const sc = { awaiting_issue:'badge-warning', active:'badge-info' };
+    const none = '<span style="color:var(--text-muted)">None</span>';
+    const notAssigned = '<span style="color:var(--text-muted)">Not yet assigned</span>';
     const fromAddr = a => [a.branch_name, a.branch_address, [a.branch_city, a.branch_state, a.branch_zip].filter(Boolean).join(' ')].filter(Boolean).join(', ');
     const toAddr = a => a.delivery_address || [a.customer_address, [a.customer_city, a.customer_state, a.customer_zip].filter(Boolean).join(' ')].filter(Boolean).join(', ') || '—';
-    document.getElementById('dispatch-content').innerHTML = !deliveries.length ? '<div class="empty-state"><p>No deliveries to show.</p></div>' : `
+    document.getElementById('dispatch-content').innerHTML = !deliveries.length ? '<div class="empty-state"><p>No deliveries, pickups, or operator jobs to show.</p></div>' : `
+      <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Agreement #</th><th>Customer</th><th>Date</th><th>From</th><th>To</th><th>Items</th><th>Driver</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Agreement #</th><th>Customer</th><th>Items</th><th>Route</th><th>Delivery</th><th>Delivery Date</th><th>Pickup</th><th>Pickup Date</th><th>Operator</th><th>Status</th><th></th></tr></thead>
         <tbody>${deliveries.map(a => `<tr>
           <td class="fw-600">${a.agreement_number}</td>
           <td>${a.customer_name||'—'}</td>
-          <td>${a.checkout_date && a.status==='active' ? this.fmtDate(a.checkout_date) : '<span style="color:var(--text-muted)">Pending</span>'}</td>
-          <td style="max-width:220px">${fromAddr(a)||'—'}</td>
-          <td style="max-width:220px">${toAddr(a)}</td>
-          <td style="max-width:220px">${a.item_summary||'—'}</td>
-          <td>${a.delivery_driver_name || '<span style="color:var(--text-muted)">Not yet assigned</span>'}</td>
+          <td style="max-width:200px">${a.item_summary||'—'}</td>
+          <td style="max-width:220px">${a.delivery_required ? `${fromAddr(a)||'—'} → ${toAddr(a)}` : '—'}</td>
+          <td>${a.delivery_required ? (a.delivery_driver_name || notAssigned) : none}</td>
+          <td>${a.delivery_required ? (a.checkout_date && a.status==='active' ? this.fmtDate(a.checkout_date) : '<span style="color:var(--text-muted)">Pending</span>') : none}</td>
+          <td>${a.pickup_required ? (a.pickup_driver_name || notAssigned) : none}</td>
+          <td>${a.pickup_required ? this.fmtDate(a.due_date) : none}</td>
+          <td>${a.operator_required ? (a.operator_name || notAssigned) : none}</td>
           <td><span class="badge-pill ${sc[a.display_status]||'badge-secondary'}">${a.display_status}</span></td>
           <td style="text-align:right;white-space:nowrap">
             ${a.status==='awaiting_issue' && this.can('rentals_issue') ? `<button class="btn btn-sm btn-primary" onclick="App.showIssueRentalModal(${a.id})">Issue</button>` : ''}
@@ -3522,7 +3537,8 @@ const App = {
             <button class="btn btn-sm btn-outline" onclick="App.viewRentalAgreement(${a.id})">View</button>
           </td>
         </tr>`).join('')}</tbody>
-      </table>`;
+      </table>
+      </div>`;
   },
 
   // Standalone page (Warehouse hub tile) — previously the "Rental Items" tab
@@ -3901,9 +3917,13 @@ const App = {
     const agreements = await this.api('GET', `/rentals/agreements${view ? '?view='+view : ''}`);
     if (!document.getElementById('rental-content')) return;
     const sc = { pending:'badge-warning', awaiting_issue:'badge-warning', active:'badge-info', overdue:'badge-danger', returned:'badge-success', cancelled:'badge-secondary' };
+    const none = '<span style="color:var(--text-muted)">None</span>';
+    const notAssigned = '<span style="color:var(--text-muted)">Not yet assigned</span>';
+    const customerPickupTag = '<span class="badge-pill badge-secondary" style="font-size:11px">Customer Pickup</span>';
     document.getElementById('rental-content').innerHTML = !agreements.length ? '<div class="empty-state"><p>No rental agreements found.</p></div>' : `
+      <div class="table-wrap">
       <table class="table">
-        <thead><tr><th>Agreement #</th><th>Customer</th><th>Branch</th><th>Checkout</th><th>Due</th><th>Duration</th><th>Items</th><th>Status</th><th></th></tr></thead>
+        <thead><tr><th>Agreement #</th><th>Customer</th><th>Branch</th><th>Checkout</th><th>Due</th><th>Duration</th><th>Items</th><th>Delivery</th><th>Pickup</th><th>Operator</th><th>Status</th><th></th></tr></thead>
         <tbody>${agreements.map(a => `<tr>
           <td class="fw-600">${a.agreement_number}</td>
           <td>${a.customer_name||'—'}</td>
@@ -3912,12 +3932,16 @@ const App = {
           <td>${this.fmtDate(a.due_date)}</td>
           <td>${(a.status==='pending'||a.status==='awaiting_issue') ? '—' : this.rentalDurationLabel(a.checkout_date, a.due_date, a.returned_at)}</td>
           <td><span class="badge badge-info">${a.item_count}</span></td>
+          <td>${a.delivery_required ? (a.delivery_driver_name || notAssigned) : (a.customer_pickup ? customerPickupTag : none)}</td>
+          <td>${a.pickup_required ? (a.pickup_driver_name || notAssigned) : none}</td>
+          <td>${a.operator_required ? (a.operator_name || notAssigned) : none}</td>
           <td><span class="badge-pill ${sc[a.display_status]||'badge-secondary'}">${a.display_status}</span></td>
           <td style="text-align:right;white-space:nowrap">
             <button class="btn btn-sm btn-outline" onclick="App.viewRentalAgreement(${a.id})">View</button>
           </td>
         </tr>`).join('')}</tbody>
-      </table>`;
+      </table>
+      </div>`;
   },
 
   // ─── Deposits & Credit Notes ────────────────────────────────────────────
@@ -3943,11 +3967,15 @@ const App = {
   async loadRentalDeposits() {
     const el = document.getElementById('rental-deposits-content');
     if (!el) return;
-    const [active, returned] = await Promise.all([
+    // awaiting_issue is included too — the deposit is collected at finalize
+    // (PATCH .../checkout), which happens before issue, so a paid-but-not-yet-
+    // issued agreement already holds a real deposit that belongs on this list.
+    const [awaitingIssue, active, returned] = await Promise.all([
+      this.api('GET', '/rentals/agreements?view=awaiting_issue'),
       this.api('GET', '/rentals/agreements?view=active'),
       this.api('GET', '/rentals/agreements?view=returned'),
     ]);
-    const agreements = [...active, ...returned].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
+    const agreements = [...awaitingIssue, ...active, ...returned].sort((a,b) => new Date(b.created_at) - new Date(a.created_at));
     if (!document.getElementById('rental-deposits-content')) return;
     document.getElementById('rental-deposits-content').innerHTML = !agreements.length ? '<div class="empty-state"><p>No rental deposits to show.</p></div>' : `
       <table class="table">
@@ -4061,18 +4089,25 @@ const App = {
           </div>
           ${a.status==='pending' ? `<div style="padding:8px 12px;background:rgba(245,158,11,0.08);border-left:3px solid #d97706;border-radius:4px;font-size:12px;color:#d97706;margin-bottom:12px">Held — no payment collected yet. Fees and deposit are calculated when a cashier processes payment, based on the rental period starting at that moment.</div>` : ''}
           ${a.status==='awaiting_issue' ? `<div style="padding:8px 12px;background:rgba(245,158,11,0.08);border-left:3px solid #d97706;border-radius:4px;font-size:12px;color:#d97706;margin-bottom:12px">Paid — waiting to be issued (collected or delivered). The rental clock starts once it's issued.</div>` : ''}
-          ${(a.delivery_required || a.pickup_required || a.operator_required) ? `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:12px">
+          ${(a.delivery_required || a.pickup_required || a.operator_required || a.customer_pickup) ? `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:12px">
             <strong style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Additional Services</strong>
+            ${a.customer_pickup ? `<div>Customer Pickup — item collected by the customer at the counter</div>` : ''}
             ${a.delivery_required ? `<div>Delivery — ${this.fmt(a.delivery_cost)}${a.delivery_driver_name ? ` — ${a.delivery_driver_name}` : ' — driver not yet assigned'}</div>` : ''}
             ${a.operator_required ? `<div>Operator — ${this.fmt(a.operator_fee)}${a.operator_name ? ` — ${a.operator_name}` : ' — not yet assigned'}</div>` : ''}
             ${a.pickup_required ? `<div>Pickup — ${this.fmt(a.pickup_cost)}${a.pickup_driver_name ? ` — ${a.pickup_driver_name}` : ' — driver not yet assigned'}</div>` : ''}
           </div>` : ''}
           <table class="table" style="margin-bottom:12px">
-            <thead><tr><th>Product</th><th>Class</th><th>Qty</th><th>Returned</th><th>Est. Fee</th><th>Actual Fee</th><th>Deposit</th><th>Condition</th></tr></thead>
+            <thead><tr><th>Product</th><th>Rate</th><th>Class</th><th>Qty</th><th>Returned</th><th>Est. Fee</th><th>Actual Fee</th><th>Deposit</th><th>Condition</th></tr></thead>
             <tbody>${a.items.map(i=>{
               const tag = i.parent_item_id ? (i.is_mandatory ? ' <span class="badge-pill badge-success" style="font-size:10px">included</span>' : ' <span class="badge-pill badge-secondary" style="font-size:10px">accessory</span>') : '';
+              const rateParts = i.is_mandatory ? null : [`${this.fmt(i.daily_rate)}/day`];
+              if (rateParts) {
+                if (i.weekly_rate) rateParts.push(`${this.fmt(i.weekly_rate)}/wk`);
+                if (i.monthly_rate) rateParts.push(`${this.fmt(i.monthly_rate)}/mo`);
+              }
               return `<tr>
               <td>${i.product_name}${tag}</td>
+              <td style="font-size:12px;color:var(--text-muted)">${i.is_mandatory ? 'Included, no charge' : rateParts.join(' · ')}</td>
               <td>${i.rental_classification==='equipment'?'Equipment':'Tool'}</td>
               <td>${i.quantity}</td>
               <td>${i.quantity_returned}</td>
@@ -4310,7 +4345,7 @@ const App = {
             </div>
           </div>
           <p style="font-size:11px;color:var(--text-muted);margin-top:-6px">Item availability below reflects stock at the selected location.</p>
-          <div class="form-group"><label>Due Date *</label><input type="date" id="rc-duedate" value="${tomorrow}"></div>
+          <div class="form-group"><label>Due Date *</label><input type="date" id="rc-duedate" value="${tomorrow}" oninput="App._recalcRentalCheckoutEstimate()"></div>
           <hr style="margin:12px 0">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <strong>Items</strong>
@@ -4322,12 +4357,18 @@ const App = {
           <p style="font-size:11px;color:var(--text-muted);margin:2px 0 8px">Costs entered here are charged along with the rental fee when the cashier processes payment. The driver/operator themselves are assigned later, at issue/return.</p>
           <div class="form-group">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal">
+              <input type="checkbox" id="rc-customer-pickup" onchange="App._toggleCustomerPickup()" style="width:16px;height:16px;cursor:pointer">
+              Customer Pickup <span style="font-weight:400;color:var(--text-muted);font-size:11px">(customer collects the item themselves — no delivery)</span>
+            </label>
+          </div>
+          <div class="form-group">
+            <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal">
               <input type="checkbox" id="rc-delivery" onchange="App._toggleRentalCreateService('delivery')" style="width:16px;height:16px;cursor:pointer">
               Delivery required
             </label>
           </div>
           <div id="rc-delivery-fields" style="display:none">
-            <div class="form-group" style="max-width:220px"><label style="font-size:11px">Delivery Cost</label><input type="number" id="rc-delivery-cost" value="0" min="0" step="0.01"></div>
+            <div class="form-group" style="max-width:220px"><label style="font-size:11px">Delivery Cost</label><input type="number" id="rc-delivery-cost" value="0" min="0" step="0.01" oninput="App._recalcRentalCheckoutEstimate()"></div>
             <div class="form-group"><label style="font-size:11px">Delivery Address</label><textarea id="rc-delivery-address" rows="2" placeholder="Leave blank to use the customer's address on file"></textarea></div>
           </div>
           <div class="form-group">
@@ -4337,7 +4378,7 @@ const App = {
             </label>
           </div>
           <div id="rc-pickup-fields" class="form-group" style="display:none;max-width:220px">
-            <label style="font-size:11px">Pickup Cost</label><input type="number" id="rc-pickup-cost" value="0" min="0" step="0.01">
+            <label style="font-size:11px">Pickup Cost</label><input type="number" id="rc-pickup-cost" value="0" min="0" step="0.01" oninput="App._recalcRentalCheckoutEstimate()">
           </div>
           <div class="form-group">
             <label style="display:flex;align-items:center;gap:8px;cursor:pointer;font-weight:normal">
@@ -4346,9 +4387,10 @@ const App = {
             </label>
           </div>
           <div id="rc-operator-fields" class="form-group" style="display:none;max-width:220px">
-            <label style="font-size:11px">Operator Fee</label><input type="number" id="rc-operator-fee" value="0" min="0" step="0.01">
+            <label style="font-size:11px">Operator Fee</label><input type="number" id="rc-operator-fee" value="0" min="0" step="0.01" oninput="App._recalcRentalCheckoutEstimate()">
           </div>
           <hr style="margin:12px 0">
+          <div id="rc-total-summary" style="background:var(--bg-secondary);border-radius:6px;padding:10px 12px;font-size:13px;margin-bottom:12px"></div>
           <div class="form-group"><label>Notes</label><textarea id="rc-agreement-notes" rows="2" placeholder="Optional notes for this rental…"></textarea></div>
           <p style="font-size:11px;color:var(--text-muted);margin-top:8px">This places the rental on hold — a cashier will collect payment (cash or credit) and the rental period begins when it's finalized at the register.</p>
         </div>
@@ -4358,6 +4400,7 @@ const App = {
         </div>
       </div>`);
     this.addRentalCheckoutLine();
+    this._recalcRentalCheckoutEstimate();
     document.addEventListener('click', (e) => {
       if (!e.target.closest('#rc-customer-search') && !e.target.closest('#rc-customer-dd')) {
         const dd = document.getElementById('rc-customer-dd');
@@ -4370,6 +4413,22 @@ const App = {
     const box = document.getElementById(`rc-${which}`);
     const fields = document.getElementById(`rc-${which}-fields`);
     if (fields) fields.style.display = box?.checked ? 'block' : 'none';
+    // Delivery and Customer Pickup are mutually exclusive — the item can't
+    // both be dropped off and collected by the customer.
+    if (which === 'delivery' && box?.checked) {
+      const cp = document.getElementById('rc-customer-pickup');
+      if (cp) cp.checked = false;
+    }
+    this._recalcRentalCheckoutEstimate();
+  },
+
+  _toggleCustomerPickup() {
+    const box = document.getElementById('rc-customer-pickup');
+    if (box?.checked) {
+      const deliveryBox = document.getElementById('rc-delivery');
+      if (deliveryBox?.checked) { deliveryBox.checked = false; this._toggleRentalCreateService('delivery'); }
+    }
+    this._recalcRentalCheckoutEstimate();
   },
 
   // Mirrors the main POS customer picker (App.selectCustomer/setCartCustomer)
@@ -4433,6 +4492,7 @@ const App = {
         <input type="text" id="rl-cond-${idx}" placeholder="Condition out (optional)" style="flex:2;padding:6px;border:1px solid var(--border);border-radius:4px;font-size:13px">
         <span id="rl-warn-${idx}" style="font-size:11px;color:var(--danger);align-self:center"></span>
       </div>
+      <div id="rl-rate-${idx}" style="font-size:11px;color:var(--text-muted);margin-top:4px"></div>
       <div id="rl-accessories-${idx}"></div>`;
     container.appendChild(wrap);
   },
@@ -4450,22 +4510,153 @@ const App = {
   // Loads and renders the mandatory/optional accessories for whichever item
   // is currently selected on this checkout line — mandatory ones are always
   // included at no cost; optional ones are checkboxes that add their own fee.
+  // Also renders the item's Daily/Weekly/Monthly rate card and refreshes the
+  // running estimate at the bottom of the form.
   async _onRentalLineProductChange(idx) {
     this._updateRentalLineAvail(idx);
     const hidden = document.getElementById(`rl-prod-${idx}`);
     const accEl = document.getElementById(`rl-accessories-${idx}`);
+    const rateEl = document.getElementById(`rl-rate-${idx}`);
     if (!hidden || !accEl) return;
     const productId = hidden.value;
-    if (!productId) { accEl.innerHTML = ''; return; }
+    if (!productId) {
+      accEl.innerHTML = '';
+      if (rateEl) rateEl.innerHTML = '';
+      this._recalcRentalCheckoutEstimate();
+      return;
+    }
+    const product = (this._rentalProducts || []).find(p => String(p.id) === String(productId));
+    if (rateEl && product) {
+      const parts = [`${this.fmt(product.rental_rate)}/day`];
+      if (product.rental_weekly_rate) parts.push(`${this.fmt(product.rental_weekly_rate)}/week`);
+      if (product.rental_monthly_rate) parts.push(`${this.fmt(product.rental_monthly_rate)}/month`);
+      if (product.rental_classification === 'equipment' && product.rental_hourly_rate) parts.push(`${this.fmt(product.rental_hourly_rate)}/hr`);
+      rateEl.innerHTML = `Rate: ${parts.join(' · ')}`;
+    }
     const accessories = await this.api('GET', `/products/${productId}/accessories`);
     if (!document.getElementById(`rl-accessories-${idx}`)) return;
-    if (!accessories.length) { accEl.innerHTML = ''; return; }
-    accEl.innerHTML = `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);font-size:12px">
+    this._rentalLineAccessories = this._rentalLineAccessories || {};
+    this._rentalLineAccessories[idx] = accessories;
+    accEl.innerHTML = !accessories.length ? '' : `<div style="margin-top:6px;padding-top:6px;border-top:1px dashed var(--border);font-size:12px">
       ${accessories.map(a => a.is_mandatory
         ? `<div style="color:var(--text-muted)">✓ Includes ${a.name} <span style="font-size:11px">(mandatory, no charge)</span></div>`
-        : `<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" class="rl-acc-${idx}" value="${a.accessory_product_id}" style="width:auto"> ${a.name} <span style="color:var(--text-muted)">(+${this.fmt(a.rental_rate)}/day)</span></label>`
+        : `<label style="display:flex;align-items:center;gap:6px"><input type="checkbox" class="rl-acc-${idx}" value="${a.accessory_product_id}" onchange="App._recalcRentalCheckoutEstimate()" style="width:auto"> ${a.name} <span style="color:var(--text-muted)">(+${this.fmt(a.rental_rate)}/day)</span></label>`
       ).join('')}
     </div>`;
+    this._recalcRentalCheckoutEstimate();
+  },
+
+  // Client-side port of lib/rentalPricing.js's calculateRentalFee — used only
+  // to show a live estimate on the New Rental form before the hold is placed.
+  // The server recomputes this for real (and is authoritative) at finalize
+  // time using the actual checkout instant, so this must stay logically
+  // identical to that module or the displayed estimate will silently drift
+  // from what's actually billed.
+  _calcRentalFeeEstimate({ classification, dailyRate, weeklyRate, monthlyRate, hourlyRate, start, end }) {
+    const totalMs = Math.max(0, end - start);
+    const totalHours = Math.floor(totalMs / 3600000);
+    const totalCalendarDays = totalHours / 24;
+
+    const months = Math.floor(totalCalendarDays / 28);
+    const remAfterMonths = totalCalendarDays - months * 28;
+    const weeks = Math.floor(remAfterMonths / 7);
+    const remAfterWeeks = remAfterMonths - weeks * 7;
+    let days = Math.floor(remAfterWeeks);
+    let remainderHours = (remAfterWeeks - days) * 24;
+
+    const daily = dailyRate || 0;
+    const hourly = hourlyRate || 0;
+    let hoursBilled = 0;
+
+    if (classification === 'equipment') {
+      if (remainderHours > 8) { days += 1; remainderHours = 0; }
+      else hoursBilled = remainderHours;
+    } else {
+      hoursBilled = remainderHours;
+    }
+
+    const monthlyFee = months * (monthlyRate || 0);
+    const weeklyFee = weeks * (weeklyRate || 0);
+    const dailyFee = days * daily;
+    const hourlyFee = classification === 'equipment' ? hoursBilled * hourly : hoursBilled * (daily / 24);
+
+    const fee = monthlyFee + weeklyFee + dailyFee + hourlyFee;
+    return Math.round(fee * 100) / 100;
+  },
+
+  // Recomputes the running estimate shown on the New Rental form — every
+  // line's tiered fee (main item + checked optional accessories) from "now"
+  // to the chosen due date, plus tax, plus delivery/pickup/operator fees.
+  // Mirrors the double-charge model used at finalize (the deposit equals the
+  // rental fee), so the estimated total matches what actually gets charged.
+  _recalcRentalCheckoutEstimate() {
+    const summaryEl = document.getElementById('rc-total-summary');
+    if (!summaryEl) return;
+    const dueDateStr = document.getElementById('rc-duedate')?.value;
+    const rows = [];
+    let feeSubtotal = 0, taxTotal = 0;
+    if (dueDateStr) {
+      const start = new Date();
+      const end = new Date(`${dueDateStr}T${start.toISOString().slice(11,19)}.000Z`);
+      document.querySelectorAll('#rental-checkout-lines [id^="rental-line-"]').forEach(line => {
+        const idx = line.id.replace('rental-line-', '');
+        const productId = document.getElementById(`rl-prod-${idx}`)?.value;
+        if (!productId) return;
+        const product = (this._rentalProducts || []).find(p => String(p.id) === String(productId));
+        if (!product) return;
+        const qty = parseInt(document.getElementById(`rl-qty-${idx}`)?.value) || 0;
+        if (qty <= 0) return;
+        const fee = this._calcRentalFeeEstimate({
+          classification: product.rental_classification, dailyRate: product.rental_rate,
+          weeklyRate: product.rental_weekly_rate, monthlyRate: product.rental_monthly_rate,
+          hourlyRate: product.rental_hourly_rate, start, end,
+        }) * qty;
+        rows.push({ label: `${product.name} × ${qty}`, fee });
+        feeSubtotal += fee;
+        taxTotal += fee * (product.tax_rate || 0) / 100;
+
+        const accs = (this._rentalLineAccessories || {})[idx] || [];
+        document.querySelectorAll(`.rl-acc-${idx}:checked`).forEach(cb => {
+          const acc = accs.find(a => String(a.accessory_product_id) === String(cb.value));
+          if (!acc) return;
+          const accFee = this._calcRentalFeeEstimate({
+            classification: acc.rental_classification, dailyRate: acc.rental_rate,
+            weeklyRate: acc.rental_weekly_rate, monthlyRate: acc.rental_monthly_rate,
+            hourlyRate: acc.rental_hourly_rate, start, end,
+          }) * qty;
+          rows.push({ label: `+ ${acc.name} × ${qty}`, fee: accFee });
+          feeSubtotal += accFee;
+          taxTotal += accFee * (acc.tax_rate || 0) / 100;
+        });
+      });
+    }
+
+    if (!dueDateStr || !rows.length) {
+      summaryEl.innerHTML = `<span style="color:var(--text-muted)">Select a due date and at least one item to see an estimated total.</span>`;
+      return;
+    }
+
+    const deliveryFee = document.getElementById('rc-delivery')?.checked ? parseFloat(document.getElementById('rc-delivery-cost')?.value) || 0 : 0;
+    const pickupFee = document.getElementById('rc-pickup')?.checked ? parseFloat(document.getElementById('rc-pickup-cost')?.value) || 0 : 0;
+    const operatorFee = document.getElementById('rc-operator')?.checked ? parseFloat(document.getElementById('rc-operator-fee')?.value) || 0 : 0;
+    const servicesTotal = deliveryFee + pickupFee + operatorFee;
+    // Deposit mirrors the fee 1:1 (double-charge model — see PATCH .../checkout
+    // in routes/rentals.js), so what's actually collected at the register is
+    // fee + matching deposit + tax + service fees, not just the fee alone.
+    const grandTotal = feeSubtotal + feeSubtotal + taxTotal + servicesTotal;
+    const days = Math.max(1, Math.round((new Date(`${dueDateStr}T00:00:00`) - new Date(new Date().toDateString())) / 86400000));
+
+    summaryEl.innerHTML = `
+      <div style="font-weight:600;margin-bottom:6px">Estimated Total — ${days} day${days===1?'':'s'}</div>
+      ${rows.map(r => `<div style="display:flex;justify-content:space-between"><span>${r.label}</span><span>${this.fmt(r.fee)}</span></div>`).join('')}
+      <div style="display:flex;justify-content:space-between"><span>Refundable Deposit</span><span>${this.fmt(feeSubtotal)}</span></div>
+      <div style="display:flex;justify-content:space-between"><span>Tax</span><span>${this.fmt(taxTotal)}</span></div>
+      ${deliveryFee ? `<div style="display:flex;justify-content:space-between"><span>Delivery Fee</span><span>${this.fmt(deliveryFee)}</span></div>` : ''}
+      ${pickupFee ? `<div style="display:flex;justify-content:space-between"><span>Pickup Fee</span><span>${this.fmt(pickupFee)}</span></div>` : ''}
+      ${operatorFee ? `<div style="display:flex;justify-content:space-between"><span>Operator Fee</span><span>${this.fmt(operatorFee)}</span></div>` : ''}
+      <div style="display:flex;justify-content:space-between;font-weight:700;border-top:1px solid var(--border);margin-top:6px;padding-top:6px"><span>Total Due at Register</span><span>${this.fmt(grandTotal)}</span></div>
+      <p style="font-size:11px;color:var(--text-muted);margin-top:6px">Estimated — the real charge is computed when payment is processed, based on the exact start time.</p>
+    `;
   },
 
   // Re-fetches rental items scoped to the newly-selected branch and refreshes
@@ -4496,6 +4687,7 @@ const App = {
       if (hidden.value) this._onRentalLineProductChange(idx);
       else { const accEl = document.getElementById(`rl-accessories-${idx}`); if (accEl) accEl.innerHTML = ''; }
     });
+    this._recalcRentalCheckoutEstimate();
   },
 
   // ─── Rental item picker popup (New Rental screen) ──────────────────────
@@ -4581,6 +4773,7 @@ const App = {
     const deliveryRequired = document.getElementById('rc-delivery').checked;
     const pickupRequired = document.getElementById('rc-pickup').checked;
     const operatorRequired = document.getElementById('rc-operator').checked;
+    const customerPickup = document.getElementById('rc-customer-pickup').checked;
     try {
       const agreement = await this.api('POST', '/rentals/agreements', {
         customer_id, branch_id, employee_id: this.currentUser.id, due_date, items,
@@ -4592,6 +4785,7 @@ const App = {
         pickup_cost: pickupRequired ? parseFloat(document.getElementById('rc-pickup-cost').value) || 0 : 0,
         operator_required: operatorRequired ? 1 : 0,
         operator_fee: operatorRequired ? parseFloat(document.getElementById('rc-operator-fee').value) || 0 : 0,
+        customer_pickup: customerPickup ? 1 : 0,
       });
       this.closeModal();
       this.alert(`Rental ${agreement.agreement_number} placed on hold — a cashier can recall it from Held Orders in the POS to collect payment`);
@@ -4668,6 +4862,8 @@ const App = {
     if (a.status !== 'awaiting_issue') { this.alert('This rental is not awaiting issue', 'warning'); return; }
     const drivers = employees.filter(e => e.is_driver);
     const operators = employees.filter(e => e.is_operator);
+    const nowLocal = new Date();
+    const defaultIssuedAt = `${nowLocal.getFullYear()}-${String(nowLocal.getMonth()+1).padStart(2,'0')}-${String(nowLocal.getDate()).padStart(2,'0')}T${String(nowLocal.getHours()).padStart(2,'0')}:${String(nowLocal.getMinutes()).padStart(2,'0')}`;
     this.showModal(`
       <div class="modal" style="max-width:480px">
         <div class="modal-header">
@@ -4686,7 +4882,11 @@ const App = {
                 ${accs.length ? `<div style="font-size:11px;color:var(--text-muted)">+ ${accs.map(x=>x.product_name).join(', ')}</div>` : ''}</div>`;
             }).join('')}
           </div>
-          <p style="font-size:11px;color:var(--text-muted);margin-top:-6px;margin-bottom:12px">Marking this issued starts the rental clock now.</p>
+          <div class="form-group" style="margin-bottom:12px">
+            <label>Start Date / Time</label>
+            <input type="datetime-local" id="ri-issued-at" value="${defaultIssuedAt}" max="${defaultIssuedAt}">
+            <div style="font-size:11px;color:var(--text-muted);margin-top:2px">Defaults to now — back-date this if the item actually went out earlier. The rental clock and all fee calculations run from this time.</div>
+          </div>
 
           ${a.delivery_required ? `<div class="form-group">
             <label>Delivery Driver <span style="font-weight:400;color:var(--text-muted)">(fee ${this.fmt(a.delivery_cost)}, already charged)</span></label>
@@ -4718,11 +4918,18 @@ const App = {
     const operatorEl = document.getElementById('ri-operator-id');
     if (deliveryDriverEl && !deliveryDriverEl.value) { this.alert('Select a driver for delivery', 'error'); return; }
     if (operatorEl && !operatorEl.value) { this.alert('Select an operator', 'error'); return; }
+    const issuedAtRaw = document.getElementById('ri-issued-at')?.value;
+    if (!issuedAtRaw) { this.alert('Enter a start date/time', 'error'); return; }
+    // The datetime-local input has no timezone of its own — new Date() here
+    // resolves it against the browser's local clock, then toISOString() makes
+    // it unambiguous for the server regardless of what timezone it runs in.
+    const issuedAt = new Date(issuedAtRaw).toISOString();
     try {
       const agreement = await this.api('PATCH', `/rentals/agreements/${id}/issue`, {
         employee_id: this.currentUser?.id || null,
         delivery_driver_id: deliveryDriverEl ? parseInt(deliveryDriverEl.value) || null : null,
         operator_id: operatorEl ? parseInt(operatorEl.value) || null : null,
+        issued_at: issuedAt,
       });
       this.closeModal();
       this.alert(`Rental ${agreement.agreement_number} issued — clock started`);
