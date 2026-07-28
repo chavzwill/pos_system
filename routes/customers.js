@@ -87,12 +87,19 @@ router.get('/', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Discount card fields (name/percent/active) come from a LEFT JOIN so the
+// POS can decide whether to auto-apply it (discount_card_type_active must
+// also be true — deactivating a type retires it for every customer holding
+// it without editing each customer record).
+const CUSTOMER_WITH_CARD_SELECT = `SELECT c.*, dct.name as discount_card_type_name, dct.discount_percent as discount_card_percent, dct.active as discount_card_type_active
+  FROM customers c LEFT JOIN discount_card_types dct ON c.discount_card_type_id = dct.id WHERE c.id = ?`;
+
 router.get('/:id', requireAuth, async (req, res) => {
   try {
     const { rows: [customer] } = await db.execute({ sql: 'SELECT * FROM customers WHERE id = ?', args: [req.params.id] });
     if (!customer) return res.status(404).json({ error: 'Customer not found' });
     await runCreditCheck(req.params.id);
-    const { rows: [updated] } = await db.execute({ sql: 'SELECT * FROM customers WHERE id = ?', args: [req.params.id] });
+    const { rows: [updated] } = await db.execute({ sql: CUSTOMER_WITH_CARD_SELECT, args: [req.params.id] });
     const { rows: transactions } = await db.execute({ sql: 'SELECT * FROM transactions WHERE customer_id = ? ORDER BY created_at DESC LIMIT 10', args: [req.params.id] });
     res.json({ ...updated, recent_transactions: transactions });
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -111,14 +118,36 @@ router.get('/:id/transactions', requireAuth, async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// Validates a customer's discount card fields before insert/update: the card
+// type (if given) must exist, and the card number (if given) can't already
+// belong to another customer — one active card per customer, enforced here
+// since SQLite's ALTER TABLE ADD COLUMN can't add a UNIQUE constraint after
+// the fact. Returns an error string, or null if everything checks out.
+async function validateDiscountCard(discount_card_type_id, discount_card_number, excludeCustomerId) {
+  if (!discount_card_type_id) return null;
+  const { rows: [type] } = await db.execute({ sql: 'SELECT id FROM discount_card_types WHERE id = ?', args: [discount_card_type_id] });
+  if (!type) return 'Selected discount card type does not exist';
+  if (discount_card_number) {
+    const { rows: [dupe] } = await db.execute({
+      sql: `SELECT id FROM customers WHERE discount_card_number = ? ${excludeCustomerId ? 'AND id != ?' : ''}`,
+      args: excludeCustomerId ? [discount_card_number, excludeCustomerId] : [discount_card_number],
+    });
+    if (dupe) return `Card number ${discount_card_number} is already assigned to another customer`;
+  }
+  return null;
+}
+
 router.post('/', requirePermission('customers'), async (req, res) => {
   const {
     first_name, last_name, email, phone, address, city, state, zip, notes, customer_type, credit_terms_days, credit_limit, tax_exempt, tax_exemption_number,
     is_rental_customer, rental_id_type, rental_id_number, rental_address_proof_type, rental_address_proof_details,
     rental_reference_name, rental_reference_phone, rental_reference_relationship,
+    discount_card_type_id, discount_card_number,
   } = req.body;
   if (!first_name || !last_name) return res.status(400).json({ error: 'First and last name required' });
   try {
+    const cardError = await validateDiscountCard(discount_card_type_id, discount_card_number, null);
+    if (cardError) return res.status(400).json({ error: cardError });
     const customer_number = await nextNumber(db, 'customers', 'customer_number', 'CUST-', 4);
     const type = customer_type || 'cash';
     const creditEnabled = type === 'credit' ? 1 : 0;
@@ -128,11 +157,13 @@ router.post('/', requirePermission('customers'), async (req, res) => {
     const isRentalCust = is_rental_customer ? 1 : 0;
     const result = await db.execute({ sql: `INSERT INTO customers
       (customer_number,first_name,last_name,email,phone,address,city,state,zip,notes,customer_type,credit_terms_days,credit_limit,credit_enabled,tax_exempt,tax_exemption_number,
-       is_rental_customer,rental_id_type,rental_id_number,rental_address_proof_type,rental_address_proof_details,rental_reference_name,rental_reference_phone,rental_reference_relationship)
-      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+       is_rental_customer,rental_id_type,rental_id_number,rental_address_proof_type,rental_address_proof_details,rental_reference_name,rental_reference_phone,rental_reference_relationship,
+       discount_card_type_id,discount_card_number)
+      VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
       args: [customer_number, first_name, last_name, email||null, phone||null, address||null, city||null, state||null, zip||null, notes||null, type, terms, limit, creditEnabled, taxExempt, tax_exemption_number||null,
         isRentalCust, isRentalCust ? (rental_id_type||null) : null, isRentalCust ? (rental_id_number||null) : null, isRentalCust ? (rental_address_proof_type||null) : null, isRentalCust ? (rental_address_proof_details||null) : null,
-        isRentalCust ? (rental_reference_name||null) : null, isRentalCust ? (rental_reference_phone||null) : null, isRentalCust ? (rental_reference_relationship||null) : null] });
+        isRentalCust ? (rental_reference_name||null) : null, isRentalCust ? (rental_reference_phone||null) : null, isRentalCust ? (rental_reference_relationship||null) : null,
+        discount_card_type_id || null, discount_card_type_id ? (discount_card_number || null) : null] });
     const { rows: [row] } = await db.execute({ sql: 'SELECT * FROM customers WHERE id = ?', args: [Number(result.lastInsertRowid)] });
     res.status(201).json(row);
   } catch (e) {
@@ -145,8 +176,11 @@ router.put('/:id', requirePermission('customers'), async (req, res) => {
     first_name, last_name, email, phone, address, city, state, zip, notes, active, customer_type, credit_terms_days, credit_limit, tax_exempt, tax_exemption_number,
     is_rental_customer, rental_id_type, rental_id_number, rental_address_proof_type, rental_address_proof_details,
     rental_reference_name, rental_reference_phone, rental_reference_relationship,
+    discount_card_type_id, discount_card_number,
   } = req.body;
   try {
+    const cardError = await validateDiscountCard(discount_card_type_id, discount_card_number, req.params.id);
+    if (cardError) return res.status(400).json({ error: cardError });
     const type = customer_type || 'cash';
     const creditEnabled = type === 'credit' ? 1 : 0;
     const terms = parseInt(credit_terms_days) || 30;
@@ -154,10 +188,12 @@ router.put('/:id', requirePermission('customers'), async (req, res) => {
     const taxExempt = tax_exempt ? 1 : 0;
     const isRentalCust = is_rental_customer ? 1 : 0;
     await db.execute({ sql: `UPDATE customers SET first_name=?,last_name=?,email=?,phone=?,address=?,city=?,state=?,zip=?,notes=?,active=?,customer_type=?,credit_terms_days=?,credit_limit=?,credit_enabled=?,tax_exempt=?,tax_exemption_number=?,
-      is_rental_customer=?,rental_id_type=?,rental_id_number=?,rental_address_proof_type=?,rental_address_proof_details=?,rental_reference_name=?,rental_reference_phone=?,rental_reference_relationship=? WHERE id=?`,
+      is_rental_customer=?,rental_id_type=?,rental_id_number=?,rental_address_proof_type=?,rental_address_proof_details=?,rental_reference_name=?,rental_reference_phone=?,rental_reference_relationship=?,
+      discount_card_type_id=?,discount_card_number=? WHERE id=?`,
       args: [first_name, last_name, email||null, phone||null, address||null, city||null, state||null, zip||null, notes||null, active??1, type, terms, limit, creditEnabled, taxExempt, tax_exemption_number||null,
         isRentalCust, isRentalCust ? (rental_id_type||null) : null, isRentalCust ? (rental_id_number||null) : null, isRentalCust ? (rental_address_proof_type||null) : null, isRentalCust ? (rental_address_proof_details||null) : null,
-        isRentalCust ? (rental_reference_name||null) : null, isRentalCust ? (rental_reference_phone||null) : null, isRentalCust ? (rental_reference_relationship||null) : null, req.params.id] });
+        isRentalCust ? (rental_reference_name||null) : null, isRentalCust ? (rental_reference_phone||null) : null, isRentalCust ? (rental_reference_relationship||null) : null,
+        discount_card_type_id || null, discount_card_type_id ? (discount_card_number || null) : null, req.params.id] });
     if (type === 'cash') {
       await db.execute({ sql: 'UPDATE customers SET account_blocked = 0 WHERE id = ?', args: [req.params.id] });
     } else {

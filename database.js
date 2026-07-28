@@ -635,6 +635,13 @@ async function _init() {
       active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS discount_card_types (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      discount_percent REAL NOT NULL DEFAULT 0,
+      active INTEGER DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS po_attachments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       po_id INTEGER NOT NULL REFERENCES purchase_orders(id) ON DELETE CASCADE,
@@ -947,6 +954,13 @@ async function _init() {
     // so dispatch/issue screens can show a deliberate "Customer Pickup" state
     // instead of just blank/not-applicable.
     'ALTER TABLE rental_agreements ADD COLUMN customer_pickup INTEGER DEFAULT 0',
+    // One active discount card per customer, entered on their profile — the
+    // card is "activated" simply by having both fields set. Uniqueness of
+    // discount_card_number across customers and existence of the referenced
+    // type are enforced in routes/customers.js rather than at the schema
+    // level (SQLite's ALTER TABLE ADD COLUMN can't add a UNIQUE constraint).
+    'ALTER TABLE customers ADD COLUMN discount_card_type_id INTEGER REFERENCES discount_card_types(id)',
+    'ALTER TABLE customers ADD COLUMN discount_card_number TEXT',
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch(e) {}
@@ -1199,6 +1213,18 @@ async function _init() {
     }
   } catch(e) {}
 
+  // Add discount-cards permission to existing security groups
+  try {
+    const { rows: groups } = await db.execute({ sql: 'SELECT id, name, permissions FROM security_groups', args: [] });
+    for (const g of groups) {
+      const perms = JSON.parse(g.permissions || '{}');
+      if (!('discount-cards' in perms)) {
+        perms['discount-cards'] = (g.name === 'Administrator' || g.name === 'Manager');
+        await db.execute({ sql: 'UPDATE security_groups SET permissions = ? WHERE id = ?', args: [JSON.stringify(perms), g.id] });
+      }
+    }
+  } catch(e) {}
+
   // Ensure admin always has a password — runs unconditionally on every boot
   {
     const { rows: [adminEmp] } = await db.execute({ sql: 'SELECT id, password FROM employees WHERE username = ?', args: ['admin'] });
@@ -1232,9 +1258,9 @@ async function _init() {
   // Seed security groups
   const { rows: [sgCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM security_groups', args: [] });
   if (Number(sgCount.c) === 0) {
-    await db.execute({ sql: 'INSERT INTO security_groups (name, description, permissions) VALUES (?,?,?)', args: ['Administrator','Full system access',JSON.stringify({dashboard:true,pos:true,inventory:true,customers:true,transactions:true,reports:true,employees:true,settings:true,purchasing:true,branches:true,security:true,accounts:true,quotations:true,suppliers:true,transfers:true,transfers_pickup:true,transfers_dropoff:true,crm:true,commissions:true,multi_branch_access:true,warehouse:true,shipping:true,'cycle-counts':true,drawers:true,void_transactions:true,promotions:true,process_returns:true,purchase_requests:true,services:true,rentals:true,rentals_issue:true,layaway:true,layaway_create:true,layaway_payments:true,layaway_cancel:true})] });
-    await db.execute({ sql: 'INSERT INTO security_groups (name, description, permissions) VALUES (?,?,?)', args: ['Cashier','POS and basic operations',JSON.stringify({dashboard:true,pos:true,inventory:false,customers:true,transactions:true,reports:false,employees:false,settings:false,purchasing:false,branches:false,security:false,accounts:false,quotations:true,suppliers:false,transfers:false,transfers_pickup:false,transfers_dropoff:false,crm:false,commissions:false,multi_branch_access:false,warehouse:false,shipping:false,'cycle-counts':false,drawers:false,void_transactions:false,promotions:false,process_returns:false,purchase_requests:false,services:false,rentals:true,rentals_issue:false,layaway:true,layaway_create:false,layaway_payments:false,layaway_cancel:false})] });
-    await db.execute({ sql: 'INSERT INTO security_groups (name, description, permissions) VALUES (?,?,?)', args: ['Manager','Store management without admin',JSON.stringify({dashboard:true,pos:true,inventory:true,customers:true,transactions:true,reports:true,employees:true,settings:false,purchasing:true,branches:false,security:false,accounts:true,quotations:true,suppliers:true,transfers:true,transfers_pickup:true,transfers_dropoff:true,crm:true,commissions:true,multi_branch_access:true,warehouse:true,shipping:true,'cycle-counts':true,drawers:true,void_transactions:true,promotions:true,process_returns:true,purchase_requests:true,services:true,rentals:true,rentals_issue:true,layaway:true,layaway_create:true,layaway_payments:true,layaway_cancel:true})] });
+    await db.execute({ sql: 'INSERT INTO security_groups (name, description, permissions) VALUES (?,?,?)', args: ['Administrator','Full system access',JSON.stringify({dashboard:true,pos:true,inventory:true,customers:true,transactions:true,reports:true,employees:true,settings:true,purchasing:true,branches:true,security:true,accounts:true,quotations:true,suppliers:true,transfers:true,transfers_pickup:true,transfers_dropoff:true,crm:true,commissions:true,multi_branch_access:true,warehouse:true,shipping:true,'cycle-counts':true,drawers:true,void_transactions:true,promotions:true,process_returns:true,purchase_requests:true,services:true,rentals:true,rentals_issue:true,layaway:true,layaway_create:true,layaway_payments:true,layaway_cancel:true,'discount-cards':true})] });
+    await db.execute({ sql: 'INSERT INTO security_groups (name, description, permissions) VALUES (?,?,?)', args: ['Cashier','POS and basic operations',JSON.stringify({dashboard:true,pos:true,inventory:false,customers:true,transactions:true,reports:false,employees:false,settings:false,purchasing:false,branches:false,security:false,accounts:false,quotations:true,suppliers:false,transfers:false,transfers_pickup:false,transfers_dropoff:false,crm:false,commissions:false,multi_branch_access:false,warehouse:false,shipping:false,'cycle-counts':false,drawers:false,void_transactions:false,promotions:false,process_returns:false,purchase_requests:false,services:false,rentals:true,rentals_issue:false,layaway:true,layaway_create:false,layaway_payments:false,layaway_cancel:false,'discount-cards':false})] });
+    await db.execute({ sql: 'INSERT INTO security_groups (name, description, permissions) VALUES (?,?,?)', args: ['Manager','Store management without admin',JSON.stringify({dashboard:true,pos:true,inventory:true,customers:true,transactions:true,reports:true,employees:true,settings:false,purchasing:true,branches:false,security:false,accounts:true,quotations:true,suppliers:true,transfers:true,transfers_pickup:true,transfers_dropoff:true,crm:true,commissions:true,multi_branch_access:true,warehouse:true,shipping:true,'cycle-counts':true,drawers:true,void_transactions:true,promotions:true,process_returns:true,purchase_requests:true,services:true,rentals:true,rentals_issue:true,layaway:true,layaway_create:true,layaway_payments:true,layaway_cancel:true,'discount-cards':true})] });
 
     // Assign to existing employees
     try {
