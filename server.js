@@ -36,7 +36,10 @@ app.use(cors());
 // covers the whole pipeline. Cheap CPU cost, large win on the wire for the
 // SPA payload and any sizeable API response (e.g. product/transaction lists).
 app.use(compression());
-app.use(bodyParser.json());
+// Default 100kb limit is too small for bulk CSV imports (inventory/rental
+// item lists, PO line items, etc.) serialized to JSON — bump it so those
+// requests don't get rejected before reaching the route handler.
+app.use(bodyParser.json({ limit: '10mb' }));
 app.use(express.static(path.join(__dirname, 'public')));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
@@ -82,6 +85,14 @@ app.use('/api/woocommerce',    woocommerceRouter);
 app.use('/api/api-keys',       require('./routes/api-keys'));
 app.use('/api/rentals',        require('./routes/rentals'));
 app.use('/api/layaway',        require('./routes/layaway'));
+
+// Any error under /api (oversized body, malformed JSON, etc.) must come back
+// as JSON — App.api()'s res.json() call otherwise chokes on Express's default
+// HTML error page (starts with "<!DOCTYPE", which isn't valid JSON).
+app.use('/api', (err, req, res, next) => {
+  if (res.headersSent) return next(err);
+  res.status(err.status || 500).json({ error: err.message || 'Request failed' });
+});
 
 app.get('*', (req, res) => {
   res.sendFile(path.join(__dirname, 'public', 'index.html'));

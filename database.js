@@ -938,6 +938,9 @@ async function _init() {
     'ALTER TABLE customers ADD COLUMN rental_reference_name TEXT',
     'ALTER TABLE customers ADD COLUMN rental_reference_phone TEXT',
     'ALTER TABLE customers ADD COLUMN rental_reference_relationship TEXT',
+    'ALTER TABLE products ADD COLUMN model_number TEXT',
+    'ALTER TABLE products ADD COLUMN size TEXT',
+    'ALTER TABLE products ADD COLUMN taxable INTEGER DEFAULT 1',
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch(e) {}

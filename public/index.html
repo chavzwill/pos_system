@@ -76,6 +76,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* Tables */
 .table-wrap { overflow-x: auto; }
 table { width: 100%; border-collapse: collapse; }
+.sticky-table thead th { position: sticky; top: 0; z-index: 1; background: #f5f5f5; }
 th { background: #f5f5f5; padding: 9px 12px; text-align: left; font-size: 12px; text-transform: uppercase; letter-spacing: .5px; color: var(--text-muted); font-weight: 600; white-space: nowrap; }
 td { padding: 10px 12px; border-bottom: 1px solid var(--border); vertical-align: middle; }
 tr:last-child td { border-bottom: none; }
@@ -437,10 +438,6 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
       Dashboard
     </div>
-    <div class="nav-item" data-section="purchasing-hub">
-      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
-      Purchasing
-    </div>
     <div class="nav-item" data-section="sales-hub">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
       Sales
@@ -452,6 +449,10 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
     <div class="nav-item" data-section="warehouse-hub">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 4H4v2h16V4zm1 10v-2l-1-5H4l-1 5v2h1v6h10v-6h4v6h2v-6h1zm-9 4H6v-4h6v4z"/></svg>
       Warehouse
+    </div>
+    <div class="nav-item" data-section="purchasing-hub">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+      Purchasing
     </div>
     <div class="nav-item" data-section="dispatch">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
@@ -905,7 +906,7 @@ const App = {
       { section: 'reports', label: 'Reports', color: '#4CAF50', icon: '<path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zM9 17H7v-7h2v7zm4 0h-2V7h2v10zm4 0h-2v-4h2v4z"/>' },
     ]},
     'warehouse-hub': { title: 'Warehouse', children: [
-      { section: 'inventory', label: 'Inventory', color: '#2196F3', icon: '<path d="M20 4H4v2h16V4zm1 10v-2l-1-5H4l-1 5v2h1v6h10v-6h4v6h2v-6h1zm-9 4H6v-4h6v4z"/>' },
+      { section: 'inventory', label: 'Retail Inventory', color: '#2196F3', icon: '<path d="M20 4H4v2h16V4zm1 10v-2l-1-5H4l-1 5v2h1v6h10v-6h4v6h2v-6h1zm-9 4H6v-4h6v4z"/>' },
       { section: 'warehouse', label: 'Warehouse Mgmt', color: '#00897B', icon: '<path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM3 7h12v7H3V7zm3 9.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V7.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/>' },
       { section: 'cycle-counts', label: 'Cycle Counts', color: '#4CAF50', icon: '<path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 3c1.93 0 3.5 1.57 3.5 3.5S13.93 13 12 13s-3.5-1.57-3.5-3.5S10.07 6 12 6zm7 13H5v-.23c0-.62.28-1.2.76-1.58C7.47 15.82 9.64 15 12 15s4.53.82 6.24 2.19c.48.38.76.97.76 1.58V19z"/>' },
       { section: 'transfers', label: 'Branch Transfers', color: '#FF9800', icon: '<path d="M6.99 11L3 15l3.99 4v-3H14v-2H6.99v-3zM21 9l-3.99-4v3H10v2h7.01v3L21 9z"/>' },
@@ -1078,7 +1079,7 @@ const App = {
       const hub = this._hubGroups[ds];
       el.classList.toggle('active', ds === name || !!(hub && hub.children.some(c => c.section === name)));
     });
-    const titles = { dashboard: 'Dashboard', pos: 'Point of Sale', inventory: 'Inventory Management', services: 'Services & Non-Inventory Items', rentals: 'Rentals', 'rental-items': 'Rental Items', dispatch: 'Dispatch', 'rental-dispatch': 'Rental Dispatch', 'transfer-dispatch': 'Branch Transfer Dispatch', 'rental-deposits': 'Rental Deposits & Credit Notes', 'purchase-requests': 'Purchase Requests', layaway: 'Layaway', customers: 'Customers', transactions: 'Transactions', 'online-orders': 'Online Orders', reports: 'Reports & Analytics', employees: 'Employees', settings: 'Settings', suppliers: 'Suppliers', purchasing: 'Purchasing', quotations: 'Quotations', accounts: 'Accounts Receivable', branches: 'Branch Management', security: 'Security Groups', transfers: 'Branch Transfers', crm: 'CRM & Sales', commissions: 'Commission Tracking', warehouse: 'Warehouse Management', shipping: 'Shipping', 'cycle-counts': 'Cycle Counts', drawers: 'Cash Drawers', promotions: 'Promotions', 'purchasing-hub': 'Purchasing', 'sales-hub': 'Sales', 'accounts-hub': 'Accounts', 'warehouse-hub': 'Warehouse', 'admin-hub': 'Admin' };
+    const titles = { dashboard: 'Dashboard', pos: 'Point of Sale', inventory: 'Retail Inventory Management', services: 'Services & Non-Inventory Items', rentals: 'Rentals', 'rental-items': 'Rental Items', dispatch: 'Dispatch', 'rental-dispatch': 'Rental Dispatch', 'transfer-dispatch': 'Branch Transfer Dispatch', 'rental-deposits': 'Rental Deposits & Credit Notes', 'purchase-requests': 'Purchase Requests', layaway: 'Layaway', customers: 'Customers', transactions: 'Transactions', 'online-orders': 'Online Orders', reports: 'Reports & Analytics', employees: 'Employees', settings: 'Settings', suppliers: 'Suppliers', purchasing: 'Purchasing', quotations: 'Quotations', accounts: 'Accounts Receivable', branches: 'Branch Management', security: 'Security Groups', transfers: 'Branch Transfers', crm: 'CRM & Sales', commissions: 'Commission Tracking', warehouse: 'Warehouse Management', shipping: 'Shipping', 'cycle-counts': 'Cycle Counts', drawers: 'Cash Drawers', promotions: 'Promotions', 'purchasing-hub': 'Purchasing', 'sales-hub': 'Sales', 'accounts-hub': 'Accounts', 'warehouse-hub': 'Warehouse', 'admin-hub': 'Admin' };
     document.getElementById('topbar-title').textContent = titles[name] || name;
     const content = document.getElementById('content');
     content.style.padding = name === 'pos' ? '0' : '20px';
@@ -2659,7 +2660,7 @@ const App = {
   // ─── Inventory ────────────────────────────────────────────
   async renderInventory() {
     const [products, categories, movements] = await Promise.all([
-      this.api('GET', '/products?is_service=0'),
+      this.api('GET', '/products?is_service=0&is_rental=0'),
       this.api('GET', '/categories'),
       this.api('GET', '/products/movements?limit=30'),
     ]);
@@ -2668,7 +2669,7 @@ const App = {
 
     document.getElementById('content').innerHTML = `
       <div class="section-header">
-        <h2>Inventory</h2>
+        <h2>Retail Inventory Management</h2>
         <button class="btn btn-primary" onclick="App.showProductForm()">+ Add Product</button>
       </div>
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
@@ -2711,7 +2712,7 @@ const App = {
       const q = document.getElementById('inv-search').value;
       const cat = document.getElementById('inv-cat-filter').value;
       const branchId = document.getElementById('inv-branch-filter').value;
-      let url = '/products?is_service=0&';
+      let url = '/products?is_service=0&is_rental=0&';
       if (q) url += `search=${encodeURIComponent(q)}&`;
       if (cat) url += `category=${cat}&`;
       if (branchId) url += `branch_id=${branchId}&`;
@@ -2755,7 +2756,7 @@ const App = {
     const q = (document.getElementById('inv-search') || {}).value || '';
     const cat = (document.getElementById('inv-cat-filter') || {}).value || '';
     const branchId = (document.getElementById('inv-branch-filter') || {}).value || '';
-    let url = '/api/products/export?';
+    let url = '/api/products/export?is_service=0&is_rental=0&';
     if (q) url += `search=${encodeURIComponent(q)}&`;
     if (cat) url += `category=${encodeURIComponent(cat)}&`;
     if (branchId) url += `branch_id=${encodeURIComponent(branchId)}&`;
@@ -3528,10 +3529,17 @@ const App = {
   // inside Rentals; moved out since managing the rental catalog is a
   // warehouse/inventory task, not a front-counter one like the other tabs.
   async renderRentalItems() {
+    const branches = await this.api('GET', '/branches');
     document.getElementById('content').innerHTML = `
       <div class="section-header">
         <h2>Rental Items</h2>
         <div id="rental-header-actions" style="display:flex;gap:8px;align-items:center">
+          <input id="ri-search" type="text" placeholder="Search name or SKU…" oninput="App._filterRentalItemsTable()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card);color:var(--text);width:180px">
+          <select id="ri-branch-filter" onchange="App._filterRentalItemsTable()" style="padding:7px 10px;border:1px solid var(--border);border-radius:6px;font-size:13px;background:var(--card);color:var(--text)">
+            <option value="">All Branches</option>
+            <option value="unassigned">Unassigned</option>
+            ${branches.map(b => `<option value="${b.id}">${b.name}</option>`).join('')}
+          </select>
           <button class="btn btn-secondary btn-sm" onclick="App.exportRentalItemsCsv()" title="Export rental items to CSV">&#8659; Export CSV</button>
           ${this.can('rentals_manage_items') ? `
           <a class="btn btn-secondary btn-sm" href="/api/products/export/rentals/template" download title="Download import template">&#8659; Template</a>
@@ -3559,28 +3567,77 @@ const App = {
     const text = await file.text();
     const rows = this._parseCsv(text);
     if (!rows.length) { this.alert('No data rows found in CSV', 'error'); return; }
-    try {
-      const result = await this.api('POST', '/products/import/rentals', { rows });
-      let msg = `Import complete: ${result.created} created, ${result.updated} updated`;
-      if (result.errors.length) msg += `\n${result.errors.length} error(s):\n${result.errors.join('\n')}`;
-      this.alert(msg, result.errors.length ? 'error' : 'success');
-      this.renderRentalItems();
-    } catch (e) { this.alert(e.message, 'error'); }
+
+    const BATCH_SIZE = 25;
+    const batches = [];
+    for (let i = 0; i < rows.length; i += BATCH_SIZE) batches.push(rows.slice(i, i + BATCH_SIZE));
+
+    this.showModal(`
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header"><span class="modal-title">Importing Rental Items</span></div>
+        <div class="modal-body">
+          <p id="ri-import-status" style="font-size:13px;color:var(--text-muted);margin-bottom:8px">Starting import of ${rows.length} row(s)…</p>
+          <div style="background:var(--border);border-radius:6px;overflow:hidden;height:10px">
+            <div id="ri-import-bar" style="background:var(--primary);height:100%;width:0%;transition:width .2s"></div>
+          </div>
+        </div>
+      </div>`);
+
+    let created = 0, updated = 0, processed = 0;
+    const errors = [];
+    for (const batch of batches) {
+      try {
+        const result = await this.api('POST', '/products/import/rentals', { rows: batch });
+        created += result.created;
+        updated += result.updated;
+        errors.push(...result.errors);
+      } catch (e) {
+        errors.push(e.message);
+      }
+      processed += batch.length;
+      const pct = Math.round((processed / rows.length) * 100);
+      const bar = document.getElementById('ri-import-bar');
+      const status = document.getElementById('ri-import-status');
+      if (bar) bar.style.width = pct + '%';
+      if (status) status.textContent = `Imported ${processed} of ${rows.length} row(s) (${pct}%)`;
+    }
+
+    this.closeModal();
+    let msg = `Import complete: ${created} created, ${updated} updated`;
+    if (errors.length) msg += `\n${errors.length} error(s):\n${errors.join('\n')}`;
+    this.alert(msg, errors.length ? 'error' : 'success');
+    this.renderRentalItems();
   },
 
   async loadRentalItems() {
     const el = document.getElementById('rental-content');
     if (!el) return;
-    const items = await this.api('GET', '/products?is_rental=1');
+    this._rentalItemsAll = await this.api('GET', '/products?is_rental=1');
     if (!document.getElementById('rental-content')) return;
-    document.getElementById('rental-content').innerHTML = !items.length ? '<div class="empty-state"><p>No rental items yet.</p></div>' : `
+    this._filterRentalItemsTable();
+  },
+
+  // Re-renders the rental items table from the cached list (this._rentalItemsAll)
+  // against the current search/branch filter inputs — no re-fetch, so typing in
+  // the search box or switching branches doesn't hit the API on every change.
+  _filterRentalItemsTable() {
+    const el = document.getElementById('rental-content');
+    if (!el || !this._rentalItemsAll) return;
+    const branchFilter = document.getElementById('ri-branch-filter')?.value || '';
+    const search = (document.getElementById('ri-search')?.value || '').trim().toLowerCase();
+    let filtered = !branchFilter ? this._rentalItemsAll
+      : branchFilter === 'unassigned' ? this._rentalItemsAll.filter(p => !p.assigned_branch_id)
+      : this._rentalItemsAll.filter(p => String(p.assigned_branch_id) === branchFilter);
+    if (search) filtered = filtered.filter(p => p.name.toLowerCase().includes(search) || p.sku.toLowerCase().includes(search));
+    document.getElementById('rental-content').innerHTML = !filtered.length ? '<div class="empty-state"><p>No rental items match this filter.</p></div>' : `
       <div class="card">
-        <div class="table-wrap">
-          <table>
-            <thead><tr><th>SKU</th><th>Name</th><th>Class</th><th>Daily</th><th>Weekly</th><th>Monthly</th><th>Hourly</th><th>Stock</th><th>Available</th><th>Status</th><th></th></tr></thead>
-            <tbody>${items.map(p => `<tr>
+        <div class="table-wrap" style="max-height:65vh;overflow-y:auto">
+          <table class="sticky-table">
+            <thead><tr><th>SKU</th><th>Name</th><th>Branch</th><th>Class</th><th>Daily</th><th>Weekly</th><th>Monthly</th><th>Hourly</th><th>Stock</th><th>Available</th><th>Status</th><th></th></tr></thead>
+            <tbody>${filtered.map(p => `<tr>
               <td class="fw-600">${p.sku}${p.is_accessory?' <span class="badge-pill badge-secondary" style="font-size:10px">accessory</span>':''}</td>
               <td>${p.name}</td>
+              <td>${p.assigned_branch_name || '—'}</td>
               <td><span class="badge-pill ${p.rental_classification==='equipment'?'badge-info':'badge-secondary'}">${p.rental_classification==='equipment'?'Equipment':'Tool'}</span></td>
               <td>${this.fmt(p.rental_rate)}</td>
               <td>${this.fmt(p.rental_weekly_rate)}</td>
@@ -3635,6 +3692,10 @@ const App = {
           </div>
           <div class="form-group"><label>Name *</label><input id="rf-name" value="${p.name||''}"></div>
           <div class="form-group"><label>Description</label><input id="rf-desc" value="${p.description||''}"></div>
+          <div class="input-row">
+            <div class="form-group"><label>Model Number</label><input id="rf-model" value="${p.model_number||''}"></div>
+            <div class="form-group"><label>Size</label><input id="rf-size" value="${p.size||''}"></div>
+          </div>
           <div class="form-group"><label>Branch / Location</label>
             <select id="rf-branch">
               <option value="">— Unassigned (global stock only) —</option>
@@ -3672,6 +3733,9 @@ const App = {
               <input type="checkbox" id="rf-is-accessory" ${p.is_accessory?'checked':''} style="width:auto"> This is an accessory (can be attached to other rental items)
             </label></div>
           </div>
+          <div class="form-group"><label style="display:flex;align-items:center;gap:6px">
+            <input type="checkbox" id="rf-taxable" ${p.taxable!==0?'checked':''} style="width:auto"> Taxable
+          </label></div>
           <div class="form-group">
             <label>Mandatory Accessories <span style="font-weight:400;color:var(--text-muted)">(always included with this item, no extra charge)</span></label>
             <div style="max-height:140px;overflow-y:auto;border:1px solid var(--border);border-radius:6px;padding:8px">
@@ -3716,6 +3780,9 @@ const App = {
       sku,
       name,
       description: document.getElementById('rf-desc').value.trim() || null,
+      model_number: document.getElementById('rf-model').value.trim() || null,
+      size: document.getElementById('rf-size').value.trim() || null,
+      taxable: document.getElementById('rf-taxable').checked ? 1 : 0,
       category_id: document.getElementById('rf-cat').value || null,
       stock_qty: parseInt(document.getElementById('rf-stock').value) || 0,
       min_stock: parseInt(document.getElementById('rf-minstock').value) || 0,
