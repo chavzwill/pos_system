@@ -1654,7 +1654,7 @@ const App = {
   async renderPOS() {
     [this.allCategories, this.allProducts] = await Promise.all([
       this.api('GET', '/categories'),
-      this.api('GET', '/products?active=1'),
+      this.api('GET', '/products?active=1&is_rental=0'),
     ]);
     if (this.section !== 'pos') return;
     this.posCategory = 'all';
