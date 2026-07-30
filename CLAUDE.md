@@ -84,7 +84,7 @@ The `security_groups.permissions` JSON blob uses these keys (all boolean). Modul
 - `suppliers` → `suppliers_add`, `suppliers_edit`, `suppliers_delete`
 - `purchase_requests` → `pr_create`, `pr_approve`, `pr_convert`
 - `purchasing` → `purchasing_create`, `purchasing_approve`, `purchasing_receive`
-- `transfers` → `transfers_create`, `transfers_approve`
+- `transfers` → `transfers_create`, `transfers_approve`, `transfers_pickup`, `transfers_dropoff`
 - `quotations` → `quotations_create`, `quotations_approve`, `quotations_convert`
 - `accounts` → `accounts_create`, `accounts_payments`, `accounts_writeoff`
 - `crm` → `crm_leads`, `crm_opportunities`
@@ -99,7 +99,7 @@ The `security_groups.permissions` JSON blob uses these keys (all boolean). Modul
 
 `multi_branch_access` is stored directly in the permissions blob and checked standalone; it has no sub-permissions and does not appear in `_permissionTree`.
 
-**Shipping note:** The `shipping` permission and `renderShipping()` section exist in the frontend, but there is no `routes/shipping.js` and no `/api/shipping` route mounted in `server.js`. The backend for shipping is not yet implemented.
+**Shipping note:** The `shipping` permission and `renderShipping()` section are backed by `shipments` / `shipment_items` in `database.js` and a set of `/shipments*` routes inside `routes/warehouse.js` (mounted at `/api/warehouse`, not a standalone `/api/shipping`). Draft shipments can be created directly or from an online order (`POST /warehouse/shipments/from-order/:txId`); `PATCH /:id/ship` deducts inventory, `/deliver` marks it complete, `/cancel` restores stock if it had already shipped.
 
 Three built-in groups seed on first run: **Administrator** (all true), **Manager** (all except `settings`, `branches`, `security`), **Cashier** (pos, customers, transactions, quotations, dashboard only).
 
