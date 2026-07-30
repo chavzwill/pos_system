@@ -75,7 +75,24 @@ router.get('/inventory', requirePermission('reports'), async (req, res) => {
       const { rows: [row] } = await db.execute({ sql: `SELECT COUNT(*) as total_products, SUM(stock_qty) as total_units, SUM(stock_qty * cost) as cost_value, SUM(stock_qty * price) as retail_value FROM products WHERE active = 1${catFilterNoAlias}`, args: [...catP] });
       summary = row;
     }
-    const { rows: lowStock } = await db.execute({ sql: `SELECT p.sku, p.name, c.name as category_name, b.name as branch_name, bi.stock_qty, bi.min_stock FROM branch_inventory bi JOIN products p ON bi.product_id = p.id JOIN branches b ON bi.branch_id = b.id LEFT JOIN categories c ON p.category_id = c.id WHERE p.active=1 AND b.active=1 AND bi.stock_qty <= bi.min_stock${bf}${catFilterP} ORDER BY bi.stock_qty ASC, b.name ASC`, args: [...bp, ...catP] });
+    // Products with no branch_inventory row at all (never touched by a
+    // branch-scoped PO/transfer/sale) fall back to the global products.stock_qty
+    // check below — otherwise they'd never appear here even if genuinely low,
+    // which is exactly the drift that made this list disagree with the header
+    // low-stock count (that one always reads products.stock_qty).
+    const globalFallbackSql = !branch_id ? `
+      UNION ALL
+      SELECT p.sku, p.name, c.name as category_name, NULL as branch_name, p.stock_qty, p.min_stock
+      FROM products p LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.active=1 AND p.is_rental=0 AND p.is_service=0 AND p.stock_qty <= p.min_stock
+        AND NOT EXISTS (SELECT 1 FROM branch_inventory bi2 JOIN branches b2 ON bi2.branch_id = b2.id WHERE bi2.product_id = p.id AND b2.active = 1)
+        ${catFilterP}` : '';
+    const { rows: lowStock } = await db.execute({ sql: `SELECT sku, name, category_name, branch_name, stock_qty, min_stock FROM (
+      SELECT p.sku, p.name, c.name as category_name, b.name as branch_name, bi.stock_qty, bi.min_stock
+      FROM branch_inventory bi JOIN products p ON bi.product_id = p.id JOIN branches b ON bi.branch_id = b.id LEFT JOIN categories c ON p.category_id = c.id
+      WHERE p.active=1 AND p.is_rental=0 AND p.is_service=0 AND b.active=1 AND bi.stock_qty <= bi.min_stock${bf}${catFilterP}
+      ${globalFallbackSql}
+    ) ORDER BY stock_qty ASC`, args: [...bp, ...catP, ...(branch_id ? [] : catP)] });
     const { rows: byCategory } = await db.execute({ sql: `SELECT c.name as category, COUNT(p.id) as products, SUM(p.stock_qty) as units, SUM(p.stock_qty * p.cost) as cost_value FROM products p JOIN categories c ON p.category_id = c.id WHERE p.active=1 GROUP BY c.id`, args: [] });
     // Warehouses carry no sales, so they're excluded from the sales-report branch
     // filter above — but their stock still has real value, tracked separately here.
@@ -98,7 +115,18 @@ router.get('/dashboard', requireAuth, async (req, res) => {
     const { rows: [todayStats] } = await db.execute({ sql: `SELECT COUNT(*) as transactions, COALESCE(SUM(total),0) as sales FROM transactions t WHERE t.status='completed' AND date(t.created_at) = date(?) ${warehouseExclude}${bf}`, args: [today, ...bp] });
     const { rows: [monthStats] } = await db.execute({ sql: `SELECT COUNT(*) as transactions, COALESCE(SUM(total),0) as sales FROM transactions t WHERE t.status='completed' AND date(t.created_at) >= date(?) ${warehouseExclude}${bf}`, args: [monthStart, ...bp] });
     const { rows: [totalCustomers] } = await db.execute({ sql: 'SELECT COUNT(*) as count FROM customers WHERE active=1', args: [] });
-    const { rows: [lowStock] } = await db.execute({ sql: 'SELECT COUNT(*) as count FROM products WHERE active=1 AND stock_qty <= min_stock', args: [] });
+    // Mirrors the /inventory report's low-stock logic (branch_inventory rows,
+    // falling back to products.stock_qty only for products with no branch
+    // record) — this used to just check products.stock_qty on its own, which
+    // made the header badge disagree with the warehouse report's count.
+    const { rows: [lowStock] } = await db.execute({ sql: `SELECT COUNT(*) as count FROM (
+        SELECT DISTINCT p.id FROM branch_inventory bi JOIN products p ON bi.product_id = p.id JOIN branches b ON bi.branch_id = b.id
+        WHERE p.active=1 AND p.is_rental=0 AND p.is_service=0 AND b.active=1 AND bi.stock_qty <= bi.min_stock
+        UNION
+        SELECT p.id FROM products p
+        WHERE p.active=1 AND p.is_rental=0 AND p.is_service=0 AND p.stock_qty <= p.min_stock
+          AND NOT EXISTS (SELECT 1 FROM branch_inventory bi2 JOIN branches b2 ON bi2.branch_id = b2.id WHERE bi2.product_id = p.id AND b2.active = 1)
+      )`, args: [] });
     const { rows: recentTx } = await db.execute({ sql: `SELECT t.*, c.first_name || ' ' || c.last_name as customer_name FROM transactions t LEFT JOIN customers c ON t.customer_id = c.id WHERE t.branch_id NOT IN (SELECT id FROM branches WHERE is_warehouse = 1)${bf} ORDER BY t.created_at DESC LIMIT 5`, args: [...bp] });
     const { rows: last7Days } = await db.execute({ sql: `SELECT date(t.created_at) as date, COALESCE(SUM(t.total),0) as sales, COUNT(*) as transactions FROM transactions t WHERE t.status='completed' AND date(t.created_at) >= date('now', '-6 days') ${warehouseExclude}${bf} GROUP BY date(t.created_at) ORDER BY date`, args: [...bp] });
 
