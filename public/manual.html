@@ -1,0 +1,598 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>User Manual — RetailPOS</title>
+<style>
+  :root {
+    --primary: #10703a;
+    --primary-light: #1c8a4d;
+    --success: #4CAF50;
+    --danger: #f44336;
+    --warning: #FF9800;
+    --info: #2196F3;
+    --bg: #f4f6f5;
+    --card: #ffffff;
+    --border: #e0e0e0;
+    --text: #212121;
+    --text-muted: #757575;
+    --toc-w: 280px;
+  }
+  * { box-sizing: border-box; }
+  html { scroll-behavior: smooth; }
+  body {
+    margin: 0; font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif;
+    background: var(--bg); color: var(--text); font-size: 14.5px; line-height: 1.6;
+  }
+  a { color: var(--primary-light); }
+  code { background: #eef1ef; border-radius: 4px; padding: 1px 5px; font-size: 12.5px; font-family: 'SF Mono', Menlo, Consolas, monospace; }
+  .layout { display: flex; min-height: 100vh; }
+
+  /* ── TOC sidebar ─────────────────────────────────────────── */
+  #toc {
+    width: var(--toc-w); flex-shrink: 0; background: var(--primary); color: #fff;
+    position: sticky; top: 0; height: 100vh; overflow-y: auto; padding-bottom: 24px;
+  }
+  #toc .toc-header { padding: 20px 20px 14px; border-bottom: 1px solid rgba(255,255,255,.15); }
+  #toc .toc-header h1 { font-size: 16px; margin: 0 0 3px; font-weight: 700; letter-spacing: .3px; }
+  #toc .toc-header p { margin: 0; font-size: 11.5px; color: rgba(255,255,255,.6); }
+  #toc .toc-group { padding: 14px 12px 4px; }
+  #toc .toc-group-label { font-size: 10.5px; text-transform: uppercase; letter-spacing: .6px; color: rgba(255,255,255,.45); padding: 6px 10px 4px; font-weight: 700; }
+  #toc a { display: block; padding: 7px 10px; border-radius: 6px; color: rgba(255,255,255,.82); text-decoration: none; font-size: 13px; font-weight: 500; border-left: 3px solid transparent; }
+  #toc a:hover { background: rgba(255,255,255,.08); color: #fff; }
+  #toc a.active { background: rgba(255,255,255,.14); color: #fff; border-left-color: #7ee2a8; }
+
+  /* ── main content ────────────────────────────────────────── */
+  #content { flex: 1; min-width: 0; padding: 36px 48px 90px; max-width: 900px; }
+  .search-box { position: sticky; top: 0; z-index: 5; background: var(--bg); padding: 0 0 18px; margin-bottom: 8px; }
+  .search-box input {
+    width: 100%; padding: 10px 14px; border: 1px solid var(--border); border-radius: 8px;
+    font-size: 14px; background: var(--card); box-shadow: 0 1px 2px rgba(0,0,0,.04);
+  }
+  h2.module { font-size: 22px; margin: 0 0 4px; padding-top: 8px; color: var(--primary); scroll-margin-top: 16px; }
+  h2.module .tag { font-size: 11px; font-weight: 600; text-transform: uppercase; letter-spacing: .4px; color: var(--text-muted); background: #eef1ef; border-radius: 5px; padding: 2px 8px; margin-left: 10px; vertical-align: middle; }
+  .module-intro { color: var(--text-muted); margin: 4px 0 20px; font-size: 14px; }
+  h3 { font-size: 16px; margin: 26px 0 8px; scroll-margin-top: 16px; }
+  h4 { font-size: 13.5px; margin: 16px 0 6px; text-transform: uppercase; letter-spacing: .3px; color: var(--text-muted); }
+  section.module { border-bottom: 1px solid var(--border); padding-bottom: 30px; margin-bottom: 30px; }
+  section.module:last-of-type { border-bottom: none; }
+  p { margin: 8px 0; }
+  ul, ol { margin: 8px 0; padding-left: 22px; }
+  li { margin: 4px 0; }
+  .callout {
+    border-radius: 8px; padding: 12px 16px; margin: 14px 0; font-size: 13.5px; border-left: 4px solid;
+  }
+  .callout.tip { background: #eef7ee; border-color: var(--success); }
+  .callout.warn { background: #fff6e9; border-color: var(--warning); }
+  .callout.note { background: #eaf3fc; border-color: var(--info); }
+  .callout strong { display: block; margin-bottom: 3px; font-size: 12px; text-transform: uppercase; letter-spacing: .3px; }
+  table.ref { width: 100%; border-collapse: collapse; margin: 12px 0; font-size: 13px; }
+  table.ref th { background: #eef1ef; text-align: left; padding: 8px 10px; font-size: 11.5px; text-transform: uppercase; letter-spacing: .3px; color: var(--text-muted); border-bottom: 1px solid var(--border); }
+  table.ref td { padding: 8px 10px; border-bottom: 1px solid var(--border); vertical-align: top; }
+  .perm-pill { display: inline-block; background: #eef1ef; border-radius: 5px; padding: 1px 7px; font-size: 11.5px; font-family: 'SF Mono', Menlo, Consolas, monospace; color: var(--primary); }
+  .steps { counter-reset: step; list-style: none; padding-left: 0; }
+  .steps li { counter-increment: step; padding-left: 30px; position: relative; margin: 10px 0; }
+  .steps li::before {
+    content: counter(step); position: absolute; left: 0; top: 0; width: 20px; height: 20px;
+    background: var(--primary); color: #fff; border-radius: 50%; font-size: 11px; font-weight: 700;
+    display: flex; align-items: center; justify-content: center;
+  }
+  .back-to-top { font-size: 12px; margin-top: 8px; display: inline-block; }
+
+  @media (max-width: 860px) {
+    .layout { flex-direction: column; }
+    #toc { position: relative; height: auto; width: 100%; }
+    #content { padding: 24px 20px 60px; max-width: 100%; }
+  }
+
+  @media (prefers-color-scheme: dark) {
+    :root {
+      --bg: #14161a; --card: #1d2025; --border: #303540; --text: #e7e9ec; --text-muted: #9aa0aa;
+    }
+    code { background: #262b33; }
+    .search-box input { background: var(--card); color: var(--text); border-color: var(--border); }
+    h2.module .tag { background: #262b33; }
+    .callout.tip { background: #16261c; }
+    .callout.warn { background: #2a2213; }
+    .callout.note { background: #142330; }
+    table.ref th { background: #262b33; }
+    .perm-pill { background: #262b33; }
+  }
+
+  @media print {
+    #toc, .search-box, .back-to-top { display: none; }
+    #content { max-width: 100%; padding: 0; }
+    section.module { break-inside: avoid-page; }
+  }
+</style>
+</head>
+<body>
+<div class="layout">
+  <nav id="toc">
+    <div class="toc-header">
+      <h1>&#9673; RetailPOS</h1>
+      <p>User Manual</p>
+    </div>
+    <div class="toc-group">
+      <div class="toc-group-label">Start Here</div>
+      <a href="#getting-started">Getting Started</a>
+      <a href="#dashboard">Dashboard</a>
+    </div>
+    <div class="toc-group">
+      <div class="toc-group-label">Sales</div>
+      <a href="#pos">Point of Sale</a>
+      <a href="#drawers">Cash Drawers</a>
+      <a href="#transactions">Transactions &amp; Returns</a>
+      <a href="#quotations">Quotations</a>
+      <a href="#layaway">Layaway</a>
+      <a href="#rentals">Rentals</a>
+      <a href="#promotions">Promotions</a>
+      <a href="#discount-cards">Discount Cards</a>
+    </div>
+    <div class="toc-group">
+      <div class="toc-group-label">Inventory &amp; Fulfillment</div>
+      <a href="#inventory">Inventory</a>
+      <a href="#services">Services &amp; Non-Inventory</a>
+      <a href="#purchasing">Purchasing</a>
+      <a href="#suppliers">Suppliers</a>
+      <a href="#transfers">Branch Transfers</a>
+      <a href="#warehouse">Warehouse Management</a>
+    </div>
+    <div class="toc-group">
+      <div class="toc-group-label">Customers &amp; Money</div>
+      <a href="#customers">Customers</a>
+      <a href="#accounts">Accounts Receivable</a>
+      <a href="#crm">CRM &amp; Sales Pipeline</a>
+      <a href="#commissions">Commissions</a>
+    </div>
+    <div class="toc-group">
+      <div class="toc-group-label">Reporting &amp; Admin</div>
+      <a href="#reports">Reports &amp; Analytics</a>
+      <a href="#employees">Employees</a>
+      <a href="#branches">Branches</a>
+      <a href="#security">Security Groups</a>
+      <a href="#settings">Settings &amp; Integrations</a>
+    </div>
+    <div class="toc-group">
+      <div class="toc-group-label">Reference</div>
+      <a href="#appendix">Permission Key Reference</a>
+    </div>
+  </nav>
+
+  <main id="content">
+    <div class="search-box">
+      <input type="text" id="manual-search" placeholder="Search the manual… (e.g. &quot;void a sale&quot;, &quot;low stock&quot;, &quot;credit customer&quot;)" autocomplete="off">
+    </div>
+
+    <section class="module" id="getting-started">
+      <h2 class="module">Getting Started</h2>
+      <p class="module-intro">What RetailPOS is, how to log in, and how the app is organized.</p>
+
+      <h3>Logging in</h3>
+      <p>Open the app in a browser and sign in with your username and password. On a brand-new install, the default administrator account is username <code>admin</code>, password <code>123456</code> — you'll be forced to change this password on first login.</p>
+      <div class="callout warn"><strong>Security note</strong>Passwords are stored and checked in plain text and there is no session timeout beyond closing the browser. Don't reuse a sensitive password for the admin account, and change the default immediately on a new installation.</div>
+
+      <h3>The sidebar</h3>
+      <p>The left sidebar is grouped into hubs — <strong>Sales</strong>, <strong>Accounts</strong>, <strong>Warehouse</strong>, <strong>Purchasing</strong>, <strong>Dispatch</strong>, and <strong>Admin</strong> — plus <strong>Dashboard</strong> at the top. Clicking a hub opens a tile grid of the individual screens inside it; which tiles you see depends on your permissions (see <a href="#security">Security Groups</a>). This manual link itself opens in a new tab so you can keep it open for reference while you work.</p>
+
+      <h3>Branches</h3>
+      <p>Everything in the app — stock, sales, drawers, warehouse bins — is scoped to a <strong>branch</strong>. If your account has multi-branch access and is assigned to more than one branch, you'll see a branch switcher; otherwise you're locked to your assigned default branch. See <a href="#branches">Branches</a> for how locations are set up.</p>
+
+      <h3>Permissions</h3>
+      <p>What you can see and do is controlled by the <strong>Security Group</strong> your account belongs to (Administrator, Manager, Cashier, or a custom group your admin created). If a button or section seems to be missing, it's most likely a permissions issue — ask an administrator to check your group under <a href="#security">Security Groups</a>.</p>
+    </section>
+
+    <section class="module" id="dashboard">
+      <h2 class="module">Dashboard</h2>
+      <p class="module-intro">The landing page after login — a snapshot of how the business (or your branch) is doing right now.</p>
+      <p>Everyone sees a dashboard regardless of role. It shows:</p>
+      <ul>
+        <li>Today's and this month's sales totals and transaction counts</li>
+        <li>Total active customers</li>
+        <li>A <strong>low-stock count</strong> badge — also shown as a red notification in the top header everywhere in the app, so it's always visible, not just on this page</li>
+        <li>The five most recent transactions</li>
+        <li>A 7-day sales trend</li>
+        <li>A per-branch breakdown, if you have multi-branch access</li>
+      </ul>
+      <div class="callout note"><strong>Low stock</strong>The low-stock count checks each product's stock at the branch level first, falling back to its overall stock figure only for products that have never been tracked per-branch. Rental items and services are never counted as "low stock" since they don't carry ordinary sale inventory.</div>
+    </section>
+
+    <section class="module" id="pos">
+      <h2 class="module">Point of Sale <span class="tag">pos</span></h2>
+      <p class="module-intro">Where retail sales actually happen — the cash-register screen.</p>
+
+      <h3>Opening a sale</h3>
+      <p>The first thing you'll see on entering POS is a prompt to open a cash drawer — you can skip it, but a drawer session lets the app track cash in/out for reconciliation later (see <a href="#drawers">Cash Drawers</a>). Tap products in the grid (retail items only — rentals are managed on their own screen) or scan a barcode to add them to the cart. Attach a customer to the sale to accrue loyalty points, apply store credit, trigger a customer's discount card, or sell on a credit account.</p>
+
+      <h3>Discounts, promotions, and discount cards</h3>
+      <ul>
+        <li><strong>Manual discount</strong> — a cashier with the <span class="perm-pill">pos_discounts</span> permission can apply a line or cart discount directly.</li>
+        <li><strong>Promo codes</strong> — type a code at checkout; it's validated against active date windows, usage limits, and minimum-purchase rules before it's applied.</li>
+        <li><strong>Auto-applied promotions</strong> — any active, code-less promotion that matches the cart is offered automatically (see <a href="#promotions">Promotions</a>).</li>
+        <li><strong>Discount cards</strong> — attaching a customer who carries an active discount card applies their flat percentage automatically, and it always takes priority over a promo code — attaching such a customer clears any promo already on the cart (see <a href="#discount-cards">Discount Cards</a>).</li>
+      </ul>
+
+      <h3>Holding an order</h3>
+      <p>Use <strong>Hold</strong> (needs <span class="perm-pill">pos_hold</span>) to park a cart without charging it or touching stock — useful when a customer steps away or a quote is being converted. Recall it later from the held-orders list to finish the sale, or delete the hold entirely to abandon it.</p>
+
+      <h3>Payment methods</h3>
+      <p>Cash, card, and other tendered methods are settled immediately. Selecting <strong>credit</strong> instead requires the customer to have a credit account in good standing — a blocked account (overdue past its payment terms) is rejected at checkout with a clear error rather than silently failing.</p>
+
+      <h3>Voids and refunds</h3>
+      <p>Voiding a line item mid-sale needs <span class="perm-pill">pos_void_items</span>. Refunding or returning items on an already-completed sale is handled from <a href="#transactions">Transactions</a>, not the POS screen itself, and needs <span class="perm-pill">transactions_returns</span>/<span class="perm-pill">pos_refunds</span>.</p>
+
+      <h3>Receipts and labels</h3>
+      <p>After checkout you can print a standard receipt, or (for shippable orders) a pick list / shipping label from the Shipping screen — see <a href="#warehouse">Warehouse Management</a>.</p>
+    </section>
+
+    <section class="module" id="drawers">
+      <h2 class="module">Cash Drawers <span class="tag">drawers</span></h2>
+      <p class="module-intro">Tracking physical cash in and out of the register across a shift.</p>
+      <ul>
+        <li><strong>Sessions</strong> — open a drawer at the start of a shift with a starting float, close it at the end. Only staff with <span class="perm-pill">drawers_open</span>/<span class="perm-pill">drawers_close</span> can do so, and reconciling a closed session (counting the actual cash against what the system expects) needs <span class="perm-pill">drawers_manage</span>.</li>
+        <li><strong>Reconciliation</strong> uses your store's configured currency denominations (bill and coin values) so you count physical notes, not just type in a total — differences (over/short) are recorded per session.</li>
+        <li><strong>Manage Drawers</strong> tab — set up which physical registers/drawers exist per branch, independent of who's using them on a given day.</li>
+        <li>Voiding a completed transaction (as opposed to voiding a line mid-sale) is gated by <span class="perm-pill">void_transactions</span> and is grouped with drawer permissions since it affects the day's cash reconciliation.</li>
+      </ul>
+    </section>
+
+    <section class="module" id="transactions">
+      <h2 class="module">Transactions &amp; Returns <span class="tag">transactions</span></h2>
+      <p class="module-intro">The full history of completed (and held) sales, plus the returns workflow.</p>
+      <ul>
+        <li>Search/filter by date, customer, status, branch, payment method, or transaction number.</li>
+        <li><strong>Returns</strong> (needs <span class="perm-pill">transactions_returns</span>) — process a full or partial return against a completed sale; stock and any applicable fees are adjusted automatically.</li>
+        <li><strong>Voiding</strong> a completed transaction after the fact needs <span class="perm-pill">void_transactions</span> — distinct from voiding an in-progress cart line at the POS.</li>
+        <li><strong>Exporting</strong> transaction history needs <span class="perm-pill">transactions_export</span>.</li>
+        <li><strong>Online Orders</strong> — sales that came in through the WooCommerce integration (or any API-key-authenticated channel) appear here tagged as online, with their own fulfillment status you can advance toward shipping.</li>
+      </ul>
+      <div class="callout tip"><strong>Held orders</strong>A hold created by converting an accepted quotation is linked back to that quote — finishing the sale marks the quote "converted"; deleting the hold instead reverts the quote back to "accepted" so it isn't left stranded.</div>
+    </section>
+
+    <section class="module" id="quotations">
+      <h2 class="module">Quotations <span class="tag">quotations</span></h2>
+      <p class="module-intro">Formal price quotes for a customer, for either retail goods or a rental, that can later become a real sale.</p>
+
+      <h3>Two kinds of quote</h3>
+      <p><strong>Retail</strong> quotes price from the current catalog and can mix real products with free-typed custom line items (for things not yet in your catalog). <strong>Rental</strong> quotes are priced as a non-binding estimate using the item's daily/weekly/monthly rate over the requested date range, and can include delivery, pickup, and operator add-ons.</p>
+
+      <h3>Status flow</h3>
+      <ol class="steps">
+        <li><strong>Draft</strong> — still being built; can be freely edited.</li>
+        <li><strong>Sent</strong> — shared with the customer.</li>
+        <li><strong>Accepted</strong> — the customer has committed. For retail quotes, this is the moment anything not currently in stock at the quote's branch is automatically handled: stock available at another branch triggers an automatic branch transfer, and anything no branch can cover (or a custom item never in the catalog) is bundled into a single purchase request for Purchasing to action.</li>
+        <li><strong>Converted</strong> — the quote becomes real: a retail quote becomes a held order a cashier finalizes at the POS; a rental quote becomes a rental agreement (after re-checking stock and the customer's rental eligibility, since time may have passed since the quote was drafted).</li>
+      </ol>
+      <p>A quote can also be <strong>declined</strong> instead of accepted. Needs <span class="perm-pill">quotations_create</span> to build one, <span class="perm-pill">quotations_approve</span> to move it through status changes, and <span class="perm-pill">quotations_convert</span> to finalize it into a sale or agreement.</p>
+    </section>
+
+    <section class="module" id="layaway">
+      <h2 class="module">Layaway <span class="tag">layaway</span></h2>
+      <p class="module-intro">Reserve merchandise for a customer against a schedule of installment payments.</p>
+      <ul>
+        <li>Only products explicitly marked layaway-eligible can go on a plan.</li>
+        <li>Stock is reserved <strong>immediately</strong> when the plan is created, not when it's paid off — so it won't get sold to someone else in the meantime.</li>
+        <li>A minimum deposit (a store-wide percentage) is required up front; the customer can choose weekly, biweekly, or monthly installments after that.</li>
+        <li>Every deposit and installment is recorded as a real transaction, so it shows up in normal cash-drawer and sales reporting.</li>
+        <li>Paying off the full balance <strong>auto-completes</strong> the plan and awards loyalty points.</li>
+        <li><strong>Cancelling</strong> a plan restores the reserved stock and refunds whatever the customer already paid, minus a configurable cancellation fee (percentage or flat) that's forfeited.</li>
+      </ul>
+      <p>Needs <span class="perm-pill">layaway_create</span> to start a plan, <span class="perm-pill">layaway_payments</span> to record installments, <span class="perm-pill">layaway_cancel</span> to cancel one.</p>
+    </section>
+
+    <section class="module" id="rentals">
+      <h2 class="module">Rentals <span class="tag">rentals</span></h2>
+      <p class="module-intro">Rent out equipment instead of selling it, with its own catalog, compliance requirements, and checkout/return workflow.</p>
+
+      <h3>Rental Items</h3>
+      <p>Managed separately from retail Inventory. Each item has daily/weekly/monthly/hourly rates, a classification (e.g. "tool"), a model number and size, and can have mandatory or optional accessories attached (needs <span class="perm-pill">rentals_manage_items</span>).</p>
+
+      <h3>Customer eligibility</h3>
+      <p>A customer can't start a new rental until their profile has an ID (type, number, and a scanned copy), a proof of address, and an emergency reference on file. This is enforced at both the direct rental-hold flow and at converting a rental quote into an agreement.</p>
+
+      <h3>Rental Dispatch — the agreement lifecycle</h3>
+      <ol class="steps">
+        <li><strong>Create</strong> — pick items and a due date; availability is checked for that window.</li>
+        <li><strong>Checkout</strong> (needs <span class="perm-pill">rentals_checkout</span>) — finalizes pricing and takes the deposit.</li>
+        <li><strong>Issue</strong> (needs <span class="perm-pill">rentals_issue</span>) — records the physical handoff to the customer; this can happen on a different date than checkout, and can include delivery (with driver and cost) or a customer pickup, plus an optional equipment operator.</li>
+        <li><strong>Return</strong> (needs <span class="perm-pill">rentals_returns</span>) — processes the item coming back, assessing any late fees or damage fees against the deposit.</li>
+      </ol>
+      <p>An agreement can also be <strong>cancelled</strong> with a reason on file instead of following through to return.</p>
+
+      <h3>Rental Deposits &amp; Credit Notes</h3>
+      <p>Tracks deposits collected and refunded per agreement, and lets staff issue a credit note when a partial or adjusted refund is warranted instead of a straight deposit return.</p>
+    </section>
+
+    <section class="module" id="promotions">
+      <h2 class="module">Promotions <span class="tag">promotions</span></h2>
+      <p class="module-intro">Cart- or catalog-wide discounts, either automatic or code-triggered.</p>
+      <ul>
+        <li>A promotion is a percentage or fixed discount, optionally scoped to specific products or categories, with an optional date window and minimum purchase.</li>
+        <li>A product or category can only belong to <strong>one active promotion at a time</strong> — the system blocks adding it to a second one while the first is still active, so promotions never silently stack on the same item.</li>
+        <li>A promotion can have one or more <strong>codes</strong>, each with its own usage limit — retiring one code doesn't kill the whole promotion.</li>
+        <li>At checkout, promotions with no code attached are offered automatically; the best (largest discount) one is suggested first if more than one qualifies.</li>
+      </ul>
+      <p>Needs <span class="perm-pill">promotions_create</span> to build a promotion, <span class="perm-pill">promotions_codes</span> to manage its codes.</p>
+    </section>
+
+    <section class="module" id="discount-cards">
+      <h2 class="module">Discount Cards <span class="tag">discount-cards</span></h2>
+      <p class="module-intro">A simple flat percentage tied to a customer, presented as a physical card.</p>
+      <p>Set up card <strong>types</strong> here (a name plus a flat discount percentage), then assign a type and card number to a customer from their profile. There's no date window, no code, no product scoping — attaching a card-carrying customer to a cart just applies the discount automatically, and it always overrides a promo code rather than combining with one. A card type can't be deleted while any customer still references it — deactivate it instead to stop it applying without breaking customer history.</p>
+    </section>
+
+    <section class="module" id="inventory">
+      <h2 class="module">Inventory <span class="tag">inventory</span></h2>
+      <p class="module-intro">The retail product catalog and stock levels — rental items and services live in their own sections.</p>
+
+      <h3>Products</h3>
+      <p>Each product has a SKU, barcode, price, cost, tax rate, category, and a minimum-stock threshold used for low-stock alerts. Products can carry a photo (uploaded per product) and be organized by category.</p>
+
+      <h3>Variations</h3>
+      <p>For products that come in options (Size, Color, etc.), define variation types on the product, then add individual variants — each with its own SKU, price, and stock level. A sale against a specific variant deducts that variant's stock, not the parent product's.</p>
+
+      <h3>Stock — two numbers to know about</h3>
+      <p>Every product has a single overall <strong>stock level</strong>, and separately a <strong>per-branch stock level</strong> once it's been touched by a branch-specific action (a sale, a received PO, a transfer, etc.). Most day-to-day stock changes update both automatically. If you ever see a stock number that looks "off" compared to what a branch report shows, this is usually why — see the note under <a href="#reports">Reports</a>.</p>
+
+      <h3>Adjusting stock and stock movements</h3>
+      <p>Manual stock adjustments (needs <span class="perm-pill">inventory_adjust</span>) and every automatic change (sales, receiving, transfers, cycle-count corrections) are logged as stock movements you can review per product, so you can always trace why a number changed.</p>
+
+      <h3>CSV import/export</h3>
+      <p>Bulk-manage the catalog with a CSV template you can download, edit, and re-import — useful for large catalog updates or migrating from another system. A separate template/import exists specifically for rental items.</p>
+
+      <h3>Permissions</h3>
+      <p><span class="perm-pill">inventory_add</span> to create products, <span class="perm-pill">inventory_edit</span> to change them, <span class="perm-pill">inventory_delete</span> to remove them, <span class="perm-pill">inventory_adjust</span> for manual stock corrections.</p>
+    </section>
+
+    <section class="module" id="services">
+      <h2 class="module">Services &amp; Non-Inventory Items <span class="tag">services</span></h2>
+      <p class="module-intro">Things you sell that aren't physical stock — labor, installation, warranties, etc.</p>
+      <p>These are ordinary products under the hood (same catalog, same <code>/products</code> data), just flagged as a service or non-inventory item, which turns off stock tracking for them entirely. They won't ever show up in low-stock alerts or stock reports, and selling one never touches a stock number.</p>
+    </section>
+
+    <section class="module" id="purchasing">
+      <h2 class="module">Purchasing <span class="tag">purchasing</span> <span class="tag">purchase_requests</span></h2>
+      <p class="module-intro">Getting new stock from suppliers, from an internal request through to receiving it.</p>
+
+      <h3>Purchase Requests (PR) — the ask</h3>
+      <p>Staff request items either for resale or for internal use (consumables that won't track stock). A request line can point at an existing catalog product, or just be typed in by name with an optional source URL — handy for something not in the catalog yet. Requests flow <strong>draft → submitted → approved/rejected</strong> (needs <span class="perm-pill">pr_create</span> / <span class="perm-pill">pr_approve</span>), and an approved request converts 1:1 into a Purchase Order (<span class="perm-pill">pr_convert</span>).</p>
+
+      <h3>Purchase Orders (PO) — the supplier-facing order</h3>
+      <ol class="steps">
+        <li><strong>Draft</strong> — built directly or from a converted PR.</li>
+        <li><strong>Sent</strong> to the supplier.</li>
+        <li><strong>Approved</strong> (needs <span class="perm-pill">purchasing_approve</span>, on top of the base purchasing permission).</li>
+        <li><strong>Receiving</strong> (needs <span class="perm-pill">purchasing_receive</span>) — mark items as arrived; this can happen over multiple partial deliveries. Receiving updates stock (both overall and at the PO's branch) and refreshes the product's cost to the latest price paid.</li>
+      </ol>
+      <p>A PO can also be marked <strong>cancelled</strong>, and items received damaged can be logged separately to reverse the stock that was just added. You can attach files to a PO — invoices, packing slips — up to 20MB each.</p>
+      <div class="callout note"><strong>Items with no product yet</strong>A PO line for something not yet in your catalog can be "linked" to a product after the fact — either an existing one or a brand-new one created on the spot — and any quantity already received retroactively applies to its stock.</div>
+    </section>
+
+    <section class="module" id="suppliers">
+      <h2 class="module">Suppliers <span class="tag">suppliers</span></h2>
+      <p class="module-intro">The vendor directory purchase orders are placed against.</p>
+      <p>Standard contact/address record per supplier, plus payment terms and a flag distinguishing local from international/online suppliers. Needs <span class="perm-pill">suppliers_add</span> / <span class="perm-pill">suppliers_edit</span> / <span class="perm-pill">suppliers_delete</span> for the respective actions.</p>
+    </section>
+
+    <section class="module" id="transfers">
+      <h2 class="module">Branch Transfers <span class="tag">transfers</span></h2>
+      <p class="module-intro">Moving stock between two of your locations.</p>
+      <ol class="steps">
+        <li><strong>Create</strong> a transfer — stock is deducted from the source branch immediately, so it's off that branch's books as soon as the transfer exists, not just once it physically leaves.</li>
+        <li><strong>Dispatch</strong> (needs <span class="perm-pill">transfers_pickup</span>) — marks it picked up from the source and in transit.</li>
+        <li><strong>Receive</strong> (needs <span class="perm-pill">transfers_dropoff</span>) — add the stock to the destination branch; this can be done in partial batches over more than one delivery.</li>
+      </ol>
+      <p>Cancelling a transfer restores whatever hadn't yet been received back to the source branch. Transfers can also be created automatically when a multi-branch quotation is accepted and part of the order has to come from another location.</p>
+    </section>
+
+    <section class="module" id="warehouse">
+      <h2 class="module">Warehouse Management <span class="tag">warehouse</span> <span class="tag">cycle-counts</span> <span class="tag">shipping</span></h2>
+      <p class="module-intro">Physical storage layout, inventory audits, and outbound shipments.</p>
+
+      <h3>Zones &amp; bins</h3>
+      <p>Set up named zones per branch, then individual storage bins within each zone (with an optional capacity). Assign products to specific bins with a quantity, marking one bin as "primary" if a product lives in more than one spot. A bin's assigned quantity is automatically kept in sync with that branch's stock level everywhere stock moves — receiving, shipping, transfers, layaway, cycle counts — so you never have to update it by hand.</p>
+
+      <h3>Cycle Counts</h3>
+      <p>A physical inventory audit. Start a session scoped to all products, a category, or a specific bin — it snapshots what the system currently expects for each item. Export the sheet to CSV for an offline count, then import the actual counted quantities back in; the system computes the variance per line. <strong>Committing</strong> the session applies only the lines that actually differ, adjusting stock and bin quantities and logging each change for audit purposes — once committed, a session is locked. Needs <span class="perm-pill">cyclecounts_create</span> to run a session, <span class="perm-pill">cyclecounts_approve</span> to commit it.</p>
+
+      <h3>Shipping</h3>
+      <p>Create a shipment (a set of items going out to a customer or another location), print a pick list for warehouse staff and a shipping label once it's packed, then progress it: <strong>draft → shipped</strong> (deducts stock) <strong>→ delivered</strong>. A shipment can also be created directly from an online order that's ready to fulfill, and cancelling a shipment that had already shipped restores the stock it took.</p>
+    </section>
+
+    <section class="module" id="customers">
+      <h2 class="module">Customers <span class="tag">customers</span></h2>
+      <p class="module-intro">Customer profiles, purchase history, and account status.</p>
+      <ul>
+        <li>Standard contact info, loyalty points (earned automatically on every sale), and total lifetime spend.</li>
+        <li><strong>Credit accounts</strong> — flag a customer as a credit customer to let them buy on account; see <a href="#accounts">Accounts Receivable</a> for how that's collected and enforced.</li>
+        <li><strong>Discount card</strong> assignment (type + card number) lives on this profile — see <a href="#discount-cards">Discount Cards</a>.</li>
+        <li><strong>Rental compliance</strong> fields (ID scan, address proof, emergency reference) also live here and gate whether the customer can start a new rental.</li>
+        <li>A customer's full transaction history is viewable from their profile.</li>
+      </ul>
+      <p>Needs <span class="perm-pill">customers_add</span> / <span class="perm-pill">customers_edit</span> / <span class="perm-pill">customers_delete</span>; extending or adjusting credit terms needs <span class="perm-pill">customers_credit</span>.</p>
+    </section>
+
+    <section class="module" id="accounts">
+      <h2 class="module">Accounts Receivable <span class="tag">accounts</span></h2>
+      <p class="module-intro">Managing customers who buy on credit instead of paying up front.</p>
+      <ul>
+        <li>Each credit customer carries a running <strong>account balance</strong> and a <strong>credit limit</strong>; a credit sale adds to the balance instead of collecting cash.</li>
+        <li><strong>Payments</strong> against the balance are recorded here (needs <span class="perm-pill">accounts_payments</span>), with an aging report and a per-customer statement available.</li>
+        <li><strong>Auto credit-check</strong> — every time a payment is recorded (and periodically for the whole customer list), the system checks how long a customer's oldest unpaid credit sale has been outstanding against their payment terms. Exceed it, and the account is automatically <strong>blocked</strong> from further credit sales until the balance is brought current — this happens without anyone manually flagging the account.</li>
+        <li><strong>Write-offs</strong> for balances that will never be collected need <span class="perm-pill">accounts_writeoff</span>.</li>
+      </ul>
+    </section>
+
+    <section class="module" id="crm">
+      <h2 class="module">CRM &amp; Sales Pipeline <span class="tag">crm</span></h2>
+      <p class="module-intro">Tracking prospective business, separate from walk-in retail sales.</p>
+      <ul>
+        <li><strong>Leads</strong> (<span class="perm-pill">crm_leads</span>) — a prospective contact, which can be converted into an opportunity once qualified.</li>
+        <li><strong>Opportunities</strong> (<span class="perm-pill">crm_opportunities</span>) — a deal in progress, moved through pipeline stages; can link directly to a quotation, so a sales-driven deal and its formal price quote stay connected.</li>
+        <li><strong>Activities</strong> — calls, meetings, follow-up tasks logged against a lead or opportunity, each markable complete (or reopened).</li>
+        <li>A CRM-specific dashboard summarizes pipeline health separately from the main Dashboard.</li>
+      </ul>
+    </section>
+
+    <section class="module" id="commissions">
+      <h2 class="module">Commissions <span class="tag">commissions</span></h2>
+      <p class="module-intro">Paying staff a cut of what they sell.</p>
+      <ul>
+        <li>Define <strong>commission plans</strong> (needs <span class="perm-pill">commissions_plans</span>) — a rate structure — and assign them to specific employees.</li>
+        <li>A commission record is <strong>created automatically</strong> whenever an assigned employee completes a sale or wins a CRM opportunity — no manual entry needed for the common case.</li>
+        <li>Records move through <strong>approval</strong> (<span class="perm-pill">commissions_approve</span>, individually or in bulk) before being marked <strong>paid</strong> (<span class="perm-pill">commissions_pay</span>, also available in bulk).</li>
+        <li>A summary view totals commissions owed/paid across employees and time periods.</li>
+      </ul>
+    </section>
+
+    <section class="module" id="reports">
+      <h2 class="module">Reports &amp; Analytics <span class="tag">reports</span></h2>
+      <p class="module-intro">Sales, inventory, and financial reporting across the business.</p>
+      <ul>
+        <li><strong>Sales</strong> — totals, trend by day, breakdown by payment method, for any date range and (optionally) a single branch.</li>
+        <li><strong>Top Products</strong> and <strong>Sales by Category</strong>.</li>
+        <li><strong>Inventory report</strong> — stock value (cost and retail), and the low-stock list. Warehouses are broken out separately here since they don't generate sales but still hold real stock value.</li>
+        <li><strong>AR Collections</strong> — payments collected against credit accounts over a period.</li>
+        <li><strong>Promotions</strong> report — usage and discount totals per promotion/code.</li>
+      </ul>
+      <div class="callout note"><strong>Why a stock number sometimes looks inconsistent</strong>A product's single overall stock figure and its per-branch stock figure are tracked in parallel, and most stock-moving actions keep both in sync — but a product that's never been touched by a branch-specific action (no branch sale, transfer, or received PO yet) may only have the overall number set. Reports that break stock down by branch and reports that use the overall figure are answering slightly different questions, which is worth knowing if two numbers ever don't match.</div>
+      <p>Exporting reports needs <span class="perm-pill">reports_export</span>; financial detail reports need <span class="perm-pill">reports_financial</span>.</p>
+    </section>
+
+    <section class="module" id="employees">
+      <h2 class="module">Employees <span class="tag">employees</span></h2>
+      <p class="module-intro">Staff accounts, roles, and branch assignments.</p>
+      <ul>
+        <li>Each employee has a username/password, a default branch, and a security group that determines their permissions.</li>
+        <li>An employee can be assigned to more than one branch (see <a href="#branches">Branches</a>) if they need to work across locations.</li>
+        <li>Editing salary/pay-rate information needs <span class="perm-pill">employees_salaries</span>, separate from ordinary profile edits (<span class="perm-pill">employees_edit</span>).</li>
+        <li><span class="perm-pill">employees_add</span> / <span class="perm-pill">employees_delete</span> gate creating and removing accounts.</li>
+      </ul>
+    </section>
+
+    <section class="module" id="branches">
+      <h2 class="module">Branches <span class="tag">branches</span></h2>
+      <p class="module-intro">Your store locations (and warehouses).</p>
+      <ul>
+        <li>Each branch has its own address/contact info and, optionally, its own currency for multi-currency operations.</li>
+        <li>A branch can be flagged as a <strong>warehouse</strong> — a fulfillment/storage-only location excluded from sales reporting and the POS branch picker, but still tracked for stock value.</li>
+        <li>Assign employees to a branch (and pick one as their default) from the branch detail view.</li>
+        <li>Branches are never hard-deleted, only deactivated, since almost every other record in the system references one.</li>
+      </ul>
+      <div class="callout note"><strong>Multi-branch access</strong>Seeing a branch switcher in the UI (rather than being locked to one location) depends on a separate "multi-branch access" flag on your security group, not the Branches permission itself — that permission only controls who can manage branch *records*.</div>
+      <p>Needs <span class="perm-pill">branches_add</span> / <span class="perm-pill">branches_edit</span> / <span class="perm-pill">branches_delete</span>.</p>
+    </section>
+
+    <section class="module" id="security">
+      <h2 class="module">Security Groups <span class="tag">security</span></h2>
+      <p class="module-intro">Roles that determine what each employee can see and do.</p>
+      <p>Three groups exist out of the box:</p>
+      <table class="ref">
+        <tr><th>Group</th><th>Access</th></tr>
+        <tr><td><strong>Administrator</strong></td><td>Everything.</td></tr>
+        <tr><td><strong>Manager</strong></td><td>Everything except Settings, Branches, and Security.</td></tr>
+        <tr><td><strong>Cashier</strong></td><td>Dashboard, POS, Customers, Transactions, Quotations, plus base Rentals/Layaway access (not the issue/cancel/payment sub-actions).</td></tr>
+      </table>
+      <p>You can also create custom groups with any combination of permissions checked in the permission-tree editor. A group can't be deleted while any employee is still assigned to it — reassign them first. See the full key list in the <a href="#appendix">Permission Key Reference</a> below.</p>
+      <div class="callout tip"><strong>Module vs. sub-permission</strong>Checking a whole module (e.g. "Inventory") grants everything under it. Unchecking one specific sub-permission (e.g. "Delete Products") on an otherwise-checked module denies just that one action while leaving the rest of the module enabled.</div>
+    </section>
+
+    <section class="module" id="settings">
+      <h2 class="module">Settings &amp; Integrations <span class="tag">settings</span></h2>
+      <p class="module-intro">Store-wide configuration.</p>
+      <ul>
+        <li><strong>Company</strong> (<span class="perm-pill">settings_company</span>) — store name, logo, address, currency.</li>
+        <li><strong>Tax</strong> (<span class="perm-pill">settings_tax</span>) — default tax rate used where a product doesn't specify its own.</li>
+        <li><strong>Payment</strong> (<span class="perm-pill">settings_payment</span>) — accepted payment methods, credit terms defaults, layaway deposit percentage and cancellation fee.</li>
+        <li><strong>Integrations</strong> (<span class="perm-pill">settings_integrations</span>):
+          <ul>
+            <li><strong>Email/SMTP</strong> — credentials for sending receipts, statements, and notifications by email.</li>
+            <li><strong>Cloudinary</strong> — optional cloud image storage for product photos and PO attachments; recommended (and required on Vercel-hosted deployments, where local file storage doesn't persist).</li>
+            <li><strong>WooCommerce</strong> — two-way sync of products and orders with a WooCommerce store. Once configured, the app syncs automatically on an interval you set, and you can trigger a manual sync or review the sync log here too.</li>
+          </ul>
+        </li>
+      </ul>
+      <div class="callout warn"><strong>Shipping carriers</strong>The Shipping screen under Warehouse Management lets you record a carrier and tracking number per shipment freeform (UPS, FedEx, USPS, DHL, Local Delivery, Other) — there's no live carrier-rate or tracking-API integration; it's a record-keeping field, not a connected shipping service.</div>
+    </section>
+
+    <section class="module" id="appendix">
+      <h2 class="module">Appendix: Permission Key Reference</h2>
+      <p class="module-intro">Every module and its finer-grained sub-permissions, for building a custom Security Group.</p>
+      <table class="ref">
+        <tr><th>Module</th><th>Sub-permissions</th></tr>
+        <tr><td>pos</td><td>pos_discounts, pos_refunds, pos_void_items, pos_hold</td></tr>
+        <tr><td>drawers</td><td>drawers_manage, drawers_open, drawers_close, void_transactions</td></tr>
+        <tr><td>inventory</td><td>inventory_add, inventory_edit, inventory_delete, inventory_adjust</td></tr>
+        <tr><td>customers</td><td>customers_add, customers_edit, customers_delete, customers_credit</td></tr>
+        <tr><td>transactions</td><td>transactions_export, transactions_refund, transactions_returns</td></tr>
+        <tr><td>reports</td><td>reports_export, reports_financial</td></tr>
+        <tr><td>employees</td><td>employees_add, employees_edit, employees_delete, employees_salaries</td></tr>
+        <tr><td>suppliers</td><td>suppliers_add, suppliers_edit, suppliers_delete</td></tr>
+        <tr><td>rentals</td><td>rentals_manage_items, rentals_checkout, rentals_returns, rentals_issue</td></tr>
+        <tr><td>layaway</td><td>layaway_create, layaway_payments, layaway_cancel</td></tr>
+        <tr><td>purchase_requests</td><td>pr_create, pr_approve, pr_convert</td></tr>
+        <tr><td>purchasing</td><td>purchasing_create, purchasing_approve, purchasing_receive</td></tr>
+        <tr><td>transfers</td><td>transfers_create, transfers_approve, transfers_pickup, transfers_dropoff</td></tr>
+        <tr><td>quotations</td><td>quotations_create, quotations_approve, quotations_convert</td></tr>
+        <tr><td>accounts</td><td>accounts_create, accounts_payments, accounts_writeoff</td></tr>
+        <tr><td>crm</td><td>crm_leads, crm_opportunities</td></tr>
+        <tr><td>commissions</td><td>commissions_plans, commissions_approve, commissions_pay</td></tr>
+        <tr><td>warehouse</td><td>warehouse_bins, warehouse_assign</td></tr>
+        <tr><td>shipping</td><td>shipping_create, shipping_carriers</td></tr>
+        <tr><td>cycle-counts</td><td>cyclecounts_create, cyclecounts_approve</td></tr>
+        <tr><td>branches</td><td>branches_add, branches_edit, branches_delete</td></tr>
+        <tr><td>security</td><td>security_manage, security_assign</td></tr>
+        <tr><td>promotions</td><td>promotions_create, promotions_codes</td></tr>
+        <tr><td>discount-cards</td><td>(none)</td></tr>
+        <tr><td>settings</td><td>settings_company, settings_tax, settings_payment, settings_integrations</td></tr>
+        <tr><td>services</td><td>(none)</td></tr>
+        <tr><td>dashboard</td><td>(none)</td></tr>
+      </table>
+      <p><code>multi_branch_access</code> is a standalone flag (not nested under any module) that controls whether the branch switcher appears in the UI.</p>
+      <p class="back-to-top"><a href="#getting-started">&uarr; Back to top</a></p>
+    </section>
+  </main>
+</div>
+
+<script>
+(function() {
+  var tocLinks = Array.prototype.slice.call(document.querySelectorAll('#toc a[href^="#"]'));
+  var sections = tocLinks.map(function(a) { return document.getElementById(a.getAttribute('href').slice(1)); }).filter(Boolean);
+
+  function onScroll() {
+    var pos = window.scrollY + 100;
+    var current = sections[0];
+    for (var i = 0; i < sections.length; i++) {
+      if (sections[i].offsetTop <= pos) current = sections[i];
+    }
+    tocLinks.forEach(function(a) {
+      a.classList.toggle('active', current && a.getAttribute('href') === '#' + current.id);
+    });
+  }
+  window.addEventListener('scroll', onScroll, { passive: true });
+  onScroll();
+
+  // Simple search: a section matches if it contains every word typed, not the
+  // exact phrase — "void a sale" should still find "voiding a completed
+  // transaction" even though that exact phrase appears nowhere verbatim.
+  var input = document.getElementById('manual-search');
+  var moduleSections = Array.prototype.slice.call(document.querySelectorAll('section.module'));
+  input.addEventListener('input', function() {
+    var words = input.value.trim().toLowerCase().split(/\s+/).filter(Boolean);
+    var q = words.join(' ');
+    moduleSections.forEach(function(sec) {
+      if (!words.length) { sec.style.display = ''; return; }
+      var text = sec.textContent.toLowerCase();
+      sec.style.display = words.every(function(w) { return text.indexOf(w) !== -1; }) ? '' : 'none';
+    });
+    tocLinks.forEach(function(a) {
+      var id = a.getAttribute('href').slice(1);
+      var sec = document.getElementById(id);
+      a.style.display = (!q || (sec && sec.style.display !== 'none')) ? '' : 'none';
+    });
+  });
+})();
+</script>
+</body>
+</html>
