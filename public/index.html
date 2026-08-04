@@ -2711,9 +2711,21 @@ const App = {
   },
 
   // ─── Inventory ────────────────────────────────────────────
-  async renderInventory() {
+  async renderInventory(activeTab) {
+    const tab = activeTab || this._inventoryTab || 'all';
+    this._inventoryTab = tab;
+    const tabBtn = (key, label) => `
+      <button class="btn btn-sm ${tab===key?'btn-primary':'btn-outline'}"
+        onclick="App.renderInventory('${key}')">${label}</button>`;
+    const tabsHtml = `<div style="display:flex;gap:8px;margin-bottom:16px">
+      ${tabBtn('all','All Inventory')}
+      ${tabBtn('non-inventory','Non-Inventory Items')}
+    </div>`;
+
+    if (tab === 'non-inventory') return this.renderNonInventoryTab(tabsHtml);
+
     const [products, categories, movements, branches] = await Promise.all([
-      this.api('GET', '/products?is_service=0&is_rental=0'),
+      this.api('GET', '/products?is_service=0&is_rental=0&is_non_inventory=0'),
       this.api('GET', '/categories'),
       this.api('GET', '/products/movements?limit=30'),
       // All branches, not just the ones this employee is individually assigned
@@ -2728,6 +2740,7 @@ const App = {
         <h2>Retail Inventory Management</h2>
         <button class="btn btn-primary" onclick="App.showProductForm()">+ Add Product</button>
       </div>
+      ${tabsHtml}
       <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
         <div class="search-bar" style="flex:0 0 auto">
           <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
@@ -2768,7 +2781,7 @@ const App = {
       const q = document.getElementById('inv-search').value;
       const cat = document.getElementById('inv-cat-filter').value;
       const branchId = document.getElementById('inv-branch-filter').value;
-      let url = '/products?is_service=0&is_rental=0&';
+      let url = '/products?is_service=0&is_rental=0&is_non_inventory=0&';
       if (q) url += `search=${encodeURIComponent(q)}&`;
       if (cat) url += `category=${cat}&`;
       if (branchId) url += `branch_id=${branchId}&`;
@@ -2780,6 +2793,71 @@ const App = {
     document.getElementById('inv-search').addEventListener('input', refilter);
     document.getElementById('inv-cat-filter').addEventListener('change', refilter);
     document.getElementById('inv-branch-filter').addEventListener('change', () => { refilter(); refilterHistory(); });
+  },
+
+  // Products created by linking a received PO item back to a quotation's "Q"
+  // item (routes/purchase-orders.js link-product) — purchased for one specific
+  // quote, not stocked for general sale. Kept out of the main table above;
+  // still fully findable here and via the raw /products search used by the
+  // quote/PR pickers, so they can be reused or ordered again later.
+  async renderNonInventoryTab(tabsHtml) {
+    const products = await this.api('GET', '/products?is_non_inventory=1');
+    if (this.section !== 'inventory') return;
+    document.getElementById('content').innerHTML = `
+      <div class="section-header">
+        <h2>Retail Inventory Management</h2>
+      </div>
+      ${tabsHtml}
+      <div style="display:flex;align-items:center;gap:8px;margin-bottom:16px;flex-wrap:wrap;">
+        <div class="search-bar" style="flex:0 0 auto">
+          <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+          <input type="text" id="noninv-search" placeholder="Search non-inventory items..." style="width:240px">
+        </div>
+      </div>
+      <p style="color:var(--text-muted);font-size:13px;margin:-8px 0 14px">
+        Items purchased to fulfill a specific quotation. They're still searchable when building a new quote or purchase request —
+        use "Add to Warehouse Inventory" once you're stocking one for general sale.
+      </p>
+      <div class="card">
+        <div class="table-wrap" id="noninv-table-wrap" style="max-height:65vh;overflow-y:auto">
+          ${this.buildNonInventoryTable(products)}
+        </div>
+      </div>`;
+
+    document.getElementById('noninv-search').addEventListener('input', async (e) => {
+      const q = e.target.value;
+      const filtered = await this.api('GET', `/products?is_non_inventory=1${q ? `&search=${encodeURIComponent(q)}` : ''}`);
+      document.getElementById('noninv-table-wrap').innerHTML = this.buildNonInventoryTable(filtered);
+    });
+  },
+
+  buildNonInventoryTable(products) {
+    if (!products.length) return '<div class="empty-state"><p>No non-inventory items found</p></div>';
+    return `<table class="sticky-table">
+      <thead><tr><th>SKU</th><th>Name</th><th>Category</th><th>Price</th><th>Cost</th><th>Stock</th><th>Actions</th></tr></thead>
+      <tbody>
+        ${products.map(p => `<tr id="noninv-row-${p.id}">
+          <td style="font-family:monospace;font-size:12px">${p.sku}</td>
+          <td class="fw-600">${p.name}</td>
+          <td style="color:var(--text-muted)">${p.category_name || '—'}</td>
+          <td>${this.fmt(p.price)}</td>
+          <td style="color:var(--text-muted)">${this.fmt(p.cost)}</td>
+          <td>${p.stock_qty}</td>
+          <td style="white-space:nowrap">
+            <button class="btn btn-secondary btn-sm" onclick="App.showProductForm(${p.id})">Edit</button>
+            <button class="btn btn-primary btn-sm" onclick="App.promoteToInventory(${p.id})">Add to Warehouse Inventory</button>
+          </td>
+        </tr>`).join('')}
+      </tbody>
+    </table>`;
+  },
+
+  async promoteToInventory(id) {
+    try {
+      await this.api('PATCH', `/products/${id}/promote-to-inventory`);
+      this.alert('Added to warehouse inventory — it now shows under All Inventory');
+      this.renderInventory('non-inventory');
+    } catch(e) { this.alert(e.message, 'error'); }
   },
 
   buildStockHistory(movements) {
@@ -2812,7 +2890,7 @@ const App = {
     const q = (document.getElementById('inv-search') || {}).value || '';
     const cat = (document.getElementById('inv-cat-filter') || {}).value || '';
     const branchId = (document.getElementById('inv-branch-filter') || {}).value || '';
-    let url = '/api/products/export?is_service=0&is_rental=0&';
+    let url = '/api/products/export?is_service=0&is_rental=0&is_non_inventory=0&';
     if (q) url += `search=${encodeURIComponent(q)}&`;
     if (cat) url += `category=${encodeURIComponent(cat)}&`;
     if (branchId) url += `branch_id=${encodeURIComponent(branchId)}&`;
@@ -3709,8 +3787,8 @@ const App = {
               <td>${p.assigned_branch_name || '—'}</td>
               <td><span class="badge-pill ${p.rental_classification==='equipment'?'badge-info':'badge-secondary'}">${p.rental_classification==='equipment'?'Equipment':'Tool'}</span></td>
               <td>${this.fmt(p.rental_rate)}</td>
-              <td>${this.fmt(p.rental_weekly_rate)}</td>
-              <td>${this.fmt(p.rental_monthly_rate)}</td>
+              <td>${p.rental_classification==='equipment' ? this.fmt(p.rental_weekly_rate) : this.fmt(this._toolTierDayRates(p.rental_rate).weekTierDayRate)+'/day'}</td>
+              <td>${p.rental_classification==='equipment' ? this.fmt(p.rental_monthly_rate) : this.fmt(this._toolTierDayRates(p.rental_rate).monthTierDayRate)+'/day'}</td>
               <td>${p.rental_classification==='equipment' ? this.fmt(p.rental_hourly_rate) : '—'}</td>
               <td>${p.stock_qty}</td>
               <td class="${(p.stock_qty - (p.rental_outstanding_qty||0)) <= 0 ? 'color-danger fw-600' : ''}">${p.stock_qty - (p.rental_outstanding_qty||0)}</td>
@@ -3778,16 +3856,26 @@ const App = {
             <div class="form-group"><label>Tax Rate %</label><input type="number" id="rf-tax" value="${defaultTax}" min="0" step="0.1"></div>
           </div>
           <div class="form-group"><label>Classification *</label>
-            <select id="rf-classification" onchange="App._toggleRentalHourlyField()">
+            <select id="rf-classification" onchange="App._toggleRentalRateFields()">
               <option value="tool" ${classification==='tool'?'selected':''}>Tool (24-hour day; overdue prorated at daily rate ÷ 24)</option>
               <option value="equipment" ${classification==='equipment'?'selected':''}>Equipment (8-hour work day; hourly rate for partial days)</option>
             </select>
           </div>
-          <p style="font-size:11px;color:var(--text-muted);margin:-6px 0 8px">Rentals of 28+ days use the monthly rate; 7-27 days mix week/day blocks at their own rates.</p>
+          <p id="rf-tier-caption" style="font-size:11px;color:var(--text-muted);margin:-6px 0 8px">${classification==='equipment'
+            ? 'Rentals of 28+ days use the monthly rate; 7-27 days mix week/day blocks at their own rates.'
+            : 'Tools auto-discount off the daily rate: 7-28 days bills the whole rental at 85% of daily, per day; 28+ days bills the whole rental at 75% of that, per day. Weekly/Monthly Rate are not used for tools.'}</p>
           <div class="input-row-3">
             <div class="form-group"><label>Daily Rate *</label><input type="number" id="rf-rate" value="${p.rental_rate||0}" min="0" step="0.01" oninput="App._suggestRentalTierRates()"></div>
-            <div class="form-group"><label>Weekly Rate *</label><input type="number" id="rf-weekly" value="${p.rental_weekly_rate||0}" min="0" step="0.01"></div>
-            <div class="form-group"><label>Monthly Rate *</label><input type="number" id="rf-monthly" value="${p.rental_monthly_rate||0}" min="0" step="0.01"></div>
+            <div class="form-group">
+              <label id="rf-weekly-label">Weekly Rate ${classification==='equipment'?'*':''}</label>
+              <input type="number" id="rf-weekly" value="${p.rental_weekly_rate||0}" min="0" step="0.01" style="${classification==='equipment'?'':'display:none'}">
+              <div id="rf-weekly-computed" style="${classification==='equipment'?'display:none':''};padding:8px 10px;background:var(--bg-secondary,#f5f5f5);border-radius:6px;font-size:13px;font-weight:600"></div>
+            </div>
+            <div class="form-group">
+              <label id="rf-monthly-label">Monthly Rate ${classification==='equipment'?'*':''}</label>
+              <input type="number" id="rf-monthly" value="${p.rental_monthly_rate||0}" min="0" step="0.01" style="${classification==='equipment'?'':'display:none'}">
+              <div id="rf-monthly-computed" style="${classification==='equipment'?'display:none':''};padding:8px 10px;background:var(--bg-secondary,#f5f5f5);border-radius:6px;font-size:13px;font-weight:600"></div>
+            </div>
           </div>
           <div class="form-group" id="rf-hourly-wrap" style="${classification==='equipment'?'':'display:none'}">
             <label>Hourly Rate * <span style="font-weight:400;color:var(--text-muted)">(equipment only — bills partial days up to 8 hours)</span></label>
@@ -3821,23 +3909,61 @@ const App = {
           <button class="btn btn-primary" onclick="App.saveRentalItem(${id||'null'})">Save</button>
         </div>
       </div>`);
+    this._refreshRentalToolTierComputed();
   },
 
-  _toggleRentalHourlyField() {
+  // Tools ignore the catalog weekly/monthly rate columns entirely — both
+  // tiers are always derived from the daily rate (mirrors the tool branch in
+  // lib/rentalPricing.js and public/index.html's _calcRentalFeeEstimate).
+  // Returns the per-day rate for each tier.
+  _toolTierDayRates(daily) {
+    const weekTierDayRate = (daily || 0) * 0.85;
+    return { weekTierDayRate, monthTierDayRate: weekTierDayRate * 0.75 };
+  },
+
+  _toggleRentalRateFields() {
     const cls = document.getElementById('rf-classification')?.value;
-    const wrap = document.getElementById('rf-hourly-wrap');
-    if (wrap) wrap.style.display = cls === 'equipment' ? '' : 'none';
+    const isEquipment = cls === 'equipment';
+    const hourlyWrap = document.getElementById('rf-hourly-wrap');
+    if (hourlyWrap) hourlyWrap.style.display = isEquipment ? '' : 'none';
+    const caption = document.getElementById('rf-tier-caption');
+    if (caption) caption.textContent = isEquipment
+      ? 'Rentals of 28+ days use the monthly rate; 7-27 days mix week/day blocks at their own rates.'
+      : 'Tools auto-discount off the daily rate: 7-28 days bills the whole rental at 85% of daily, per day; 28+ days bills the whole rental at 75% of that, per day. Weekly/Monthly Rate are not used for tools.';
+    ['weekly', 'monthly'].forEach(tier => {
+      const label = document.getElementById(`rf-${tier}-label`);
+      const input = document.getElementById(`rf-${tier}`);
+      const computed = document.getElementById(`rf-${tier}-computed`);
+      if (label) label.textContent = `${tier === 'weekly' ? 'Weekly' : 'Monthly'} Rate ${isEquipment ? '*' : ''}`;
+      if (input) input.style.display = isEquipment ? '' : 'none';
+      if (computed) computed.style.display = isEquipment ? 'none' : '';
+    });
+    this._refreshRentalToolTierComputed();
+  },
+
+  _refreshRentalToolTierComputed() {
+    const cls = document.getElementById('rf-classification')?.value;
+    if (cls === 'equipment') return;
+    const daily = parseFloat(document.getElementById('rf-rate')?.value) || 0;
+    const { weekTierDayRate, monthTierDayRate } = this._toolTierDayRates(daily);
+    const weeklyEl = document.getElementById('rf-weekly-computed');
+    const monthlyEl = document.getElementById('rf-monthly-computed');
+    if (weeklyEl) weeklyEl.textContent = `${this.fmt(weekTierDayRate)}/day (7-28 days)`;
+    if (monthlyEl) monthlyEl.textContent = `${this.fmt(monthTierDayRate)}/day (28+ days)`;
   },
 
   // Convenience only — pre-fills week/month rates as a no-discount default
   // (7x / 28x the daily rate) the first time a daily rate is entered, so
-  // staff aren't left with a $0 tier by accident. Editable afterward.
+  // staff aren't left with a $0 tier by accident if they later switch this
+  // item to Equipment. Editable afterward. Tools ignore these catalog
+  // fields entirely, so this only matters for equipment.
   _suggestRentalTierRates() {
     const daily = parseFloat(document.getElementById('rf-rate')?.value) || 0;
     const weeklyEl = document.getElementById('rf-weekly');
     const monthlyEl = document.getElementById('rf-monthly');
     if (weeklyEl && !parseFloat(weeklyEl.value)) weeklyEl.value = (daily * 7).toFixed(2);
     if (monthlyEl && !parseFloat(monthlyEl.value)) monthlyEl.value = (daily * 28).toFixed(2);
+    this._refreshRentalToolTierComputed();
   },
 
   async saveRentalItem(id) {
@@ -3858,8 +3984,8 @@ const App = {
       tax_rate: parseFloat(document.getElementById('rf-tax').value) || 0,
       rental_classification: classification,
       rental_rate: parseFloat(document.getElementById('rf-rate').value) || 0,
-      rental_weekly_rate: parseFloat(document.getElementById('rf-weekly').value) || 0,
-      rental_monthly_rate: parseFloat(document.getElementById('rf-monthly').value) || 0,
+      rental_weekly_rate: classification === 'equipment' ? (parseFloat(document.getElementById('rf-weekly').value) || 0) : 0,
+      rental_monthly_rate: classification === 'equipment' ? (parseFloat(document.getElementById('rf-monthly').value) || 0) : 0,
       rental_hourly_rate: classification === 'equipment' ? (parseFloat(document.getElementById('rf-hourly').value) || 0) : 0,
       replacement_value: parseFloat(document.getElementById('rf-replval').value) || 0,
       active: parseInt(document.getElementById('rf-active').value),
@@ -4581,9 +4707,14 @@ const App = {
     const product = (this._rentalProducts || []).find(p => String(p.id) === String(productId));
     if (rateEl && product) {
       const parts = [`${this.fmt(product.rental_rate)}/day`];
-      if (product.rental_weekly_rate) parts.push(`${this.fmt(product.rental_weekly_rate)}/week`);
-      if (product.rental_monthly_rate) parts.push(`${this.fmt(product.rental_monthly_rate)}/month`);
-      if (product.rental_classification === 'equipment' && product.rental_hourly_rate) parts.push(`${this.fmt(product.rental_hourly_rate)}/hr`);
+      if (product.rental_classification === 'equipment') {
+        if (product.rental_weekly_rate) parts.push(`${this.fmt(product.rental_weekly_rate)}/week`);
+        if (product.rental_monthly_rate) parts.push(`${this.fmt(product.rental_monthly_rate)}/month`);
+        if (product.rental_hourly_rate) parts.push(`${this.fmt(product.rental_hourly_rate)}/hr`);
+      } else {
+        const { weekTierDayRate, monthTierDayRate } = this._toolTierDayRates(product.rental_rate);
+        parts.push(`${this.fmt(weekTierDayRate)}/day after 7 days`, `${this.fmt(monthTierDayRate)}/day after 28 days`);
+      }
       rateEl.innerHTML = `Rate: ${parts.join(' · ')}`;
     }
     const accessories = await this.api('GET', `/products/${productId}/accessories`);
@@ -4609,6 +4740,16 @@ const App = {
     const totalMs = Math.max(0, end - start);
     const totalHours = Math.floor(totalMs / 3600000);
     const totalCalendarDays = totalHours / 24;
+    const daily = dailyRate || 0;
+
+    // Tools: 7-28 days bills the WHOLE rental at 85% of the daily rate per
+    // day; above 28 days bills the whole rental at 75% of that (see the
+    // matching branch in lib/rentalPricing.js — must stay identical).
+    if (classification !== 'equipment' && totalCalendarDays >= 7) {
+      const weekTierDayRate = daily * 0.85;
+      const perDayRate = totalCalendarDays > 28 ? weekTierDayRate * 0.75 : weekTierDayRate;
+      return Math.round(totalCalendarDays * perDayRate * 100) / 100;
+    }
 
     const months = Math.floor(totalCalendarDays / 28);
     const remAfterMonths = totalCalendarDays - months * 28;
@@ -4617,7 +4758,6 @@ const App = {
     let days = Math.floor(remAfterWeeks);
     let remainderHours = (remAfterWeeks - days) * 24;
 
-    const daily = dailyRate || 0;
     const hourly = hourlyRate || 0;
     let hoursBilled = 0;
 
@@ -9309,11 +9449,14 @@ const App = {
     if (!item) return;
     this._linkPOId = poId;
     this._linkItemId = itemId;
+    this._linkQuotationItemId = item.quotation_item_id || null;
     this._linkMode = 'new';
+    const fromQuote = !!item.quotation_item_id;
     this.showSecondaryModal(`
       <div class="modal" style="max-width:520px">
-        <div class="modal-header"><span class="modal-title">Add "${item.product_name}" to Inventory</span><button class="modal-close">✕</button></div>
+        <div class="modal-header"><span class="modal-title">${fromQuote ? `Add "${item.product_name}" as Non-Inventory Item` : `Add "${item.product_name}" to Inventory`}</span><button class="modal-close">✕</button></div>
         <div class="modal-body">
+          ${fromQuote ? `<p style="font-size:12px;color:var(--text-muted);margin-top:0;margin-bottom:14px">This item was quoted for a specific customer — it'll show under Inventory → Non-Inventory Items, not the main list, until someone orders more for general stock.</p>` : ''}
           <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:fit-content;margin-bottom:14px">
             <button id="link-mode-new" class="btn" style="border-radius:0;border:none;padding:8px 16px;background:var(--primary);color:#fff;font-weight:600" onclick="App._setLinkMode('new')">Create New Product</button>
             <button id="link-mode-existing" class="btn" style="border-radius:0;border:none;padding:8px 16px;background:var(--card);color:var(--text)" onclick="App._setLinkMode('existing')">Link Existing Product</button>
@@ -9340,7 +9483,7 @@ const App = {
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="App.closeSecondaryModal()">Cancel</button>
-          <button class="btn btn-primary" onclick="App.linkPOItemToProduct()">Add to Inventory</button>
+          <button class="btn btn-primary" onclick="App.linkPOItemToProduct()">${fromQuote ? 'Add as Non-Inventory Item' : 'Add to Inventory'}</button>
         </div>
       </div>`);
   },
@@ -9355,6 +9498,12 @@ const App = {
     existingBtn.style.color = mode === 'existing' ? '#fff' : 'var(--text)';
     document.getElementById('link-new-panel').style.display = mode === 'new' ? '' : 'none';
     document.getElementById('link-existing-panel').style.display = mode === 'existing' ? '' : 'none';
+    // Only a brand-new product gets tagged non-inventory (see link-product route) —
+    // linking to an existing product leaves its inventory status untouched.
+    const submitBtn = document.querySelector('.modal-footer .btn-primary');
+    if (submitBtn && this._linkQuotationItemId) {
+      submitBtn.textContent = mode === 'new' ? 'Add as Non-Inventory Item' : 'Add to Inventory';
+    }
   },
 
   async linkPOItemToProduct() {
@@ -9373,7 +9522,9 @@ const App = {
     try {
       const result = await this.api('POST', `/purchase-orders/${this._linkPOId}/items/${this._linkItemId}/link-product`, payload);
       this.closeSecondaryModal();
-      this.alert(result.quotation_updated ? 'Added to inventory — the original quote was updated too' : 'Added to inventory');
+      const nonInventory = this._linkMode === 'new' && this._linkQuotationItemId;
+      const base = nonInventory ? 'Added as a non-inventory item (see Inventory → Non-Inventory Items)' : 'Added to inventory';
+      this.alert(result.quotation_updated ? `${base} — the original quote was updated too` : base);
       this.viewPO(this._linkPOId);
     } catch(e) { this.alert(e.message, 'error'); }
   },

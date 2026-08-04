@@ -286,7 +286,8 @@
       <p class="module-intro">Rent out equipment instead of selling it, with its own catalog, compliance requirements, and checkout/return workflow.</p>
 
       <h3>Rental Items</h3>
-      <p>Managed separately from retail Inventory. Each item has daily/weekly/monthly/hourly rates, a classification (e.g. "tool"), a model number and size, and can have mandatory or optional accessories attached (needs <span class="perm-pill">rentals_manage_items</span>).</p>
+      <p>Managed separately from retail Inventory. Each item has a daily rate, a classification (<strong>Tool</strong> or <strong>Equipment</strong>), a model number and size, and can have mandatory or optional accessories attached (needs <span class="perm-pill">rentals_manage_items</span>).</p>
+      <div class="callout note"><strong>Tool pricing tiers</strong>Tools get automatic volume discounts off the daily rate instead of a manually-set weekly/monthly catalog price: renting 7-28 days bills the <em>whole</em> rental at 85% of the daily rate per day, and renting more than 28 days bills the whole rental at 75% of that (i.e. 63.75% of the original daily rate) per day. The Weekly/Monthly Rate fields on the item form are only used for Equipment items, which still bill in fixed week/month blocks at their own configured rates plus an hourly rate for partial days.</div>
 
       <h3>Customer eligibility</h3>
       <p>A customer can't start a new rental until their profile has an ID (type, number, and a scanned copy), a proof of address, and an emergency reference on file. This is enforced at both the direct rental-hold flow and at converting a rental quote into an agreement.</p>
@@ -341,6 +342,11 @@
       <h3>CSV import/export</h3>
       <p>Bulk-manage the catalog with a CSV template you can download, edit, and re-import — useful for large catalog updates or migrating from another system. A separate template/import exists specifically for rental items.</p>
 
+      <h3>Quote-sourced items — the "Non-Inventory Items" tab</h3>
+      <p>When a quotation includes a "Q" item — something quoted for a customer that isn't in the catalog yet — and its Purchase Order is received and linked to a new product (see <a href="#purchasing">Purchasing</a>), that product is stocked and tracked normally, but it was bought to fulfill one specific quote, not for general resale. It's automatically kept out of the main product table above and listed instead under the <strong>Non-Inventory Items</strong> tab on this page.</p>
+      <p>Items there are still fully searchable and selectable when building a new quotation or purchase request, so ordering more of the same thing later works exactly like normal. Once you're ready to stock it for everyone — not just the customer it was originally quoted to — click <strong>Add to Warehouse Inventory</strong> on its row; it immediately moves into the main Inventory list as-is.</p>
+      <div class="callout note"><strong>Not the same as Services</strong>This is a different idea from the <a href="#services">Services &amp; Non-Inventory Items</a> module below. A service/non-inventory-flagged product has stock tracking turned off permanently. An item on this "Non-Inventory Items" tab is a completely normal, stock-tracked product — it's just hidden from the main list until someone promotes it.</div>
+
       <h3>Permissions</h3>
       <p><span class="perm-pill">inventory_add</span> to create products, <span class="perm-pill">inventory_edit</span> to change them, <span class="perm-pill">inventory_delete</span> to remove them, <span class="perm-pill">inventory_adjust</span> for manual stock corrections.</p>
     </section>
@@ -366,7 +372,7 @@
         <li><strong>Receiving</strong> (needs <span class="perm-pill">purchasing_receive</span>) — mark items as arrived; this can happen over multiple partial deliveries. Receiving updates stock (both overall and at the PO's branch) and refreshes the product's cost to the latest price paid.</li>
       </ol>
       <p>A PO can also be marked <strong>cancelled</strong>, and items received damaged can be logged separately to reverse the stock that was just added. You can attach files to a PO — invoices, packing slips — up to 20MB each.</p>
-      <div class="callout note"><strong>Items with no product yet</strong>A PO line for something not yet in your catalog can be "linked" to a product after the fact — either an existing one or a brand-new one created on the spot — and any quantity already received retroactively applies to its stock.</div>
+      <div class="callout note"><strong>Items with no product yet</strong>A PO line for something not yet in your catalog can be "linked" to a product after the fact — either an existing one or a brand-new one created on the spot — and any quantity already received retroactively applies to its stock. If the line traces back to a quotation's "Q" item, the newly created product is automatically tagged non-inventory and shows under Inventory's <a href="#inventory">Non-Inventory Items tab</a> rather than the main catalog list, since it was bought for that one quote.</div>
     </section>
 
     <section class="module" id="suppliers">

@@ -191,9 +191,14 @@ router.post('/:id/items/:itemId/link-product', async (req, res) => {
       } else {
         if (!sku || !name) throw new Error('SKU and name are required to create a new product');
         const qty = item.quantity_received || 0;
+        // Items that trace back to a quotation's "Q" line were purchased to
+        // fulfill that one quote — tag the new product non-inventory so it
+        // stays out of the normal Inventory list until someone explicitly
+        // orders more for general stock (see PATCH /:id/promote-to-inventory).
+        const nonInventory = item.quotation_item_id ? 1 : 0;
         const result = await tx.execute({
-          sql: 'INSERT INTO products (sku,barcode,name,category_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
-          args: [sku, null, name, category_id||null, parseFloat(price)||0, parseFloat(cost)||item.unit_cost||0, tax_rate??8.5, qty, 5, 1, po.supplier_id||null]
+          sql: 'INSERT INTO products (sku,barcode,name,category_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,is_non_inventory) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
+          args: [sku, null, name, category_id||null, parseFloat(price)||0, parseFloat(cost)||item.unit_cost||0, tax_rate??8.5, qty, 5, 1, po.supplier_id||null, nonInventory]
         });
         productId = Number(result.lastInsertRowid);
       }

@@ -58,7 +58,7 @@ const upload = multer({
 // GET all products
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const { search, category, active, low_stock, branch_id, supplier_id, is_service, is_rental, is_accessory, is_layaway_eligible, online } = req.query;
+    const { search, category, active, low_stock, branch_id, supplier_id, is_service, is_rental, is_accessory, is_layaway_eligible, is_non_inventory, online } = req.query;
     const params = [];
     let sql;
 
@@ -100,7 +100,7 @@ router.get('/', requireAuth, async (req, res) => {
     if (branch_id) {
       sql = `SELECT p.id, p.sku, p.barcode, p.name, p.description, p.category_id, p.price, p.cost, p.tax_rate, p.active, p.created_at, p.supplier_id, p.image_path, p.is_service, p.unit,
         p.is_rental, p.rental_rate_type, p.rental_rate, p.rental_deposit, p.rental_late_fee_rate, p.replacement_value,
-        p.rental_classification, p.rental_weekly_rate, p.rental_monthly_rate, p.rental_hourly_rate, p.is_accessory, p.is_layaway_eligible,
+        p.rental_classification, p.rental_weekly_rate, p.rental_monthly_rate, p.rental_hourly_rate, p.is_accessory, p.is_layaway_eligible, p.is_non_inventory,
         COALESCE(bi.stock_qty, 0) as stock_qty,
         COALESCE(bi.min_stock, p.min_stock) as min_stock,
         p.stock_qty as global_stock_qty,
@@ -131,6 +131,7 @@ router.get('/', requireAuth, async (req, res) => {
     if (is_rental !== undefined) { sql += ` AND p.is_rental = ?`; params.push(is_rental); }
     if (is_accessory !== undefined) { sql += ` AND p.is_accessory = ?`; params.push(is_accessory); }
     if (is_layaway_eligible !== undefined) { sql += ` AND p.is_layaway_eligible = ?`; params.push(is_layaway_eligible); }
+    if (is_non_inventory !== undefined) { sql += ` AND p.is_non_inventory = ?`; params.push(is_non_inventory); }
     if (low_stock === 'true') {
       if (branch_id) {
         sql += ` AND COALESCE(bi.stock_qty, p.stock_qty) <= COALESCE(bi.min_stock, p.min_stock)`;
@@ -183,7 +184,7 @@ router.get('/movements', requirePermission('inventory'), async (req, res) => {
 // GET export filtered products as CSV
 router.get('/export', requirePermission('inventory'), async (req, res) => {
   try {
-    const { search, category, active, low_stock, branch_id, supplier_id, is_rental, is_service } = req.query;
+    const { search, category, active, low_stock, branch_id, supplier_id, is_rental, is_service, is_non_inventory } = req.query;
     const params = [];
     let sql;
 
@@ -216,6 +217,7 @@ router.get('/export', requirePermission('inventory'), async (req, res) => {
     if (active !== undefined) { sql += ` AND p.active = ?`; params.push(active); }
     if (is_rental !== undefined) { sql += ` AND p.is_rental = ?`; params.push(is_rental); }
     if (is_service !== undefined) { sql += ` AND p.is_service = ?`; params.push(is_service); }
+    if (is_non_inventory !== undefined) { sql += ` AND p.is_non_inventory = ?`; params.push(is_non_inventory); }
     if (low_stock === 'true') {
       if (branch_id) {
         sql += ` AND COALESCE(bi.stock_qty, p.stock_qty) <= COALESCE(bi.min_stock, p.min_stock)`;
@@ -581,6 +583,17 @@ router.patch('/:id/stock', requirePermission('inventory'), async (req, res) => {
     await db.execute({ sql: 'UPDATE products SET stock_qty = ? WHERE id = ?', args: [newQty, req.params.id] });
     await db.execute({ sql: 'INSERT INTO stock_movements (product_id, branch_id, quantity_change, type, reason) VALUES (?, ?, ?, ?, ?)', args: [req.params.id, null, adj, 'adjustment', reason || null] });
     res.json({ stock_qty: newQty });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// PATCH promote a non-inventory (quote-sourced) product into normal inventory
+router.patch('/:id/promote-to-inventory', requirePermission('inventory'), async (req, res) => {
+  try {
+    const { rows: [product] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [req.params.id] });
+    if (!product) return res.status(404).json({ error: 'Product not found' });
+    await db.execute({ sql: 'UPDATE products SET is_non_inventory = 0 WHERE id = ?', args: [req.params.id] });
+    const { rows: [updated] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [req.params.id] });
+    res.json(updated);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

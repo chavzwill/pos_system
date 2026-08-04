@@ -961,6 +961,12 @@ async function _init() {
     // level (SQLite's ALTER TABLE ADD COLUMN can't add a UNIQUE constraint).
     'ALTER TABLE customers ADD COLUMN discount_card_type_id INTEGER REFERENCES discount_card_types(id)',
     'ALTER TABLE customers ADD COLUMN discount_card_number TEXT',
+    // Products created by linking a received PO item back to a quotation's
+    // "Q" item (see routes/purchase-orders.js link-product) were purchased to
+    // fulfill one specific quote, not stocked for general sale — keep them
+    // out of the normal Inventory list until someone explicitly promotes
+    // them via PATCH /products/:id/promote-to-inventory.
+    'ALTER TABLE products ADD COLUMN is_non_inventory INTEGER NOT NULL DEFAULT 0',
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch(e) {}
