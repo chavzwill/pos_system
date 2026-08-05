@@ -7435,7 +7435,7 @@ const App = {
         <td><span class="badge-pill ${tx.status==='completed'?'badge-success':'badge-danger'}">${tx.status}</span></td>
         <td style="white-space:nowrap">
           <button class="btn btn-secondary btn-sm" onclick="App.viewTransaction(${tx.id})">View</button>
-          ${tx.status==='completed'&&!tx.rental_agreement_number?`${this.can('transactions_returns')?`<button class="btn btn-warning btn-sm" onclick="App.processReturn(${tx.id})" style="background:#f59e0b;color:#fff;border:none">Return</button>`:''}${`<button class="btn btn-danger btn-sm" onclick="App.voidTransaction(${tx.id})">Void</button>`}`:''}
+          ${tx.status==='completed'&&!tx.rental_agreement_number&&this.can('transactions_returns')?`<button class="btn btn-warning btn-sm" onclick="App.processReturn(${tx.id})" style="background:#f59e0b;color:#fff;border:none">Return</button>`:''}
         </td>
       </tr>`).join('')}</tbody>
     </table>`;
@@ -7525,109 +7525,6 @@ const App = {
         </div>
       </div>`);
     this._viewTx = tx;
-  },
-
-  voidTransaction(id) {
-    const overlay = document.createElement('div');
-    overlay.className = 'modal-overlay';
-    overlay.id = 'void-override-overlay';
-    overlay.style.zIndex = '9600';
-    overlay.innerHTML = `
-      <div class="modal" style="max-width:380px">
-        <div class="modal-header">
-          <span class="modal-title">Manager Override Required</span>
-          <button class="modal-close" onclick="document.getElementById('void-override-overlay').remove()">✕</button>
-        </div>
-        <div class="modal-body">
-          <p style="font-size:13px;color:var(--text-muted);margin-bottom:16px">
-            Voiding a transaction requires authorisation. Enter the PIN of a manager or administrator with void privileges.
-          </p>
-          <div class="form-group"><label>Override PIN</label>
-            <input type="password" id="void-pin-input" maxlength="8" placeholder="Enter PIN"
-              style="letter-spacing:4px;font-size:18px;text-align:center"
-              onkeydown="if(event.key==='Enter')App.submitVoid(${id})">
-          </div>
-          <div class="form-group"><label>Reason (optional)</label>
-            <input type="text" id="void-reason-input" placeholder="e.g. Customer changed mind, entry error...">
-          </div>
-          <div id="void-pin-err" style="color:var(--danger);font-size:13px;min-height:16px;text-align:center"></div>
-        </div>
-        <div class="modal-footer">
-          <button class="btn btn-secondary" onclick="document.getElementById('void-override-overlay').remove()">Cancel</button>
-          <button class="btn btn-danger" onclick="App.submitVoid(${id})">Void Transaction</button>
-        </div>
-      </div>`;
-    document.body.appendChild(overlay);
-    setTimeout(() => document.getElementById('void-pin-input')?.focus(), 50);
-  },
-
-  async submitVoid(id) {
-    const pin = document.getElementById('void-pin-input')?.value;
-    const reason = document.getElementById('void-reason-input')?.value.trim() || null;
-    const errEl = document.getElementById('void-pin-err');
-    if (!pin) { if (errEl) errEl.textContent = 'PIN is required.'; return; }
-    try {
-      const result = await this.api('PATCH', `/transactions/${id}/void`, { pin, reason });
-      document.getElementById('void-override-overlay')?.remove();
-      this.closeModal();
-      this.alert(`Transaction voided — authorised by ${result.voided_by}`);
-      this.loadTransactions();
-      const tx = await this.api('GET', `/transactions/${id}`);
-      this.showVoidReceipt(tx);
-    } catch(e) {
-      if (errEl) errEl.textContent = e.message;
-      document.getElementById('void-pin-input').value = '';
-      document.getElementById('void-pin-input').focus();
-    }
-  },
-
-  showVoidReceipt(tx) {
-    const items = (tx.items || []).filter(i => i.product_id);
-    const storeName = this.settings.store_name || 'My Store';
-    const footer = 'This document confirms the transaction was voided and no charge stands.';
-    this.showModal(`
-      <div class="modal" style="max-width:400px">
-        <div class="modal-header">
-          <span class="modal-title">Void Receipt</span>
-          <button class="modal-close" onclick="App.closeModal()">✕</button>
-        </div>
-        <div class="modal-body">
-          <div class="receipt">
-            <div style="text-align:center;font-weight:700;font-size:15px;margin-bottom:6px">${storeName}</div>
-            ${this._printLogoTag(36)}
-            <div class="receipt-title" style="color:var(--danger)">VOID RECEIPT</div>
-            ${tx.branch_name ? `<div style="text-align:center;font-size:12px;color:#444;font-weight:600">${tx.branch_name}</div>` : ''}
-            <hr>
-            <div class="receipt-row"><span>Transaction #:</span><span>${tx.transaction_number}</span></div>
-            <div class="receipt-row"><span>Voided:</span><span>${this.fmtDateTime(tx.voided_at)}</span></div>
-            ${tx.customer_name ? `<div class="receipt-row"><span>Customer:</span><span>${tx.customer_name}</span></div>` : ''}
-            ${tx.voided_by_name ? `<div class="receipt-row"><span>Authorized By:</span><span>${tx.voided_by_name}</span></div>` : ''}
-            ${tx.void_reason ? `<div class="receipt-row"><span>Reason:</span><span>${tx.void_reason}</span></div>` : ''}
-            <hr>
-            ${items.map(i => `<div class="receipt-row"><span>${i.product_name}</span><span>${this.fmt(i.total)}</span></div>${i.quantity > 1 ? `<div style="color:#666;font-size:11px;padding-left:4px">${i.quantity} x ${this.fmt(i.unit_price)}</div>` : ''}`).join('')}
-            <hr>
-            <div class="receipt-row"><span>Original Payment</span><span>${(tx.payment_method||'').replace('_',' ').toUpperCase()}</span></div>
-            <div class="receipt-row receipt-total" style="color:var(--danger)"><span>AMOUNT VOIDED</span><span>${this.fmt(tx.total)}</span></div>
-            <hr>
-            <div style="text-align:center;margin-top:4px;font-size:11px">${footer}</div>
-          </div>
-        </div>
-        <div class="modal-footer no-print">
-          <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
-          <button class="btn btn-secondary" onclick="App.emailVoidReceipt(${tx.id},'${(tx.customer_email||'').replace(/'/g,"\\'")}')">✉️ Email</button>
-          <button class="btn btn-primary" onclick="window.print()">🖨️ Print</button>
-        </div>
-      </div>`);
-  },
-
-  emailVoidReceipt(txId, customerEmail) {
-    this.showEmailModal('Email Void Receipt', customerEmail, async (to) => {
-      this.closeModal();
-      try {
-        await this.api('POST', `/email/send-void-receipt/${txId}`, { to });
-        this.alert(`Void receipt sent to ${to}`);
-      } catch(e) { this.alert(e.message, 'error'); }
-    });
   },
 
   async updateFulfillment(txId) {

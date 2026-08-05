@@ -251,7 +251,6 @@
         <li><strong>Sessions</strong> — open a drawer at the start of a shift with a starting float, close it at the end. Only staff with <span class="perm-pill">drawers_open</span>/<span class="perm-pill">drawers_close</span> can do so, and reconciling a closed session (counting the actual cash against what the system expects) needs <span class="perm-pill">drawers_manage</span>.</li>
         <li><strong>Reconciliation</strong> uses your store's configured currency denominations (bill and coin values) so you count physical notes, not just type in a total — differences (over/short) are recorded per session.</li>
         <li><strong>Manage Drawers</strong> tab — set up which physical registers/drawers exist per branch, independent of who's using them on a given day.</li>
-        <li>Voiding a completed transaction (as opposed to voiding a line mid-sale) is gated by <span class="perm-pill">void_transactions</span> and is grouped with drawer permissions since it affects the day's cash reconciliation.</li>
       </ul>
     </section>
 
@@ -261,7 +260,6 @@
       <ul>
         <li>Search/filter by date, customer, status, branch, payment method, or transaction number.</li>
         <li><strong>Returns</strong> (needs <span class="perm-pill">transactions_returns</span>) — process a full or partial return against a completed sale; stock and any applicable fees are adjusted automatically.</li>
-        <li><strong>Voiding</strong> a completed transaction after the fact needs <span class="perm-pill">void_transactions</span> — distinct from voiding an in-progress cart line at the POS.</li>
         <li><strong>Exporting</strong> transaction history needs <span class="perm-pill">transactions_export</span>.</li>
         <li><strong>Online Orders</strong> — sales that came in through the WooCommerce integration (or any API-key-authenticated channel) appear here tagged as online, with their own fulfillment status you can advance toward shipping.</li>
       </ul>
