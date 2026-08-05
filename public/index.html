@@ -1926,6 +1926,29 @@ const App = {
   // won or lost the definition depending on declaration order.
   showPOSPaymentModal() {
     if (!this.cart.length) { this.alert('Cart is empty', 'warning'); return; }
+    // Available Credit already covers the whole ticket — no cash/card/other
+    // tender is actually changing hands, so skip straight to completing the
+    // sale instead of forcing a tender pick (previously the only way through
+    // here was e.g. picking Cash and typing in "0").
+    const { total } = this.getCartTotals();
+    if (total <= 0 && this._storeCreditApplied > 0) {
+      this.showModal(`
+        <div class="modal" style="max-width:420px">
+          <div class="modal-header"><span class="modal-title">Payment</span><button class="modal-close">✕</button></div>
+          <div class="modal-body">
+            <p style="text-align:center;font-size:14px;color:var(--text-muted);margin-bottom:12px">Available Credit fully covers this ticket — no additional tender needed.</p>
+            <div style="text-align:center;background:var(--bg);border-radius:8px;padding:14px">
+              <div style="font-size:12px;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px">Applied from Available Credit</div>
+              <div style="font-size:28px;font-weight:700;color:var(--success)">${this.fmt(this._storeCreditApplied)}</div>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="App.closeModal();App.processPayment('available_credit')">Complete Sale</button>
+          </div>
+        </div>`);
+      return;
+    }
     this.showModal(`
       <div class="modal" style="max-width:480px">
         <div class="modal-header"><span class="modal-title">Payment</span><button class="modal-close">✕</button></div>
@@ -2358,7 +2381,10 @@ const App = {
     const isTaxExempt = this.isCartTaxExempt();
     let tax = isTaxExempt ? 0 : this.cart.reduce((s, i) => s + (i.price * i.quantity * i.tax_rate / 100), 0);
     const discount = this.cartDiscount || 0;
-    const total = subtotal + tax - discount;
+    // Must match getCartTotals()'s formula exactly (including the floor at
+    // 0) — this is what the "Amount Due" box below shows, and it needs to
+    // reflect applied Available Credit the same way checkout itself does.
+    const total = Math.max(0, subtotal + tax - discount - (this._storeCreditApplied || 0));
     const discountLabel = this._returnCredit ? `↩ Return Credit ${this._returnCredit.return_number}` : this.autoAppliedPromo ? `🏷 ${this.autoAppliedPromo.name}` : 'Discount';
 
     totals.innerHTML = `
@@ -14535,17 +14561,27 @@ const App = {
   async viewDrawerReport(id) {
     const s = await this.api('GET', `/drawers/sessions/${id}`);
     const tenderMap = {};
-    (s.tenders || []).forEach(t => { tenderMap[t.payment_method] = t; });
-    const tenderLabels = { cash:'Cash', credit_card:'Card', check:'Check', gift_card:'Gift Card', credit:'Charge Account', direct_deposit:'Direct Deposit' };
-    const allTenders = ['cash','credit_card','check','gift_card','credit','direct_deposit'];
+    // A credit/debit terminal typically settles as one lump "Card" batch,
+    // not split by credit vs debit — combine both into a single bucket so
+    // they compare against the one card_counted column instead of each
+    // wrongly comparing its own half against the full counted amount.
+    (s.tenders || []).forEach(t => {
+      const key = (t.payment_method === 'credit_card' || t.payment_method === 'debit_card') ? 'card' : t.payment_method;
+      if (!tenderMap[key]) tenderMap[key] = { tx_count: 0, total: 0 };
+      tenderMap[key].tx_count += t.tx_count || 0;
+      tenderMap[key].total += parseFloat(t.total || 0);
+    });
+    const tenderLabels = { cash:'Cash', card:'Card', check:'Check', gift_card:'Gift Card', credit:'Charge Account', direct_deposit:'Direct Deposit', available_credit:'Available Credit' };
+    const allTenders = ['cash','card','check','gift_card','credit','direct_deposit','available_credit'];
     const expectedCash = parseFloat(s.opening_float||0) + parseFloat(tenderMap['cash']?.total||0);
     const rec = s.reconciliation;
 
     const tenderRows = allTenders.map(k => {
       const t = tenderMap[k] || { tx_count:0, total:0 };
       const expected = k === 'cash' ? expectedCash : parseFloat(t.total||0);
-      const recKey = k === 'credit_card' ? 'card' : k;
-      const counted = rec ? parseFloat(rec[`${recKey}_counted`]||0) : null;
+      // Available Credit never involves a physical tender to reconcile —
+      // leave it out of counted/variance entirely.
+      const counted = (rec && k !== 'available_credit') ? parseFloat(rec[`${k}_counted`]||0) : null;
       const variance = counted !== null ? (counted - expected) : null;
       const varStyle = variance === null ? '' : variance < 0 ? 'color:var(--danger)' : variance > 0 ? 'color:var(--success)' : 'color:var(--text-muted)';
       return `<tr>
@@ -14605,8 +14641,12 @@ const App = {
     const savedCounts = {};
     (rec.note_counts || []).forEach(nc => { savedCounts[nc.denomination_id] = nc.quantity; });
 
+    // Credit and debit both settle as one lump "Card" batch from the
+    // terminal — combine them so debit sales aren't silently missing from
+    // the expected card total here.
+    const cardExpected = parseFloat(tenderMap['credit_card']?.total||0) + parseFloat(tenderMap['debit_card']?.total||0);
     const nonCashRows = [
-      { key:'card',           label:'Card',           expected: parseFloat(tenderMap['credit_card']?.total||0),     counted: rec.card_counted },
+      { key:'card',           label:'Card',           expected: cardExpected,                                       counted: rec.card_counted },
       { key:'check',          label:'Check',          expected: parseFloat(tenderMap['check']?.total||0),           counted: rec.check_counted },
       { key:'gift_card',      label:'Gift Card',      expected: parseFloat(tenderMap['gift_card']?.total||0),       counted: rec.gift_card_counted },
       { key:'credit',         label:'Charge Account', expected: parseFloat(tenderMap['credit']?.total||0),          counted: rec.credit_counted },
@@ -14760,13 +14800,17 @@ const App = {
     (s.tenders || []).forEach(t => { tenderMap[t.payment_method] = t; });
     const rec = s.reconciliation;
     const expectedCash = parseFloat(s.opening_float||0) + parseFloat(tenderMap['cash']?.total||0);
+    // Credit and debit both settle as one lump "Card" batch from the
+    // terminal — combine them so debit sales aren't silently missing.
+    const cardSales = parseFloat(tenderMap['credit_card']?.total||0) + parseFloat(tenderMap['debit_card']?.total||0);
     const rows = [
-      { label:'Cash',           expected: expectedCash,                                           sales: parseFloat(tenderMap['cash']?.total||0),            cnt: rec?.cash_counted },
-      { label:'Card',           expected: parseFloat(tenderMap['credit_card']?.total||0),     sales: parseFloat(tenderMap['credit_card']?.total||0),     cnt: rec?.card_counted },
-      { label:'Check',          expected: parseFloat(tenderMap['check']?.total||0),            sales: parseFloat(tenderMap['check']?.total||0),           cnt: rec?.check_counted },
-      { label:'Gift Card',      expected: parseFloat(tenderMap['gift_card']?.total||0),        sales: parseFloat(tenderMap['gift_card']?.total||0),       cnt: rec?.gift_card_counted },
-      { label:'Charge Account', expected: parseFloat(tenderMap['credit']?.total||0),           sales: parseFloat(tenderMap['credit']?.total||0),          cnt: rec?.credit_counted },
-      { label:'Direct Deposit', expected: parseFloat(tenderMap['direct_deposit']?.total||0),   sales: parseFloat(tenderMap['direct_deposit']?.total||0),  cnt: rec?.direct_deposit_counted },
+      { label:'Cash',             expected: expectedCash,                                         sales: parseFloat(tenderMap['cash']?.total||0),            cnt: rec?.cash_counted },
+      { label:'Card',             expected: cardSales,                                             sales: cardSales,                                          cnt: rec?.card_counted },
+      { label:'Check',            expected: parseFloat(tenderMap['check']?.total||0),            sales: parseFloat(tenderMap['check']?.total||0),           cnt: rec?.check_counted },
+      { label:'Gift Card',        expected: parseFloat(tenderMap['gift_card']?.total||0),        sales: parseFloat(tenderMap['gift_card']?.total||0),       cnt: rec?.gift_card_counted },
+      { label:'Charge Account',   expected: parseFloat(tenderMap['credit']?.total||0),           sales: parseFloat(tenderMap['credit']?.total||0),          cnt: rec?.credit_counted },
+      { label:'Direct Deposit',   expected: parseFloat(tenderMap['direct_deposit']?.total||0),   sales: parseFloat(tenderMap['direct_deposit']?.total||0),  cnt: rec?.direct_deposit_counted },
+      { label:'Available Credit', expected: parseFloat(tenderMap['available_credit']?.total||0), sales: parseFloat(tenderMap['available_credit']?.total||0), cnt: null },
     ];
     const tableRows = rows.map(r => {
       const v = r.cnt != null ? (r.cnt - r.expected).toFixed(2) : '—';
