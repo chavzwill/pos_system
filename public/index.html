@@ -181,6 +181,42 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .customer-bar { display: flex; align-items: center; gap: 8px; background: #f5f5f5; border-radius: 6px; padding: 8px 10px; font-size: 13px; }
 .customer-bar svg { color: var(--text-muted); width: 16px; height: 16px; flex-shrink: 0; }
 
+/* POS full-screen kiosk mode */
+body.pos-kiosk #sidebar, body.pos-kiosk #topbar { display: none; }
+.pos-kiosk-topbar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: #eef2fb; border-bottom: 1px solid #c5d5f5; flex-shrink: 0; flex-wrap: wrap; }
+.pos-kiosk-exit { width: 34px; height: 34px; border-radius: 6px; border: none; background: #1e3a5f; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.pos-kiosk-exit:hover { background: #16304d; }
+.pos-item-input-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; }
+.pos-item-input-wrap input { width: 220px; font-family: monospace; letter-spacing: .5px; }
+.pos-ticket-info { padding: 4px 14px; font-size: 13px; color: var(--text); display: flex; align-items: center; gap: 18px; flex-wrap: wrap; flex-shrink: 0; }
+.pos-ticket-info .customer-bar { background: transparent; padding: 0; }
+.pos-ticket-wrap { flex: 1; overflow: hidden; display: flex; }
+.pos-ticket-table-wrap { flex: 1; overflow-y: auto; padding: 0 14px; }
+.pos-ticket-table { width: 100%; border-collapse: collapse; font-size: 13px; }
+.pos-ticket-table th { text-align: left; padding: 6px 8px; font-size: 11px; text-transform: uppercase; color: var(--text-muted); border-bottom: 2px solid var(--border); position: sticky; top: 0; background: #fff; }
+.pos-ticket-table td { padding: 7px 8px; border-bottom: 1px solid #f0f0f0; }
+.pos-ticket-row { cursor: pointer; }
+.pos-ticket-row:hover { background: #f8f9fb; }
+.pos-ticket-row.selected { background: #e8f5e9; }
+.pos-ticket-row .qty-ctrl { display: inline-flex; }
+.pos-bottom-bar { display: flex; align-items: center; gap: 24px; padding: 10px 14px; border-top: 2px solid var(--border); background: #fafbfc; flex-shrink: 0; flex-wrap: wrap; }
+.pos-bottom-bar .pos-totals { display: flex; gap: 20px; flex-wrap: wrap; }
+.pos-bottom-bar .pos-total-item { text-align: left; }
+.pos-bottom-bar .pos-total-item label { display: block; font-size: 11px; text-transform: uppercase; color: var(--text-muted); }
+.pos-bottom-bar .pos-total-item span { font-size: 16px; font-weight: 700; }
+.pos-amount-due { margin-left: auto; background: #fff; border: 2px solid var(--primary); border-radius: 8px; padding: 8px 20px; text-align: right; }
+.pos-amount-due label { display: block; font-size: 11px; text-transform: uppercase; color: var(--text-muted); }
+.pos-amount-due span { font-size: 26px; font-weight: 700; color: var(--primary); }
+.pos-status-line { padding: 4px 14px; font-size: 11px; color: var(--text-muted); display: flex; gap: 18px; border-top: 1px solid var(--border); flex-shrink: 0; }
+.pos-action-grid { width: 380px; flex-shrink: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-left: 1px solid var(--border); overflow-y: auto; }
+.pos-grid-btn { background: #eef2fb; border: none; cursor: pointer; padding: 10px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .2px; color: #1e3a5f; display: flex; align-items: center; justify-content: center; text-align: center; min-height: 56px; line-height: 1.25; }
+.pos-grid-btn:hover:not(:disabled) { filter: brightness(0.95); }
+.pos-grid-btn:disabled { opacity: .4; cursor: not-allowed; }
+.pos-grid-btn.void { background: #fdecea; color: var(--danger); }
+.pos-grid-btn.pay-acct { background: #e3f2fd; color: #1565c0; }
+.pos-grid-btn.payment { background: var(--success); color: #fff; font-size: 13px; }
+.pos-grid-btn.hold { background: #ede7f6; color: #4527a0; }
+
 /* Status badges */
 .badge-pill { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
 .badge-success { background: #E8F5E9; color: #2E7D32; }
@@ -390,6 +426,17 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
   .pos-left { border-right: none !important; border-bottom: 1px solid var(--border); }
   .pos-right { width: 100%; }
   .cart-items { max-height: 45vh; }
+
+  /* POS kiosk layout: stack the action grid under the ticket table instead
+     of a fixed side panel, and let the top toolbar wrap. */
+  .pos-kiosk-topbar { padding: 8px; }
+  .pos-item-input-wrap { margin-left: 0; width: 100%; }
+  .pos-item-input-wrap input { width: 100%; flex: 1; }
+  .pos-ticket-wrap { flex-direction: column; overflow-y: auto !important; }
+  .pos-ticket-table-wrap { flex: none; max-height: 40vh; }
+  .pos-action-grid { width: 100%; overflow-y: visible; }
+  .pos-bottom-bar { flex-direction: column; align-items: stretch; }
+  .pos-amount-due { margin-left: 0; }
 
   /* Touch targets */
   .btn { min-height: 38px; }
@@ -619,7 +666,13 @@ const App = {
   },
 
   updateClock() {
-    document.getElementById('clock').textContent = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    const t = new Date().toLocaleTimeString([], { hour: '2-digit', minute: '2-digit', second: '2-digit' });
+    document.getElementById('clock').textContent = t;
+    // POS kiosk mode hides #topbar (and its #clock) entirely — this mirrors
+    // the same running interval into the POS status bar's own clock when
+    // that page is open, rather than starting a second interval.
+    const posClock = document.getElementById('pos-kiosk-clock');
+    if (posClock) posClock.textContent = t;
   },
 
   bindNav() {
@@ -1090,6 +1143,11 @@ const App = {
     content.style.padding = name === 'pos' ? '0' : '20px';
     content.style.overflow = name === 'pos' ? 'hidden' : 'auto';
     content.style.height = name === 'pos' ? '100%' : 'auto';
+    // Full-screen kiosk mode for POS — hides the sidebar/topbar chrome (see
+    // `body.pos-kiosk` CSS) so the register screen matches a dedicated
+    // terminal layout; the POS page's own Exit button calls showSection()
+    // with a different name to leave kiosk mode again.
+    document.body.classList.toggle('pos-kiosk', name === 'pos');
     const renders = { dashboard: () => this.renderDashboard(), pos: () => this.renderPOS(), inventory: () => this.renderInventory(), services: () => this.renderServices(), rentals: () => this.renderRentals(), 'rental-items': () => this.renderRentalItems(), dispatch: () => this.renderHub('dispatch'), 'rental-dispatch': () => this.renderRentalDispatch(), 'transfer-dispatch': () => this.renderTransferDispatch(), 'rental-deposits': () => this.renderRentalDeposits(), 'purchase-requests': () => this.renderPurchasing('requests'), layaway: () => this.renderLayaway(), customers: () => this.renderCustomers(), transactions: () => this.renderTransactions(), 'online-orders': () => this.renderOnlineOrders(), reports: () => this.renderReports(), employees: () => this.renderEmployees(), settings: () => this.renderSettings(), suppliers: () => this.renderSuppliers(), purchasing: () => this.renderPurchasing(), quotations: () => this.renderQuotations(), accounts: () => this.renderAccounts(), branches: () => this.renderBranches(), security: () => this.renderSecurity(), transfers: () => this.renderTransfers(), crm: () => this.renderCRM(), commissions: () => this.renderCommissions(), warehouse: () => this.renderWarehouse(), shipping: () => this.renderShipping(), 'cycle-counts': () => this.renderCycleCounts(), drawers: () => this.renderDrawers(), promotions: () => this.renderPromotions(), 'discount-cards': () => this.renderDiscountCards(), 'purchasing-hub': () => this.renderHub('purchasing-hub'), 'sales-hub': () => this.renderHub('sales-hub'), 'accounts-hub': () => this.renderHub('accounts-hub'), 'warehouse-hub': () => this.renderHub('warehouse-hub'), 'admin-hub': () => this.renderHub('admin-hub') };
     if (renders[name]) await renders[name]();
   },
@@ -1663,6 +1721,7 @@ const App = {
     if (this.section !== 'pos') return;
     this.posCategory = 'all';
     this.posSearch = '';
+    this._selectedCartLine = null;
 
     const branches = this.currentUser.branches || [];
     const defaultBranch = branches.find(b => b.is_default) || branches[0] || null;
@@ -1670,85 +1729,140 @@ const App = {
       this.posBranch = defaultBranch;
     }
 
+    // Right-hand action grid — 4 columns, grouped like the reference terminal
+    // (lookups / ticket actions / hold&quote / transactional), each button a
+    // relocation of an existing capability (see the POS button-mapping plan).
+    // Buttons the current employee can't use are simply omitted rather than
+    // shown disabled, matching how e.g. Hold/Recall are already gated today.
+    const gridButtons = [
+      `<button class="pos-grid-btn" onclick="App.selectCustomer()">Cust Lookup</button>`,
+      `<button class="pos-grid-btn" onclick="App.posCustZoom()">Cust Zoom</button>`,
+      `<button class="pos-grid-btn" onclick="App.showItemLookupModal()">Item Lookup</button>`,
+      `<button class="pos-grid-btn" onclick="App.posItemZoom()">Item Zoom</button>`,
+      `<button class="pos-grid-btn" onclick="App.showTicketDiscountModal()">Ticket Discount</button>`,
+      `<button class="pos-grid-btn" onclick="App.showTaxExemptModal()">Tax Exempt</button>`,
+      this.can('layaway_create') ? `<button class="pos-grid-btn" onclick="App.posCreateLayawayFromCart()">Create Layaway</button>` : '',
+      this.can('quotations') ? `<button class="pos-grid-btn" onclick="App.posCreateQuoteFromCart()">Create Quote</button>` : '',
+      this.can('quotations') ? `<button class="pos-grid-btn" onclick="App.showQuoteSearch()">Quote Recall</button>` : '',
+      this.can('pos_hold') ? `<button class="pos-grid-btn hold" onclick="App.holdOrder()">Hold</button>` : '',
+      this.can('pos_hold') ? `<button class="pos-grid-btn hold" onclick="App.recallOrder()">Hold Recall <span id="hold-count-badge" style="display:none;background:rgba(0,0,0,0.15);border-radius:10px;padding:0 5px;font-size:10px;margin-left:2px"></span></button>` : '',
+      `<button class="pos-grid-btn" onclick="App.posReprintTicket()">Reprint Ticket</button>`,
+      this.can('transactions') ? `<button class="pos-grid-btn" onclick="App.showSection('transactions')">Returns</button>` : '',
+      `<button class="pos-grid-btn pay-acct" onclick="App.processPayment('credit')">Pay On Acct</button>`,
+      `<button class="pos-grid-btn void" onclick="App.posVoidSelectedLine()">Void Line</button>`,
+      `<button class="pos-grid-btn" onclick="App.posQuantitySelectedLine()">Quantity</button>`,
+      `<button class="pos-grid-btn void" onclick="App.posCancelTicket()">Cancel Ticket</button>`,
+      `<button class="pos-grid-btn payment" style="grid-column:1 / -1" onclick="App.showPOSPaymentModal()">PAYMENT</button>`,
+    ].filter(Boolean).join('');
+
+    const cashierName = this.currentUser ? `${this.currentUser.first_name} ${this.currentUser.last_name}` : '';
+
     document.getElementById('content').innerHTML = `
       <div id="pos-section" style="height:100%;display:flex;flex-direction:column;">
-        <div id="pos-branch-bar" style="display:flex;align-items:center;gap:10px;padding:7px 14px;background:#e8f0fe;border-bottom:1px solid #c5d5f5;flex-shrink:0"></div>
+        <div class="pos-kiosk-topbar">
+          <button class="pos-kiosk-exit" title="Exit POS" onclick="App.showSection('dashboard')">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="18" height="18"><path d="M17 7l-1.41 1.41L18.17 11H8v2h10.17l-2.58 2.59L17 17l5-5zM4 5h8V3H4c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h8v-2H4V5z"/></svg>
+          </button>
+          <div id="pos-branch-bar" style="display:flex;align-items:center;gap:10px"></div>
+          <div class="pos-item-input-wrap">
+            <input type="text" id="pos-item-input" placeholder="ITEM NUMBER" autocomplete="off">
+            <button class="btn btn-sm btn-primary" onclick="App.posSubmitItemInput()">
+              <svg viewBox="0 0 24 24" fill="currentColor" width="14" height="14"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            </button>
+          </div>
+        </div>
         <div id="pos-drawer-banner" style="display:none;align-items:center;gap:14px;padding:10px 16px;background:#fff8e1;border-bottom:2px solid #ffc107;flex-shrink:0">
           <svg viewBox="0 0 24 24" fill="#f59e0b" width="20" height="20"><path d="M1 21h22L12 2 1 21zm12-3h-2v-2h2v2zm0-4h-2v-4h2v4z"/></svg>
           <span style="font-size:14px;font-weight:500;color:#7c5c00">No cash drawer is open for this session.</span>
           <button class="btn btn-sm" style="background:#f59e0b;color:#fff;font-weight:600;border:none;padding:5px 14px" onclick="App.checkPOSDrawer()">Open Drawer</button>
         </div>
-        <div class="pos-body" style="flex:1;display:flex;overflow:hidden;">
-        <div class="pos-left" style="padding:14px;border-right:1px solid var(--border);background:#f8f9fb;">
-          <div style="display:flex;gap:10px;align-items:center;margin-bottom:10px;">
-            <div class="search-bar" style="flex:1">
-              <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
-              <input type="text" id="pos-search" placeholder="Search products by name, SKU, or barcode..." style="font-size:14px;">
-            </div>
-            ${this.can('quotations') ? `<button class="btn btn-outline btn-sm" onclick="App.showQuoteSearch()" style="white-space:nowrap;flex-shrink:0;font-weight:600">📋 Invoice</button>` : ''}
-          </div>
-          <div class="category-bar" id="cat-bar" style="margin-bottom:10px;">
-            <div class="cat-btn active" data-cat="all">All</div>
-            ${this.allCategories.map(c => `<div class="cat-btn" data-cat="${c.id}">${this.categoryEmoji(c.name)} ${c.name}</div>`).join('')}
-          </div>
-          <div class="product-grid" id="product-grid"></div>
-        </div>
-        <div class="pos-right" style="padding:14px;background:#fff;display:flex;flex-direction:column;gap:10px;">
-          <div style="display:flex;align-items:center;justify-content:space-between;">
-            <span style="font-weight:700;font-size:15px;">Cart</span>
-            <div style="display:flex;gap:6px;align-items:center;">
-              ${this.can('pos_hold') ? `<button class="btn btn-sm" style="background:#f59e0b;color:#fff;border:none;font-weight:600" onclick="App.recallOrder()">Recall <span id="hold-count-badge" style="display:none;background:rgba(0,0,0,0.15);border-radius:10px;padding:0 5px;font-size:10px;margin-left:2px"></span></button><button class="btn btn-sm" style="background:#6366f1;color:#fff;border:none;font-weight:600" onclick="App.holdOrder()">Hold</button>` : ''}
-              <button class="btn btn-secondary btn-sm" onclick="App.clearCart()">Clear</button>
-            </div>
-          </div>
+        <div class="pos-ticket-info">
           <div class="customer-bar" id="cart-customer-bar">
             <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 12c2.21 0 4-1.79 4-4s-1.79-4-4-4-4 1.79-4 4 1.79 4 4 4zm0 2c-2.67 0-8 1.34-8 4v2h16v-2c0-2.66-5.33-4-8-4z"/></svg>
+            <span style="color:var(--text-muted)">Customer #:</span>
             <span id="cart-customer-name" style="flex:1">Walk-in Customer</span>
             <button class="btn btn-outline btn-sm" onclick="App.selectCustomer()">Select</button>
             <button class="btn btn-secondary btn-sm" id="remove-customer-btn" style="display:none" onclick="App.removeCustomer()">✕</button>
           </div>
+          <span style="color:var(--text-muted)">Sales rep: <strong style="color:var(--text)">${cashierName}</strong></span>
           <div id="active-quote-bar" style="display:none;background:#e8f0fe;border:1px solid #b3c8f7;border-radius:6px;padding:6px 10px;font-size:12px;align-items:center;gap:8px">
             <svg viewBox="0 0 24 24" fill="#1a73e8" width="14" height="14"><path d="M14 2H6a2 2 0 0 0-2 2v16a2 2 0 0 0 2 2h12a2 2 0 0 0 2-2V8l-6-6zm-1 1.5L18.5 9H13V3.5zM16 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-4H8V6h5v2z"/></svg>
             <span style="color:#1a73e8">Invoice: <strong id="active-quote-number"></strong></span>
             <button class="btn btn-sm btn-secondary" style="padding:2px 8px;font-size:11px;margin-left:auto" onclick="App.clearActiveQuote()">✕ Remove</button>
           </div>
-          <div id="store-credit-bar" style="display:none;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:6px;padding:6px 10px;font-size:12px;display:none;align-items:center;gap:8px">
-            <span style="color:#2e7d32">💳 Store Credit: <strong id="store-credit-balance"></strong></span>
+          <div id="store-credit-bar" style="display:none;background:#e8f5e9;border:1px solid #a5d6a7;border-radius:6px;padding:6px 10px;font-size:12px;align-items:center;gap:8px">
+            <span style="color:#2e7d32">💳 Available Credit: <strong id="store-credit-balance"></strong></span>
             <button class="btn btn-sm" style="background:#2e7d32;color:#fff;padding:3px 10px;font-size:11px;margin-left:auto" onclick="App.applyStoreCredit()">Apply</button>
             <button class="btn btn-sm btn-secondary" id="remove-store-credit-btn" style="display:none;padding:3px 8px;font-size:11px" onclick="App.removeStoreCredit()">✕</button>
           </div>
-          <div class="cart-items" id="cart-items-list"></div>
-          <div class="cart-totals" id="cart-totals"></div>
-          <div style="display:flex;gap:8px;align-items:center;" id="discount-row">
-            <input type="number" id="discount-input" placeholder="Discount $" min="0" step="0.01" style="width:120px;">
-            <button class="btn btn-secondary btn-sm" onclick="App.applyDiscount()">Apply</button>
-            <span id="discount-display" style="font-size:13px;color:var(--success);"></span>
-          </div>
-          <div style="display:flex;gap:8px;align-items:center;" id="promo-row">
-            <input type="text" id="promo-code-input" placeholder="Promo code" style="flex:1;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
-            <button class="btn btn-secondary btn-sm" onclick="App.applyPromoCode()">Apply</button>
-            <button class="btn btn-outline btn-sm" id="remove-promo-btn" style="display:none" onclick="App.removePromoCode()">✕</button>
-          </div>
-          <div id="promo-display" style="font-size:12px;color:var(--success);display:none"></div>
-          <div class="payment-btns" style="grid-template-columns:1fr 1fr 1fr;">
-            <button class="pay-btn pay-cash" onclick="App.processPayment('cash')"><span>💵</span> Cash<span>Exact / Change</span></button>
-            <button class="pay-btn pay-card" onclick="App.processPayment('credit_card')"><span>💳</span> Card<span>Credit / Debit</span></button>
-            <button class="pay-btn pay-check" onclick="App.processPayment('check')"><span>🏦</span> Check<span>Personal / Business</span></button>
-            <button class="pay-btn" style="background:#9C27B0;color:#fff;" onclick="App.processPayment('credit')"><span>🧾</span> Credit<span>Charge Account</span></button>
-            <button class="pay-btn pay-split" onclick="App.processPayment('gift_card')"><span>🎁</span> Gift Card<span>Stored Value</span></button>
-            <button class="pay-btn" style="background:#0277BD;color:#fff;" onclick="App.processPayment('direct_deposit')"><span>🏛️</span> Direct Deposit<span>Bank Transfer</span></button>
-          </div>
         </div>
+        <div class="pos-ticket-wrap">
+          <div class="pos-ticket-table-wrap">
+            <table class="pos-ticket-table">
+              <thead><tr><th>Item Number</th><th>Description</th><th style="text-align:center">Qty</th><th style="text-align:right">Price</th><th style="text-align:right">Line Total</th><th></th></tr></thead>
+              <tbody id="cart-items-list"></tbody>
+            </table>
+          </div>
+          <div class="pos-action-grid">${gridButtons}</div>
+        </div>
+        <div class="pos-bottom-bar" id="cart-totals"></div>
+        <div class="pos-status-line">
+          <span id="pos-kiosk-clock"></span>
+          <span>Cashier: ${cashierName}</span>
         </div>
       </div>`;
 
     this._posHasDrawers = false;
     this.renderPOSBranchBar();
-    this.renderProductGrid();
     this.renderCart();
     this.checkPOSDrawer();
     if (this.can('pos_hold')) this.updateHoldBadge();
+    this.updateClock();
 
+    document.getElementById('pos-item-input').addEventListener('keydown', e => {
+      if (e.key === 'Enter') this.posSubmitItemInput();
+    });
+  },
+
+  // Primary item-entry path in the kiosk layout — types/scans go here rather
+  // than the old always-visible product grid. An exact SKU/barcode match
+  // wins; otherwise the first name/SKU substring match, mirroring what the
+  // Item Lookup grid (renderProductGrid's search) already does.
+  posSubmitItemInput() {
+    const input = document.getElementById('pos-item-input');
+    const q = (input?.value || '').trim();
+    if (!q) return;
+    const ql = q.toLowerCase();
+    let product = this.allProducts.find(p => (p.sku || '').toLowerCase() === ql || (p.barcode || '').toLowerCase() === ql);
+    if (!product) product = this.allProducts.find(p => (p.name || '').toLowerCase().includes(ql) || (p.sku || '').toLowerCase().includes(ql));
+    if (!product) { this.alert(`No item found matching "${q}"`, 'warning'); return; }
+    this.addToCart(product.id);
+    if (input) { input.value = ''; input.focus(); }
+  },
+
+  // "Item Lookup" grid button — today's clickable product grid (search +
+  // category bar), unchanged, relocated into a modal for browsing when the
+  // item number isn't known. renderProductGrid()/addToCart() are reused
+  // exactly as before.
+  showItemLookupModal() {
+    this.posCategory = 'all';
+    this.posSearch = '';
+    this.showModal(`
+      <div class="modal" style="max-width:900px">
+        <div class="modal-header"><span class="modal-title">Item Lookup</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <div class="search-bar" style="margin-bottom:10px">
+            <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
+            <input type="text" id="pos-search" placeholder="Search products by name, SKU, or barcode...">
+          </div>
+          <div class="category-bar" id="cat-bar" style="margin-bottom:10px;">
+            <div class="cat-btn active" data-cat="all">All</div>
+            ${this.allCategories.map(c => `<div class="cat-btn" data-cat="${c.id}">${this.categoryEmoji(c.name)} ${c.name}</div>`).join('')}
+          </div>
+          <div class="product-grid" id="product-grid" style="max-height:420px"></div>
+        </div>
+      </div>`);
+    this.renderProductGrid();
     document.getElementById('pos-search').addEventListener('input', e => {
       this.posSearch = e.target.value;
       this.renderProductGrid();
@@ -1761,6 +1875,209 @@ const App = {
       this.posCategory = btn.dataset.cat;
       this.renderProductGrid();
     });
+  },
+
+  // "Ticket Discount" grid button — the manual $ discount and promo-code UI,
+  // unchanged (applyDiscount/applyPromoCode/removePromoCode read/write these
+  // same ids), just relocated from an always-visible row into an on-demand
+  // modal. Re-syncs the modal's fields from current state on open, since this
+  // markup no longer stays mounted between openings.
+  showTicketDiscountModal() {
+    this.showModal(`
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header"><span class="modal-title">Ticket Discount</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px" id="discount-row">
+            <input type="number" id="discount-input" placeholder="Discount $" min="0" step="0.01" style="width:120px;">
+            <button class="btn btn-secondary btn-sm" onclick="App.applyDiscount()">Apply</button>
+            <span id="discount-display" style="font-size:13px;color:var(--success);"></span>
+          </div>
+          <div style="display:flex;gap:8px;align-items:center;margin-bottom:8px" id="promo-row">
+            <input type="text" id="promo-code-input" placeholder="Promo code" style="flex:1;text-transform:uppercase" oninput="this.value=this.value.toUpperCase()">
+            <button class="btn btn-secondary btn-sm" onclick="App.applyPromoCode()">Apply</button>
+            <button class="btn btn-outline btn-sm" id="remove-promo-btn" style="display:none" onclick="App.removePromoCode()">✕</button>
+          </div>
+          <div id="promo-display" style="font-size:12px;color:var(--success);display:none"></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Close</button></div>
+      </div>`);
+    if (this.appliedPromoCode) {
+      const pd = document.getElementById('promo-display');
+      pd.textContent = `✓ ${this.appliedPromoCode.promo_name}: -${this.fmt(this.appliedPromoCode.discount_amount)}`;
+      pd.style.display = 'block';
+      document.getElementById('remove-promo-btn').style.display = '';
+    } else if (this.autoAppliedPromo) {
+      const pd = document.getElementById('promo-display');
+      const changeBtn = (this._availablePromos || []).length > 1 ? ` <button class="btn btn-sm" onclick="App._showPromoPickerDropdown()" style="font-size:11px;padding:2px 8px;margin-left:6px">${this._availablePromos.length} promos ▼</button>` : '';
+      pd.innerHTML = `✓ ${this.autoAppliedPromo.name}: -${this.fmt(this.autoAppliedPromo.discount_amount)}${changeBtn}`;
+      pd.style.display = 'block';
+    } else if (this.cartDiscount > 0) {
+      document.getElementById('discount-input').value = this.cartDiscount.toFixed(2);
+      document.getElementById('discount-display').textContent = `-${this.fmt(this.cartDiscount)}`;
+    }
+    this._updateDiscountCardUI();
+  },
+
+  // "Payment" grid button — the same 6 tender buttons that used to sit
+  // always-visible under the cart, now opened on demand; processPayment()
+  // itself is untouched. Named distinctly from the unrelated Accounts
+  // Receivable showPaymentModal(customerId,...) elsewhere in this file —
+  // App is one flat object, so a same-named method here would have silently
+  // won or lost the definition depending on declaration order.
+  showPOSPaymentModal() {
+    if (!this.cart.length) { this.alert('Cart is empty', 'warning'); return; }
+    this.showModal(`
+      <div class="modal" style="max-width:480px">
+        <div class="modal-header"><span class="modal-title">Payment</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <div class="payment-btns" style="grid-template-columns:1fr 1fr 1fr;">
+            <button class="pay-btn pay-cash" onclick="App.closeModal();App.processPayment('cash')"><span>💵</span> Cash<span>Exact / Change</span></button>
+            <button class="pay-btn pay-card" onclick="App.closeModal();App.processPayment('credit_card')"><span>💳</span> Credit Card<span>Credit</span></button>
+            <button class="pay-btn pay-card" onclick="App.closeModal();App.processPayment('debit_card')"><span>💳</span> Debit Card<span>Debit</span></button>
+            <button class="pay-btn pay-check" onclick="App.closeModal();App.processPayment('check')"><span>🏦</span> Check<span>Personal / Business</span></button>
+            <button class="pay-btn" style="background:#9C27B0;color:#fff;" onclick="App.closeModal();App.processPayment('credit')"><span>🧾</span> Credit<span>Charge Account</span></button>
+            <button class="pay-btn pay-split" onclick="App.closeModal();App.processPayment('gift_card')"><span>🎁</span> Gift Card<span>Stored Value</span></button>
+            <button class="pay-btn" style="background:#0277BD;color:#fff;" onclick="App.closeModal();App.processPayment('direct_deposit')"><span>🏛️</span> Direct Deposit<span>Bank Transfer</span></button>
+          </div>
+        </div>
+      </div>`);
+  },
+
+  // ─── Right-grid actions that act on the currently selected ticket row ────
+  // (row selection itself is set by clicking a row — see renderCart()).
+
+  posItemZoom() {
+    const idx = this._selectedCartLine;
+    if (idx == null || !this.cart[idx]) { this.alert('Click a ticket line first', 'warning'); return; }
+    const item = this.cart[idx];
+    if (!item.product_id) { this.alert('No catalog record for this line', 'warning'); return; }
+    this.showProductForm(item.product_id);
+  },
+
+  posCustZoom() {
+    if (!this.cartCustomer) { this.alert('No customer attached to this ticket', 'warning'); return; }
+    this.viewCustomer(this.cartCustomer.id);
+  },
+
+  posVoidSelectedLine() {
+    const idx = this._selectedCartLine;
+    if (idx == null || !this.cart[idx]) { this.alert('Click a ticket line first', 'warning'); return; }
+    this.voidCartLine(idx);
+  },
+
+  posQuantitySelectedLine() {
+    const idx = this._selectedCartLine;
+    if (idx == null || !this.cart[idx]) { this.alert('Click a ticket line first', 'warning'); return; }
+    const item = this.cart[idx];
+    const input = prompt(`New quantity for ${item.name}:`, item.quantity);
+    if (input == null) return;
+    const newQty = parseInt(input);
+    if (!Number.isFinite(newQty) || newQty < 0) { this.alert('Enter a valid quantity', 'error'); return; }
+    this.updateCartQty(idx, newQty - item.quantity);
+  },
+
+  posReprintTicket() {
+    if (!this._lastReceiptTx) { this.alert('No completed sale to reprint yet this session', 'warning'); return; }
+    this.showReceipt(this._lastReceiptTx, this._lastReceiptChange, this._lastReceiptCash);
+  },
+
+  posCancelTicket() {
+    if (!this.cart.length) return;
+    if (!confirm('Cancel this ticket? All items will be removed.')) return;
+    this.clearCart();
+  },
+
+  // "Create Quote" grid button — opens the normal (unchanged) quote form,
+  // then prefills it from the current ticket instead of leaving it blank.
+  async posCreateQuoteFromCart() {
+    await this.showQuoteForm();
+    if (this.cartCustomer?.id) { const el = document.getElementById('qt-cust'); if (el) el.value = this.cartCustomer.id; }
+    if (this.posBranch?.id) { const el = document.getElementById('qt-branch'); if (el) el.value = this.posBranch.id; }
+    if (this.cart.length) {
+      document.getElementById('qt-item-0')?.remove();
+      for (const item of this.cart) {
+        if (item.variation_id) {
+          // quotation_items has no variation_id/variation_name column —
+          // encode the variant into the description instead of silently
+          // collapsing the line to the base product.
+          this.addQuoteCustomItem({ product_name: `${item.name} (${item.variation_name})`, quantity: item.quantity, unit_price: item.price });
+        } else {
+          this.addQuoteItem({ product_id: item.product_id, quantity: item.quantity, unit_price: item.price });
+        }
+      }
+    }
+  },
+
+  // "Create Layaway" grid button — opens the normal (unchanged) layaway
+  // form at POS's actual branch, then prefills customer + whatever cart
+  // items are layaway-eligible there (createLayawayPlan() itself, and
+  // everything downstream — collections, cancellation — is untouched).
+  async posCreateLayawayFromCart() {
+    await this.showLayawayCheckoutModal();
+    // Set only after the modal opens (which resets it to false itself) —
+    // so an abandoned/cancelled POS-seeded attempt can't leak into clearing
+    // the cart on some later, unrelated layaway created normally.
+    this._layawayFromPOSCart = true;
+    const branchSel = document.getElementById('lc-branch');
+    if (branchSel && this.posBranch?.id) {
+      branchSel.value = this.posBranch.id;
+      await this._refreshLayawayCheckoutBranch();
+    }
+    if (this.cartCustomer?.id) this._selectLayawayCustomer(this.cartCustomer.id);
+    const eligible = this.cart.filter(item => (this._layawayProducts || []).some(p => p.id === item.product_id));
+    const skipped = this.cart.length - eligible.length;
+    if (eligible.length) {
+      document.getElementById('layaway-line-0')?.remove();
+      for (const item of eligible) {
+        this.addLayawayLine();
+        const idx = this._layawayLineIdx - 1;
+        const sel = document.getElementById(`ll-prod-${idx}`);
+        const qtyEl = document.getElementById(`ll-qty-${idx}`);
+        if (sel) sel.value = item.product_id;
+        if (qtyEl) qtyEl.value = item.quantity;
+      }
+      this._recalcLayawayTotals();
+    }
+    if (skipped > 0) this.alert(`${skipped} cart item(s) aren't eligible for layaway and were left out — add eligible items manually if needed.`, 'warning');
+  },
+
+  // ─── Tax-exempt override ──────────────────────────────────────────────
+  // A per-ticket manual override, independent of the attached customer's
+  // saved profile flag — for a one-off exemption (e.g. a walk-in government
+  // or non-profit purchase) that shouldn't require editing that customer's
+  // record. Wins over the customer flag when set; cleared per clearCart().
+  isCartTaxExempt() { return !!(this._manualTaxExempt || this.cartCustomer?.tax_exempt); },
+  cartTaxExemptionNumber() { return this._manualTaxExempt?.number || this.cartCustomer?.tax_exemption_number || null; },
+
+  showTaxExemptModal() {
+    this.showModal(`
+      <div class="modal" style="max-width:380px">
+        <div class="modal-header"><span class="modal-title">Tax Exempt Sale</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <p style="font-size:13px;color:var(--text-muted)">Marks this ticket tax-exempt regardless of the customer's saved profile — for a one-off exemption (e.g. government/non-profit purchase). Leave blank to clear.</p>
+          <div class="form-group"><label>Exemption Number (optional)</label>
+            <input id="tx-exempt-number" value="${this.escapeAttr(this._manualTaxExempt?.number || '')}" placeholder="e.g. EX-12345">
+          </div>
+        </div>
+        <div class="modal-footer">
+          ${this._manualTaxExempt ? `<button class="btn btn-secondary" onclick="App._manualTaxExempt=null;App.closeModal();App.renderCart()">Clear</button>` : ''}
+          <button class="btn btn-primary" onclick="App._manualTaxExempt={number:document.getElementById('tx-exempt-number').value.trim()||null};App.closeModal();App.renderCart()">Apply</button>
+        </div>
+      </div>`);
+  },
+
+  // Click-to-select a ticket row (highlighted green) — the only new
+  // interaction, needed so the Void Line/Quantity/Item Zoom grid buttons have
+  // a target. Per-row inline controls (qty +/-, VOID, ×) stay fully
+  // functional independent of selection — a click that lands on one of them
+  // still fires its own handler as it bubbles, but is ignored here so it
+  // doesn't also toggle row selection (checking the target rather than
+  // stopping propagation on the whole cell, so clicking blank space in the
+  // qty/actions columns still selects the row like everywhere else in it).
+  selectCartLine(event, idx) {
+    if (event.target.closest('button')) return;
+    this._selectedCartLine = this._selectedCartLine === idx ? null : idx;
+    this.renderCart();
   },
 
   renderProductGrid() {
@@ -1983,7 +2300,7 @@ const App = {
   },
 
   clearCart() {
-    this.cart = []; this.cartCustomer = null; this.cartDiscount = 0; this._storeCreditApplied = 0; this.appliedPromoCode = null; this.autoAppliedPromo = null; this._availablePromos = []; this._returnCredit = null; this._activeQuoteId = null; this.appliedDiscountCard = null;
+    this.cart = []; this.cartCustomer = null; this.cartDiscount = 0; this._storeCreditApplied = 0; this.appliedPromoCode = null; this.autoAppliedPromo = null; this._availablePromos = []; this._returnCredit = null; this._activeQuoteId = null; this.appliedDiscountCard = null; this._manualTaxExempt = null;
     this.renderCart();
     const aqBar = document.getElementById('active-quote-bar');
     if (aqBar) aqBar.style.display = 'none';
@@ -1991,7 +2308,8 @@ const App = {
     document.getElementById('remove-customer-btn').style.display = 'none';
     const di = document.getElementById('discount-input');
     if (di) di.value = '';
-    document.getElementById('discount-display').textContent = '';
+    const dd = document.getElementById('discount-display');
+    if (dd) dd.textContent = '';
     const pi = document.getElementById('promo-code-input');
     if (pi) pi.value = '';
     const pd = document.getElementById('promo-display');
@@ -2007,44 +2325,55 @@ const App = {
     if (!list || !totals) return;
 
     if (!this.cart.length) {
-      list.innerHTML = '<div class="empty-state" style="padding:20px"><svg viewBox="0 0 24 24" fill="currentColor"><path d="M7 18c-1.1 0-1.99.9-1.99 2S5.9 22 7 22s2-.9 2-2-.9-2-2-2zm10 0c-1.1 0-1.99.9-1.99 2s.89 2 1.99 2 2-.9 2-2-.9-2-2-2zM5.21 4L5.21 4 4 2H1v2h2l3.6 7.59L5.25 14c-.16.28-.25.61-.25.96C5 16.1 5.9 17 7 17h12v-2H7.42c-.14 0-.25-.11-.25-.25l.03-.12L8.1 13h7.45c.75 0 1.41-.41 1.75-1.03l3.58-6.49A1 1 0 0 0 20 4H5.21z"/></svg><p>Cart is empty</p></div>';
+      // list is a <tbody> in the kiosk ticket table — a row, not a bare div.
+      list.innerHTML = '<tr><td colspan="6" class="empty-state" style="padding:24px;border:none">Cart is empty — scan or type an item number to begin.</td></tr>';
       totals.innerHTML = '';
+      this._selectedCartLine = null;
       return;
     }
 
-    list.innerHTML = this.cart.map((item, idx) => `
-      <div class="cart-item">
-        <div class="cart-item-info">
-          <div class="cart-item-name">${item.name}${item.variation_name ? `<div style="font-size:11px;color:var(--text-muted);margin-top:1px">${item.variation_name}</div>` : ''}</div>
-          <div class="cart-item-price">${this.fmt(item.price)} each</div>
-        </div>
-        <div class="qty-ctrl">
-          <button class="qty-btn" onclick="App.updateCartQty(${idx},-1)">−</button>
-          <span class="qty-val">${item.quantity}</span>
-          <button class="qty-btn" onclick="App.updateCartQty(${idx},1)">+</button>
-        </div>
-        <div class="cart-item-total">${this.fmt(item.price * item.quantity)}</div>
-        <button class="btn-void-line" title="Void Line" onclick="App.voidCartLine(${idx})">VOID</button>
-        <button class="btn-remove" onclick="App.removeFromCart(${idx})">×</button>
-      </div>`).join('');
+    list.innerHTML = this.cart.map((item, idx) => {
+      const sku = item.sku || this.allProducts.find(p => p.id === item.product_id)?.sku || '—';
+      return `
+      <tr class="pos-ticket-row${this._selectedCartLine === idx ? ' selected' : ''}" onclick="App.selectCartLine(event,${idx})">
+        <td style="font-family:monospace;font-size:12px">${sku}</td>
+        <td>${item.name}${item.variation_name ? `<div style="font-size:11px;color:var(--text-muted)">${item.variation_name}</div>` : ''}</td>
+        <td style="text-align:center">
+          <div class="qty-ctrl" style="justify-content:center">
+            <button class="qty-btn" onclick="App.updateCartQty(${idx},-1)">−</button>
+            <span class="qty-val">${item.quantity}</span>
+            <button class="qty-btn" onclick="App.updateCartQty(${idx},1)">+</button>
+          </div>
+        </td>
+        <td style="text-align:right">${this.fmt(item.price)}</td>
+        <td style="text-align:right;font-weight:600">${this.fmt(item.price * item.quantity)}</td>
+        <td style="white-space:nowrap">
+          <button class="btn-void-line" title="Void Line" onclick="App.voidCartLine(${idx})">VOID</button>
+          <button class="btn-remove" onclick="App.removeFromCart(${idx})">×</button>
+        </td>
+      </tr>`;
+    }).join('');
 
     let subtotal = this.cart.reduce((s, i) => s + i.price * i.quantity, 0);
-    const isTaxExempt = !!this.cartCustomer?.tax_exempt;
+    const isTaxExempt = this.isCartTaxExempt();
     let tax = isTaxExempt ? 0 : this.cart.reduce((s, i) => s + (i.price * i.quantity * i.tax_rate / 100), 0);
     const discount = this.cartDiscount || 0;
     const total = subtotal + tax - discount;
+    const discountLabel = this._returnCredit ? `↩ Return Credit ${this._returnCredit.return_number}` : this.autoAppliedPromo ? `🏷 ${this.autoAppliedPromo.name}` : 'Discount';
 
     totals.innerHTML = `
-      <div class="total-row"><span>Subtotal</span><span>${this.fmt(subtotal)}</span></div>
-      <div class="total-row">${isTaxExempt ? `<span style="color:#2e7d32;font-weight:600">Tax Exempt</span><span style="color:#2e7d32">—</span>` : `<span>Tax</span><span>${this.fmt(tax)}</span>`}</div>
-      ${discount > 0 ? `<div class="total-row" style="color:var(--success)"><span>${this._returnCredit ? `↩ Return Credit <span style="font-size:11px;font-family:monospace;color:var(--text-muted)">${this._returnCredit.return_number}</span>` : this.autoAppliedPromo ? `🏷 ${this.autoAppliedPromo.name}` : 'Discount'}</span><span>-${this.fmt(discount)}</span></div>` : ''}
-      ${this._storeCreditApplied > 0 ? `<div class="total-row" style="color:#2e7d32"><span>💳 Store Credit</span><span>-${this.fmt(this._storeCreditApplied)}</span></div>` : ''}
-      <div class="total-row grand"><span>TOTAL</span><span>${this.fmt(total)}</span></div>`;
+      <div class="pos-totals">
+        <div class="pos-total-item"><label>Subtotal</label><span>${this.fmt(subtotal)}</span></div>
+        <div class="pos-total-item"><label>${isTaxExempt ? 'Tax Exempt' : 'Tax'}</label><span>${isTaxExempt ? '—' : this.fmt(tax)}</span></div>
+        ${discount > 0 ? `<div class="pos-total-item"><label>${discountLabel}</label><span style="color:var(--success)">-${this.fmt(discount)}</span></div>` : ''}
+        ${this._storeCreditApplied > 0 ? `<div class="pos-total-item"><label>💳 Available Credit</label><span style="color:var(--success)">-${this.fmt(this._storeCreditApplied)}</span></div>` : ''}
+      </div>
+      <div class="pos-amount-due"><label>Amount Due</label><span>${this.fmt(total)}</span></div>`;
   },
 
   getCartTotals() {
     const subtotal = this.cart.reduce((s, i) => s + i.price * i.quantity, 0);
-    const isTaxExempt = !!this.cartCustomer?.tax_exempt;
+    const isTaxExempt = this.isCartTaxExempt();
     const tax = isTaxExempt ? 0 : this.cart.reduce((s, i) => s + (i.price * i.quantity * i.tax_rate / 100), 0);
     const discount = this.cartDiscount || 0;
     const storeCredit = this._storeCreditApplied || 0;
@@ -2084,7 +2413,7 @@ const App = {
       if (approvalCode === null) return;
     }
 
-    const isTaxExempt = !!this.cartCustomer?.tax_exempt;
+    const isTaxExempt = this.isCartTaxExempt();
 
     try {
       const tx = await this.api('POST', '/transactions', {
@@ -2102,7 +2431,7 @@ const App = {
         store_credit_applied: this._storeCreditApplied || 0,
         quote_id: this._activeQuoteId || null,
         tax_exempt: isTaxExempt ? 1 : 0,
-        tax_exemption_number: isTaxExempt ? (this.cartCustomer?.tax_exemption_number || null) : null,
+        tax_exemption_number: isTaxExempt ? this.cartTaxExemptionNumber() : null,
         approval_code: approvalCode || null,
       });
 
@@ -2645,8 +2974,13 @@ const App = {
       document.getElementById('remove-customer-btn').style.display = 'inline-flex';
       const bar = document.getElementById('store-credit-bar');
       const bal = parseFloat(c.account_balance || 0);
-      if (bal > 0 && c.customer_type !== 'credit') {
-        document.getElementById('store-credit-balance').textContent = this.fmt(bal);
+      // account_balance is a receivable (positive = customer owes the
+      // store); a credit note (routes/transactions.js return handling,
+      // routes/rentals.js deposit credit notes) decrements it, so a
+      // negative balance here means the store owes THEM — that's the
+      // available credit this bar lets them redeem.
+      if (bal < 0 && c.customer_type !== 'credit') {
+        document.getElementById('store-credit-balance').textContent = this.fmt(Math.abs(bal));
         document.getElementById('remove-store-credit-btn').style.display = 'none';
         bar.style.display = 'flex';
       } else {
@@ -2661,7 +2995,8 @@ const App = {
         this._availablePromos = [];
         const pi = document.getElementById('promo-code-input');
         if (pi) pi.value = '';
-        document.getElementById('remove-promo-btn').style.display = 'none';
+        const rb = document.getElementById('remove-promo-btn');
+        if (rb) rb.style.display = 'none';
       } else {
         this.appliedDiscountCard = null;
       }
@@ -2682,10 +3017,11 @@ const App = {
 
   applyStoreCredit() {
     const bal = parseFloat(this.cartCustomer?.account_balance || 0);
-    if (bal <= 0) return;
+    if (bal >= 0) return;
+    const available = Math.abs(bal);
     const { subtotal, tax } = this.getCartTotals();
     const maxApplicable = Math.max(0, parseFloat((subtotal + tax - this.cartDiscount).toFixed(2)));
-    this._storeCreditApplied = Math.min(bal, maxApplicable);
+    this._storeCreditApplied = Math.min(available, maxApplicable);
     document.getElementById('remove-store-credit-btn').style.display = 'inline-flex';
     document.querySelector('#store-credit-bar button:not(#remove-store-credit-btn)').style.display = 'none';
     this.renderCart();
@@ -5227,6 +5563,12 @@ const App = {
   ],
 
   async renderLayaway() {
+    // Guarded — createLayawayPlan() calls this unconditionally on success,
+    // including when the plan was created from POS's "Create Layaway" grid
+    // button while still on the POS screen; without this check it would
+    // blow away the POS kiosk layout underneath the closing modal (same
+    // class of bug as renderQuotations() had for Create Quote from POS).
+    if (this.section !== 'layaway') return;
     this.layawayTab = this.layawayTab || 'active';
     document.getElementById('content').innerHTML = `
       <div class="section-header">
@@ -5278,6 +5620,9 @@ const App = {
   // ─── New Layaway (customer + items + deposit) ──────────────────────────────
 
   async showLayawayCheckoutModal() {
+    // Reset on every open — posCreateLayawayFromCart() sets this true right
+    // after this call returns, for that one attempt only.
+    this._layawayFromPOSCart = false;
     const branches = this.currentUser.branches || [];
     const defaultBranch = branches.find(b => b.is_default) || branches[0] || null;
     const [customers, products] = await Promise.all([
@@ -5468,6 +5813,10 @@ const App = {
       });
       this.closeModal();
       this.alert(`Layaway ${plan.plan_number} created — deposit collected`);
+      // Only clear the POS ticket when this plan was seeded from it — a
+      // layaway created normally from the Layaway section has no relation
+      // to whatever (if anything) happens to be sitting in this.cart.
+      if (this._layawayFromPOSCart) { this._layawayFromPOSCart = false; this.clearCart(); }
       this.renderLayaway();
     } catch(e) { this.alert(e.message, 'error'); }
   },
@@ -7098,7 +7447,7 @@ const App = {
             <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Subtotal</span><span>${this.fmt(tx.subtotal)}</span></div>
             <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Tax</span><span>${this.fmt(tx.tax_amount)}</span></div>
             ${tx.discount_amount > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;color:var(--success)"><span>${tx.source_return_number ? `↩ Return Credit <span style="font-family:monospace;font-size:11px;color:var(--text-muted)">${tx.source_return_number}</span>` : `Discount${tx.promotion_code ? ` <span style="font-family:monospace;font-size:11px;background:var(--bg);padding:1px 5px;border-radius:4px;color:var(--text-muted)">${tx.promotion_code}</span>` : ''}${tx.promotion_name ? ` <span style="color:var(--text-muted);font-size:11px">— ${tx.promotion_name}</span>` : ''}`}</span><span>-${this.fmt(tx.discount_amount)}</span></div>` : ''}
-            ${tx.store_credit_applied > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;color:#2e7d32"><span>💳 Store Credit Applied</span><span>-${this.fmt(tx.store_credit_applied)}</span></div>` : ''}
+            ${tx.store_credit_applied > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px;color:#2e7d32"><span>💳 Available Credit Applied</span><span>-${this.fmt(tx.store_credit_applied)}</span></div>` : ''}
             <div style="display:flex;justify-content:space-between;font-size:16px;font-weight:700;margin-top:6px"><span>TOTAL</span><span>${this.fmt(tx.total)}</span></div>
             ${tx.change_amount > 0 ? `<div style="display:flex;justify-content:space-between;font-size:13px;color:var(--success)"><span>Change</span><span>${this.fmt(tx.change_amount)}</span></div>` : ''}
           </div>
@@ -10017,7 +10366,12 @@ const App = {
   // ─── Quotations ───────────────────────────────────────────
   async renderQuotations() {
     const c = document.getElementById('content');
-    c.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
+    // Guarded before the stomp, not just after — saveQuote() calls this
+    // unconditionally on success, including when the quote was created from
+    // POS's "Create Quote" grid button while still on the POS screen; without
+    // this check it would blow away the POS kiosk layout underneath the
+    // closing modal.
+    if (this.section === 'quotations') c.innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
     const quotes = await this.api('GET', '/quotations?limit=100');
     if (this.section !== 'quotations') return;
     const statusColor = { draft:'badge-warning', sent:'badge-info', accepted:'badge-success', declined:'badge-danger', converted:'badge-teal' };

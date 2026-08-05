@@ -211,7 +211,13 @@ router.post('/', requirePermission('pos'), async (req, res) => {
           await tx.execute({ sql: 'UPDATE customers SET account_balance = account_balance + ? WHERE id = ?', args: [total, customer_id] });
         }
         if (storeCredit > 0) {
-          await tx.execute({ sql: 'UPDATE customers SET account_balance = MAX(0, account_balance - ?) WHERE id = ?', args: [storeCredit, customer_id] });
+          // account_balance is a receivable (positive = customer owes the
+          // store); a credit note decrements it negative (store owes them —
+          // see the return-resolution handling below). Applying that credit
+          // here moves the balance back toward zero, clamped so it can't
+          // cross into positive (the frontend already caps storeCredit at
+          // the available |balance|, this is defense-in-depth only).
+          await tx.execute({ sql: 'UPDATE customers SET account_balance = MIN(0, account_balance + ?) WHERE id = ?', args: [storeCredit, customer_id] });
         }
       }
 

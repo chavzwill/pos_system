@@ -202,28 +202,46 @@
       <h2 class="module">Point of Sale <span class="tag">pos</span></h2>
       <p class="module-intro">Where retail sales actually happen — the cash-register screen.</p>
 
+      <h3>Layout</h3>
+      <p>POS opens full-screen — the sidebar and top header are hidden for a distraction-free register screen. Use the exit icon at the top-left to leave POS and return to the rest of the app. The ticket table on the left lists items on the current sale; the button grid on the right groups every register action (lookups, discounts, hold/quote, void/cancel, payment) into one place, similar to a dedicated terminal.</p>
+
       <h3>Opening a sale</h3>
-      <p>The first thing you'll see on entering POS is a prompt to open a cash drawer — you can skip it, but a drawer session lets the app track cash in/out for reconciliation later (see <a href="#drawers">Cash Drawers</a>). Tap products in the grid (retail items only — rentals are managed on their own screen) or scan a barcode to add them to the cart. Attach a customer to the sale to accrue loyalty points, apply store credit, trigger a customer's discount card, or sell on a credit account.</p>
+      <p>The first thing you'll see on entering POS is a prompt to open a cash drawer — you can skip it, but a drawer session lets the app track cash in/out for reconciliation later (see <a href="#drawers">Cash Drawers</a>). Type or scan an item's SKU/barcode into the item-number box (top right) and press Enter to add it directly, or use <strong>Item Lookup</strong> on the button grid to browse/search the catalog by name and click items in (retail items only — rentals are managed on their own screen). Click a ticket line to select it, then use <strong>Item Zoom</strong> (view/edit that product), <strong>Void Line</strong>, or <strong>Quantity</strong> on the grid — the same actions are also available inline on the row itself (+/−, VOID, ×). Attach a customer via <strong>Cust Lookup</strong> to accrue loyalty points, apply store credit, trigger a customer's discount card, or sell on a credit account; <strong>Cust Zoom</strong> opens that customer's history once one is attached.</p>
 
       <h3>Discounts, promotions, and discount cards</h3>
+      <p>Open <strong>Ticket Discount</strong> on the button grid for the discount/promo entry:</p>
       <ul>
-        <li><strong>Manual discount</strong> — a cashier with the <span class="perm-pill">pos_discounts</span> permission can apply a line or cart discount directly.</li>
+        <li><strong>Manual discount</strong> — a cashier with the <span class="perm-pill">pos_discounts</span> permission can apply a cart discount directly.</li>
         <li><strong>Promo codes</strong> — type a code at checkout; it's validated against active date windows, usage limits, and minimum-purchase rules before it's applied.</li>
         <li><strong>Auto-applied promotions</strong> — any active, code-less promotion that matches the cart is offered automatically (see <a href="#promotions">Promotions</a>).</li>
         <li><strong>Discount cards</strong> — attaching a customer who carries an active discount card applies their flat percentage automatically, and it always takes priority over a promo code — attaching such a customer clears any promo already on the cart (see <a href="#discount-cards">Discount Cards</a>).</li>
       </ul>
 
       <h3>Holding an order</h3>
-      <p>Use <strong>Hold</strong> (needs <span class="perm-pill">pos_hold</span>) to park a cart without charging it or touching stock — useful when a customer steps away or a quote is being converted. Recall it later from the held-orders list to finish the sale, or delete the hold entirely to abandon it.</p>
+      <p>Use <strong>Hold</strong> (needs <span class="perm-pill">pos_hold</span>) to park a cart without charging it or touching stock — useful when a customer steps away or a quote is being converted. Use <strong>Hold Recall</strong> to finish it later from the held-orders list, or delete the hold entirely to abandon it.</p>
+
+      <h3>Converting the current ticket to a Quote or Layaway</h3>
+      <p><strong>Create Quote</strong> and <strong>Create Layaway</strong> on the grid open the normal quotation/layaway tools (see <a href="#quotations">Quotations</a>), pre-filled from whatever's currently on the ticket — the attached customer, branch, and line items — so you don't have to re-enter them. Both forms stay fully editable before you save, so nothing is locked in by the prefill.</p>
+      <ul>
+        <li><strong>Quote</strong>: any item with variations (size/color/etc.) is added as a described custom line rather than a catalog line, since quotes don't track which specific variant was intended — the variant name is written into the description so it isn't lost.</li>
+        <li><strong>Layaway</strong>: only items that are actually layaway-eligible can go on a layaway plan (see <a href="#inventory">Inventory</a>'s services/layaway product settings) — any ticket item that isn't gets left out, with a warning naming how many were skipped, so you can add them to the layaway manually if needed. Creating the layaway clears the POS ticket, since the deposit is collected as part of that flow (needs <span class="perm-pill">layaway_create</span>); the resulting plan then follows the normal layaway lifecycle in <a href="#layaway">Layaway</a> — collect installments, pick up on completion — with no difference from one created directly there.</li>
+      </ul>
+      <p><strong>Quote Recall</strong> on the grid opens the same quotation lookup tools without leaving the register screen.</p>
 
       <h3>Payment methods</h3>
-      <p>Cash, card, and other tendered methods are settled immediately. Selecting <strong>credit</strong> instead requires the customer to have a credit account in good standing — a blocked account (overdue past its payment terms) is rejected at checkout with a clear error rather than silently failing.</p>
+      <p>Open <strong>Payment</strong> on the button grid to choose a tender — Cash, Credit Card, Debit Card, Check, Gift Card, and Direct Deposit are all settled immediately. <strong>Pay On Acct</strong> charges straight to a customer's credit account, which requires the account to be in good standing — a blocked account (overdue past its payment terms) is rejected at checkout with a clear error rather than silently failing.</p>
 
-      <h3>Voids and refunds</h3>
-      <p>Voiding a line item mid-sale needs <span class="perm-pill">pos_void_items</span>. Refunding or returning items on an already-completed sale is handled from <a href="#transactions">Transactions</a>, not the POS screen itself, and needs <span class="perm-pill">transactions_returns</span>/<span class="perm-pill">pos_refunds</span>.</p>
+      <h3>Tax exemption</h3>
+      <p>Tax is normally waived automatically for a customer whose profile has the tax-exempt flag set. For a one-off exemption that shouldn't require editing that customer's record — a walk-in government or non-profit purchase, for instance — use <strong>Tax Exempt</strong> on the button grid to mark just the current ticket, optionally recording an exemption number. This overrides the customer's saved flag for this sale only; the ticket totals update immediately, and the transaction/receipt are labeled tax-exempt the same way a profile-driven exemption would be.</p>
+
+      <h3>Available credit (credit notes)</h3>
+      <p>When a customer has an outstanding credit note — issued from a return (see <a href="#transactions">Transactions &amp; Returns</a>) or a rental deposit (see <a href="#warehouse">Warehouse Management</a>) — attaching them to a ticket shows an <strong>Available Credit</strong> bar with the balance the store owes them. <strong>Apply</strong> uses as much of it as the current ticket total needs (capped at whichever is smaller), reducing what's still owed by exactly the amount applied once the sale completes.</p>
+
+      <h3>Voids, cancels, and refunds</h3>
+      <p>Voiding a line item mid-sale (<strong>Void Line</strong>, or the row's own VOID button) needs <span class="perm-pill">pos_void_items</span> and an authorizing PIN. <strong>Cancel Ticket</strong> clears the whole sale in progress. Refunding or returning items on an already-completed sale is handled from <a href="#transactions">Transactions</a> — the <strong>Returns</strong> button on the grid jumps straight there — and needs <span class="perm-pill">transactions_returns</span>/<span class="perm-pill">pos_refunds</span>.</p>
 
       <h3>Receipts and labels</h3>
-      <p>After checkout you can print a standard receipt, or (for shippable orders) a pick list / shipping label from the Shipping screen — see <a href="#warehouse">Warehouse Management</a>.</p>
+      <p>After checkout you can print a standard receipt, or re-open the last completed sale's receipt with <strong>Reprint Ticket</strong> (scoped to the current register session). For shippable orders, print a pick list / shipping label from the Shipping screen — see <a href="#warehouse">Warehouse Management</a>.</p>
     </section>
 
     <section class="module" id="drawers">
