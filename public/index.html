@@ -6,10 +6,12 @@
 <title>POS System</title>
 <style>
 :root {
-  --primary: #10703a;
-  --primary-light: #1c8a4d;
-  --accent: #10703a;
-  --accent-hover: #0d5c2f;
+  --primary: #007e37;
+  --primary-light: #1c9350;
+  --accent: #007e37;
+  --accent-hover: #005f29;
+  --brand-yellow: #ffd800;
+  --brand-black: #000000;
   --success: #4CAF50;
   --danger: #f44336;
   --warning: #FF9800;
@@ -34,7 +36,7 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 .sidebar-nav { flex: 1; padding: 8px 0; overflow-y: auto; }
 .nav-item { display: flex; align-items: center; gap: 12px; padding: 13px 16px; cursor: pointer; transition: background .15s; color: rgba(255,255,255,0.75); font-size: 14px; font-weight: 700; border-left: 3px solid transparent; }
 .nav-item:hover { background: rgba(255,255,255,0.08); color: #fff; }
-.nav-item.active { background: rgba(255,255,255,0.12); color: #fff; border-left-color: #4ade80; }
+.nav-item.active { background: rgba(255,255,255,0.12); color: #fff; border-left-color: var(--brand-yellow); }
 .nav-item svg { width: 20px; height: 20px; flex-shrink: 0; }
 .sidebar-footer { padding: 12px 16px; border-top: 1px solid rgba(255,255,255,0.1); font-size: 12px; color: rgba(255,255,255,0.5); }
 .sidebar-footer strong { display: block; color: rgba(255,255,255,0.8); }
@@ -42,7 +44,12 @@ body { font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', sans-serif; b
 /* Main */
 #main { flex: 1; display: flex; flex-direction: column; overflow: hidden; }
 #topbar { background: var(--card); border-bottom: 1px solid var(--border); padding: 0 20px; height: 52px; display: flex; align-items: center; justify-content: space-between; flex-shrink: 0; }
-#topbar-title { font-size: 17px; font-weight: 600; }
+#topbar-title { font-size: 17px; font-weight: 600; display: flex; align-items: center; gap: 6px; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
+.breadcrumb-link { color: var(--text-muted); text-decoration: none; font-weight: 500; font-size: 14px; display: inline-flex; align-items: center; gap: 4px; }
+.breadcrumb-link:hover { color: var(--accent); text-decoration: underline; }
+.breadcrumb-link svg { width: 14px; height: 14px; flex-shrink: 0; }
+.breadcrumb-sep { color: var(--text-muted); opacity: .6; font-size: 14px; }
+.breadcrumb-current { color: var(--text); font-weight: 700; overflow: hidden; text-overflow: ellipsis; }
 #topbar-right { display: flex; align-items: center; gap: 16px; }
 #clock { font-size: 13px; color: var(--text-muted); font-variant-numeric: tabular-nums; }
 .badge { background: var(--danger); color: #fff; border-radius: 10px; padding: 2px 7px; font-size: 11px; font-weight: 600; }
@@ -94,7 +101,7 @@ tr:hover td { background: #fafafa; }
 .btn-secondary { background: #e0e0e0; color: var(--text); }
 .btn-secondary:hover:not(:disabled) { background: #bdbdbd; }
 .btn-outline { background: transparent; border: 1px solid var(--accent); color: var(--accent); }
-.btn-outline:hover { background: rgba(33,150,243,0.08); }
+.btn-outline:hover { background: rgba(0,126,55,0.08); }
 .btn-teal { background: #00897B; color: #fff; }
 .btn-teal:hover:not(:disabled) { background: #00695C; }
 .btn-sm { padding: 4px 10px; font-size: 12px; }
@@ -130,7 +137,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .cat-btn.active, .cat-btn:hover { background: var(--accent); color: #fff; border-color: var(--accent); }
 .product-grid { display: grid; grid-template-columns: repeat(auto-fill, minmax(130px, 1fr)); gap: 10px; overflow-y: auto; flex: 1; padding: 2px; }
 .product-card { background: #fff; border: 1px solid var(--border); border-radius: 8px; padding: 12px 10px; cursor: pointer; transition: all .15s; text-align: center; user-select: none; }
-.product-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(33,150,243,0.15); transform: translateY(-1px); }
+.product-card:hover { border-color: var(--accent); box-shadow: 0 2px 8px rgba(0,126,55,0.15); transform: translateY(-1px); }
 .product-card.out-of-stock { opacity: .5; cursor: not-allowed; }
 .product-card.has-vars { border-color: #90caf9; }
 .product-card.has-vars:hover { border-color: var(--accent); }
@@ -184,7 +191,7 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 /* POS full-screen kiosk mode */
 body.pos-kiosk #sidebar, body.pos-kiosk #topbar { display: none; }
 .pos-kiosk-topbar { display: flex; align-items: center; gap: 12px; padding: 8px 14px; background: #eef2fb; border-bottom: 1px solid #c5d5f5; flex-shrink: 0; flex-wrap: wrap; }
-.pos-kiosk-exit { width: 34px; height: 34px; border-radius: 6px; border: none; background: #1e3a5f; color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
+.pos-kiosk-exit { width: 34px; height: 34px; border-radius: 6px; border: none; background: var(--brand-black); color: #fff; cursor: pointer; display: flex; align-items: center; justify-content: center; flex-shrink: 0; }
 .pos-kiosk-exit:hover { background: #16304d; }
 .pos-item-input-wrap { margin-left: auto; display: flex; align-items: center; gap: 6px; }
 .pos-item-input-wrap input { width: 220px; font-family: monospace; letter-spacing: .5px; }
@@ -209,7 +216,7 @@ body.pos-kiosk #sidebar, body.pos-kiosk #topbar { display: none; }
 .pos-amount-due span { font-size: 26px; font-weight: 700; color: var(--primary); }
 .pos-status-line { padding: 4px 14px; font-size: 11px; color: var(--text-muted); display: flex; gap: 18px; border-top: 1px solid var(--border); flex-shrink: 0; }
 .pos-action-grid { width: 380px; flex-shrink: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-left: 1px solid var(--border); overflow-y: auto; }
-.pos-grid-btn { background: #eef2fb; border: none; cursor: pointer; padding: 10px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .2px; color: #1e3a5f; display: flex; align-items: center; justify-content: center; text-align: center; min-height: 56px; line-height: 1.25; }
+.pos-grid-btn { background: #eef2fb; border: none; cursor: pointer; padding: 10px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .2px; color: var(--brand-black); display: flex; align-items: center; justify-content: center; text-align: center; min-height: 56px; line-height: 1.25; }
 .pos-grid-btn:hover:not(:disabled) { filter: brightness(0.95); }
 .pos-grid-btn:disabled { opacity: .4; cursor: not-allowed; }
 .pos-grid-btn.void { background: #fdecea; color: var(--danger); }
@@ -993,6 +1000,38 @@ const App = {
     return this.can(section);
   },
 
+  // Every leaf section lives under exactly one hub in _hubGroups (the sole
+  // exception is 'dashboard', which has no hub) — walk the groups once to
+  // find which one a given section belongs to, for the breadcrumb trail.
+  _findHubForSection(name) {
+    for (const key of Object.keys(this._hubGroups)) {
+      if (this._hubGroups[key].children.some(c => c.section === name)) return key;
+    }
+    return null;
+  },
+
+  // Home > [Hub] > Current — mirrors the sidebar's own hierarchy so a leaf
+  // section (e.g. Quotations) always has a one-click way back to its hub's
+  // tile grid (e.g. Sales), not just to the sidebar nav item.
+  buildBreadcrumb(name, currentTitle) {
+    const homeIcon = `<svg viewBox="0 0 24 24" fill="currentColor"><path d="M10 20v-6h4v6h5v-8h3L12 3 2 12h3v8z"/></svg>`;
+    const homeLink = `<a href="#" class="breadcrumb-link" onclick="event.preventDefault();App.showSection('dashboard')">${homeIcon}Home</a>`;
+    if (name === 'dashboard') return `<span class="breadcrumb-current">${currentTitle}</span>`;
+    const sep = `<span class="breadcrumb-sep">›</span>`;
+    const parts = [homeLink];
+    if (this._hubGroups[name]) {
+      // Viewing a hub's own tile grid — the hub name IS the current page.
+      parts.push(sep, `<span class="breadcrumb-current">${currentTitle}</span>`);
+    } else {
+      const hubKey = this._findHubForSection(name);
+      if (hubKey) {
+        parts.push(sep, `<a href="#" class="breadcrumb-link" onclick="event.preventDefault();App.showSection('${hubKey}')">${this._hubGroups[hubKey].title}</a>`);
+      }
+      parts.push(sep, `<span class="breadcrumb-current">${currentTitle}</span>`);
+    }
+    return parts.join('');
+  },
+
   canAccessHub(hubKey) {
     const hub = this._hubGroups[hubKey];
     if (!hub) return false;
@@ -1138,7 +1177,7 @@ const App = {
       el.classList.toggle('active', ds === name || !!(hub && hub.children.some(c => c.section === name)));
     });
     const titles = { dashboard: 'Dashboard', pos: 'Point of Sale', inventory: 'Retail Inventory Management', services: 'Services & Non-Inventory Items', rentals: 'Rentals', 'rental-items': 'Rental Items', dispatch: 'Dispatch', 'rental-dispatch': 'Rental Dispatch', 'transfer-dispatch': 'Branch Transfer Dispatch', 'rental-deposits': 'Rental Deposits & Credit Notes', 'purchase-requests': 'Purchase Requests', layaway: 'Layaway', customers: 'Customers', transactions: 'Transactions', 'online-orders': 'Online Orders', reports: 'Reports & Analytics', employees: 'Employees', settings: 'Settings', suppliers: 'Suppliers', purchasing: 'Purchasing', quotations: 'Quotations', accounts: 'Accounts Receivable', branches: 'Branch Management', security: 'Security Groups', transfers: 'Branch Transfers', crm: 'CRM & Sales', commissions: 'Commission Tracking', warehouse: 'Warehouse Management', shipping: 'Shipping', 'cycle-counts': 'Cycle Counts', drawers: 'Cash Drawers', promotions: 'Promotions', 'discount-cards': 'Discount Cards', 'purchasing-hub': 'Purchasing', 'sales-hub': 'Sales', 'accounts-hub': 'Accounts', 'warehouse-hub': 'Warehouse', 'admin-hub': 'Admin' };
-    document.getElementById('topbar-title').textContent = titles[name] || name;
+    document.getElementById('topbar-title').innerHTML = this.buildBreadcrumb(name, titles[name] || name);
     const content = document.getElementById('content');
     content.style.padding = name === 'pos' ? '0' : '20px';
     content.style.overflow = name === 'pos' ? 'hidden' : 'auto';
@@ -1694,16 +1733,16 @@ const App = {
     const branches = this.currentUser.branches || [];
     const isMulti = this.currentUser.permissions?.multi_branch_access && branches.length > 1;
     const inner = isMulti
-      ? `<select id="pos-branch-select" onchange="App.posBranch=App.currentUser.branches.find(b=>b.id==+this.value)" style="border:none;background:transparent;font-weight:600;font-size:14px;color:#1e3a5f;cursor:pointer;outline:none;max-width:260px">
+      ? `<select id="pos-branch-select" onchange="App.posBranch=App.currentUser.branches.find(b=>b.id==+this.value)" style="border:none;background:transparent;font-weight:600;font-size:14px;color:var(--brand-black);cursor:pointer;outline:none;max-width:260px">
            ${branches.map(b => `<option value="${b.id}" ${this.posBranch?.id===b.id?'selected':''}>${b.name}</option>`).join('')}
          </select>`
-      : `<span style="font-weight:600;font-size:14px;color:#1e3a5f">${this.posBranch?.name || 'No Branch'}</span>`;
+      : `<span style="font-weight:600;font-size:14px;color:var(--brand-black)">${this.posBranch?.name || 'No Branch'}</span>`;
     const drawerInfo = this.currentDrawerSession
-      ? `<span style="margin-left:16px;font-size:12px;color:#3b6bc4;background:rgba(59,107,196,0.1);padding:3px 10px;border-radius:12px">🗄 ${this.currentDrawerSession.drawer_name||'Drawer'} · $${parseFloat(this.currentDrawerSession.opening_float||0).toFixed(2)} float</span>`
+      ? `<span style="margin-left:16px;font-size:12px;color:var(--accent);background:rgba(0,126,55,0.1);padding:3px 10px;border-radius:12px">🗄 ${this.currentDrawerSession.drawer_name||'Drawer'} · $${parseFloat(this.currentDrawerSession.opening_float||0).toFixed(2)} float</span>`
       : '';
     bar.innerHTML = `
-      <svg viewBox="0 0 24 24" fill="#3b6bc4" width="16" height="16"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
-      <span style="font-size:12px;color:#3b6bc4;text-transform:uppercase;letter-spacing:.5px">Branch</span>
+      <svg viewBox="0 0 24 24" style="fill:var(--accent)" width="16" height="16"><path d="M12 2C8.13 2 5 5.13 5 9c0 5.25 7 13 7 13s7-7.75 7-13c0-3.87-3.13-7-7-7zm0 9.5c-1.38 0-2.5-1.12-2.5-2.5s1.12-2.5 2.5-2.5 2.5 1.12 2.5 2.5-1.12 2.5-2.5 2.5z"/></svg>
+      <span style="font-size:12px;color:var(--accent);text-transform:uppercase;letter-spacing:.5px">Branch</span>
       ${inner}${drawerInfo}`;
 
     // Show/hide the drawer banner below the branch bar
