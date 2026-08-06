@@ -7,6 +7,22 @@ const { syncBinQty } = require('../lib/binSync');
 const { requireAuth, requirePermission } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
 
+// Mirrors availableCashBack() in public/index.html — the frontend uses this
+// same formula to decide whether to show the Cash Back bar; this copy is the
+// server-side clamp applied below so a stale/tampered client value can never
+// apply more than the customer is actually entitled to.
+function computeAvailableCashBack(row) {
+  if (!row || !row.active || !row.points_threshold || !row.reward_amount) return 0;
+  const accrued = Math.floor((row.loyalty_points || 0) / row.points_threshold) * row.reward_amount;
+  if (accrued <= 0) return 0;
+  if (row.min_redeem_amount > 0 && accrued < row.min_redeem_amount) return 0;
+  if (row.min_redeem_days > 0 && row.cash_back_last_redeemed_at) {
+    const daysSince = (Date.now() - new Date(row.cash_back_last_redeemed_at).getTime()) / 86400000;
+    if (daysSince < row.min_redeem_days) return 0;
+  }
+  return accrued;
+}
+
 // Put order on hold (no stock updates, no payment processing)
 router.post('/hold', requirePermission('pos_hold'), async (req, res) => {
   try {
@@ -126,7 +142,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 router.post('/', requirePermission('pos'), async (req, res) => {
   try {
-    const { customer_id, employee_id, drawer_session_id, items, discount_amount, promotion_code, promotion_name, payment_method, amount_tendered, notes, source_return_id, store_credit_applied, quote_id, tax_exempt, tax_exemption_number, approval_code } = req.body;
+    const { customer_id, employee_id, drawer_session_id, items, discount_amount, promotion_code, promotion_name, payment_method, amount_tendered, notes, source_return_id, store_credit_applied, cash_back_applied, quote_id, tax_exempt, tax_exemption_number, approval_code } = req.body;
     let { branch_id } = req.body;
     if (!items || items.length === 0) return res.status(400).json({ error: 'No items in transaction' });
 
@@ -162,7 +178,24 @@ router.post('/', requirePermission('pos'), async (req, res) => {
     tax_amount = parseFloat(tax_amount.toFixed(2));
     const disc = parseFloat(discount_amount || 0);
     const storeCredit = parseFloat(store_credit_applied || 0);
-    const total = parseFloat((subtotal + tax_amount - disc - storeCredit).toFixed(2));
+
+    // Server-side clamp against the customer's actual eligibility right now
+    // — see computeAvailableCashBack() above.
+    let cashBack = parseFloat(cash_back_applied || 0);
+    let cashBackCard = null;
+    if (cashBack > 0 && customer_id) {
+      const { rows: [row] } = await db.execute({
+        sql: `SELECT c.loyalty_points, c.cash_back_last_redeemed_at, cbct.points_threshold, cbct.reward_amount, cbct.min_redeem_amount, cbct.min_redeem_days, cbct.active
+              FROM customers c LEFT JOIN cash_back_card_types cbct ON c.cash_back_card_type_id = cbct.id WHERE c.id = ?`,
+        args: [customer_id],
+      });
+      cashBackCard = row;
+      cashBack = Math.min(cashBack, computeAvailableCashBack(row));
+    } else {
+      cashBack = 0;
+    }
+
+    const total = parseFloat((subtotal + tax_amount - disc - storeCredit - cashBack).toFixed(2));
     const method = payment_method || 'cash';
     const isCredit = method === 'credit';
 
@@ -180,7 +213,7 @@ router.post('/', requirePermission('pos'), async (req, res) => {
     let committed = false;
     try {
       const txSource = req.apiKey ? 'online' : 'pos';
-      const txResult = await tx.execute({ sql: `INSERT INTO transactions (transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,discount_amount,promotion_code,promotion_name,total,payment_method,amount_tendered,change_amount,is_credit,notes,source_return_id,store_credit_applied,tax_exempt,tax_exemption_number,approval_code,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [transaction_number, customer_id || null, employee_id || 1, branch_id || null, drawer_session_id || null, subtotal, tax_amount, disc, promotion_code || null, promotion_name || null, total, method, tendered, change > 0 ? change : 0, isCredit ? 1 : 0, notes || null, source_return_id || null, storeCredit > 0 ? storeCredit : 0, isTaxExempt, tax_exemption_number || null, approval_code || null, txSource] });
+      const txResult = await tx.execute({ sql: `INSERT INTO transactions (transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,discount_amount,promotion_code,promotion_name,total,payment_method,amount_tendered,change_amount,is_credit,notes,source_return_id,store_credit_applied,cash_back_applied,tax_exempt,tax_exemption_number,approval_code,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [transaction_number, customer_id || null, employee_id || 1, branch_id || null, drawer_session_id || null, subtotal, tax_amount, disc, promotion_code || null, promotion_name || null, total, method, tendered, change > 0 ? change : 0, isCredit ? 1 : 0, notes || null, source_return_id || null, storeCredit > 0 ? storeCredit : 0, cashBack > 0 ? cashBack : 0, isTaxExempt, tax_exemption_number || null, approval_code || null, txSource] });
       const txId = Number(txResult.lastInsertRowid);
 
       for (const { product, variation, quantity, unit_price, lineTotal, lineTax, discount } of processedItems) {
@@ -218,6 +251,14 @@ router.post('/', requirePermission('pos'), async (req, res) => {
           // cross into positive (the frontend already caps storeCredit at
           // the available |balance|, this is defense-in-depth only).
           await tx.execute({ sql: 'UPDATE customers SET account_balance = MIN(0, account_balance + ?) WHERE id = ?', args: [storeCredit, customer_id] });
+        }
+        if (cashBack > 0 && cashBackCard) {
+          // Consume points proportionally to the dollar amount actually
+          // applied (which may be less than a full reward chunk if the cart
+          // total was smaller) — e.g. redeeming $3 of a "500 pts = $5" reward
+          // deducts 300 points, leaving 200 still accruing toward the next one.
+          const pointsToDeduct = Math.round((cashBack / cashBackCard.reward_amount) * cashBackCard.points_threshold);
+          await tx.execute({ sql: 'UPDATE customers SET loyalty_points = MAX(0, loyalty_points - ?), cash_back_last_redeemed_at = CURRENT_TIMESTAMP WHERE id = ?', args: [pointsToDeduct, customer_id] });
         }
       }
 
