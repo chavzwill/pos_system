@@ -1576,7 +1576,10 @@ const App = {
           if (this._stmRefRequired(r.method) && !r.approval_code) { this.alert(`Enter a reference/approval number for ${r.method.replace('_',' ')}`, 'error'); return; }
         }
         overlay.remove();
-        resolve({ tenders: rows.map(r => ({ method: r.method, amount: r.amount, approval_code: r.approval_code || null })) });
+        resolve({
+          tenders: rows.map(r => ({ method: r.method, amount: r.amount, approval_code: r.approval_code || null })),
+          foreignCash: rows.map(r => r.foreign),
+        });
       });
     });
   },
@@ -1590,13 +1593,35 @@ const App = {
     return `<option value="">Method…</option>` + methods.map(([v, l]) => `<option value="${v}" ${v === selected ? 'selected' : ''}>${l}</option>`).join('');
   },
 
+  // Alt-currency support mirrors showCashTenderModal's — only Cash rows get
+  // a currency picker, and only when Alternate Currencies are configured in
+  // Settings. The Amount field is in whatever currency is selected; the base
+  // equivalent (what's actually validated/sent to the server) is shown as a
+  // live hint underneath, same conversion math as _ctmGetResult().
+  _stmHasAltCurrencies() {
+    return (this.altCurrencies || []).length > 0;
+  },
+
+  _stmCurrencyOptionsHtml() {
+    const base = this.activeCurrency || this.settings.currency || 'USD';
+    return [
+      `<option value="${base}" data-rate="1">${base} — base currency</option>`,
+      ...(this.altCurrencies || []).map(c => `<option value="${c.code}" data-rate="${c.rate}">${c.code} (1 ${base} = ${c.rate} ${c.code})</option>`),
+    ].join('');
+  },
+
   _stmRowHtml(method = '', amount = '') {
+    const showCurrency = method === 'cash' && this._stmHasAltCurrencies();
     return `<div class="stm-row" style="margin-bottom:8px;padding:8px;border:1px solid var(--border);border-radius:6px">
       <div style="display:flex;gap:8px;align-items:center">
         <select class="stm-method" style="flex:1.4" onchange="App._stmRowMethodChanged(this)">${this._stmMethodOptionsHtml(method)}</select>
         <input type="number" class="stm-amount" min="0" step="0.01" value="${amount}" placeholder="Amount" style="width:100px;flex-shrink:0" oninput="App._updateStmSummary()">
         <button type="button" class="btn btn-danger btn-sm" style="flex-shrink:0" onclick="this.closest('.stm-row').remove();App._updateStmSummary()">✕</button>
       </div>
+      ${this._stmHasAltCurrencies() ? `<div class="stm-currency-wrap" style="margin-top:6px;${showCurrency ? '' : 'display:none'}">
+        <select class="stm-currency" style="width:100%" onchange="App._updateStmSummary()">${this._stmCurrencyOptionsHtml()}</select>
+        <div class="stm-currency-hint" style="font-size:11px;color:var(--text-muted);margin-top:2px"></div>
+      </div>` : ''}
       <input type="text" class="stm-ref" placeholder="Ref / Approval #" style="width:100%;margin-top:6px;box-sizing:border-box;${this._stmRefRequired(method) ? '' : 'display:none'}">
     </div>`;
   },
@@ -1605,6 +1630,8 @@ const App = {
     const row = selectEl.closest('.stm-row');
     const refInput = row.querySelector('.stm-ref');
     refInput.style.display = this._stmRefRequired(selectEl.value) ? '' : 'none';
+    const curWrap = row.querySelector('.stm-currency-wrap');
+    if (curWrap) curWrap.style.display = (selectEl.value === 'cash' && this._stmHasAltCurrencies()) ? '' : 'none';
     this._updateStmSummary();
   },
 
@@ -1618,17 +1645,33 @@ const App = {
   },
 
   _getStmRows() {
-    return Array.from(document.querySelectorAll('#stm-rows .stm-row')).map(row => ({
-      method: row.querySelector('.stm-method')?.value || '',
-      amount: parseFloat(row.querySelector('.stm-amount')?.value) || 0,
-      approval_code: row.querySelector('.stm-ref')?.value.trim() || '',
-    })).filter(r => r.method && r.amount > 0);
+    return Array.from(document.querySelectorAll('#stm-rows .stm-row')).map(row => {
+      const method = row.querySelector('.stm-method')?.value || '';
+      const rawAmount = parseFloat(row.querySelector('.stm-amount')?.value) || 0;
+      const curSel = row.querySelector('.stm-currency');
+      const rate = curSel ? parseFloat(curSel.selectedOptions[0]?.dataset.rate || '1') : 1;
+      const currency = curSel ? curSel.value : (this.activeCurrency || this.settings.currency || 'USD');
+      return {
+        method,
+        amount: parseFloat((rawAmount / rate).toFixed(2)),
+        approval_code: row.querySelector('.stm-ref')?.value.trim() || '',
+        foreign: rate !== 1 ? { currency, rate, tenderedAlt: rawAmount } : null,
+      };
+    }).filter(r => r.method && r.amount > 0);
   },
 
   _updateStmSummary() {
     const total = this._stmTotal || 0;
     const summary = document.getElementById('stm-summary');
     const confirmBtn = document.getElementById('stm-confirm');
+    document.querySelectorAll('#stm-rows .stm-row').forEach(row => {
+      const hint = row.querySelector('.stm-currency-hint');
+      if (!hint) return;
+      const curSel = row.querySelector('.stm-currency');
+      const rate = curSel ? parseFloat(curSel.selectedOptions[0]?.dataset.rate || '1') : 1;
+      const rawAmount = parseFloat(row.querySelector('.stm-amount')?.value) || 0;
+      hint.textContent = (rate !== 1 && rawAmount > 0) ? `≈ ${this.fmt(rawAmount / rate)}` : '';
+    });
     if (!summary) return;
     const rows = this._getStmRows();
     const applied = parseFloat(rows.reduce((sum, r) => sum + r.amount, 0).toFixed(2));
@@ -2593,6 +2636,7 @@ const App = {
     let cashResult = null;
     let approvalCode = null;
     let splitTenders = null;
+    let splitForeignCash = null;
 
     if (method === 'cash') {
       cashResult = await this.showCashTenderModal(total);
@@ -2612,6 +2656,7 @@ const App = {
       const splitResult = await this.showSplitTenderModal(total);
       if (!splitResult) return;
       splitTenders = splitResult.tenders;
+      splitForeignCash = splitResult.foreignCash;
     }
 
     const isTaxExempt = this.isCartTaxExempt();
@@ -2658,7 +2703,7 @@ const App = {
         this.alert(`Change due: ${this.fmt(changeAmount)}${altMsg}`, 'success');
       }
 
-      this.showReceipt(tx, changeAmount, cashResult);
+      this.showReceipt(tx, changeAmount, cashResult, splitForeignCash);
       this.clearCart();
       this.renderProductGrid();
     } catch (e) {
@@ -2976,15 +3021,21 @@ const App = {
 
   // Itemized per-leg rows for a split-tender sale's receipt, replacing the
   // single Payment/Tendered/Approval-code block used for normal sales.
-  _splitPaymentReceiptRows(tx) {
+  // foreignCash is a same-order-as-tx.payments array from
+  // showSplitTenderModal (or undefined for older/API-created split sales) —
+  // the DB itself only ever stores base-currency amounts, so this detail is
+  // only available right after the sale, same as the single-tender cash flow.
+  _splitPaymentReceiptRows(tx, foreignCash) {
     const payments = tx.payments || [];
-    return payments.map(p => {
+    return payments.map((p, i) => {
       const refLabel = p.payment_method === 'direct_deposit' ? 'Ref #' : p.payment_method === 'gift_card' ? 'Gift Card #' : (p.payment_method === 'credit_card' || p.payment_method === 'debit_card') ? 'Approval' : null;
-      return `<div class="receipt-row"><span>${p.payment_method.replace('_',' ').toUpperCase()}</span><span>${this.fmt(p.amount)}</span></div>${p.approval_code && refLabel ? `<div class="receipt-row" style="font-size:10px;color:#666"><span>${refLabel}</span><span>${p.approval_code}</span></div>` : ''}`;
+      const foreign = foreignCash && foreignCash[i];
+      const foreignLine = foreign ? `<div class="receipt-row" style="font-size:10px;color:#666"><span>Tendered (${foreign.currency})</span><span>${foreign.currency} ${foreign.tenderedAlt.toFixed(2)}</span></div>` : '';
+      return `<div class="receipt-row"><span>${p.payment_method.replace('_',' ').toUpperCase()}</span><span>${this.fmt(p.amount)}</span></div>${foreignLine}${p.approval_code && refLabel ? `<div class="receipt-row" style="font-size:10px;color:#666"><span>${refLabel}</span><span>${p.approval_code}</span></div>` : ''}`;
     }).join('');
   },
 
-  showReceipt(tx, change = 0, cashResult = null) {
+  showReceipt(tx, change = 0, cashResult = null, splitForeignCash = null) {
     const items = tx.items || [];
     const storeName = this.settings.store_name || 'My Store';
     const footer = this.settings.receipt_footer || 'Thank you!';
@@ -2994,6 +3045,7 @@ const App = {
     this._lastReceiptTx = tx;
     this._lastReceiptChange = change;
     this._lastReceiptCash = cashResult;
+    this._lastReceiptSplitForeign = splitForeignCash;
 
     const overlay = this.showModal(`
       <div class="modal" style="max-width:400px">
@@ -3020,7 +3072,7 @@ const App = {
             ${tx.discount_amount > 0 ? `<div class="receipt-row"><span>Discount${tx.promotion_code ? ` (${tx.promotion_code})` : ''}</span><span>-${this.fmt(tx.discount_amount)}</span></div>${tx.promotion_name ? `<div style="color:#666;font-size:11px;padding-left:4px">${tx.promotion_name}</div>` : ''}` : ''}
             <hr>
             <div class="receipt-row receipt-total"><span>TOTAL</span><span>${this.fmt(tx.total)}</span></div>
-            ${tx.payment_method === 'split' ? this._splitPaymentReceiptRows(tx) : `<div class="receipt-row"><span>Payment</span><span>${tx.payment_method.replace('_',' ').toUpperCase()}</span></div>
+            ${tx.payment_method === 'split' ? this._splitPaymentReceiptRows(tx, splitForeignCash) : `<div class="receipt-row"><span>Payment</span><span>${tx.payment_method.replace('_',' ').toUpperCase()}</span></div>
             ${tx.amount_tendered > tx.total ? (cashResult?.rate > 1 ? `<div class="receipt-row"><span>Tendered (${cashResult.currency})</span><span>${cashResult.currency} ${cashResult.tenderedAlt.toFixed(2)}</span></div><div class="receipt-row" style="font-size:10px;color:#666"><span>Equivalent</span><span>${this.fmt(tx.amount_tendered)}</span></div><div class="receipt-row"><span>Change</span><span>${this.fmt(change)}</span></div>` : `<div class="receipt-row"><span>Tendered</span><span>${this.fmt(tx.amount_tendered)}</span></div><div class="receipt-row"><span>Change</span><span>${this.fmt(change)}</span></div>`) : ''}
             ${tx.approval_code ? `<div class="receipt-row"><span>${tx.payment_method === 'direct_deposit' ? 'Deposit Ref #' : tx.payment_method === 'gift_card' ? 'Gift Card #' : 'Approval Code'}</span><span style="font-family:monospace;font-weight:600">${tx.approval_code}</span></div>` : ''}`}
             <hr>
@@ -3050,6 +3102,7 @@ const App = {
     if (!tx) return;
     const change = this._lastReceiptChange || 0;
     const cashResult = this._lastReceiptCash;
+    const splitForeignCash = this._lastReceiptSplitForeign;
     const items = tx.items || [];
     const storeName = this.settings.store_name || 'My Store';
     const footer = this.settings.receipt_footer || 'Thank you!';
@@ -3072,9 +3125,11 @@ const App = {
 
     const tenderRows = [];
     if (tx.payment_method === 'split') {
-      (tx.payments || []).forEach(p => {
+      (tx.payments || []).forEach((p, i) => {
         const refLabel = p.payment_method === 'direct_deposit' ? 'Ref #' : p.payment_method === 'gift_card' ? 'Gift Card #' : (p.payment_method === 'credit_card' || p.payment_method === 'debit_card') ? 'Approval' : null;
         tenderRows.push([p.payment_method.replace('_',' ').toUpperCase(), this.fmt(p.amount)]);
+        const foreign = splitForeignCash && splitForeignCash[i];
+        if (foreign) tenderRows.push([`Tendered (${foreign.currency})`, `${foreign.currency} ${foreign.tenderedAlt.toFixed(2)}`]);
         if (p.approval_code && refLabel) tenderRows.push([refLabel, p.approval_code]);
       });
     } else {
