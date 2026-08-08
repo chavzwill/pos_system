@@ -7141,10 +7141,11 @@ const App = {
           ? `<span class="badge-pill badge-info">Credit</span>${c.account_blocked ? ' <span class="badge-pill badge-danger">Blocked</span>' : ''}`
           : '<span class="badge-pill" style="background:#e0e0e0;color:#555">Cash</span>';
         const taxExemptBadge = c.tax_exempt ? ' <span class="badge-pill" style="background:#e8f5e9;color:#2e7d32;border:1px solid #a5d6a7">Tax Exempt</span>' : '';
+        const rentalBadge = c.is_rental_customer ? ' <span class="badge-pill badge-purple">🔑 Rental</span>' : '';
         return `<tr>
         <td style="font-family:monospace;font-size:12px">${c.customer_number}</td>
         <td class="fw-600">${c.first_name} ${c.last_name}</td>
-        <td style="white-space:nowrap">${typeBadge}${taxExemptBadge}</td>
+        <td style="white-space:nowrap">${typeBadge}${taxExemptBadge}${rentalBadge}</td>
         <td style="color:var(--text-muted)">${c.email||'—'}</td>
         <td>${c.phone||'—'}</td>
         <td style="color:var(--text-muted)">${c.city||'—'}</td>
