@@ -13,7 +13,7 @@ async function calcCommission(employeeId, saleAmount, sourceType, sourceId, sour
 
   if (!asgn) return null;
 
-  const applyMap = { pos: 'transaction', quotes: 'quotation', crm: 'opportunity' };
+  const applyMap = { pos: 'transaction', quotes: 'quotation', crm: 'opportunity', rentals: 'rental' };
   if (asgn.apply_to !== 'all' && applyMap[asgn.apply_to] !== sourceType) return null;
   if (saleAmount < (asgn.min_sale_amount || 0)) return null;
 
@@ -56,6 +56,35 @@ async function calcCommission(employeeId, saleAmount, sourceType, sourceId, sour
 }
 
 module.exports.calcCommission = calcCommission;
+
+// Rentals never call calcCommission() directly — commission on a rental is
+// deliberately deferred (see routes/rentals.js and routes/accounts.js call
+// sites) rather than fired at booking time, so both trigger points share
+// this one revenue formula + duplicate-guard instead of duplicating them.
+// `source_id` is always the rental's checkout_transaction_id — stable for
+// the agreement's whole lifetime, so calling this twice (e.g. a credit
+// payment trigger firing after a return trigger already did, in some future
+// edge case) is a safe no-op rather than a duplicate commission_records row.
+async function calcRentalCommission(agreement, checkoutTx) {
+  if (!agreement.checkout_transaction_id) return null;
+  const { rows: [existing] } = await db.execute({ sql: "SELECT id FROM commission_records WHERE source_type='rental' AND source_id=?", args: [agreement.checkout_transaction_id] });
+  if (existing) return null;
+
+  // Deposit is refundable collateral, not revenue — excluded here even
+  // though it's part of checkoutTx.subtotal. damage_fee_total/
+  // duration_adjustment_total/tax_adjustment_total are the settlement-time
+  // accumulators on rental_agreements (already net of any credits for an
+  // early return), added on top of the original checkout revenue.
+  const revenueAmount = parseFloat((
+    (checkoutTx.subtotal - agreement.deposit_total) +
+    checkoutTx.tax_amount +
+    (agreement.damage_fee_total || 0) +
+    (agreement.duration_adjustment_total || 0) +
+    (agreement.tax_adjustment_total || 0)
+  ).toFixed(2));
+
+  return calcCommission(agreement.employee_id, revenueAmount, 'rental', agreement.checkout_transaction_id, agreement.agreement_number);
+}
 
 router.use(requirePermission('commissions'));
 
@@ -237,3 +266,4 @@ router.post('/calculate/transaction/:txId', async (req, res) => {
 
 module.exports = router;
 module.exports.calcCommission = calcCommission;
+module.exports.calcRentalCommission = calcRentalCommission;

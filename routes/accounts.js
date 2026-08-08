@@ -4,6 +4,7 @@ const { db } = require('../database');
 const { runCreditCheck } = require('./customers');
 const { requirePermission } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
+const { calcRentalCommission } = require('./commissions');
 
 // Every endpoint in this file is specific to the Accounts Receivable
 // screen (unlike e.g. employees.js, nothing here is used as a cross-feature
@@ -173,6 +174,24 @@ router.post('/payments', async (req, res) => {
 
       const { rows: [payRow] } = await db.execute({ sql: `SELECT p.*, c.first_name || ' ' || c.last_name as customer_name FROM account_payments p LEFT JOIN customers c ON p.customer_id = c.id WHERE p.id = ?`, args: [payId] });
       try { await runCreditCheck(customer_id); } catch(e) {}
+      // A credit-financed rental's commission is deliberately gated on the
+      // customer actually paying, not on booking — see calcRentalCommission.
+      // Only fires once this (or an earlier) payment brings the specific
+      // checkout invoice to fully paid; works whether or not the rental has
+      // been returned yet, since an explicit allocation like this one isn't
+      // subject to the "exclude returned rentals" filter that only applies
+      // to the auto-FIFO candidate query above.
+      try {
+        for (const alloc of finalAllocations) {
+          const { rows: [rentalAgreement] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE checkout_transaction_id = ?', args: [alloc.transaction_id] });
+          if (!rentalAgreement) continue;
+          const { rows: [checkoutTx] } = await db.execute({ sql: 'SELECT * FROM transactions WHERE id = ?', args: [alloc.transaction_id] });
+          if (!checkoutTx) continue;
+          const { rows: [{ paid }] } = await db.execute({ sql: 'SELECT COALESCE(SUM(amount),0) as paid FROM payment_allocations WHERE transaction_id = ?', args: [alloc.transaction_id] });
+          if (checkoutTx.total - paid > 0.001) continue;
+          await calcRentalCommission(rentalAgreement, checkoutTx);
+        }
+      } catch(e) {}
       res.status(201).json(payRow);
     } catch(e) {
       // Once committed, the payment is saved — rolling back a closed transaction

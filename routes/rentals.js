@@ -6,6 +6,8 @@ const { getBranchStock, feeFor, buildRentalLines, insertPendingAgreement, assert
 const { requirePermission, requireAnyPermission } = require('../lib/permissions');
 const { runCreditCheck } = require('./customers');
 const { nextNumber } = require('../lib/nextNumber');
+const { calcRentalCommission } = require('./commissions');
+const { logActivity } = require('./crm');
 
 // ─── Agreements list/detail ───────────────────────────────────────────────
 
@@ -272,6 +274,13 @@ router.patch('/agreements/:id/checkout', requireAnyPermission('rentals_checkout'
       await tx.commit();
       committed = true;
       if (isCredit) { try { await runCreditCheck(agreement.customer_id); } catch(e) {} }
+      try {
+        await logActivity({
+          customerId: agreement.customer_id, employeeId: finalizeEmployeeId,
+          type: 'rental', subject: `Rental ${agreement.agreement_number} checked out — due ${agreement.due_date}`,
+          completed: true,
+        });
+      } catch(e) {}
 
       const { rows: [updated] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
       const { rows: agItems } = await db.execute({ sql: 'SELECT * FROM rental_agreement_items WHERE agreement_id = ?', args: [req.params.id] });
@@ -378,6 +387,11 @@ router.patch('/agreements/:id/cancel', requirePermission('rentals_returns'), asy
             }
           }
         }
+        // A credit customer paying off the invoice early (before return) can
+        // fire calcRentalCommission's Trigger B in routes/accounts.js — if
+        // this rental is then cancelled, that commission shouldn't stand,
+        // same reasoning as routes/transactions.js's void-cleanup.
+        await tx.execute({ sql: "DELETE FROM commission_records WHERE source_type='rental' AND source_id=? AND status != 'paid'", args: [agreement.checkout_transaction_id] });
       }
       // A pending agreement created by converting a rental quote points
       // quotations.converted_to_agreement_id back at it — if it's cancelled
@@ -389,6 +403,13 @@ router.patch('/agreements/:id/cancel', requirePermission('rentals_returns'), asy
       await tx.execute({ sql: "UPDATE rental_agreements SET status = 'cancelled', cancellation_reason = ?, cancelled_by = ?, cancelled_at = CURRENT_TIMESTAMP WHERE id = ?", args: [reason || null, employee_id || null, req.params.id] });
       await tx.commit();
       if (reversedCreditCustomerId) { try { await runCreditCheck(reversedCreditCustomerId); } catch(e) {} }
+      try {
+        await logActivity({
+          customerId: agreement.customer_id, employeeId: employee_id || agreement.employee_id,
+          type: 'rental', subject: `Rental ${agreement.agreement_number} cancelled`,
+          completed: true,
+        });
+      } catch(e) {}
     } catch(e) {
       await tx.rollback();
       return res.status(400).json({ error: e.message });
@@ -570,6 +591,28 @@ router.patch('/agreements/:id/return', requirePermission('rentals_returns'), asy
     const { rows: [updated] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
     const { rows: updatedItems } = await db.execute({ sql: 'SELECT * FROM rental_agreement_items WHERE agreement_id = ?', args: [req.params.id] });
     updated.items = updatedItems;
+
+    // Only fires once the agreement is fully closed (every item returned) —
+    // a partial return correctly leaves this alone. Credit-financed rentals
+    // are deliberately excluded here: their commission trigger is the
+    // customer actually paying off the invoice (routes/accounts.js), not
+    // the return itself — see calcRentalCommission's callers for why.
+    if (updated.status === 'returned') {
+      try {
+        await logActivity({
+          customerId: updated.customer_id, employeeId: updated.employee_id,
+          type: 'rental', subject: `Rental ${updated.agreement_number} returned`,
+          completed: true,
+        });
+      } catch(e) {}
+      if (!checkoutIsCredit && updated.checkout_transaction_id) {
+        try {
+          const { rows: [checkoutTx] } = await db.execute({ sql: 'SELECT * FROM transactions WHERE id = ?', args: [updated.checkout_transaction_id] });
+          if (checkoutTx) await calcRentalCommission(updated, checkoutTx);
+        } catch(e) {}
+      }
+    }
+
     res.json(updated);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

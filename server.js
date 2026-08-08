@@ -9,6 +9,7 @@ const { ensureReady, db } = require('./database');
 const { router: woocommerceRouter, runSyncAll: wooSyncAll } = require('./routes/woocommerce');
 const { apiKeyAuth } = require('./lib/apiKeyAuth');
 const { sessionAuth } = require('./lib/sessionAuth');
+const { logActivity } = require('./routes/crm');
 
 // Without these, any unhandled rejection (e.g. a bug in one request's async
 // code) crashes the entire Node process per Node's default behavior since
@@ -119,6 +120,34 @@ if (!process.env.VERCEL) {
       }
     } catch (e) {}
   }, 60000);
+
+  // Rental overdue detection — "overdue" is only ever computed live at read
+  // time (see rental_agreements' display_status in routes/rentals.js), so
+  // this is the one place that turns "due_date has passed" into a one-time
+  // CRM activity per rental, guarded by overdue_notified_at so it only
+  // fires once per rental. Not time-critical, checked every 30 minutes.
+  setInterval(async () => {
+    try {
+      await ensureReady();
+      const { rows: overdue } = await db.execute({
+        sql: "SELECT * FROM rental_agreements WHERE status='active' AND due_date < date('now') AND overdue_notified_at IS NULL",
+        args: [],
+      });
+      for (const agreement of overdue) {
+        try {
+          await db.execute({ sql: 'UPDATE rental_agreements SET overdue_notified_at = CURRENT_TIMESTAMP WHERE id = ?', args: [agreement.id] });
+          // completed:false + a past due_date makes this surface in the CRM
+          // Activities tab's existing Overdue bucket automatically, no new
+          // frontend code needed (public/index.html's renderCrmActivities).
+          await logActivity({
+            customerId: agreement.customer_id, employeeId: agreement.employee_id,
+            type: 'rental', subject: `Rental ${agreement.agreement_number} is overdue (due ${agreement.due_date})`,
+            dueDate: agreement.due_date, completed: false,
+          });
+        } catch(e) {}
+      }
+    } catch (e) {}
+  }, 30 * 60000);
 }
 
 // Vercel serverless export

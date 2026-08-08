@@ -5,6 +5,21 @@ const { calcCommission } = require('./commissions');
 const { requirePermission } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
 
+// Thin insert wrapper other modules can call directly (not an HTTP route,
+// so it isn't gated by the router.use(requirePermission('crm')) below) —
+// lets a rental status change (or any future system event) show up in a
+// customer's CRM activity timeline with no lead/opportunity required,
+// since crm_activities.customer_id is an independent FK. `type` is
+// free-text/unenforced in the schema, so new types need no migration.
+async function logActivity({ customerId, employeeId, type, subject, description, dueDate, completed }) {
+  const result = await db.execute({
+    sql: `INSERT INTO crm_activities (customer_id, employee_id, type, subject, description, due_date, completed, completed_at) VALUES (?,?,?,?,?,?,?,?)`,
+    args: [customerId || null, employeeId || null, type || 'task', subject, description || null, dueDate || null, completed ? 1 : 0, completed ? new Date().toISOString() : null],
+  });
+  const { rows: [row] } = await db.execute({ sql: 'SELECT * FROM crm_activities WHERE id = ?', args: [Number(result.lastInsertRowid)] });
+  return row;
+}
+
 router.use(requirePermission('crm'));
 
 // ── Dashboard ──────────────────────────────────────────────
@@ -268,3 +283,4 @@ router.delete('/activities/:id', async (req, res) => {
 });
 
 module.exports = router;
+module.exports.logActivity = logActivity;

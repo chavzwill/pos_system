@@ -995,6 +995,11 @@ async function _init() {
     // Mirrors store_credit_applied — how much of this sale was paid with
     // redeemed cash-back value, for the receipt line and audit trail.
     'ALTER TABLE transactions ADD COLUMN cash_back_applied REAL DEFAULT 0',
+    // "Overdue" is otherwise computed live (due_date vs today) with no
+    // stored status — this column only exists to stop the overdue-rental
+    // poller (server.js) from re-logging the same CRM activity on every
+    // tick once a rental has already been flagged.
+    'ALTER TABLE rental_agreements ADD COLUMN overdue_notified_at DATETIME',
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch(e) {}
@@ -1611,6 +1616,8 @@ async function _init() {
     'CREATE INDEX IF NOT EXISTS idx_purchase_request_items_pr_id ON purchase_request_items(pr_id)',
     'CREATE INDEX IF NOT EXISTS idx_account_payments_customer_id ON account_payments(customer_id)',
     'CREATE INDEX IF NOT EXISTS idx_commission_records_employee_id ON commission_records(employee_id)',
+    'CREATE INDEX IF NOT EXISTS idx_commission_records_source ON commission_records(source_type, source_id)',
+    'CREATE INDEX IF NOT EXISTS idx_payment_allocations_transaction_id ON payment_allocations(transaction_id)',
     'CREATE INDEX IF NOT EXISTS idx_returns_original_transaction_id ON returns(original_transaction_id)',
     'CREATE INDEX IF NOT EXISTS idx_return_items_return_id ON return_items(return_id)',
     'CREATE INDEX IF NOT EXISTS idx_employee_branches_employee_id ON employee_branches(employee_id)',

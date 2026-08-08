@@ -470,7 +470,8 @@
       <ul>
         <li><strong>Leads</strong> (<span class="perm-pill">crm_leads</span>) — a prospective contact, which can be converted into an opportunity once qualified.</li>
         <li><strong>Opportunities</strong> (<span class="perm-pill">crm_opportunities</span>) — a deal in progress, moved through pipeline stages; can link directly to a quotation, so a sales-driven deal and its formal price quote stay connected.</li>
-        <li><strong>Activities</strong> — calls, meetings, follow-up tasks logged against a lead or opportunity, each markable complete (or reopened).</li>
+        <li><strong>Activities</strong> — calls, meetings, follow-up tasks logged against a lead or opportunity, each markable complete (or reopened). An activity can also attach straight to a customer with no lead or opportunity needed.</li>
+        <li><strong>Rentals feed into a customer's Activities automatically</strong> — checkout, return, and cancellation each log a completed entry, so a rep can see a customer's rental history right in CRM. An <strong>overdue</strong> rental logs as an open (not completed) activity with the original due date, so it shows up in the Activities tab's Overdue bucket as something to follow up on — checked roughly every 30 minutes, not instantly.</li>
         <li>A CRM-specific dashboard summarizes pipeline health separately from the main Dashboard.</li>
       </ul>
     </section>
@@ -481,6 +482,8 @@
       <ul>
         <li>Define <strong>commission plans</strong> (needs <span class="perm-pill">commissions_plans</span>) — a rate structure — and assign them to specific employees.</li>
         <li>A commission record is <strong>created automatically</strong> whenever an assigned employee completes a sale or wins a CRM opportunity — no manual entry needed for the common case.</li>
+        <li>A plan's <strong>Applies To</strong> setting scopes it to POS sales, quotes, CRM deals, rentals, or all of them — a plan only earns commission on the category(ies) it's scoped to, so assigning someone a POS-only plan doesn't automatically start paying them on rentals too.</li>
+        <li><strong>Rentals are commissioned on a delay, not at booking</strong> — the risk being commissioned against is different depending on how the rental was paid. A cash/card-paid rental earns commission once the item is fully returned; a credit-account rental earns commission once the customer actually pays off that rental's invoice (whether that happens before or after the item comes back). This is deliberate: it rewards staff for following up and closing the loop, not just for booking the rental.</li>
         <li>Records move through <strong>approval</strong> (<span class="perm-pill">commissions_approve</span>, individually or in bulk) before being marked <strong>paid</strong> (<span class="perm-pill">commissions_pay</span>, also available in bulk).</li>
         <li>A summary view totals commissions owed/paid across employees and time periods.</li>
       </ul>

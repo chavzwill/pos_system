@@ -12363,7 +12363,7 @@ const App = {
   },
 
   sourceTypeLabel(s) {
-    return { transaction:'POS Sale', quotation:'Quote', opportunity:'CRM Deal', manual:'Manual' }[s] || s;
+    return { transaction:'POS Sale', quotation:'Quote', opportunity:'CRM Deal', manual:'Manual', rental:'Rental' }[s] || s;
   },
 
   async renderCommDashboard(el) {
@@ -12421,7 +12421,7 @@ const App = {
         </div>
         <div class="card">
           <div class="card-header"><span class="card-title">Commission by Source</span></div>
-          ${['transaction','quotation','opportunity','manual'].map(s => {
+          ${['transaction','quotation','opportunity','rental','manual'].map(s => {
             const r = bySource[s] || { count: 0, total: 0 };
             if (!r.count) return '';
             return `<div style="display:flex;justify-content:space-between;align-items:center;padding:10px 0;border-bottom:1px solid var(--border)">
@@ -12581,7 +12581,7 @@ const App = {
     ]);
 
     const typeLabel = t => ({ percentage:'% of Sale', tiered:'Tiered %', flat:'Flat Amount' }[t] || t);
-    const applyLabel = a => ({ all:'All Sales', pos:'POS Only', quotes:'Quotes Only', crm:'CRM Deals Only' }[a] || a);
+    const applyLabel = a => ({ all:'All Sales', pos:'POS Only', quotes:'Quotes Only', crm:'CRM Deals Only', rentals:'Rentals Only' }[a] || a);
 
     el.innerHTML = `
       <div class="two-col" style="align-items:start">
@@ -12657,6 +12657,7 @@ const App = {
                 <option value="pos" ${p.apply_to==='pos'?'selected':''}>POS Only</option>
                 <option value="quotes" ${p.apply_to==='quotes'?'selected':''}>Quotes Only</option>
                 <option value="crm" ${p.apply_to==='crm'?'selected':''}>CRM Deals Only</option>
+                <option value="rentals" ${p.apply_to==='rentals'?'selected':''}>Rentals Only</option>
               </select>
             </div>
           </div>
@@ -12927,7 +12928,7 @@ const App = {
   },
 
   activityIcon(type) {
-    const icons = { call:'📞', email:'✉️', meeting:'📅', task:'✅', note:'📝' };
+    const icons = { call:'📞', email:'✉️', meeting:'📅', task:'✅', note:'📝', rental:'🔑' };
     return icons[type] || '📌';
   },
 
