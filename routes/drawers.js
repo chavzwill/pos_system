@@ -99,12 +99,25 @@ router.get('/sessions/:id', requireAuth, async (req, res) => {
       WHERE ds.id = ?`, args: [req.params.id] });
     if (!session) return res.status(404).json({ error: 'Not found' });
 
+    // Sums per-leg amounts from transaction_payments (so a split-tender sale's
+    // cash portion and card portion land in separate buckets), falling back
+    // to the whole transaction total for any transaction with no
+    // transaction_payments rows (e.g. rentals/layaway/quotation-hold sales
+    // that insert into transactions directly, bypassing POST /transactions).
     const { rows: tenders } = await db.execute({ sql: `
       SELECT payment_method,
-        COUNT(*) as tx_count,
-        COALESCE(SUM(total), 0) as total
-      FROM transactions WHERE drawer_session_id = ?
-      GROUP BY payment_method`, args: [req.params.id] });
+        COUNT(DISTINCT transaction_id) as tx_count,
+        COALESCE(SUM(amount), 0) as total
+      FROM (
+        SELECT tp.transaction_id, tp.payment_method, tp.amount
+        FROM transaction_payments tp JOIN transactions t ON t.id = tp.transaction_id
+        WHERE t.drawer_session_id = ?
+        UNION ALL
+        SELECT t.id as transaction_id, t.payment_method, t.total as amount
+        FROM transactions t
+        WHERE t.drawer_session_id = ? AND NOT EXISTS (SELECT 1 FROM transaction_payments tp2 WHERE tp2.transaction_id = t.id)
+      )
+      GROUP BY payment_method`, args: [req.params.id, req.params.id] });
     session.tenders = tenders;
 
     const { rows: [reconciliation] } = await db.execute({ sql: `SELECT dr.*, e.first_name || ' ' || e.last_name as reconciled_by_name FROM drawer_reconciliations dr LEFT JOIN employees e ON e.id = dr.reconciled_by WHERE dr.session_id = ?`, args: [req.params.id] });

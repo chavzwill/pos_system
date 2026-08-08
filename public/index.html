@@ -90,7 +90,7 @@ tr:last-child td { border-bottom: none; }
 tr:hover td { background: #fafafa; }
 
 /* Buttons */
-.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 500; transition: background .15s, opacity .15s; }
+.btn { display: inline-flex; align-items: center; gap: 6px; padding: 7px 14px; border-radius: 6px; border: none; cursor: pointer; font-size: 13px; font-weight: 700; transition: background .15s, opacity .15s; }
 .btn:disabled { opacity: .5; cursor: not-allowed; }
 .btn-primary { background: var(--accent); color: #fff; }
 .btn-primary:hover:not(:disabled) { background: var(--accent-hover); }
@@ -216,13 +216,13 @@ body.pos-kiosk #sidebar, body.pos-kiosk #topbar { display: none; }
 .pos-amount-due span { font-size: 26px; font-weight: 700; color: var(--primary); }
 .pos-status-line { padding: 4px 14px; font-size: 11px; color: var(--text-muted); display: flex; gap: 18px; border-top: 1px solid var(--border); flex-shrink: 0; }
 .pos-action-grid { width: 380px; flex-shrink: 0; display: grid; grid-template-columns: repeat(4, 1fr); gap: 1px; background: var(--border); border-left: 1px solid var(--border); overflow-y: auto; }
-.pos-grid-btn { background: #eef2fb; border: none; cursor: pointer; padding: 10px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .2px; color: var(--brand-black); display: flex; align-items: center; justify-content: center; text-align: center; min-height: 56px; line-height: 1.25; }
-.pos-grid-btn:hover:not(:disabled) { filter: brightness(0.95); }
+.pos-grid-btn { background: var(--primary); border: none; cursor: pointer; padding: 10px 4px; font-size: 11px; font-weight: 700; text-transform: uppercase; letter-spacing: .2px; color: #fff; display: flex; align-items: center; justify-content: center; text-align: center; min-height: 56px; line-height: 1.25; }
+.pos-grid-btn:hover:not(:disabled) { filter: brightness(1.12); }
 .pos-grid-btn:disabled { opacity: .4; cursor: not-allowed; }
-.pos-grid-btn.void { background: #fdecea; color: var(--danger); }
-.pos-grid-btn.pay-acct { background: #e3f2fd; color: #1565c0; }
+.pos-grid-btn.void { background: var(--danger); color: #fff; }
+.pos-grid-btn.pay-acct { background: #1565c0; color: #fff; }
 .pos-grid-btn.payment { background: var(--success); color: #fff; font-size: 13px; }
-.pos-grid-btn.hold { background: #ede7f6; color: #4527a0; }
+.pos-grid-btn.hold { background: #4527a0; color: #fff; }
 
 /* Status badges */
 .badge-pill { display: inline-block; padding: 3px 10px; border-radius: 12px; font-size: 11px; font-weight: 600; text-transform: uppercase; }
@@ -1530,6 +1530,117 @@ const App = {
     });
   },
 
+  // ─── Split Tender Modal ───────────────────────────────────
+  // Collects 2+ tender rows (method + amount, plus a ref/approval code for
+  // methods that need one) that together must add up to the total. Charge
+  // Account is intentionally excluded — see routes/transactions.js.
+  showSplitTenderModal(total) {
+    this._stmTotal = total;
+    return new Promise(resolve => {
+      document.querySelectorAll('.modal-overlay').forEach(el => el.remove());
+      const overlay = document.createElement('div');
+      overlay.className = 'modal-overlay';
+      overlay.innerHTML = `
+        <div class="modal" style="max-width:480px">
+          <div class="modal-header"><span class="modal-title">Split Tender</span><button id="stm-x" class="modal-close">✕</button></div>
+          <div class="modal-body">
+            <div style="text-align:center;background:var(--bg);border-radius:8px;padding:12px;margin-bottom:14px">
+              <div style="font-size:12px;color:var(--text-muted);margin-bottom:2px;text-transform:uppercase;letter-spacing:.5px">Total Due</div>
+              <div style="font-size:26px;font-weight:700">${this.fmt(total)}</div>
+            </div>
+            <p style="font-size:12px;color:var(--text-muted);margin-bottom:10px">Add two or more tenders that together cover the full total. Charge Account isn't available as a split leg.</p>
+            <div id="stm-rows"></div>
+            <button type="button" class="btn btn-secondary btn-sm" onclick="App._addStmRow()" style="margin-top:4px">+ Add Tender</button>
+            <div id="stm-summary" style="text-align:right;font-size:13px;font-weight:600;margin-top:12px"></div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" id="stm-cancel">Cancel</button>
+            <button class="btn btn-primary" id="stm-confirm" disabled>Confirm Payment</button>
+          </div>
+        </div>`;
+      document.body.appendChild(overlay);
+      const rowsEl = overlay.querySelector('#stm-rows');
+      rowsEl.innerHTML = this._stmRowHtml() + this._stmRowHtml();
+      this._updateStmSummary(total);
+
+      const cancel = () => { overlay.remove(); resolve(null); };
+      overlay.addEventListener('click', e => { if (e.target === overlay) cancel(); });
+      overlay.querySelector('#stm-x').addEventListener('click', cancel);
+      overlay.querySelector('#stm-cancel').addEventListener('click', cancel);
+      overlay.querySelector('#stm-confirm').addEventListener('click', () => {
+        const rows = this._getStmRows();
+        const applied = parseFloat(rows.reduce((sum, r) => sum + r.amount, 0).toFixed(2));
+        if (rows.length < 2) { this.alert('Add at least two tenders to split payment', 'error'); return; }
+        if (Math.abs(applied - total) > 0.01) { this.alert('Tender amounts must add up to the total due', 'error'); return; }
+        for (const r of rows) {
+          if (this._stmRefRequired(r.method) && !r.approval_code) { this.alert(`Enter a reference/approval number for ${r.method.replace('_',' ')}`, 'error'); return; }
+        }
+        overlay.remove();
+        resolve({ tenders: rows.map(r => ({ method: r.method, amount: r.amount, approval_code: r.approval_code || null })) });
+      });
+    });
+  },
+
+  _stmRefRequired(method) {
+    return ['credit_card', 'debit_card', 'direct_deposit', 'gift_card'].includes(method);
+  },
+
+  _stmMethodOptionsHtml(selected) {
+    const methods = [['cash', 'Cash'], ['credit_card', 'Credit Card'], ['debit_card', 'Debit Card'], ['check', 'Check'], ['gift_card', 'Gift Card'], ['direct_deposit', 'Direct Deposit']];
+    return `<option value="">Method…</option>` + methods.map(([v, l]) => `<option value="${v}" ${v === selected ? 'selected' : ''}>${l}</option>`).join('');
+  },
+
+  _stmRowHtml(method = '', amount = '') {
+    return `<div class="stm-row" style="margin-bottom:8px;padding:8px;border:1px solid var(--border);border-radius:6px">
+      <div style="display:flex;gap:8px;align-items:center">
+        <select class="stm-method" style="flex:1.4" onchange="App._stmRowMethodChanged(this)">${this._stmMethodOptionsHtml(method)}</select>
+        <input type="number" class="stm-amount" min="0" step="0.01" value="${amount}" placeholder="Amount" style="width:100px;flex-shrink:0" oninput="App._updateStmSummary()">
+        <button type="button" class="btn btn-danger btn-sm" style="flex-shrink:0" onclick="this.closest('.stm-row').remove();App._updateStmSummary()">✕</button>
+      </div>
+      <input type="text" class="stm-ref" placeholder="Ref / Approval #" style="width:100%;margin-top:6px;box-sizing:border-box;${this._stmRefRequired(method) ? '' : 'display:none'}">
+    </div>`;
+  },
+
+  _stmRowMethodChanged(selectEl) {
+    const row = selectEl.closest('.stm-row');
+    const refInput = row.querySelector('.stm-ref');
+    refInput.style.display = this._stmRefRequired(selectEl.value) ? '' : 'none';
+    this._updateStmSummary();
+  },
+
+  _addStmRow() {
+    const rowsEl = document.getElementById('stm-rows');
+    if (!rowsEl) return;
+    const div = document.createElement('div');
+    div.innerHTML = this._stmRowHtml();
+    rowsEl.appendChild(div.firstElementChild);
+    this._updateStmSummary();
+  },
+
+  _getStmRows() {
+    return Array.from(document.querySelectorAll('#stm-rows .stm-row')).map(row => ({
+      method: row.querySelector('.stm-method')?.value || '',
+      amount: parseFloat(row.querySelector('.stm-amount')?.value) || 0,
+      approval_code: row.querySelector('.stm-ref')?.value.trim() || '',
+    })).filter(r => r.method && r.amount > 0);
+  },
+
+  _updateStmSummary() {
+    const total = this._stmTotal || 0;
+    const summary = document.getElementById('stm-summary');
+    const confirmBtn = document.getElementById('stm-confirm');
+    if (!summary) return;
+    const rows = this._getStmRows();
+    const applied = parseFloat(rows.reduce((sum, r) => sum + r.amount, 0).toFixed(2));
+    const remaining = parseFloat((total - applied).toFixed(2));
+    const balanced = Math.abs(remaining) <= 0.005;
+    summary.style.color = balanced ? 'var(--success)' : 'var(--danger)';
+    summary.textContent = balanced
+      ? `Applied ${this.fmt(applied)} of ${this.fmt(total)} — balanced ✓`
+      : `Applied ${this.fmt(applied)} of ${this.fmt(total)} — Remaining ${this.fmt(remaining)}`;
+    if (confirmBtn) confirmBtn.disabled = !balanced || rows.length < 2;
+  },
+
   // ─── Alternate Currency Helpers ───────────────────────────
   _renderAltCurrenciesTable() {
     const base = this.activeCurrency || this.settings.currency || 'USD';
@@ -2015,8 +2126,9 @@ const App = {
             <button class="pay-btn pay-card" onclick="App.closeModal();App.processPayment('debit_card')"><span>💳</span> Debit Card<span>Debit</span></button>
             <button class="pay-btn pay-check" onclick="App.closeModal();App.processPayment('check')"><span>🏦</span> Check<span>Personal / Business</span></button>
             <button class="pay-btn" style="background:#9C27B0;color:#fff;" onclick="App.closeModal();App.processPayment('credit')"><span>🧾</span> Credit<span>Charge Account</span></button>
-            <button class="pay-btn pay-split" onclick="App.closeModal();App.processPayment('gift_card')"><span>🎁</span> Gift Card<span>Stored Value</span></button>
+            <button class="pay-btn" style="background:#EC407A;color:#fff;" onclick="App.closeModal();App.processPayment('gift_card')"><span>🎁</span> Gift Card<span>Stored Value</span></button>
             <button class="pay-btn" style="background:#0277BD;color:#fff;" onclick="App.closeModal();App.processPayment('direct_deposit')"><span>🏛️</span> Direct Deposit<span>Bank Transfer</span></button>
+            <button class="pay-btn pay-split" onclick="App.closeModal();App.processPayment('split')"><span>➗</span> Split Tender<span>Multiple Methods</span></button>
           </div>
         </div>
       </div>`);
@@ -2480,6 +2592,7 @@ const App = {
     let changeAmount = 0;
     let cashResult = null;
     let approvalCode = null;
+    let splitTenders = null;
 
     if (method === 'cash') {
       cashResult = await this.showCashTenderModal(total);
@@ -2495,6 +2608,10 @@ const App = {
     } else if (method === 'gift_card') {
       approvalCode = await this.showGiftCardModal();
       if (approvalCode === null) return;
+    } else if (method === 'split') {
+      const splitResult = await this.showSplitTenderModal(total);
+      if (!splitResult) return;
+      splitTenders = splitResult.tenders;
     }
 
     const isTaxExempt = this.isCartTaxExempt();
@@ -2518,6 +2635,7 @@ const App = {
         tax_exempt: isTaxExempt ? 1 : 0,
         tax_exemption_number: isTaxExempt ? this.cartTaxExemptionNumber() : null,
         approval_code: approvalCode || null,
+        tenders: splitTenders,
       });
 
       // Record promo code usage
@@ -2856,6 +2974,16 @@ const App = {
     if (aqBar) aqBar.style.display = 'none';
   },
 
+  // Itemized per-leg rows for a split-tender sale's receipt, replacing the
+  // single Payment/Tendered/Approval-code block used for normal sales.
+  _splitPaymentReceiptRows(tx) {
+    const payments = tx.payments || [];
+    return payments.map(p => {
+      const refLabel = p.payment_method === 'direct_deposit' ? 'Ref #' : p.payment_method === 'gift_card' ? 'Gift Card #' : (p.payment_method === 'credit_card' || p.payment_method === 'debit_card') ? 'Approval' : null;
+      return `<div class="receipt-row"><span>${p.payment_method.replace('_',' ').toUpperCase()}</span><span>${this.fmt(p.amount)}</span></div>${p.approval_code && refLabel ? `<div class="receipt-row" style="font-size:10px;color:#666"><span>${refLabel}</span><span>${p.approval_code}</span></div>` : ''}`;
+    }).join('');
+  },
+
   showReceipt(tx, change = 0, cashResult = null) {
     const items = tx.items || [];
     const storeName = this.settings.store_name || 'My Store';
@@ -2892,9 +3020,9 @@ const App = {
             ${tx.discount_amount > 0 ? `<div class="receipt-row"><span>Discount${tx.promotion_code ? ` (${tx.promotion_code})` : ''}</span><span>-${this.fmt(tx.discount_amount)}</span></div>${tx.promotion_name ? `<div style="color:#666;font-size:11px;padding-left:4px">${tx.promotion_name}</div>` : ''}` : ''}
             <hr>
             <div class="receipt-row receipt-total"><span>TOTAL</span><span>${this.fmt(tx.total)}</span></div>
-            <div class="receipt-row"><span>Payment</span><span>${tx.payment_method.replace('_',' ').toUpperCase()}</span></div>
+            ${tx.payment_method === 'split' ? this._splitPaymentReceiptRows(tx) : `<div class="receipt-row"><span>Payment</span><span>${tx.payment_method.replace('_',' ').toUpperCase()}</span></div>
             ${tx.amount_tendered > tx.total ? (cashResult?.rate > 1 ? `<div class="receipt-row"><span>Tendered (${cashResult.currency})</span><span>${cashResult.currency} ${cashResult.tenderedAlt.toFixed(2)}</span></div><div class="receipt-row" style="font-size:10px;color:#666"><span>Equivalent</span><span>${this.fmt(tx.amount_tendered)}</span></div><div class="receipt-row"><span>Change</span><span>${this.fmt(change)}</span></div>` : `<div class="receipt-row"><span>Tendered</span><span>${this.fmt(tx.amount_tendered)}</span></div><div class="receipt-row"><span>Change</span><span>${this.fmt(change)}</span></div>`) : ''}
-            ${tx.approval_code ? `<div class="receipt-row"><span>${tx.payment_method === 'direct_deposit' ? 'Deposit Ref #' : tx.payment_method === 'gift_card' ? 'Gift Card #' : 'Approval Code'}</span><span style="font-family:monospace;font-weight:600">${tx.approval_code}</span></div>` : ''}
+            ${tx.approval_code ? `<div class="receipt-row"><span>${tx.payment_method === 'direct_deposit' ? 'Deposit Ref #' : tx.payment_method === 'gift_card' ? 'Gift Card #' : 'Approval Code'}</span><span style="font-family:monospace;font-weight:600">${tx.approval_code}</span></div>` : ''}`}
             <hr>
             <div style="text-align:center;margin-top:4px">${footer}</div>
           </div>
@@ -2943,16 +3071,24 @@ const App = {
     ].filter(Boolean);
 
     const tenderRows = [];
-    if (tx.amount_tendered > tx.total) {
-      if (cashResult?.rate > 1) {
-        tenderRows.push([`Tendered (${cashResult.currency})`, `${cashResult.currency} ${cashResult.tenderedAlt.toFixed(2)}`], ['Equivalent', this.fmt(tx.amount_tendered)], ['Change', this.fmt(change)]);
-      } else {
-        tenderRows.push(['Tendered', this.fmt(tx.amount_tendered)], ['Change', this.fmt(change)]);
+    if (tx.payment_method === 'split') {
+      (tx.payments || []).forEach(p => {
+        const refLabel = p.payment_method === 'direct_deposit' ? 'Ref #' : p.payment_method === 'gift_card' ? 'Gift Card #' : (p.payment_method === 'credit_card' || p.payment_method === 'debit_card') ? 'Approval' : null;
+        tenderRows.push([p.payment_method.replace('_',' ').toUpperCase(), this.fmt(p.amount)]);
+        if (p.approval_code && refLabel) tenderRows.push([refLabel, p.approval_code]);
+      });
+    } else {
+      if (tx.amount_tendered > tx.total) {
+        if (cashResult?.rate > 1) {
+          tenderRows.push([`Tendered (${cashResult.currency})`, `${cashResult.currency} ${cashResult.tenderedAlt.toFixed(2)}`], ['Equivalent', this.fmt(tx.amount_tendered)], ['Change', this.fmt(change)]);
+        } else {
+          tenderRows.push(['Tendered', this.fmt(tx.amount_tendered)], ['Change', this.fmt(change)]);
+        }
       }
-    }
-    if (tx.approval_code) {
-      const label = tx.payment_method === 'direct_deposit' ? 'Deposit Ref #' : tx.payment_method === 'gift_card' ? 'Gift Card #' : 'Approval Code';
-      tenderRows.push([label, tx.approval_code]);
+      if (tx.approval_code) {
+        const label = tx.payment_method === 'direct_deposit' ? 'Deposit Ref #' : tx.payment_method === 'gift_card' ? 'Gift Card #' : 'Approval Code';
+        tenderRows.push([label, tx.approval_code]);
+      }
     }
 
     const win = window.open('', '_blank', 'width=850,height=1000');
@@ -7594,9 +7730,12 @@ const App = {
             <div><span style="color:var(--text-muted)">Customer:</span> ${tx.customer_name || 'Walk-in'}</div>
             <div><span style="color:var(--text-muted)">Employee:</span> ${tx.employee_name || '—'}</div>
             <div><span style="color:var(--text-muted)">Branch:</span> ${tx.branch_name || '—'}</div>
-            <div><span style="color:var(--text-muted)">Payment:</span> ${tx.payment_method.replace('_',' ')}</div>
+            <div><span style="color:var(--text-muted)">Payment:</span> ${tx.payment_method === 'split' ? 'SPLIT' : tx.payment_method.replace('_',' ')}</div>
             <div><span style="color:var(--text-muted)">Tendered:</span> ${this.fmt(tx.amount_tendered)}</div>
           </div>
+          ${tx.payment_method === 'split' ? `<div style="margin-bottom:14px;font-size:13px;border:1px solid var(--border);border-radius:6px;padding:8px 12px">
+            ${(tx.payments||[]).map(p => `<div style="display:flex;justify-content:space-between;padding:2px 0"><span>${p.payment_method.replace('_',' ')}${p.approval_code ? ` <span style="color:var(--text-muted);font-size:11px">(${p.approval_code})</span>` : ''}</span><span>${this.fmt(p.amount)}</span></div>`).join('')}
+          </div>` : ''}
           <table style="margin-bottom:12px">
             <thead><tr><th>Item</th><th>SKU</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
             <tbody>${tx.items.map(i => `<tr><td>${i.product_name}</td><td style="font-family:monospace;font-size:12px">${i.sku}</td><td style="text-align:center">${i.quantity}</td><td>${this.fmt(i.unit_price)}</td><td class="fw-600">${this.fmt(i.total)}</td></tr>`).join('')}</tbody>

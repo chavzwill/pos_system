@@ -129,6 +129,14 @@ async function _init() {
       tax_amount REAL DEFAULT 0,
       total REAL NOT NULL
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS transaction_payments (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      transaction_id INTEGER NOT NULL REFERENCES transactions(id),
+      payment_method TEXT NOT NULL,
+      amount REAL NOT NULL DEFAULT 0,
+      approval_code TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT,
@@ -1587,6 +1595,7 @@ async function _init() {
     'CREATE INDEX IF NOT EXISTS idx_transactions_created_at ON transactions(created_at)',
     'CREATE INDEX IF NOT EXISTS idx_transaction_items_transaction_id ON transaction_items(transaction_id)',
     'CREATE INDEX IF NOT EXISTS idx_transaction_items_product_id ON transaction_items(product_id)',
+    'CREATE INDEX IF NOT EXISTS idx_transaction_payments_transaction_id ON transaction_payments(transaction_id)',
     'CREATE INDEX IF NOT EXISTS idx_quotation_items_quote_id ON quotation_items(quote_id)',
     'CREATE INDEX IF NOT EXISTS idx_quotation_item_sources_quotation_item_id ON quotation_item_sources(quotation_item_id)',
     'CREATE INDEX IF NOT EXISTS idx_rental_agreements_customer_id ON rental_agreements(customer_id)',

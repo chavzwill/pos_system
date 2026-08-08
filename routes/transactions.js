@@ -136,13 +136,15 @@ router.get('/:id', requireAuth, async (req, res) => {
     if (!tx) return res.status(404).json({ error: 'Transaction not found' });
     const { rows: items } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ?', args: [req.params.id] });
     tx.items = items;
+    const { rows: payments } = await db.execute({ sql: 'SELECT * FROM transaction_payments WHERE transaction_id = ?', args: [req.params.id] });
+    tx.payments = payments;
     res.json(tx);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/', requirePermission('pos'), async (req, res) => {
   try {
-    const { customer_id, employee_id, drawer_session_id, items, discount_amount, promotion_code, promotion_name, payment_method, amount_tendered, notes, source_return_id, store_credit_applied, cash_back_applied, quote_id, tax_exempt, tax_exemption_number, approval_code } = req.body;
+    const { customer_id, employee_id, drawer_session_id, items, discount_amount, promotion_code, promotion_name, payment_method, amount_tendered, notes, source_return_id, store_credit_applied, cash_back_applied, quote_id, tax_exempt, tax_exemption_number, approval_code, tenders } = req.body;
     let { branch_id } = req.body;
     if (!items || items.length === 0) return res.status(400).json({ error: 'No items in transaction' });
 
@@ -196,7 +198,21 @@ router.post('/', requirePermission('pos'), async (req, res) => {
     }
 
     const total = parseFloat((subtotal + tax_amount - disc - storeCredit - cashBack).toFixed(2));
-    const method = payment_method || 'cash';
+
+    // Split tender: an optional array of {method, amount, approval_code} legs
+    // that together cover the total, instead of a single payment_method.
+    // Charge Account is deliberately not allowed as a leg — it has its own
+    // AR side effects (account_balance, credit checks) that assume the whole
+    // transaction total, not a partial amount.
+    let tenderLegs = null;
+    if (tenders && tenders.length) {
+      if (tenders.some(leg => leg.method === 'credit')) return res.status(400).json({ error: 'Charge Account cannot be combined with other payment methods in a split payment' });
+      const legSum = parseFloat(tenders.reduce((sum, leg) => sum + parseFloat(leg.amount || 0), 0).toFixed(2));
+      if (Math.abs(legSum - total) > 0.01) return res.status(400).json({ error: `Split tender amounts (${legSum.toFixed(2)}) don't match the total (${total.toFixed(2)})` });
+      tenderLegs = tenders.map(leg => ({ payment_method: leg.method, amount: parseFloat(leg.amount || 0), approval_code: leg.approval_code || null }));
+    }
+
+    const method = tenderLegs ? (tenderLegs.length > 1 ? 'split' : tenderLegs[0].payment_method) : (payment_method || 'cash');
     const isCredit = method === 'credit';
 
     if (isCredit && customer_id) {
@@ -206,15 +222,21 @@ router.post('/', requirePermission('pos'), async (req, res) => {
       if (cust.account_blocked) return res.status(400).json({ error: 'Customer account is blocked due to overdue payment. Please settle the outstanding balance first.' });
     }
 
-    const tendered = parseFloat(amount_tendered || (isCredit ? 0 : total));
-    const change = isCredit ? 0 : parseFloat((tendered - total).toFixed(2));
+    const tendered = tenderLegs ? total : parseFloat(amount_tendered || (isCredit ? 0 : total));
+    const change = tenderLegs ? 0 : (isCredit ? 0 : parseFloat((tendered - total).toFixed(2)));
+    const finalApprovalCode = tenderLegs ? (tenderLegs.length === 1 ? tenderLegs[0].approval_code : null) : (approval_code || null);
 
     const tx = await db.transaction('write');
     let committed = false;
     try {
       const txSource = req.apiKey ? 'online' : 'pos';
-      const txResult = await tx.execute({ sql: `INSERT INTO transactions (transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,discount_amount,promotion_code,promotion_name,total,payment_method,amount_tendered,change_amount,is_credit,notes,source_return_id,store_credit_applied,cash_back_applied,tax_exempt,tax_exemption_number,approval_code,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [transaction_number, customer_id || null, employee_id || 1, branch_id || null, drawer_session_id || null, subtotal, tax_amount, disc, promotion_code || null, promotion_name || null, total, method, tendered, change > 0 ? change : 0, isCredit ? 1 : 0, notes || null, source_return_id || null, storeCredit > 0 ? storeCredit : 0, cashBack > 0 ? cashBack : 0, isTaxExempt, tax_exemption_number || null, approval_code || null, txSource] });
+      const txResult = await tx.execute({ sql: `INSERT INTO transactions (transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,discount_amount,promotion_code,promotion_name,total,payment_method,amount_tendered,change_amount,is_credit,notes,source_return_id,store_credit_applied,cash_back_applied,tax_exempt,tax_exemption_number,approval_code,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [transaction_number, customer_id || null, employee_id || 1, branch_id || null, drawer_session_id || null, subtotal, tax_amount, disc, promotion_code || null, promotion_name || null, total, method, tendered, change > 0 ? change : 0, isCredit ? 1 : 0, notes || null, source_return_id || null, storeCredit > 0 ? storeCredit : 0, cashBack > 0 ? cashBack : 0, isTaxExempt, tax_exemption_number || null, finalApprovalCode, txSource] });
       const txId = Number(txResult.lastInsertRowid);
+
+      const paymentLegs = tenderLegs || [{ payment_method: method, amount: total, approval_code: finalApprovalCode }];
+      for (const leg of paymentLegs) {
+        await tx.execute({ sql: 'INSERT INTO transaction_payments (transaction_id, payment_method, amount, approval_code) VALUES (?,?,?,?)', args: [txId, leg.payment_method, leg.amount, leg.approval_code || null] });
+      }
 
       for (const { product, variation, quantity, unit_price, lineTotal, lineTax, discount } of processedItems) {
         const itemName = variation ? `${product.name} — ${variation.name}` : product.name;
@@ -272,6 +294,8 @@ router.post('/', requirePermission('pos'), async (req, res) => {
       const { rows: [savedTx] } = await db.execute({ sql: `SELECT t.*, c.first_name || ' ' || c.last_name as customer_name, b.name as branch_name, b.address as branch_address, b.city as branch_city, b.state as branch_state, b.zip as branch_zip, b.phone as branch_phone FROM transactions t LEFT JOIN customers c ON t.customer_id = c.id LEFT JOIN branches b ON t.branch_id = b.id WHERE t.id = ?`, args: [txId] });
       const { rows: txItems } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ?', args: [txId] });
       savedTx.items = txItems;
+      const { rows: txPayments } = await db.execute({ sql: 'SELECT * FROM transaction_payments WHERE transaction_id = ?', args: [txId] });
+      savedTx.payments = txPayments;
       // Auto-calculate commission (non-blocking, best-effort)
       try { await calcCommission(savedTx.employee_id, savedTx.total, 'transaction', txId, savedTx.transaction_number); } catch(e) {}
       res.status(201).json(savedTx);

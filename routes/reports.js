@@ -14,7 +14,23 @@ router.get('/sales', requirePermission('reports'), async (req, res) => {
 
     const { rows: [summary] } = await db.execute({ sql: `SELECT COUNT(*) as transaction_count, SUM(total) as gross_sales, SUM(tax_amount) as total_tax, SUM(discount_amount) as total_discounts, AVG(total) as avg_order FROM transactions WHERE status='completed' AND date(created_at) BETWEEN date(?) AND date(?)${bf}`, args: [s, e, ...bp] });
     const { rows: byDay } = await db.execute({ sql: `SELECT date(created_at) as date, COUNT(*) as transactions, SUM(total) as sales FROM transactions WHERE status='completed' AND date(created_at) BETWEEN date(?) AND date(?)${bf} GROUP BY date(created_at) ORDER BY date`, args: [s, e, ...bp] });
-    const { rows: byMethod } = await db.execute({ sql: `SELECT payment_method, COUNT(*) as count, SUM(total) as total FROM transactions WHERE status='completed' AND date(created_at) BETWEEN date(?) AND date(?)${bf} GROUP BY payment_method`, args: [s, e, ...bp] });
+    // Sums per-leg amounts from transaction_payments (so a split-tender
+    // sale's cash portion and card portion land in separate buckets),
+    // falling back to the whole transaction total for any transaction with
+    // no transaction_payments rows.
+    const bfAliased = branch_id ? ' AND t.branch_id = ?' : '';
+    const { rows: byMethod } = await db.execute({ sql: `
+      SELECT payment_method, COUNT(DISTINCT transaction_id) as count, SUM(amount) as total
+      FROM (
+        SELECT tp.transaction_id, tp.payment_method, tp.amount
+        FROM transaction_payments tp JOIN transactions t ON t.id = tp.transaction_id
+        WHERE t.status='completed' AND date(t.created_at) BETWEEN date(?) AND date(?)${bfAliased}
+        UNION ALL
+        SELECT t.id as transaction_id, t.payment_method, t.total as amount
+        FROM transactions t
+        WHERE t.status='completed' AND date(t.created_at) BETWEEN date(?) AND date(?)${bfAliased} AND NOT EXISTS (SELECT 1 FROM transaction_payments tp2 WHERE tp2.transaction_id = t.id)
+      )
+      GROUP BY payment_method`, args: [s, e, ...bp, s, e, ...bp] });
 
     res.json({ summary, byDay, byMethod });
   } catch(e) { res.status(500).json({ error: e.message }); }
