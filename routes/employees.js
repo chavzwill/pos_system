@@ -136,7 +136,7 @@ router.post('/login', async (req, res) => {
     const { username, pin, password } = req.body;
     let emp = null;
     if (password) {
-      const { rows: [row] } = await db.execute({ sql: `SELECT e.id, e.first_name, e.last_name, e.username, e.password, e.role, e.must_change_password, e.security_group_id, e.default_branch_id, sg.name as security_group_name, sg.permissions, b.name as default_branch_name FROM employees e LEFT JOIN security_groups sg ON e.security_group_id = sg.id LEFT JOIN branches b ON e.default_branch_id = b.id WHERE e.username=? AND e.active=1`, args: [username] });
+      const { rows: [row] } = await db.execute({ sql: `SELECT e.id, e.first_name, e.last_name, e.username, e.password, e.role, e.must_change_password, e.security_group_id, e.default_branch_id, e.is_driver, e.is_operator, e.is_security, sg.name as security_group_name, sg.permissions, b.name as default_branch_name FROM employees e LEFT JOIN security_groups sg ON e.security_group_id = sg.id LEFT JOIN branches b ON e.default_branch_id = b.id WHERE e.username=? AND e.active=1`, args: [username] });
       if (row) {
         // Lazy bcrypt migration: legacy plaintext passwords are compared
         // directly once, then immediately rehashed on success so every
@@ -155,7 +155,7 @@ router.post('/login', async (req, res) => {
         if (ok) { delete row.password; emp = row; }
       }
     } else if (pin) {
-      const { rows: [row] } = await db.execute({ sql: `SELECT e.id, e.first_name, e.last_name, e.username, e.role, e.must_change_password, e.security_group_id, e.default_branch_id, sg.name as security_group_name, sg.permissions, b.name as default_branch_name FROM employees e LEFT JOIN security_groups sg ON e.security_group_id = sg.id LEFT JOIN branches b ON e.default_branch_id = b.id WHERE e.username=? AND e.pin=? AND e.active=1`, args: [username, pin] });
+      const { rows: [row] } = await db.execute({ sql: `SELECT e.id, e.first_name, e.last_name, e.username, e.role, e.must_change_password, e.security_group_id, e.default_branch_id, e.is_driver, e.is_operator, e.is_security, sg.name as security_group_name, sg.permissions, b.name as default_branch_name FROM employees e LEFT JOIN security_groups sg ON e.security_group_id = sg.id LEFT JOIN branches b ON e.default_branch_id = b.id WHERE e.username=? AND e.pin=? AND e.active=1`, args: [username, pin] });
       emp = row || null;
     }
     if (!emp) return res.status(401).json({ error: 'Invalid credentials' });

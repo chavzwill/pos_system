@@ -492,6 +492,14 @@ body.pos-kiosk #sidebar, body.pos-kiosk #topbar { display: none; }
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M3 13h8V3H3v10zm0 8h8v-6H3v6zm10 0h8V11h-8v10zm0-18v6h8V3h-8z"/></svg>
       Dashboard
     </div>
+    <div class="nav-item" data-section="driver-dashboard" style="display:none">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M20 8h-3V4H3c-1.1 0-2 .9-2 2v11h2c0 1.66 1.34 3 3 3s3-1.34 3-3h6c0 1.66 1.34 3 3 3s3-1.34 3-3h2v-5l-3-4zM6 18.5c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5zm13.5-9l1.96 2.5H17V9.5h2.5zm-1.5 9c-.83 0-1.5-.67-1.5-1.5s.67-1.5 1.5-1.5 1.5.67 1.5 1.5-.67 1.5-1.5 1.5z"/></svg>
+      My Deliveries
+    </div>
+    <div class="nav-item" data-section="guard-dashboard" style="display:none">
+      <svg viewBox="0 0 24 24" fill="currentColor"><path d="M12 1L3 5v6c0 5.55 3.84 10.74 9 12 5.16-1.26 9-6.45 9-12V5l-9-4zm-1 13.93l-3.5-3.5 1.41-1.41L11 12.1l5.59-5.59L18 7.93l-7 7z"/></svg>
+      My Verifications
+    </div>
     <div class="nav-item" data-section="sales-hub">
       <svg viewBox="0 0 24 24" fill="currentColor"><path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/></svg>
       Sales
@@ -779,7 +787,13 @@ const App = {
     this.applyNavPermissions();
     const perms = this.currentUser.permissions;
     const allSections = ['dashboard','pos','inventory','customers','transactions','reports','employees','suppliers','purchasing','transfers','quotations','accounts','branches','security','settings'];
-    const firstSection = perms ? (allSections.find(s => this.can(s)) || 'dashboard') : 'dashboard';
+    // Drivers/guards land on their own purpose-built view instead of the
+    // generic (manager-oriented) Dashboard — neither role needs sales
+    // totals or low-stock counts, just their rental checkpoint queue.
+    let firstSection;
+    if (this.currentUser.is_driver) firstSection = 'driver-dashboard';
+    else if (this.currentUser.is_security) firstSection = 'guard-dashboard';
+    else firstSection = perms ? (allSections.find(s => this.can(s)) || 'dashboard') : 'dashboard';
     this.showSection(firstSection);
     this.checkLowStock();
   },
@@ -1140,10 +1154,22 @@ const App = {
   },
 
   applyNavPermissions() {
+    // Flag-based, not permission-based — these two are shown purely off the
+    // employee's is_driver/is_security attribute (Employees → edit), same
+    // idea as those flags filtering the delivery/security dropdowns
+    // elsewhere. Applied unconditionally, ahead of the `!perms` early
+    // return below, so it still works for an employee with no permissions
+    // object at all.
+    const driverEl = document.querySelector('.nav-item[data-section="driver-dashboard"]');
+    if (driverEl) driverEl.style.display = this.currentUser.is_driver ? '' : 'none';
+    const guardEl = document.querySelector('.nav-item[data-section="guard-dashboard"]');
+    if (guardEl) guardEl.style.display = this.currentUser.is_security ? '' : 'none';
+
     const perms = this.currentUser.permissions;
     if (!perms) return;
     document.querySelectorAll('.nav-item[data-section]').forEach(el => {
       const s = el.dataset.section;
+      if (s === 'driver-dashboard' || s === 'guard-dashboard') return;
       // Cash Drawers nav requires the drawers_manage sub-permission specifically;
       // the parent drawers key only grants POS drawer access
       const show = s === 'drawers' ? !!perms.drawers_manage : s === 'online-orders' ? this.can('transactions') : this._hubGroups[s] ? this.canAccessHub(s) : this.can(s);
@@ -1168,7 +1194,7 @@ const App = {
 
   async showSection(name) {
     const perms = this.currentUser?.permissions;
-    const sectionAllowed = name === 'online-orders' ? this.can('transactions') : name === 'rental-items' ? this.can('rentals') : name === 'rental-deposits' ? this.can('rentals') : name === 'rental-dispatch' ? this.can('rentals') : name === 'transfer-dispatch' ? this.can('transfers') : name === 'purchase-requests' ? this.can('purchase_requests') : this._hubGroups[name] ? this.canAccessHub(name) : this.can(name);
+    const sectionAllowed = name === 'driver-dashboard' ? !!this.currentUser?.is_driver : name === 'guard-dashboard' ? !!this.currentUser?.is_security : name === 'online-orders' ? this.can('transactions') : name === 'rental-items' ? this.can('rentals') : name === 'rental-deposits' ? this.can('rentals') : name === 'rental-dispatch' ? this.can('rentals') : name === 'transfer-dispatch' ? this.can('transfers') : name === 'purchase-requests' ? this.can('purchase_requests') : this._hubGroups[name] ? this.canAccessHub(name) : this.can(name);
     if (perms && !sectionAllowed) return;
     this.section = name;
     this.closeModal();
@@ -1178,7 +1204,7 @@ const App = {
       const hub = this._hubGroups[ds];
       el.classList.toggle('active', ds === name || !!(hub && hub.children.some(c => c.section === name)));
     });
-    const titles = { dashboard: 'Dashboard', pos: 'Point of Sale', inventory: 'Retail Inventory Management', services: 'Services & Non-Inventory Items', rentals: 'Rentals', 'rental-items': 'Rental Items', dispatch: 'Dispatch', 'rental-dispatch': 'Rental Dispatch', 'transfer-dispatch': 'Branch Transfer Dispatch', 'rental-deposits': 'Rental Deposits & Credit Notes', 'purchase-requests': 'Purchase Requests', layaway: 'Layaway', customers: 'Customers', transactions: 'Transactions', 'online-orders': 'Online Orders', reports: 'Reports & Analytics', employees: 'Employees', settings: 'Settings', suppliers: 'Suppliers', purchasing: 'Purchasing', quotations: 'Quotations', accounts: 'Accounts Receivable', branches: 'Branch Management', security: 'Security Groups', transfers: 'Branch Transfers', crm: 'CRM & Sales', commissions: 'Commission Tracking', warehouse: 'Warehouse Management', shipping: 'Shipping', 'cycle-counts': 'Cycle Counts', drawers: 'Cash Drawers', promotions: 'Promotions', 'discount-cards': 'Discount Cards', 'cash-back-cards': 'Cash Back Cards', 'purchasing-hub': 'Purchasing', 'sales-hub': 'Sales', 'accounts-hub': 'Accounts', 'warehouse-hub': 'Warehouse', 'admin-hub': 'Admin' };
+    const titles = { dashboard: 'Dashboard', 'driver-dashboard': 'My Deliveries', 'guard-dashboard': 'My Verifications', pos: 'Point of Sale', inventory: 'Retail Inventory Management', services: 'Services & Non-Inventory Items', rentals: 'Rentals', 'rental-items': 'Rental Items', dispatch: 'Dispatch', 'rental-dispatch': 'Rental Dispatch', 'transfer-dispatch': 'Branch Transfer Dispatch', 'rental-deposits': 'Rental Deposits & Credit Notes', 'purchase-requests': 'Purchase Requests', layaway: 'Layaway', customers: 'Customers', transactions: 'Transactions', 'online-orders': 'Online Orders', reports: 'Reports & Analytics', employees: 'Employees', settings: 'Settings', suppliers: 'Suppliers', purchasing: 'Purchasing', quotations: 'Quotations', accounts: 'Accounts Receivable', branches: 'Branch Management', security: 'Security Groups', transfers: 'Branch Transfers', crm: 'CRM & Sales', commissions: 'Commission Tracking', warehouse: 'Warehouse Management', shipping: 'Shipping', 'cycle-counts': 'Cycle Counts', drawers: 'Cash Drawers', promotions: 'Promotions', 'discount-cards': 'Discount Cards', 'cash-back-cards': 'Cash Back Cards', 'purchasing-hub': 'Purchasing', 'sales-hub': 'Sales', 'accounts-hub': 'Accounts', 'warehouse-hub': 'Warehouse', 'admin-hub': 'Admin' };
     document.getElementById('topbar-title').innerHTML = this.buildBreadcrumb(name, titles[name] || name);
     const content = document.getElementById('content');
     content.style.padding = name === 'pos' ? '0' : '20px';
@@ -1189,7 +1215,7 @@ const App = {
     // terminal layout; the POS page's own Exit button calls showSection()
     // with a different name to leave kiosk mode again.
     document.body.classList.toggle('pos-kiosk', name === 'pos');
-    const renders = { dashboard: () => this.renderDashboard(), pos: () => this.renderPOS(), inventory: () => this.renderInventory(), services: () => this.renderServices(), rentals: () => this.renderRentals(), 'rental-items': () => this.renderRentalItems(), dispatch: () => this.renderHub('dispatch'), 'rental-dispatch': () => this.renderRentalDispatch(), 'transfer-dispatch': () => this.renderTransferDispatch(), 'rental-deposits': () => this.renderRentalDeposits(), 'purchase-requests': () => this.renderPurchasing('requests'), layaway: () => this.renderLayaway(), customers: () => this.renderCustomers(), transactions: () => this.renderTransactions(), 'online-orders': () => this.renderOnlineOrders(), reports: () => this.renderReports(), employees: () => this.renderEmployees(), settings: () => this.renderSettings(), suppliers: () => this.renderSuppliers(), purchasing: () => this.renderPurchasing(), quotations: () => this.renderQuotations(), accounts: () => this.renderAccounts(), branches: () => this.renderBranches(), security: () => this.renderSecurity(), transfers: () => this.renderTransfers(), crm: () => this.renderCRM(), commissions: () => this.renderCommissions(), warehouse: () => this.renderWarehouse(), shipping: () => this.renderShipping(), 'cycle-counts': () => this.renderCycleCounts(), drawers: () => this.renderDrawers(), promotions: () => this.renderPromotions(), 'discount-cards': () => this.renderDiscountCards(), 'cash-back-cards': () => this.renderCashBackCards(), 'purchasing-hub': () => this.renderHub('purchasing-hub'), 'sales-hub': () => this.renderHub('sales-hub'), 'accounts-hub': () => this.renderHub('accounts-hub'), 'warehouse-hub': () => this.renderHub('warehouse-hub'), 'admin-hub': () => this.renderHub('admin-hub') };
+    const renders = { dashboard: () => this.renderDashboard(), 'driver-dashboard': () => this.renderDriverDashboard(), 'guard-dashboard': () => this.renderGuardDashboard(), pos: () => this.renderPOS(), inventory: () => this.renderInventory(), services: () => this.renderServices(), rentals: () => this.renderRentals(), 'rental-items': () => this.renderRentalItems(), dispatch: () => this.renderHub('dispatch'), 'rental-dispatch': () => this.renderRentalDispatch(), 'transfer-dispatch': () => this.renderTransferDispatch(), 'rental-deposits': () => this.renderRentalDeposits(), 'purchase-requests': () => this.renderPurchasing('requests'), layaway: () => this.renderLayaway(), customers: () => this.renderCustomers(), transactions: () => this.renderTransactions(), 'online-orders': () => this.renderOnlineOrders(), reports: () => this.renderReports(), employees: () => this.renderEmployees(), settings: () => this.renderSettings(), suppliers: () => this.renderSuppliers(), purchasing: () => this.renderPurchasing(), quotations: () => this.renderQuotations(), accounts: () => this.renderAccounts(), branches: () => this.renderBranches(), security: () => this.renderSecurity(), transfers: () => this.renderTransfers(), crm: () => this.renderCRM(), commissions: () => this.renderCommissions(), warehouse: () => this.renderWarehouse(), shipping: () => this.renderShipping(), 'cycle-counts': () => this.renderCycleCounts(), drawers: () => this.renderDrawers(), promotions: () => this.renderPromotions(), 'discount-cards': () => this.renderDiscountCards(), 'cash-back-cards': () => this.renderCashBackCards(), 'purchasing-hub': () => this.renderHub('purchasing-hub'), 'sales-hub': () => this.renderHub('sales-hub'), 'accounts-hub': () => this.renderHub('accounts-hub'), 'warehouse-hub': () => this.renderHub('warehouse-hub'), 'admin-hub': () => this.renderHub('admin-hub') };
     if (renders[name]) await renders[name]();
   },
 
@@ -1743,6 +1769,92 @@ const App = {
   },
 
   // ─── Dashboard ────────────────────────────────────────────
+  // ─── Driver / Guard landing dashboards ─────────────────────────────────
+  // Shown instead of the generic (manager-oriented) Dashboard for employees
+  // flagged is_driver/is_security (see enterApp()'s landing-priority
+  // check) — read entirely from the existing GET /rentals/agreements
+  // endpoint, no new backend routes. There's no pre-assignment step for
+  // delivery/pickup drivers or issue-time security (those fields are only
+  // set AS the Issue/Return action itself is completed, not booked ahead
+  // of time), so the "Needed" lists below are the shared pending pool any
+  // driver/guard can act on, paired with a personal history of what this
+  // specific employee has actually done.
+  _rentalDashRow(a, extra = '') {
+    const overdue = a.display_status === 'overdue';
+    return `<div style="display:flex;align-items:center;justify-content:space-between;padding:10px 0;border-bottom:1px solid var(--border)">
+      <div>
+        <div class="fw-600">${a.agreement_number} <span style="font-weight:400;color:var(--text-muted)">— ${a.customer_name||'—'}</span></div>
+        <div style="font-size:12px;color:var(--text-muted)">${a.item_summary||''}</div>
+      </div>
+      <div style="text-align:right">
+        <div style="font-size:12px;${overdue?'color:var(--danger);font-weight:600':'color:var(--text-muted)'}">${overdue?'Overdue — ':''}Due ${this.fmtDate(a.due_date)}</div>
+        ${extra}
+        <button class="btn btn-sm btn-outline" style="margin-top:4px" onclick="App.viewRentalAgreement(${a.id})">View</button>
+      </div>
+    </div>`;
+  },
+
+  _rentalDashSection(title, rows, emptyMsg) {
+    return `<div class="card" style="margin-bottom:16px">
+      <div class="card-header"><span class="card-title">${title}</span></div>
+      ${rows.length ? rows.join('') : `<p style="color:var(--text-muted);margin:0;padding:8px 0">${emptyMsg}</p>`}
+    </div>`;
+  },
+
+  async renderDriverDashboard() {
+    const [awaitingIssue, active, returned] = await Promise.all([
+      this.api('GET', '/rentals/agreements?view=awaiting_issue'),
+      this.api('GET', '/rentals/agreements?view=active'),
+      this.api('GET', '/rentals/agreements?view=returned'),
+    ]);
+    if (this.section !== 'driver-dashboard') return;
+
+    const deliveries = awaitingIssue.filter(a => a.delivery_required && !a.delivery_driver_id);
+    const pickups = active.filter(a => a.pickup_required).sort((a,b) => (a.due_date||'').localeCompare(b.due_date||''));
+
+    const myId = this.currentUser.id;
+    const history = [...awaitingIssue, ...active, ...returned]
+      .filter(a => a.delivery_driver_id === myId || a.pickup_driver_id === myId || a.return_driver_employee_id === myId)
+      .map(a => ({ a, at: a.returned_at || a.checkout_datetime || a.created_at }))
+      .sort((x,y) => (y.at||'').localeCompare(x.at||''))
+      .slice(0, 8)
+      .map(x => x.a);
+
+    document.getElementById('content').innerHTML = `
+      <div class="section-header"><h2>My Deliveries</h2></div>
+      ${this._rentalDashSection('Deliveries Needed', deliveries.map(a => this._rentalDashRow(a)), 'No deliveries waiting to go out.')}
+      ${this._rentalDashSection('Pickups Needed', pickups.map(a => this._rentalDashRow(a)), 'No pickups outstanding.')}
+      ${this._rentalDashSection('My Recent Activity', history.map(a => this._rentalDashRow(a, `<div style="font-size:11px;color:var(--text-muted)">${a.display_status}</div>`)), 'No completed deliveries or pickups yet.')}
+    `;
+  },
+
+  async renderGuardDashboard() {
+    const [awaitingIssue, active, returned] = await Promise.all([
+      this.api('GET', '/rentals/agreements?view=awaiting_issue'),
+      this.api('GET', '/rentals/agreements?view=active'),
+      this.api('GET', '/rentals/agreements?view=returned'),
+    ]);
+    if (this.section !== 'guard-dashboard') return;
+
+    const awaitingCheck = awaitingIssue.filter(a => !a.issue_security_employee_id);
+    const expectedReturns = [...active].sort((a,b) => (a.due_date||'').localeCompare(b.due_date||''));
+
+    const myId = this.currentUser.id;
+    const history = [...awaitingIssue, ...active, ...returned]
+      .filter(a => a.issue_security_employee_id === myId || a.return_security_employee_id === myId)
+      .map(a => ({ a, at: a.return_security_confirmed_at || a.issue_security_confirmed_at || a.created_at }))
+      .sort((x,y) => (y.at||'').localeCompare(x.at||''))
+      .slice(0, 8)
+      .map(x => x.a);
+
+    document.getElementById('content').innerHTML = `
+      <div class="section-header"><h2>My Verifications</h2></div>
+      ${this._rentalDashSection('Awaiting Security Check', awaitingCheck.map(a => this._rentalDashRow(a)), 'Nothing waiting on a security check right now.')}
+      ${this._rentalDashSection('Expected Returns', expectedReturns.map(a => this._rentalDashRow(a)), 'No active rentals outstanding.')}
+      ${this._rentalDashSection('My Recent Verifications', history.map(a => this._rentalDashRow(a, `<div style="font-size:11px;color:var(--text-muted)">${a.display_status}</div>`)), 'No verifications recorded yet.')}
+    `;
+  },
+
   async renderDashboard() {
     document.getElementById('content').innerHTML = '<div class="empty-state"><p>Loading...</p></div>';
     const branches = this.currentUser.branches || [];
