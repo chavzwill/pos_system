@@ -1000,6 +1000,23 @@ async function _init() {
     // poller (server.js) from re-logging the same CRM activity on every
     // tick once a rental has already been flagged.
     'ALTER TABLE rental_agreements ADD COLUMN overdue_notified_at DATETIME',
+    // Chain-of-custody checkpoints, required (not optional) to complete
+    // issue/return — a security guard confirms the item leaving/returning,
+    // the customer signs for it at issue, and a driver confirms collecting
+    // it at return. is_security mirrors is_driver/is_operator above: a flag
+    // that filters the security-employee dropdown in the Issue/Return
+    // modals. return_driver_employee_id is deliberately separate from the
+    // existing pickup_driver_id (a paid-service assignment, only used when
+    // pickup_required) — this one is a security check applied to every
+    // return regardless of whether pickup service was purchased.
+    'ALTER TABLE employees ADD COLUMN is_security INTEGER DEFAULT 0',
+    'ALTER TABLE rental_agreements ADD COLUMN issue_security_employee_id INTEGER REFERENCES employees(id)',
+    'ALTER TABLE rental_agreements ADD COLUMN issue_security_confirmed_at DATETIME',
+    'ALTER TABLE rental_agreements ADD COLUMN issue_customer_signature TEXT',
+    'ALTER TABLE rental_agreements ADD COLUMN return_security_employee_id INTEGER REFERENCES employees(id)',
+    'ALTER TABLE rental_agreements ADD COLUMN return_security_confirmed_at DATETIME',
+    'ALTER TABLE rental_agreements ADD COLUMN return_driver_employee_id INTEGER REFERENCES employees(id)',
+    'ALTER TABLE rental_agreements ADD COLUMN return_driver_confirmed_at DATETIME',
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch(e) {}

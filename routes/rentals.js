@@ -8,6 +8,9 @@ const { runCreditCheck } = require('./customers');
 const { nextNumber } = require('../lib/nextNumber');
 const { calcRentalCommission } = require('./commissions');
 const { logActivity } = require('./crm');
+const path = require('path');
+const fs = require('fs');
+const { cloudUpload } = require('../lib/cloudinary');
 
 // ─── Agreements list/detail ───────────────────────────────────────────────
 
@@ -24,6 +27,9 @@ router.get('/agreements', requirePermission('rentals'), async (req, res) => {
       dd.first_name || ' ' || dd.last_name as delivery_driver_name,
       pd.first_name || ' ' || pd.last_name as pickup_driver_name,
       op.first_name || ' ' || op.last_name as operator_name,
+      ise.first_name || ' ' || ise.last_name as issue_security_employee_name,
+      rse.first_name || ' ' || rse.last_name as return_security_employee_name,
+      rde.first_name || ' ' || rde.last_name as return_driver_employee_name,
       (SELECT COUNT(*) FROM rental_agreement_items WHERE agreement_id = ra.id AND parent_item_id IS NULL) as item_count,
       (SELECT GROUP_CONCAT(product_name || ' x' || quantity, ', ') FROM rental_agreement_items WHERE agreement_id = ra.id AND parent_item_id IS NULL) as item_summary,
       CASE WHEN ra.status = 'active' AND ra.due_date < date('now') THEN 'overdue' ELSE ra.status END as display_status
@@ -37,6 +43,9 @@ router.get('/agreements', requirePermission('rentals'), async (req, res) => {
       LEFT JOIN employees dd ON ra.delivery_driver_id = dd.id
       LEFT JOIN employees pd ON ra.pickup_driver_id = pd.id
       LEFT JOIN employees op ON ra.operator_id = op.id
+      LEFT JOIN employees ise ON ra.issue_security_employee_id = ise.id
+      LEFT JOIN employees rse ON ra.return_security_employee_id = rse.id
+      LEFT JOIN employees rde ON ra.return_driver_employee_id = rde.id
       WHERE 1=1`;
     const params = [];
     if (customer_id) { sql += ' AND ra.customer_id = ?'; params.push(customer_id); }
@@ -63,6 +72,9 @@ router.get('/agreements/:id', requirePermission('rentals'), async (req, res) => 
       dd.first_name || ' ' || dd.last_name as delivery_driver_name,
       pd.first_name || ' ' || pd.last_name as pickup_driver_name,
       op.first_name || ' ' || op.last_name as operator_name,
+      ise.first_name || ' ' || ise.last_name as issue_security_employee_name,
+      rse.first_name || ' ' || rse.last_name as return_security_employee_name,
+      rde.first_name || ' ' || rde.last_name as return_driver_employee_name,
       CASE WHEN ra.status = 'active' AND ra.due_date < date('now') THEN 'overdue' ELSE ra.status END as display_status
       FROM rental_agreements ra
       LEFT JOIN customers c ON ra.customer_id = c.id
@@ -75,6 +87,9 @@ router.get('/agreements/:id', requirePermission('rentals'), async (req, res) => 
       LEFT JOIN employees dd ON ra.delivery_driver_id = dd.id
       LEFT JOIN employees pd ON ra.pickup_driver_id = pd.id
       LEFT JOIN employees op ON ra.operator_id = op.id
+      LEFT JOIN employees ise ON ra.issue_security_employee_id = ise.id
+      LEFT JOIN employees rse ON ra.return_security_employee_id = rse.id
+      LEFT JOIN employees rde ON ra.return_driver_employee_id = rde.id
       WHERE ra.id = ?`, args: [req.params.id] });
     if (!agreement) return res.status(404).json({ error: 'Not found' });
     const { rows: items } = await db.execute({ sql: 'SELECT * FROM rental_agreement_items WHERE agreement_id = ?', args: [req.params.id] });
@@ -307,10 +322,17 @@ router.patch('/agreements/:id/issue', requirePermission('rentals_issue'), async 
     // decided (and charged for) when the rental was created — this step only
     // assigns WHO does it, for whichever of those the agreement already flags
     // as required.
-    const { employee_id, delivery_driver_id, operator_id, issued_at } = req.body;
+    const { employee_id, delivery_driver_id, operator_id, issued_at, security_employee_id, customer_signature } = req.body;
     const { rows: [agreement] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
     if (!agreement) return res.status(404).json({ error: 'Not found' });
     if (agreement.status !== 'awaiting_issue') return res.status(400).json({ error: `This agreement is ${agreement.status}, not awaiting issue` });
+
+    // Chain-of-custody checkpoints — required, not optional, so an item
+    // can't leave the premises without a security guard verifying it and
+    // the customer signing for it. See database.js's migration comment for
+    // why these live as their own columns rather than reusing employee_id.
+    if (!security_employee_id) return res.status(400).json({ error: 'Select the security employee who verified this item leaving' });
+    if (!customer_signature) return res.status(400).json({ error: 'Customer signature is required to issue this rental' });
 
     // Defaults to the moment this request is processed, but staff can back-date
     // it to when the item actually went out (e.g. it sat ready at the counter
@@ -325,18 +347,44 @@ router.patch('/agreements/:id/issue', requirePermission('rentals_issue'), async 
     }
     const today = issuedAt.toISOString().slice(0, 10);
 
+    // The canvas already gives us a base64 PNG client-side, so this skips
+    // multer/multipart entirely — same cloudUpload-or-local-disk fallback
+    // routes/customers.js's ID-scan upload uses, just fed a decoded Buffer
+    // instead of req.file.buffer.
+    const match = /^data:image\/(\w+);base64,(.+)$/.exec(customer_signature);
+    if (!match) return res.status(400).json({ error: 'Invalid signature image' });
+    const sigBuffer = Buffer.from(match[2], 'base64');
+    const cloudResult = await cloudUpload(sigBuffer, {
+      folder: 'pos-system/rental-signatures',
+      public_id: `rental-${req.params.id}-issue-${Date.now()}`,
+      overwrite: true,
+      resource_type: 'image',
+    });
+    let signaturePath;
+    if (cloudResult) {
+      signaturePath = cloudResult.secure_url;
+    } else {
+      const dir = path.join(__dirname, '../uploads/rental-signatures');
+      fs.mkdirSync(dir, { recursive: true });
+      const filename = `rental-${req.params.id}-issue-${Date.now()}.${match[1]}`;
+      fs.writeFileSync(path.join(dir, filename), sigBuffer);
+      signaturePath = `/uploads/rental-signatures/${filename}`;
+    }
+
     await db.execute({
       sql: `UPDATE rental_agreements SET
         status = 'active',
         checkout_date = ?, checkout_datetime = ?,
         issued_at = ?, issued_by = ?,
-        delivery_driver_id = ?, operator_id = ?
+        delivery_driver_id = ?, operator_id = ?,
+        issue_security_employee_id = ?, issue_security_confirmed_at = ?, issue_customer_signature = ?
         WHERE id = ?`,
       args: [
         today, issuedAt.toISOString(),
         issuedAt.toISOString(), employee_id || agreement.employee_id || null,
         agreement.delivery_required ? (delivery_driver_id || null) : null,
         agreement.operator_required ? (operator_id || null) : null,
+        security_employee_id, issuedAt.toISOString(), signaturePath,
         req.params.id,
       ],
     });
@@ -438,8 +486,14 @@ router.patch('/agreements/:id/cancel', requirePermission('rentals_returns'), asy
 
 router.patch('/agreements/:id/return', requirePermission('rentals_returns'), async (req, res) => {
   try {
-    const { items, duration_adjustment_override, payment_method, drawer_session_id, pickup_driver_id, returned_at } = req.body;
+    const { items, duration_adjustment_override, payment_method, drawer_session_id, pickup_driver_id, returned_at, return_security_employee_id, return_driver_employee_id } = req.body;
     if (!items || !items.length) return res.status(400).json({ error: 'At least one item is required' });
+    // Chain-of-custody checkpoints — required on every return regardless of
+    // whether the rental paid for pickup service (that's the separate,
+    // optional pickup_driver_id below); this is the security check on the
+    // physical hand-off itself. See database.js's migration comment.
+    if (!return_security_employee_id) return res.status(400).json({ error: 'Select the security employee signing this item back in' });
+    if (!return_driver_employee_id) return res.status(400).json({ error: 'Select the driver confirming collection of this item' });
 
     const { rows: [agreement] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
     if (!agreement) return res.status(404).json({ error: 'Not found' });
@@ -580,7 +634,7 @@ router.patch('/agreements/:id/return', requirePermission('rentals_returns'), asy
         await tx.execute({ sql: 'UPDATE customers SET account_balance = MAX(0, account_balance + ?) WHERE id = ?', args: [settlementAmount, agreement.customer_id] });
       }
 
-      await tx.execute({ sql: `UPDATE rental_agreements SET settlement_transaction_id = ?, deposit_refunded = ?, duration_adjustment_total = duration_adjustment_total + ?, tax_adjustment_total = tax_adjustment_total + ?, damage_fee_total = damage_fee_total + ?, pickup_driver_id = ?, status = ?, returned_at = ? WHERE id = ?`, args: [settlementTxId, depositRefunded, durationAdjustmentTotal, taxAdjustmentTotal, damageFeeTotal, pickupDriverId, newStatus, allReturned ? now.toISOString() : agreement.returned_at, req.params.id] });
+      await tx.execute({ sql: `UPDATE rental_agreements SET settlement_transaction_id = ?, deposit_refunded = ?, duration_adjustment_total = duration_adjustment_total + ?, tax_adjustment_total = tax_adjustment_total + ?, damage_fee_total = damage_fee_total + ?, pickup_driver_id = ?, status = ?, returned_at = ?, return_security_employee_id = ?, return_security_confirmed_at = ?, return_driver_employee_id = ?, return_driver_confirmed_at = ? WHERE id = ?`, args: [settlementTxId, depositRefunded, durationAdjustmentTotal, taxAdjustmentTotal, damageFeeTotal, pickupDriverId, newStatus, allReturned ? now.toISOString() : agreement.returned_at, return_security_employee_id, now.toISOString(), return_driver_employee_id, now.toISOString(), req.params.id] });
       await tx.commit();
       if (checkoutIsCredit) { try { await runCreditCheck(agreement.customer_id); } catch(e) {} }
     } catch(e) {
