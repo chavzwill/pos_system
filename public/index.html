@@ -7402,7 +7402,7 @@ const App = {
     this.showModal(`
       <div class="modal" style="max-width:660px">
         <div class="modal-header">
-          <span class="modal-title">${c.first_name} ${c.last_name}${isCredit ? ` <span style="font-size:12px;padding:2px 8px;border-radius:4px;background:#e3f2fd;color:#1565c0;margin-left:6px">Credit</span>` : ''}${c.account_blocked ? ` <span style="font-size:12px;padding:2px 8px;border-radius:4px;background:#ffebee;color:#c62828;margin-left:4px">BLOCKED</span>` : ''}</span>
+          <span class="modal-title">${c.first_name} ${c.last_name}${isCredit ? ` <span style="font-size:12px;padding:2px 8px;border-radius:4px;background:#e3f2fd;color:#1565c0;margin-left:6px">Credit</span>` : ''}${c.account_blocked ? ` <span style="font-size:12px;padding:2px 8px;border-radius:4px;background:#ffebee;color:#c62828;margin-left:4px">BLOCKED</span>` : ''}${c.is_rental_customer ? ` <span class="badge-pill badge-purple" style="font-size:12px;margin-left:4px">🔑 Rental</span>` : ''}</span>
           <button class="modal-close">✕</button>
         </div>
         <div class="modal-body">
