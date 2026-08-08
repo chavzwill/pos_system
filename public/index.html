@@ -8498,7 +8498,7 @@ const App = {
               <div class="form-group" style="flex:1"><label>Rate (1 ${s.currency||'USD'} = ?)</label><input type="number" id="alt-cur-rate" min="0.000001" step="any" placeholder="e.g. 1600"></div>
               <div style="padding-bottom:4px"><button class="btn btn-secondary" onclick="App.addAltCurrency()">+ Add</button></div>
             </div>
-            <p style="font-size:11px;color:var(--text-muted);margin:8px 0 0">Changes are saved when you click <strong>Save Settings</strong> above.</p>
+            <button class="btn btn-primary" style="margin-top:12px" onclick="App.saveSettings()">Save Settings</button>
           </div>
           <div class="card" style="margin-bottom:16px">
             <div class="card-header"><span class="card-title">Currency Denominations</span></div>
