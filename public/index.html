@@ -5075,7 +5075,7 @@ const App = {
           ${!notYetIssued ? `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:12px">
             <strong style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Chain of Custody</strong>
             <div>Issue — ${a.issue_security_employee_name ? `Security: ${a.issue_security_employee_name} (${this.fmtDateTime(a.issue_security_confirmed_at)})` : '<span style="color:var(--text-muted)">no security record (issued before this check existed)</span>'}
-              ${a.issue_customer_signature ? ` — <a href="${a.issue_customer_signature}" target="_blank">view signature</a>` : ''}</div>
+              ${a.issue_customer_signature ? ` — <button type="button" class="btn btn-sm btn-outline" style="padding:1px 8px;font-size:11px" onclick="App.showRentalSignature('${a.issue_customer_signature.replace(/'/g,"\\'")}')">View Signature</button>` : ''}</div>
             ${a.status==='returned' ? `<div>Return — ${a.return_security_employee_name ? `Security: ${a.return_security_employee_name} (${this.fmtDateTime(a.return_security_confirmed_at)})` : '<span style="color:var(--text-muted)">no security record</span>'}${a.return_driver_employee_name ? `, Collected by: ${a.return_driver_employee_name}` : ''}</div>` : ''}
           </div>` : ''}
           <table class="table" style="margin-bottom:12px">
@@ -5112,6 +5112,27 @@ const App = {
           ${a.status==='active' ? `<button class="btn btn-secondary" onclick="App.printRentalDeliveryNote(${a.id})">🖨️ Delivery Note</button>` : ''}
           ${a.status==='active' && this.can('rentals_returns') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showRentalReturnModal(${a.id})">Process Return</button>` : ''}
           ${(a.status==='active'||a.status==='pending'||a.status==='awaiting_issue') && !a.items.some(i=>i.quantity_returned>0) && this.can('rentals_returns') ? `<button class="btn btn-danger" onclick="App.cancelRentalAgreement(${a.id})">${a.status==='pending'?'Cancel Hold':'Cancel Agreement'}</button>` : ''}
+          <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
+        </div>
+      </div>`);
+  },
+
+  // Shows the customer's issue-time signature inline instead of a plain
+  // <a target="_blank"> link — some locked-down/kiosk browsers (the kind a
+  // security-guard tablet at a gate is likely to run) navigate the SAME tab
+  // when a target="_blank" link can't open a real new one, which reloads
+  // the whole SPA; init() always shows the login screen unconditionally on
+  // load (it doesn't restore an existing session), so that reload looks
+  // exactly like getting signed out even though the cookie was still valid.
+  // A same-page modal can't trigger that at all.
+  showRentalSignature(url) {
+    this.showModal(`
+      <div class="modal" style="max-width:480px">
+        <div class="modal-header"><span class="modal-title">Customer Signature</span><button class="modal-close">✕</button></div>
+        <div class="modal-body" style="text-align:center">
+          <img src="${url}" alt="Customer signature" style="max-width:100%;border:1px solid var(--border);border-radius:6px;background:#fff">
+        </div>
+        <div class="modal-footer">
           <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
         </div>
       </div>`);
