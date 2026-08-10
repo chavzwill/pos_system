@@ -239,6 +239,41 @@ async function _init() {
       tax_amount REAL DEFAULT 0,
       total REAL NOT NULL
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS work_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      wo_number TEXT UNIQUE NOT NULL,
+      customer_id INTEGER NOT NULL REFERENCES customers(id),
+      employee_id INTEGER REFERENCES employees(id),
+      branch_id INTEGER REFERENCES branches(id),
+      status TEXT NOT NULL DEFAULT 'intake',
+      description TEXT NOT NULL,
+      item_label TEXT,
+      assessment_fee REAL NOT NULL DEFAULT 0,
+      assessment_transaction_id INTEGER REFERENCES transactions(id),
+      estimate_labor REAL NOT NULL DEFAULT 0,
+      estimate_consumables REAL NOT NULL DEFAULT 0,
+      estimate_notes TEXT,
+      deposit_amount REAL NOT NULL DEFAULT 0,
+      deposit_transaction_id INTEGER REFERENCES transactions(id),
+      pickup_due_date DATE,
+      completed_at DATETIME,
+      completed_by INTEGER REFERENCES employees(id),
+      notification_method TEXT,
+      notified_at DATETIME,
+      notified_by INTEGER REFERENCES employees(id),
+      picked_up_at DATETIME,
+      cancelled_at DATETIME,
+      cancellation_reason TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )` },
+    { sql: `CREATE TABLE IF NOT EXISTS work_order_status_log (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+      status TEXT NOT NULL,
+      comment TEXT,
+      employee_id INTEGER REFERENCES employees(id),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS account_payments (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       payment_number TEXT UNIQUE NOT NULL,
@@ -1361,9 +1396,9 @@ async function _init() {
   // Seed security groups
   const { rows: [sgCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM security_groups', args: [] });
   if (Number(sgCount.c) === 0) {
-    await db.execute({ sql: 'INSERT INTO security_groups (name, description, permissions) VALUES (?,?,?)', args: ['Administrator','Full system access',JSON.stringify({dashboard:true,pos:true,inventory:true,customers:true,transactions:true,reports:true,employees:true,settings:true,purchasing:true,branches:true,security:true,accounts:true,quotations:true,suppliers:true,transfers:true,transfers_pickup:true,transfers_dropoff:true,crm:true,commissions:true,multi_branch_access:true,warehouse:true,shipping:true,'cycle-counts':true,drawers:true,void_transactions:true,promotions:true,process_returns:true,purchase_requests:true,services:true,rentals:true,rentals_issue:true,layaway:true,layaway_create:true,layaway_payments:true,layaway_cancel:true,'discount-cards':true,'cash-back-cards':true})] });
-    await db.execute({ sql: 'INSERT INTO security_groups (name, description, permissions) VALUES (?,?,?)', args: ['Cashier','POS and basic operations',JSON.stringify({dashboard:true,pos:true,inventory:false,customers:true,transactions:true,reports:false,employees:false,settings:false,purchasing:false,branches:false,security:false,accounts:false,quotations:true,suppliers:false,transfers:false,transfers_pickup:false,transfers_dropoff:false,crm:false,commissions:false,multi_branch_access:false,warehouse:false,shipping:false,'cycle-counts':false,drawers:false,void_transactions:false,promotions:false,process_returns:false,purchase_requests:false,services:false,rentals:true,rentals_issue:false,layaway:true,layaway_create:false,layaway_payments:false,layaway_cancel:false,'discount-cards':false,'cash-back-cards':false})] });
-    await db.execute({ sql: 'INSERT INTO security_groups (name, description, permissions) VALUES (?,?,?)', args: ['Manager','Store management without admin',JSON.stringify({dashboard:true,pos:true,inventory:true,customers:true,transactions:true,reports:true,employees:true,settings:false,purchasing:true,branches:false,security:false,accounts:true,quotations:true,suppliers:true,transfers:true,transfers_pickup:true,transfers_dropoff:true,crm:true,commissions:true,multi_branch_access:true,warehouse:true,shipping:true,'cycle-counts':true,drawers:true,void_transactions:true,promotions:true,process_returns:true,purchase_requests:true,services:true,rentals:true,rentals_issue:true,layaway:true,layaway_create:true,layaway_payments:true,layaway_cancel:true,'discount-cards':true,'cash-back-cards':true})] });
+    await db.execute({ sql: 'INSERT INTO security_groups (name, description, permissions) VALUES (?,?,?)', args: ['Administrator','Full system access',JSON.stringify({dashboard:true,pos:true,inventory:true,customers:true,transactions:true,reports:true,employees:true,settings:true,purchasing:true,branches:true,security:true,accounts:true,quotations:true,suppliers:true,transfers:true,transfers_pickup:true,transfers_dropoff:true,crm:true,commissions:true,multi_branch_access:true,warehouse:true,shipping:true,'cycle-counts':true,drawers:true,void_transactions:true,promotions:true,process_returns:true,purchase_requests:true,services:true,rentals:true,rentals_issue:true,layaway:true,layaway_create:true,layaway_payments:true,layaway_cancel:true,'discount-cards':true,'cash-back-cards':true,work_orders:true,wo_intake:true,wo_assess:true,wo_assign_parts:true,wo_technician:true,wo_signoff:true})] });
+    await db.execute({ sql: 'INSERT INTO security_groups (name, description, permissions) VALUES (?,?,?)', args: ['Cashier','POS and basic operations',JSON.stringify({dashboard:true,pos:true,inventory:false,customers:true,transactions:true,reports:false,employees:false,settings:false,purchasing:false,branches:false,security:false,accounts:false,quotations:true,suppliers:false,transfers:false,transfers_pickup:false,transfers_dropoff:false,crm:false,commissions:false,multi_branch_access:false,warehouse:false,shipping:false,'cycle-counts':false,drawers:false,void_transactions:false,promotions:false,process_returns:false,purchase_requests:false,services:false,rentals:true,rentals_issue:false,layaway:true,layaway_create:false,layaway_payments:false,layaway_cancel:false,'discount-cards':false,'cash-back-cards':false,work_orders:true,wo_intake:false,wo_assess:false,wo_assign_parts:false,wo_technician:false,wo_signoff:false})] });
+    await db.execute({ sql: 'INSERT INTO security_groups (name, description, permissions) VALUES (?,?,?)', args: ['Manager','Store management without admin',JSON.stringify({dashboard:true,pos:true,inventory:true,customers:true,transactions:true,reports:true,employees:true,settings:false,purchasing:true,branches:false,security:false,accounts:true,quotations:true,suppliers:true,transfers:true,transfers_pickup:true,transfers_dropoff:true,crm:true,commissions:true,multi_branch_access:true,warehouse:true,shipping:true,'cycle-counts':true,drawers:true,void_transactions:true,promotions:true,process_returns:true,purchase_requests:true,services:true,rentals:true,rentals_issue:true,layaway:true,layaway_create:true,layaway_payments:true,layaway_cancel:true,'discount-cards':true,'cash-back-cards':true,work_orders:true,wo_intake:true,wo_assess:true,wo_assign_parts:true,wo_technician:true,wo_signoff:true})] });
 
     // Assign to existing employees
     try {

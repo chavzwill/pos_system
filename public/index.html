@@ -970,6 +970,7 @@ const App = {
       { section: 'customers', label: 'Customers', color: '#00897B', icon: '<path d="M16 11c1.66 0 2.99-1.34 2.99-3S17.66 5 16 5c-1.66 0-3 1.34-3 3s1.34 3 3 3zm-8 0c1.66 0 2.99-1.34 2.99-3S9.66 5 8 5C6.34 5 5 6.34 5 8s1.34 3 3 3zm0 2c-2.33 0-7 1.17-7 3.5V19h14v-2.5c0-2.33-4.67-3.5-7-3.5zm8 0c-.29 0-.62.02-.97.05 1.16.84 1.97 1.97 1.97 3.45V19h6v-2.5c0-2.33-4.67-3.5-7-3.5z"/>' },
       { section: 'quotations', label: 'Quotations', color: '#4CAF50', icon: '<path d="M14 2H6c-1.1 0-1.99.9-1.99 2L4 20c0 1.1.89 2 1.99 2H18c1.1 0 2-.9 2-2V8l-6-6zm2 16H8v-2h8v2zm0-4H8v-2h8v2zm-3-5V3.5L18.5 9H13z"/>' },
       { section: 'rentals', label: 'Rentals', color: '#FF9800', icon: '<path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6l-3 3-4.3-4.3C.6 7.1 1 10.1 3 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.4-.4.4-1 0-1.4z"/>' },
+      { section: 'work-orders', label: 'Work Orders', color: '#546e7a', icon: '<path d="M22.7 19l-9.1-9.1c.9-2.3.4-5-1.5-6.9-2-2-5-2.4-7.4-1.3L9 6l-3 3-4.3-4.3C.6 7.1 1 10.1 3 12.1c1.9 1.9 4.6 2.4 6.9 1.5l9.1 9.1c.4.4 1 .4 1.4 0l2.3-2.3c.4-.4.4-1 0-1.4z"/>' },
       { section: 'layaway', label: 'Layaway', color: '#8d6e63', icon: '<path d="M20 6h-2.18c.11-.31.18-.65.18-1a2.996 2.996 0 0 0-5.5-1.65l-.5.67-.5-.68C10.96 2.54 10.05 2 9 2 7.34 2 6 3.34 6 5c0 .35.07.69.18 1H4c-1.11 0-1.99.89-1.99 2L2 19c0 1.11.89 2 2 2h16c1.11 0 2-.89 2-2V8c0-1.11-.89-2-2-2zm-5-2c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zM9 4c.55 0 1 .45 1 1s-.45 1-1 1-1-.45-1-1 .45-1 1-1zm11 15H4v-2h16v2zm0-5H4V8h5.08L7 10.83 8.62 12 11 8.76l1-1.36 1 1.36L15.38 12 17 10.83 14.92 8H20v6z"/>' },
       { section: 'transactions', label: 'Transactions', color: '#9c27b0', icon: '<path d="M19 3H5c-1.1 0-2 .9-2 2v14c0 1.1.9 2 2 2h14c1.1 0 2-.9 2-2V5c0-1.1-.9-2-2-2zm-7 14l-5-5 1.41-1.41L12 14.17l7.59-7.59L21 8l-9 9z"/>' },
       { section: 'online-orders', label: 'Online Orders', color: '#3b6bc4', icon: '<path d="M11.99 2C6.47 2 2 6.48 2 12s4.47 10 9.99 10C17.52 22 22 17.52 22 12S17.52 2 11.99 2zm4.24 16L12 15.45 7.77 18l1.12-4.81-3.73-3.23 4.92-.42L12 5l1.92 4.53 4.92.42-3.73 3.23L16.23 18z"/>' },
@@ -1013,6 +1014,7 @@ const App = {
     if (section === 'rental-dispatch') return this.can('rentals');
     if (section === 'transfer-dispatch') return this.can('transfers');
     if (section === 'purchase-requests') return this.can('purchase_requests');
+    if (section === 'work-orders') return this.can('work_orders');
     return this.can(section);
   },
 
@@ -1194,7 +1196,7 @@ const App = {
 
   async showSection(name) {
     const perms = this.currentUser?.permissions;
-    const sectionAllowed = name === 'driver-dashboard' ? !!this.currentUser?.is_driver : name === 'guard-dashboard' ? !!this.currentUser?.is_security : name === 'online-orders' ? this.can('transactions') : name === 'rental-items' ? this.can('rentals') : name === 'rental-deposits' ? this.can('rentals') : name === 'rental-dispatch' ? this.can('rentals') : name === 'transfer-dispatch' ? this.can('transfers') : name === 'purchase-requests' ? this.can('purchase_requests') : this._hubGroups[name] ? this.canAccessHub(name) : this.can(name);
+    const sectionAllowed = name === 'driver-dashboard' ? !!this.currentUser?.is_driver : name === 'guard-dashboard' ? !!this.currentUser?.is_security : name === 'online-orders' ? this.can('transactions') : name === 'rental-items' ? this.can('rentals') : name === 'rental-deposits' ? this.can('rentals') : name === 'rental-dispatch' ? this.can('rentals') : name === 'transfer-dispatch' ? this.can('transfers') : name === 'purchase-requests' ? this.can('purchase_requests') : name === 'work-orders' ? this.can('work_orders') : this._hubGroups[name] ? this.canAccessHub(name) : this.can(name);
     if (perms && !sectionAllowed) return;
     this.section = name;
     this.closeModal();
@@ -1204,7 +1206,7 @@ const App = {
       const hub = this._hubGroups[ds];
       el.classList.toggle('active', ds === name || !!(hub && hub.children.some(c => c.section === name)));
     });
-    const titles = { dashboard: 'Dashboard', 'driver-dashboard': 'My Deliveries', 'guard-dashboard': 'My Verifications', pos: 'Point of Sale', inventory: 'Retail Inventory Management', services: 'Services & Non-Inventory Items', rentals: 'Rentals', 'rental-items': 'Rental Items', dispatch: 'Dispatch', 'rental-dispatch': 'Rental Dispatch', 'transfer-dispatch': 'Branch Transfer Dispatch', 'rental-deposits': 'Rental Deposits & Credit Notes', 'purchase-requests': 'Purchase Requests', layaway: 'Layaway', customers: 'Customers', transactions: 'Transactions', 'online-orders': 'Online Orders', reports: 'Reports & Analytics', employees: 'Employees', settings: 'Settings', suppliers: 'Suppliers', purchasing: 'Purchasing', quotations: 'Quotations', accounts: 'Accounts Receivable', branches: 'Branch Management', security: 'Security Groups', transfers: 'Branch Transfers', crm: 'CRM & Sales', commissions: 'Commission Tracking', warehouse: 'Warehouse Management', shipping: 'Shipping', 'cycle-counts': 'Cycle Counts', drawers: 'Cash Drawers', promotions: 'Promotions', 'discount-cards': 'Discount Cards', 'cash-back-cards': 'Cash Back Cards', 'purchasing-hub': 'Purchasing', 'sales-hub': 'Sales', 'accounts-hub': 'Accounts', 'warehouse-hub': 'Warehouse', 'admin-hub': 'Admin' };
+    const titles = { dashboard: 'Dashboard', 'driver-dashboard': 'My Deliveries', 'guard-dashboard': 'My Verifications', pos: 'Point of Sale', inventory: 'Retail Inventory Management', services: 'Services & Non-Inventory Items', rentals: 'Rentals', 'rental-items': 'Rental Items', 'work-orders': 'Work Orders', dispatch: 'Dispatch', 'rental-dispatch': 'Rental Dispatch', 'transfer-dispatch': 'Branch Transfer Dispatch', 'rental-deposits': 'Rental Deposits & Credit Notes', 'purchase-requests': 'Purchase Requests', layaway: 'Layaway', customers: 'Customers', transactions: 'Transactions', 'online-orders': 'Online Orders', reports: 'Reports & Analytics', employees: 'Employees', settings: 'Settings', suppliers: 'Suppliers', purchasing: 'Purchasing', quotations: 'Quotations', accounts: 'Accounts Receivable', branches: 'Branch Management', security: 'Security Groups', transfers: 'Branch Transfers', crm: 'CRM & Sales', commissions: 'Commission Tracking', warehouse: 'Warehouse Management', shipping: 'Shipping', 'cycle-counts': 'Cycle Counts', drawers: 'Cash Drawers', promotions: 'Promotions', 'discount-cards': 'Discount Cards', 'cash-back-cards': 'Cash Back Cards', 'purchasing-hub': 'Purchasing', 'sales-hub': 'Sales', 'accounts-hub': 'Accounts', 'warehouse-hub': 'Warehouse', 'admin-hub': 'Admin' };
     document.getElementById('topbar-title').innerHTML = this.buildBreadcrumb(name, titles[name] || name);
     const content = document.getElementById('content');
     content.style.padding = name === 'pos' ? '0' : '20px';
@@ -1215,7 +1217,7 @@ const App = {
     // terminal layout; the POS page's own Exit button calls showSection()
     // with a different name to leave kiosk mode again.
     document.body.classList.toggle('pos-kiosk', name === 'pos');
-    const renders = { dashboard: () => this.renderDashboard(), 'driver-dashboard': () => this.renderDriverDashboard(), 'guard-dashboard': () => this.renderGuardDashboard(), pos: () => this.renderPOS(), inventory: () => this.renderInventory(), services: () => this.renderServices(), rentals: () => this.renderRentals(), 'rental-items': () => this.renderRentalItems(), dispatch: () => this.renderHub('dispatch'), 'rental-dispatch': () => this.renderRentalDispatch(), 'transfer-dispatch': () => this.renderTransferDispatch(), 'rental-deposits': () => this.renderRentalDeposits(), 'purchase-requests': () => this.renderPurchasing('requests'), layaway: () => this.renderLayaway(), customers: () => this.renderCustomers(), transactions: () => this.renderTransactions(), 'online-orders': () => this.renderOnlineOrders(), reports: () => this.renderReports(), employees: () => this.renderEmployees(), settings: () => this.renderSettings(), suppliers: () => this.renderSuppliers(), purchasing: () => this.renderPurchasing(), quotations: () => this.renderQuotations(), accounts: () => this.renderAccounts(), branches: () => this.renderBranches(), security: () => this.renderSecurity(), transfers: () => this.renderTransfers(), crm: () => this.renderCRM(), commissions: () => this.renderCommissions(), warehouse: () => this.renderWarehouse(), shipping: () => this.renderShipping(), 'cycle-counts': () => this.renderCycleCounts(), drawers: () => this.renderDrawers(), promotions: () => this.renderPromotions(), 'discount-cards': () => this.renderDiscountCards(), 'cash-back-cards': () => this.renderCashBackCards(), 'purchasing-hub': () => this.renderHub('purchasing-hub'), 'sales-hub': () => this.renderHub('sales-hub'), 'accounts-hub': () => this.renderHub('accounts-hub'), 'warehouse-hub': () => this.renderHub('warehouse-hub'), 'admin-hub': () => this.renderHub('admin-hub') };
+    const renders = { dashboard: () => this.renderDashboard(), 'driver-dashboard': () => this.renderDriverDashboard(), 'guard-dashboard': () => this.renderGuardDashboard(), pos: () => this.renderPOS(), inventory: () => this.renderInventory(), services: () => this.renderServices(), rentals: () => this.renderRentals(), 'rental-items': () => this.renderRentalItems(), 'work-orders': () => this.renderWorkOrders(), dispatch: () => this.renderHub('dispatch'), 'rental-dispatch': () => this.renderRentalDispatch(), 'transfer-dispatch': () => this.renderTransferDispatch(), 'rental-deposits': () => this.renderRentalDeposits(), 'purchase-requests': () => this.renderPurchasing('requests'), layaway: () => this.renderLayaway(), customers: () => this.renderCustomers(), transactions: () => this.renderTransactions(), 'online-orders': () => this.renderOnlineOrders(), reports: () => this.renderReports(), employees: () => this.renderEmployees(), settings: () => this.renderSettings(), suppliers: () => this.renderSuppliers(), purchasing: () => this.renderPurchasing(), quotations: () => this.renderQuotations(), accounts: () => this.renderAccounts(), branches: () => this.renderBranches(), security: () => this.renderSecurity(), transfers: () => this.renderTransfers(), crm: () => this.renderCRM(), commissions: () => this.renderCommissions(), warehouse: () => this.renderWarehouse(), shipping: () => this.renderShipping(), 'cycle-counts': () => this.renderCycleCounts(), drawers: () => this.renderDrawers(), promotions: () => this.renderPromotions(), 'discount-cards': () => this.renderDiscountCards(), 'cash-back-cards': () => this.renderCashBackCards(), 'purchasing-hub': () => this.renderHub('purchasing-hub'), 'sales-hub': () => this.renderHub('sales-hub'), 'accounts-hub': () => this.renderHub('accounts-hub'), 'warehouse-hub': () => this.renderHub('warehouse-hub'), 'admin-hub': () => this.renderHub('admin-hub') };
     if (renders[name]) await renders[name]();
   },
 
@@ -6337,6 +6339,377 @@ const App = {
     } catch(e) { this.alert(e.message, 'error'); }
   },
 
+  // ─── Work Orders (service/repair tickets) ──────────────────────────────────
+
+  _woTabs: [
+    { key: 'active',          label: 'Active' },
+    { key: 'awaiting_pickup', label: 'Awaiting Pickup' },
+    { key: 'picked_up',       label: 'Picked Up' },
+    { key: 'cancelled',       label: 'Cancelled' },
+    { key: 'all',             label: 'All' },
+  ],
+
+  _woStatusLabels: {
+    intake: 'Intake', assessed: 'Assessed', pending_deposit: 'Pending Deposit', in_progress: 'In Progress',
+    awaiting_signoff: 'Awaiting Sign-Off', complete: 'Complete', awaiting_pickup: 'Awaiting Pickup',
+    picked_up: 'Picked Up', cancelled: 'Cancelled',
+  },
+  _woStatusBadge: {
+    intake: 'badge-warning', assessed: 'badge-warning', pending_deposit: 'badge-warning', in_progress: 'badge-info',
+    awaiting_signoff: 'badge-info', complete: 'badge-success', awaiting_pickup: 'badge-success',
+    picked_up: 'badge-secondary', cancelled: 'badge-secondary',
+  },
+
+  async renderWorkOrders() {
+    this.woTab = this.woTab || 'active';
+    document.getElementById('content').innerHTML = `
+      <div class="section-header">
+        <h2>Work Orders</h2>
+        <div id="wo-header-actions">${this.can('wo_intake') ? `<button class="btn btn-primary btn-sm" onclick="App.showWOIntakeModal()">+ New Work Order</button>` : ''}</div>
+      </div>
+      <div class="crm-tabs" id="wo-tabs-nav">
+        ${this._woTabs.map(t=>`<button class="crm-tab ${this.woTab===t.key?'active':''}" onclick="App.filterWorkOrders('${t.key}')">${t.label}</button>`).join('')}
+      </div>
+      <div id="wo-content"></div>`;
+    await this.loadWorkOrders();
+  },
+
+  async filterWorkOrders(tab) {
+    this.woTab = tab;
+    document.querySelectorAll('#wo-tabs-nav .crm-tab').forEach((btn,i) => {
+      btn.classList.toggle('active', this._woTabs[i].key === tab);
+    });
+    await this.loadWorkOrders();
+  },
+
+  // The 30-day pickup window runs from creation regardless of lifecycle
+  // status (confirmed business rule) — shown as its own badge, independent
+  // of the status column, so a WO can show "12 days left to pickup" while
+  // still "In Progress".
+  _woPickupBadge(wo) {
+    if (['picked_up', 'cancelled'].includes(wo.status)) return '';
+    const daysPast = wo.days_past_pickup_due;
+    if (daysPast == null) return '';
+    if (daysPast > 0) return `<div style="font-size:11px;color:var(--danger)">Pickup overdue ${Math.floor(daysPast)}d</div>`;
+    const daysLeft = Math.ceil(-daysPast);
+    if (daysLeft <= 5) return `<div style="font-size:11px;color:var(--warning)">Pickup due in ${daysLeft}d</div>`;
+    return `<div style="font-size:11px;color:var(--text-muted)">Pickup due in ${daysLeft}d</div>`;
+  },
+
+  async loadWorkOrders() {
+    const el = document.getElementById('wo-content');
+    if (!el) return;
+    const view = this.woTab === 'all' ? '' : this.woTab;
+    const workOrders = await this.api('GET', `/work-orders${view ? '?view='+view : ''}`);
+    if (!document.getElementById('wo-content')) return;
+    document.getElementById('wo-content').innerHTML = !workOrders.length ? '<div class="empty-state"><p>No work orders found.</p></div>' : `
+      <div class="table-wrap">
+      <table class="table">
+        <thead><tr><th>WO #</th><th>Customer</th><th>Description</th><th>Branch</th><th>Opened</th><th>Pickup Due</th><th>Status</th><th></th></tr></thead>
+        <tbody>${workOrders.map(wo => `<tr>
+          <td class="fw-600">${wo.wo_number}</td>
+          <td>${wo.customer_name||'—'}</td>
+          <td style="max-width:260px;overflow:hidden;text-overflow:ellipsis;white-space:nowrap" title="${this.escapeAttr(wo.description)}">${wo.description}</td>
+          <td>${wo.branch_name||'—'}</td>
+          <td>${this.fmtDate(wo.created_at)}</td>
+          <td>${this.fmtDate(wo.pickup_due_date)}${this._woPickupBadge(wo)}</td>
+          <td><span class="badge-pill ${this._woStatusBadge[wo.status]||'badge-secondary'}">${this._woStatusLabels[wo.status]||wo.status}</span></td>
+          <td style="text-align:right;white-space:nowrap">
+            <button class="btn btn-sm btn-outline" onclick="App.viewWorkOrder(${wo.id})">View</button>
+          </td>
+        </tr>`).join('')}</tbody>
+      </table>
+      </div>`;
+  },
+
+  async showWOIntakeModal() {
+    const customers = await this.api('GET', '/customers?active=1');
+    const branches = this.currentUser.branches || [];
+    const isMultiBranch = this.currentUser.permissions?.multi_branch_access && branches.length > 1;
+    const defaultBranch = branches.find(b => b.is_default) || branches[0] || null;
+    this.showModal(`
+      <div class="modal" style="max-width:520px">
+        <div class="modal-header"><span class="modal-title">New Work Order</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <div class="form-group"><label>Customer *</label>
+            <select id="wo-customer">
+              <option value="">-- Select Customer --</option>
+              ${customers.map(c => `<option value="${c.id}">${c.first_name} ${c.last_name} (${c.customer_number})</option>`).join('')}
+            </select>
+          </div>
+          <div class="form-group"><label>Branch / Location</label>
+            ${isMultiBranch ? `<select id="wo-branch">${branches.map(b=>`<option value="${b.id}" ${defaultBranch && b.id===defaultBranch.id?'selected':''}>${b.name}</option>`).join('')}</select>`
+              : `<input type="text" value="${defaultBranch?.name||'No branch assigned'}" disabled style="background:var(--bg-secondary)"><input type="hidden" id="wo-branch" value="${defaultBranch?.id||''}">`}
+          </div>
+          <div class="form-group"><label>Item / Tag Label</label><input id="wo-item-label" placeholder="e.g. Red mountain bike, serial #12345"></div>
+          <div class="form-group"><label>Description *</label><textarea id="wo-description" rows="3" placeholder="What the customer reported / what's being brought in for"></textarea></div>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:-4px">The description stays editable after intake, once the item's been assessed.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="App.saveWOIntake()">Open Work Order</button>
+        </div>
+      </div>`);
+  },
+
+  async saveWOIntake() {
+    const customer_id = document.getElementById('wo-customer').value;
+    const branch_id = document.getElementById('wo-branch')?.value || null;
+    const item_label = document.getElementById('wo-item-label').value.trim();
+    const description = document.getElementById('wo-description').value.trim();
+    if (!customer_id) { this.alert('Please select a customer', 'error'); return; }
+    if (!description) { this.alert('A description is required', 'error'); return; }
+    try {
+      const wo = await this.api('POST', '/work-orders', { customer_id, branch_id, item_label, description, employee_id: this.currentUser.id });
+      this.closeModal();
+      this.alert(`Work order ${wo.wo_number} opened`);
+      this.printWOLabel(wo.id);
+      this.renderWorkOrders();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  printWOLabel(id) {
+    this.api('GET', `/work-orders/${id}/label`).then(wo => {
+      const win = window.open('', '_blank', 'width=420,height=320');
+      win.document.write(`<!DOCTYPE html><html><head><title>Label – ${wo.wo_number}</title>
+      <style>
+        body{font-family:Arial,sans-serif;margin:0;padding:20px;text-align:center}
+        .wo-num{font-size:28px;font-weight:800;letter-spacing:1px;margin:10px 0}
+        .item{font-size:14px;margin-bottom:6px}
+        .cust{font-size:12px;color:#555}
+        @media print{body{padding:8px}}
+      </style></head><body>
+      <div style="font-size:12px;text-transform:uppercase;color:#777">Work Order</div>
+      <div class="wo-num">${wo.wo_number}</div>
+      <div class="item">${wo.item_label || '—'}</div>
+      <div class="cust">${wo.customer_name || ''}</div>
+      <script>window.onload=()=>{window.print()}<\/script>
+      </body></html>`);
+      win.document.close();
+    });
+  },
+
+  async viewWorkOrder(id) {
+    const wo = await this.api('GET', `/work-orders/${id}`);
+    const estimateTotal = (parseFloat(wo.estimate_labor)||0) + (parseFloat(wo.estimate_consumables)||0);
+    this.showModal(`
+      <div class="modal" style="max-width:640px">
+        <div class="modal-header">
+          <span class="modal-title">${wo.wo_number} <span class="badge-pill ${this._woStatusBadge[wo.status]||'badge-secondary'}" style="margin-left:6px">${this._woStatusLabels[wo.status]||wo.status}</span></span>
+          <button class="modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <div class="input-row" style="margin-bottom:10px">
+            <div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Customer</label><div>${wo.customer_name||'—'} ${wo.customer_phone?`<span style="color:var(--text-muted);font-size:12px">(${wo.customer_phone})</span>`:''}</div></div>
+            <div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Branch</label><div>${wo.branch_name||'—'}</div></div>
+          </div>
+          <div class="input-row" style="margin-bottom:10px">
+            <div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Opened</label><div>${this.fmtDateTime(wo.created_at)}</div></div>
+            <div><label style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Pickup Due</label><div>${this.fmtDate(wo.pickup_due_date)}${this._woPickupBadge(wo)}</div></div>
+          </div>
+          <div class="form-group">
+            <label style="display:flex;justify-content:space-between;align-items:center">Description
+              ${!['complete','awaiting_pickup','picked_up','cancelled'].includes(wo.status) && this.can('work_orders') ? `<button type="button" class="btn btn-sm btn-outline" onclick="App._toggleWODescEdit(${wo.id})">Edit</button>` : ''}
+            </label>
+            <div id="wo-desc-view">${wo.description}</div>
+            <div id="wo-desc-edit" style="display:none">
+              <textarea id="wo-desc-input" rows="3">${wo.description}</textarea>
+              <div style="text-align:right;margin-top:4px"><button class="btn btn-sm btn-primary" onclick="App.saveWODescription(${wo.id})">Save</button></div>
+            </div>
+          </div>
+          ${wo.item_label ? `<div style="font-size:12px;color:var(--text-muted);margin:-6px 0 10px">Item: ${wo.item_label} <button type="button" class="btn btn-sm btn-outline" style="padding:1px 8px;font-size:11px;margin-left:4px" onclick="App.printWOLabel(${wo.id})">Print Label</button></div>` : ''}
+
+          <div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:13px">
+            <strong style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Fees & Estimate</strong>
+            <div style="display:flex;justify-content:space-between;margin-top:4px"><span>Assessment Fee</span><span>${this.fmt(wo.assessment_fee)} ${wo.assessment_transaction_id ? '<span class="badge-pill badge-success" style="font-size:10px">Paid</span>' : '<span style="color:var(--text-muted)">Unpaid</span>'}</span></div>
+            ${wo.status !== 'intake' ? `<div style="display:flex;justify-content:space-between"><span>Estimate (labor + consumables)</span><span>${this.fmt(estimateTotal)}</span></div>` : ''}
+            ${wo.deposit_amount > 0 ? `<div style="display:flex;justify-content:space-between"><span>Deposit</span><span>${this.fmt(wo.deposit_amount)} ${wo.deposit_transaction_id ? '<span class="badge-pill badge-success" style="font-size:10px">Paid</span>' : '<span style="color:var(--text-muted)">Unpaid</span>'}</span></div>` : ''}
+            ${wo.estimate_notes ? `<div style="color:var(--text-muted);margin-top:4px">${wo.estimate_notes}</div>` : ''}
+          </div>
+
+          <div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px">
+            <strong style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Status History</strong>
+            <div style="max-height:180px;overflow-y:auto;margin-top:6px">
+              ${wo.status_log.map(l => `<div style="font-size:12px;padding:5px 0;border-top:1px solid var(--border)">
+                <strong>${this._woStatusLabels[l.status]||l.status}</strong> — ${this.fmtDateTime(l.created_at)}${l.employee_name?` · ${l.employee_name}`:''}
+                ${l.comment ? `<div style="color:var(--text-muted)">${l.comment}</div>` : ''}
+              </div>`).join('') || '<div style="color:var(--text-muted);font-size:12px;padding:6px 0">No history yet</div>'}
+            </div>
+          </div>
+        </div>
+        <div class="modal-footer" style="flex-wrap:wrap">
+          ${wo.status==='intake' && this.can('wo_assess') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showWOAssessmentFeeModal(${wo.id})">Process Assessment Fee</button>` : ''}
+          ${wo.status==='assessed' && this.can('wo_assess') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showWOEstimateModal(${wo.id})">Enter Estimate</button>` : ''}
+          ${wo.status==='pending_deposit' && this.can('wo_assess') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showWODepositModal(${wo.id})">Process Deposit</button>` : ''}
+          ${['in_progress','awaiting_signoff'].includes(wo.status) && this.can('work_orders') ? `<button class="btn btn-secondary" onclick="App.closeModal();App.showWOStatusCommentModal(${wo.id})">Add Status Update</button>` : ''}
+          ${['intake','assessed','pending_deposit'].includes(wo.status) && this.can('work_orders') ? `<button class="btn btn-danger" onclick="App.closeModal();App.showWOCancelModal(${wo.id})">Cancel Work Order</button>` : ''}
+          <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
+        </div>
+      </div>`);
+  },
+
+  _toggleWODescEdit(id) {
+    document.getElementById('wo-desc-view').style.display = 'none';
+    document.getElementById('wo-desc-edit').style.display = 'block';
+  },
+
+  async saveWODescription(id) {
+    const description = document.getElementById('wo-desc-input').value.trim();
+    if (!description) { this.alert('Description cannot be empty', 'error'); return; }
+    try {
+      await this.api('PATCH', `/work-orders/${id}`, { description, employee_id: this.currentUser.id });
+      this.viewWorkOrder(id);
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  showWOAssessmentFeeModal(id) {
+    this.showModal(`
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header"><span class="modal-title">Process Assessment Fee</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <p style="font-size:13px;color:var(--text-muted)">This fee is non-refundable and covers the initial assessment of the item.</p>
+          <div class="form-group"><label>Payment Method</label>
+            <select id="wo-fee-paymethod"><option value="cash">Cash</option><option value="credit_card">Card</option><option value="check">Check</option></select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="App.confirmWOAssessmentFee(${id})">Confirm Payment</button>
+        </div>
+      </div>`);
+  },
+
+  async confirmWOAssessmentFee(id) {
+    const payment_method = document.getElementById('wo-fee-paymethod').value;
+    try {
+      const wo = await this.api('PATCH', `/work-orders/${id}/assessment-paid`, {
+        payment_method, employee_id: this.currentUser.id, drawer_session_id: this.currentDrawerSession?.id || null,
+      });
+      this.closeModal();
+      this.alert(`Assessment fee collected for ${wo.wo_number}`);
+      this.renderWorkOrders();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  showWOEstimateModal(id) {
+    this.showModal(`
+      <div class="modal" style="max-width:460px">
+        <div class="modal-header"><span class="modal-title">Enter Estimate</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <div class="input-row">
+            <div class="form-group"><label>Labor Estimate</label><input type="number" id="wo-est-labor" min="0" step="0.01" value="0"></div>
+            <div class="form-group"><label>Consumables Estimate</label><input type="number" id="wo-est-consumables" min="0" step="0.01" value="0"></div>
+          </div>
+          <div class="form-group"><label>Estimate Notes</label><textarea id="wo-est-notes" rows="2" placeholder="What's needed, findings from assessment, etc."></textarea></div>
+          <div class="form-group"><label>Deposit Required *</label><input type="number" id="wo-est-deposit" min="0.01" step="0.01" placeholder="Amount to collect before work begins"></div>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:-4px">Parts costs are added separately once parts are assigned, and will show alongside this estimate.</p>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="App.saveWOEstimate(${id})">Save Estimate</button>
+        </div>
+      </div>`);
+  },
+
+  async saveWOEstimate(id) {
+    const estimate_labor = document.getElementById('wo-est-labor').value;
+    const estimate_consumables = document.getElementById('wo-est-consumables').value;
+    const estimate_notes = document.getElementById('wo-est-notes').value.trim();
+    const deposit_amount = document.getElementById('wo-est-deposit').value;
+    if (!parseFloat(deposit_amount)) { this.alert('A deposit amount is required', 'error'); return; }
+    try {
+      const wo = await this.api('PATCH', `/work-orders/${id}/estimate`, { estimate_labor, estimate_consumables, estimate_notes, deposit_amount, employee_id: this.currentUser.id });
+      this.closeModal();
+      this.alert(`Estimate saved for ${wo.wo_number}`);
+      this.renderWorkOrders();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  showWODepositModal(id) {
+    this.showModal(`
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header"><span class="modal-title">Process Deposit</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <div class="form-group"><label>Payment Method</label>
+            <select id="wo-dep-paymethod"><option value="cash">Cash</option><option value="credit_card">Card</option><option value="check">Check</option></select>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="App.confirmWODeposit(${id})">Confirm Payment</button>
+        </div>
+      </div>`);
+  },
+
+  async confirmWODeposit(id) {
+    const payment_method = document.getElementById('wo-dep-paymethod').value;
+    try {
+      const wo = await this.api('PATCH', `/work-orders/${id}/deposit-paid`, {
+        payment_method, employee_id: this.currentUser.id, drawer_session_id: this.currentDrawerSession?.id || null,
+      });
+      this.closeModal();
+      this.alert(`Deposit collected for ${wo.wo_number} — now in progress`);
+      this.renderWorkOrders();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  showWOStatusCommentModal(id) {
+    this.showModal(`
+      <div class="modal" style="max-width:460px">
+        <div class="modal-header"><span class="modal-title">Add Status Update</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <div class="form-group"><label>Status</label>
+            <select id="wo-status-select">
+              <option value="">No change — just log a comment</option>
+              <option value="in_progress">In Progress</option>
+              <option value="awaiting_signoff">Awaiting Sign-Off (work done, ready for supervisor)</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Comment *</label><textarea id="wo-status-comment" rows="3" placeholder="What's happening"></textarea></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="App.saveWOStatusComment(${id})">Save</button>
+        </div>
+      </div>`);
+  },
+
+  async saveWOStatusComment(id) {
+    const status = document.getElementById('wo-status-select').value || null;
+    const comment = document.getElementById('wo-status-comment').value.trim();
+    if (!comment) { this.alert('A comment is required', 'error'); return; }
+    try {
+      await this.api('PATCH', `/work-orders/${id}/status`, { status, comment, employee_id: this.currentUser.id });
+      this.closeModal();
+      this.viewWorkOrder(id);
+      this.renderWorkOrders();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  showWOCancelModal(id) {
+    this.showModal(`
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header"><span class="modal-title">Cancel Work Order</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <div class="form-group"><label>Reason *</label><textarea id="wo-cancel-reason" rows="3"></textarea></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="App.closeModal()">Back</button>
+          <button class="btn btn-danger" onclick="App.confirmWOCancel(${id})">Cancel Work Order</button>
+        </div>
+      </div>`);
+  },
+
+  async confirmWOCancel(id) {
+    const reason = document.getElementById('wo-cancel-reason').value.trim();
+    if (!reason) { this.alert('A cancellation reason is required', 'error'); return; }
+    try {
+      await this.api('PATCH', `/work-orders/${id}/cancel`, { reason, employee_id: this.currentUser.id });
+      this.closeModal();
+      this.renderWorkOrders();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
   // ─── Layaway ──────────────────────────────────────────────────────────────
 
   _layawayTabs: [
@@ -8955,6 +9328,12 @@ const App = {
             <button class="btn btn-primary" onclick="App.saveSettings()">Save Settings</button>
           </div>
           <div class="card" style="margin-bottom:16px">
+            <div class="card-header"><span class="card-title">Work Orders</span></div>
+            <div class="form-group"><label>Assessment Fee</label><input type="number" id="s-wo-fee" value="${s.wo_assessment_fee||0}" min="0" step="0.01"></div>
+            <p style="font-size:11px;color:var(--text-muted);margin:0 0 8px">Non-refundable fee charged at intake, before the item is assessed. Applies storewide to every work order.</p>
+            <button class="btn btn-primary" onclick="App.saveSettings()">Save Settings</button>
+          </div>
+          <div class="card" style="margin-bottom:16px">
             <div class="card-header"><span class="card-title">Alternate Currencies</span></div>
             <p style="font-size:12px;color:var(--text-muted);margin:0 0 12px">Define currencies accepted at the POS with their exchange rate relative to <strong>${s.currency||'USD'}</strong>. Cashiers can select these when processing cash payments.</p>
             <div id="alt-currencies-table">${this._renderAltCurrenciesTable()}</div>
@@ -9253,6 +9632,7 @@ const App = {
       layaway_deposit_percent: document.getElementById('s-layaway-deposit').value,
       layaway_cancellation_fee_type: document.getElementById('s-layaway-fee-type').value,
       layaway_cancellation_fee_value: document.getElementById('s-layaway-fee-value').value,
+      wo_assessment_fee: document.getElementById('s-wo-fee').value,
       email_smtp_host: document.getElementById('s-smtp-host').value,
       email_smtp_port: document.getElementById('s-smtp-port').value,
       email_smtp_user: document.getElementById('s-smtp-user').value,
@@ -12550,6 +12930,13 @@ const App = {
       { key: 'rentals_returns', label: 'Process Returns & Cancellations' },
       { key: 'rentals_issue', label: 'Issue / Dispatch Rentals' },
       { key: 'rentals_pause', label: 'Authorize Rental Pauses' },
+    ]},
+    { key: 'work_orders', label: 'Work Orders', subs: [
+      { key: 'wo_intake', label: 'Open Work Orders' },
+      { key: 'wo_assess', label: 'Assess & Estimate' },
+      { key: 'wo_assign_parts', label: 'Assign Parts' },
+      { key: 'wo_technician', label: 'Technician (Tasks & Time Tracking)' },
+      { key: 'wo_signoff', label: 'Supervisor Sign-Off' },
     ]},
     { key: 'layaway', label: 'Layaway', subs: [
       { key: 'layaway_create', label: 'Create Layaway Plans' },

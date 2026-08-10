@@ -127,6 +127,7 @@
       <a href="#quotations">Quotations</a>
       <a href="#layaway">Layaway</a>
       <a href="#rentals">Rentals</a>
+      <a href="#work-orders">Work Orders</a>
       <a href="#promotions">Promotions</a>
       <a href="#discount-cards">Discount Cards</a>
       <a href="#cash-back-cards">Cash Back Cards</a>
@@ -337,6 +338,31 @@
 
       <h3>Rental Deposits &amp; Credit Notes</h3>
       <p>Tracks deposits collected and refunded per agreement, and lets staff issue a credit note when a partial or adjusted refund is warranted instead of a straight deposit return.</p>
+    </section>
+
+    <section class="module" id="work-orders">
+      <h2 class="module">Work Orders <span class="tag">work_orders</span></h2>
+      <p class="module-intro">A ticketing system for service/repair intake — a customer drops off an item, staff open a Work Order (WO) against it, and it moves through assessment, deposit, and repair before the customer is notified and the item is picked up.</p>
+
+      <h3>Lifecycle</h3>
+      <ol class="steps">
+        <li><strong>Intake</strong> (needs <span class="perm-pill">wo_intake</span>) — pick the customer, optionally the branch, an item/tag label, and a description of what's being serviced. A label prints automatically showing the WO number, ready to attach to the item. The description stays <strong>editable</strong> at any point before completion — changing it is logged in the status history, not silently overwritten.</li>
+        <li><strong>Assessment Fee</strong> (needs <span class="perm-pill">wo_assess</span>) — a single non-refundable fee, set storewide in Settings → Work Orders, is collected before the item is assessed. Status moves to <strong>Assessed</strong>.</li>
+        <li><strong>Estimate</strong> (needs <span class="perm-pill">wo_assess</span>) — labor and consumables (oil, grease, fuel, etc.) are entered as estimate dollar amounts, along with a required deposit amount. Status moves to <strong>Pending Deposit</strong>.</li>
+        <li><strong>Deposit</strong> (needs <span class="perm-pill">wo_assess</span>) — once collected, status moves to <strong>In Progress</strong> — parts assignment, technician work, and time tracking (a later phase) happen from here.</li>
+      </ol>
+      <div class="callout note"><strong>Every fee is a real payment, not just a note</strong>Both the assessment fee and the deposit create a real completed transaction the moment they're collected — there's no separate "hold" step to recall at the register the way a quotation-converted sale works. A WO's own status (<code>intake</code> / <code>assessed</code> / <code>pending_deposit</code>) already represents "payment pending," the same way a rental agreement's own status does before its checkout is finalized.</div>
+
+      <h3>Status history</h3>
+      <p>Every transition — intake, fee paid, estimate entered, deposit paid, cancelled, plus free-form updates once a WO is <strong>In Progress</strong> or <strong>Awaiting Sign-Off</strong> — is logged with who did it and an optional comment. This is the running activity feed shown on the WO's detail view, so a customer-facing service rep can see exactly what's happened without digging through separate screens.</p>
+
+      <h3>Pickup window</h3>
+      <p>Every WO gets a <strong>30-day pickup-due date, counted from when it was opened</strong> (not from completion) — shown as its own badge on the WO list and detail view, independent of lifecycle status. A repair that takes longer than 30 days can show as approaching or past its pickup window before it's even finished; this is intentional, not a bug.</p>
+
+      <h3>Cancelling</h3>
+      <p>A WO can be cancelled (with a required reason) any time before the deposit is paid. Once it's <strong>In Progress</strong> or further along, it can no longer be cancelled — the deposit has been collected and work has started.</p>
+
+      <p><em>Parts sourcing, technician time tracking, the active-tasks overview, technician skills/scheduling, and completion sign-off/customer notification are later phases of this module and will be documented here as they ship.</em></p>
     </section>
 
     <section class="module" id="promotions">
@@ -589,6 +615,7 @@
         <tr><td>employees</td><td>employees_add, employees_edit, employees_delete, employees_salaries</td></tr>
         <tr><td>suppliers</td><td>suppliers_add, suppliers_edit, suppliers_delete</td></tr>
         <tr><td>rentals</td><td>rentals_manage_items, rentals_checkout, rentals_returns, rentals_issue, rentals_pause</td></tr>
+        <tr><td>work_orders</td><td>wo_intake, wo_assess, wo_assign_parts, wo_technician, wo_signoff</td></tr>
         <tr><td>layaway</td><td>layaway_create, layaway_payments, layaway_cancel</td></tr>
         <tr><td>purchase_requests</td><td>pr_create, pr_approve, pr_convert</td></tr>
         <tr><td>purchasing</td><td>purchasing_create, purchasing_approve, purchasing_receive</td></tr>
