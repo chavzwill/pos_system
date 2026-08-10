@@ -180,7 +180,13 @@ router.post('/login', async (req, res) => {
     if (!emp) return res.status(401).json({ error: 'Invalid credentials' });
     if (emp.permissions) emp.permissions = JSON.parse(emp.permissions);
     if (emp.permissions && emp.permissions.multi_branch_access) {
-      const { rows: branches } = await db.execute({ sql: `SELECT b.id, b.branch_code, b.name, b.currency, eb.is_default FROM branches b JOIN employee_branches eb ON b.id = eb.branch_id WHERE eb.employee_id = ?`, args: [emp.id] });
+      // multi_branch_access on the security group is the whole gate — every
+      // active branch is available, not just whatever happens to be in
+      // employee_branches (that join table has no UI to manage beyond
+      // "Default Branch," so it was never a reliable per-employee allowlist).
+      // The employee's own default_branch_id still drives which one is
+      // pre-selected in every branch picker that reads is_default.
+      const { rows: branches } = await db.execute({ sql: `SELECT b.id, b.branch_code, b.name, b.currency, CASE WHEN b.id = ? THEN 1 ELSE 0 END as is_default FROM branches b WHERE b.active = 1 ORDER BY b.name`, args: [emp.default_branch_id || null] });
       emp.branches = branches;
     } else {
       emp.branches = emp.default_branch_id
