@@ -12,6 +12,30 @@ const path = require('path');
 const fs = require('fs');
 const { cloudUpload } = require('../lib/cloudinary');
 
+// A canvas signature pad already gives us a base64 PNG client-side, so this
+// skips multer/multipart entirely — same cloudUpload-or-local-disk fallback
+// routes/customers.js's ID-scan upload uses, just fed a decoded Buffer
+// instead of req.file.buffer. Shared by three call sites (customer's
+// signature at issue, the guard's at issue, the guard's at return) so the
+// decode/upload logic exists in exactly one place.
+async function uploadSignature(dataUrl, filenamePrefix) {
+  const match = /^data:image\/(\w+);base64,(.+)$/.exec(dataUrl || '');
+  if (!match) return null;
+  const buffer = Buffer.from(match[2], 'base64');
+  const cloudResult = await cloudUpload(buffer, {
+    folder: 'pos-system/rental-signatures',
+    public_id: `${filenamePrefix}-${Date.now()}`,
+    overwrite: true,
+    resource_type: 'image',
+  });
+  if (cloudResult) return cloudResult.secure_url;
+  const dir = path.join(__dirname, '../uploads/rental-signatures');
+  fs.mkdirSync(dir, { recursive: true });
+  const filename = `${filenamePrefix}-${Date.now()}.${match[1]}`;
+  fs.writeFileSync(path.join(dir, filename), buffer);
+  return `/uploads/rental-signatures/${filename}`;
+}
+
 // ─── Agreements list/detail ───────────────────────────────────────────────
 
 router.get('/agreements', requirePermission('rentals'), async (req, res) => {
@@ -322,16 +346,18 @@ router.patch('/agreements/:id/issue', requirePermission('rentals_issue'), async 
     // decided (and charged for) when the rental was created — this step only
     // assigns WHO does it, for whichever of those the agreement already flags
     // as required.
-    const { employee_id, delivery_driver_id, operator_id, issued_at, security_employee_id, customer_signature } = req.body;
+    const { employee_id, delivery_driver_id, operator_id, issued_at, security_employee_id, customer_signature, security_signature } = req.body;
     const { rows: [agreement] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
     if (!agreement) return res.status(404).json({ error: 'Not found' });
     if (agreement.status !== 'awaiting_issue') return res.status(400).json({ error: `This agreement is ${agreement.status}, not awaiting issue` });
 
     // Chain-of-custody checkpoints — required, not optional, so an item
-    // can't leave the premises without a security guard verifying it and
-    // the customer signing for it. See database.js's migration comment for
-    // why these live as their own columns rather than reusing employee_id.
+    // can't leave the premises without a security guard verifying (and
+    // signing for) it and the customer signing for it. See database.js's
+    // migration comment for why these live as their own columns rather
+    // than reusing employee_id.
     if (!security_employee_id) return res.status(400).json({ error: 'Select the security employee who verified this item leaving' });
+    if (!security_signature) return res.status(400).json({ error: "The security employee's signature is required to issue this rental" });
     if (!customer_signature) return res.status(400).json({ error: 'Customer signature is required to issue this rental' });
 
     // Defaults to the moment this request is processed, but staff can back-date
@@ -347,29 +373,10 @@ router.patch('/agreements/:id/issue', requirePermission('rentals_issue'), async 
     }
     const today = issuedAt.toISOString().slice(0, 10);
 
-    // The canvas already gives us a base64 PNG client-side, so this skips
-    // multer/multipart entirely — same cloudUpload-or-local-disk fallback
-    // routes/customers.js's ID-scan upload uses, just fed a decoded Buffer
-    // instead of req.file.buffer.
-    const match = /^data:image\/(\w+);base64,(.+)$/.exec(customer_signature);
-    if (!match) return res.status(400).json({ error: 'Invalid signature image' });
-    const sigBuffer = Buffer.from(match[2], 'base64');
-    const cloudResult = await cloudUpload(sigBuffer, {
-      folder: 'pos-system/rental-signatures',
-      public_id: `rental-${req.params.id}-issue-${Date.now()}`,
-      overwrite: true,
-      resource_type: 'image',
-    });
-    let signaturePath;
-    if (cloudResult) {
-      signaturePath = cloudResult.secure_url;
-    } else {
-      const dir = path.join(__dirname, '../uploads/rental-signatures');
-      fs.mkdirSync(dir, { recursive: true });
-      const filename = `rental-${req.params.id}-issue-${Date.now()}.${match[1]}`;
-      fs.writeFileSync(path.join(dir, filename), sigBuffer);
-      signaturePath = `/uploads/rental-signatures/${filename}`;
-    }
+    const customerSigPath = await uploadSignature(customer_signature, `rental-${req.params.id}-issue-customer`);
+    if (!customerSigPath) return res.status(400).json({ error: 'Invalid customer signature image' });
+    const guardSigPath = await uploadSignature(security_signature, `rental-${req.params.id}-issue-guard`);
+    if (!guardSigPath) return res.status(400).json({ error: 'Invalid security signature image' });
 
     await db.execute({
       sql: `UPDATE rental_agreements SET
@@ -377,14 +384,14 @@ router.patch('/agreements/:id/issue', requirePermission('rentals_issue'), async 
         checkout_date = ?, checkout_datetime = ?,
         issued_at = ?, issued_by = ?,
         delivery_driver_id = ?, operator_id = ?,
-        issue_security_employee_id = ?, issue_security_confirmed_at = ?, issue_customer_signature = ?
+        issue_security_employee_id = ?, issue_security_confirmed_at = ?, issue_customer_signature = ?, issue_security_signature = ?
         WHERE id = ?`,
       args: [
         today, issuedAt.toISOString(),
         issuedAt.toISOString(), employee_id || agreement.employee_id || null,
         agreement.delivery_required ? (delivery_driver_id || null) : null,
         agreement.operator_required ? (operator_id || null) : null,
-        security_employee_id, issuedAt.toISOString(), signaturePath,
+        security_employee_id, issuedAt.toISOString(), customerSigPath, guardSigPath,
         req.params.id,
       ],
     });
@@ -486,13 +493,14 @@ router.patch('/agreements/:id/cancel', requirePermission('rentals_returns'), asy
 
 router.patch('/agreements/:id/return', requirePermission('rentals_returns'), async (req, res) => {
   try {
-    const { items, duration_adjustment_override, payment_method, drawer_session_id, pickup_driver_id, returned_at, return_security_employee_id, return_driver_employee_id } = req.body;
+    const { items, duration_adjustment_override, payment_method, drawer_session_id, pickup_driver_id, returned_at, return_security_employee_id, return_driver_employee_id, security_signature } = req.body;
     if (!items || !items.length) return res.status(400).json({ error: 'At least one item is required' });
     // Chain-of-custody checkpoints — required on every return regardless of
     // whether the rental paid for pickup service (that's the separate,
     // optional pickup_driver_id below); this is the security check on the
     // physical hand-off itself. See database.js's migration comment.
     if (!return_security_employee_id) return res.status(400).json({ error: 'Select the security employee signing this item back in' });
+    if (!security_signature) return res.status(400).json({ error: "The security employee's signature is required to complete this return" });
     if (!return_driver_employee_id) return res.status(400).json({ error: 'Select the driver confirming collection of this item' });
 
     const { rows: [agreement] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
@@ -533,6 +541,11 @@ router.patch('/agreements/:id/return', requirePermission('rentals_returns'), asy
       const { rows: [coTx] } = await db.execute({ sql: 'SELECT payment_method FROM transactions WHERE id = ?', args: [agreement.checkout_transaction_id] });
       checkoutIsCredit = !!coTx && coTx.payment_method === 'credit';
     }
+
+    // Uploaded before the write transaction opens — this can be a real
+    // network call (Cloudinary), so it shouldn't hold a DB transaction open.
+    const guardSigPath = await uploadSignature(security_signature, `rental-${req.params.id}-return-guard`);
+    if (!guardSigPath) return res.status(400).json({ error: 'Invalid security signature image' });
 
     const tx = await db.transaction('write');
     try {
@@ -634,7 +647,7 @@ router.patch('/agreements/:id/return', requirePermission('rentals_returns'), asy
         await tx.execute({ sql: 'UPDATE customers SET account_balance = MAX(0, account_balance + ?) WHERE id = ?', args: [settlementAmount, agreement.customer_id] });
       }
 
-      await tx.execute({ sql: `UPDATE rental_agreements SET settlement_transaction_id = ?, deposit_refunded = ?, duration_adjustment_total = duration_adjustment_total + ?, tax_adjustment_total = tax_adjustment_total + ?, damage_fee_total = damage_fee_total + ?, pickup_driver_id = ?, status = ?, returned_at = ?, return_security_employee_id = ?, return_security_confirmed_at = ?, return_driver_employee_id = ?, return_driver_confirmed_at = ? WHERE id = ?`, args: [settlementTxId, depositRefunded, durationAdjustmentTotal, taxAdjustmentTotal, damageFeeTotal, pickupDriverId, newStatus, allReturned ? now.toISOString() : agreement.returned_at, return_security_employee_id, now.toISOString(), return_driver_employee_id, now.toISOString(), req.params.id] });
+      await tx.execute({ sql: `UPDATE rental_agreements SET settlement_transaction_id = ?, deposit_refunded = ?, duration_adjustment_total = duration_adjustment_total + ?, tax_adjustment_total = tax_adjustment_total + ?, damage_fee_total = damage_fee_total + ?, pickup_driver_id = ?, status = ?, returned_at = ?, return_security_employee_id = ?, return_security_confirmed_at = ?, return_security_signature = ?, return_driver_employee_id = ?, return_driver_confirmed_at = ? WHERE id = ?`, args: [settlementTxId, depositRefunded, durationAdjustmentTotal, taxAdjustmentTotal, damageFeeTotal, pickupDriverId, newStatus, allReturned ? now.toISOString() : agreement.returned_at, return_security_employee_id, now.toISOString(), guardSigPath, return_driver_employee_id, now.toISOString(), req.params.id] });
       await tx.commit();
       if (checkoutIsCredit) { try { await runCreditCheck(agreement.customer_id); } catch(e) {} }
     } catch(e) {

@@ -4877,8 +4877,8 @@ const App = {
     const issued = a.status !== 'pending' && a.status !== 'awaiting_issue';
     const returned = a.status === 'returned';
     if (!issued) return muted;
-    const issueOk = a.issue_security_employee_id && a.issue_customer_signature;
-    const returnOk = a.return_security_employee_id && a.return_driver_employee_id;
+    const issueOk = a.issue_security_employee_id && a.issue_security_signature && a.issue_customer_signature;
+    const returnOk = a.return_security_employee_id && a.return_security_signature && a.return_driver_employee_id;
     const parts = [];
     parts.push(issueOk ? `<span class="badge-pill badge-success" style="font-size:10px">✓ Issue</span>` : muted);
     if (returned) parts.push(returnOk ? `<span class="badge-pill badge-success" style="font-size:10px">✓ Return</span>` : muted);
@@ -5075,8 +5075,9 @@ const App = {
           ${!notYetIssued ? `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:12px">
             <strong style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Chain of Custody</strong>
             <div>Issue — ${a.issue_security_employee_name ? `Security: ${a.issue_security_employee_name} (${this.fmtDateTime(a.issue_security_confirmed_at)})` : '<span style="color:var(--text-muted)">no security record (issued before this check existed)</span>'}
-              ${a.issue_customer_signature ? ` — <button type="button" class="btn btn-sm btn-outline" style="padding:1px 8px;font-size:11px" onclick="App.showRentalSignature('${a.issue_customer_signature.replace(/'/g,"\\'")}')">View Signature</button>` : ''}</div>
-            ${a.status==='returned' ? `<div>Return — ${a.return_security_employee_name ? `Security: ${a.return_security_employee_name} (${this.fmtDateTime(a.return_security_confirmed_at)})` : '<span style="color:var(--text-muted)">no security record</span>'}${a.return_driver_employee_name ? `, Collected by: ${a.return_driver_employee_name}` : ''}</div>` : ''}
+              ${this._sigButton(a.issue_security_signature, 'View Guard Signature')}${this._sigButton(a.issue_customer_signature, 'View Customer Signature')}</div>
+            ${a.status==='returned' ? `<div>Return — ${a.return_security_employee_name ? `Security: ${a.return_security_employee_name} (${this.fmtDateTime(a.return_security_confirmed_at)})` : '<span style="color:var(--text-muted)">no security record</span>'}${a.return_driver_employee_name ? `, Collected by: ${a.return_driver_employee_name}` : ''}
+              ${this._sigButton(a.return_security_signature, 'View Guard Signature')}</div>` : ''}
           </div>` : ''}
           <table class="table" style="margin-bottom:12px">
             <thead><tr><th>Product</th><th>Rate</th><th>Class</th><th>Qty</th><th>Returned</th><th>Est. Fee</th><th>Actual Fee</th><th>Deposit</th><th>Condition</th></tr></thead>
@@ -5117,20 +5118,29 @@ const App = {
       </div>`);
   },
 
-  // Shows the customer's issue-time signature inline instead of a plain
-  // <a target="_blank"> link — some locked-down/kiosk browsers (the kind a
-  // security-guard tablet at a gate is likely to run) navigate the SAME tab
-  // when a target="_blank" link can't open a real new one, which reloads
-  // the whole SPA; init() always shows the login screen unconditionally on
-  // load (it doesn't restore an existing session), so that reload looks
-  // exactly like getting signed out even though the cookie was still valid.
-  // A same-page modal can't trigger that at all.
-  showRentalSignature(url) {
+  // A rental agreement can now carry up to three separate signatures
+  // (customer + guard at Issue, guard at Return) — this renders the "View
+  // ___ Signature" button for whichever one is present, or nothing at all
+  // if that checkpoint predates this feature (null column).
+  _sigButton(url, label) {
+    if (!url) return '';
+    return ` <button type="button" class="btn btn-sm btn-outline" style="padding:1px 8px;font-size:11px" onclick="App.showRentalSignature('${url.replace(/'/g,"\\'")}','${label.replace(/'/g,"\\'")}')">${label}</button>`;
+  },
+
+  // Shows a signature inline instead of a plain <a target="_blank"> link —
+  // some locked-down/kiosk browsers (the kind a security-guard tablet at a
+  // gate is likely to run) navigate the SAME tab when a target="_blank"
+  // link can't open a real new one, which reloads the whole SPA; init()
+  // always shows the login screen unconditionally on load (it doesn't
+  // restore an existing session), so that reload looks exactly like
+  // getting signed out even though the cookie was still valid. A same-page
+  // modal can't trigger that at all.
+  showRentalSignature(url, title = 'Signature') {
     this.showModal(`
       <div class="modal" style="max-width:480px">
-        <div class="modal-header"><span class="modal-title">Customer Signature</span><button class="modal-close">✕</button></div>
+        <div class="modal-header"><span class="modal-title">${title}</span><button class="modal-close">✕</button></div>
         <div class="modal-body" style="text-align:center">
-          <img src="${url}" alt="Customer signature" style="max-width:100%;border:1px solid var(--border);border-radius:6px;background:#fff">
+          <img src="${url}" alt="${title}" style="max-width:100%;border:1px solid var(--border);border-radius:6px;background:#fff">
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
@@ -5932,75 +5942,90 @@ const App = {
             </select>
             ${!securityEmployees.length ? `<div style="font-size:11px;color:var(--danger);margin-top:2px">No employees are flagged as Security yet — this rental can't be issued until one is (Employees → edit → Security checkbox).</div>` : ''}
           </div>
-          <div class="form-group" style="margin-bottom:4px">
-            <label>Customer Signature <span style="font-weight:400;color:var(--text-muted)">(required — confirms receipt)</span></label>
-            <canvas id="ri-signature-canvas" width="416" height="140" style="border:1px solid var(--border);border-radius:6px;width:100%;touch-action:none;cursor:crosshair;background:#fff"></canvas>
-            <div style="display:flex;justify-content:space-between;align-items:center;margin-top:4px">
-              <span style="font-size:11px;color:var(--text-muted)">Have the customer sign above with mouse, finger, or stylus.</span>
-              <button type="button" class="btn btn-secondary btn-sm" onclick="App._riSigClear()">Clear</button>
-            </div>
-          </div>
+          ${this._sigPadHtml('ri-guard-sig', 'Guard Signature', 'required — the security employee above signs to confirm')}
+          ${this._sigPadHtml('ri-customer-sig', 'Customer Signature', 'required — confirms receipt')}
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
           <button class="btn btn-primary" onclick="App.confirmIssueRental(${id})">Issue Rental</button>
         </div>
       </div>`);
-    this._riSigInit();
+    this._sigPadInit('ri-guard-sig');
+    this._sigPadInit('ri-customer-sig');
   },
 
-  // ─── Rental issue signature pad ────────────────────────────────────────
+  // ─── Signature pad (canvas-ID-parameterized) ───────────────────────────
   // No canvas/signature infrastructure existed anywhere in this app before
-  // this — a minimal pointer/touch-driven drawing surface, saved as a PNG
-  // data URL and decoded server-side (routes/rentals.js's issue handler).
-  _riSigPos(canvas, evt) {
+  // the rental checkpoint feature — a minimal pointer/touch-driven drawing
+  // surface, saved as a PNG data URL and decoded server-side
+  // (routes/rentals.js's uploadSignature helper). Parameterized by canvas
+  // ID (rather than one hardcoded canvas + one flat boolean) since a single
+  // modal can now hold two or three of these at once (customer + guard at
+  // Issue, guard at Return).
+  _sigPadHtml(canvasId, label, hint) {
+    return `<div class="form-group" style="margin-bottom:12px">
+      <label>${label} <span style="font-weight:400;color:var(--text-muted)">(${hint})</span></label>
+      <canvas id="${canvasId}" width="416" height="140" style="border:1px solid var(--border);border-radius:6px;width:100%;touch-action:none;cursor:crosshair;background:#fff"></canvas>
+      <div style="display:flex;justify-content:flex-end;margin-top:4px">
+        <button type="button" class="btn btn-secondary btn-sm" onclick="App._sigPadClear('${canvasId}')">Clear</button>
+      </div>
+    </div>`;
+  },
+  _sigPadPos(canvas, evt) {
     const rect = canvas.getBoundingClientRect();
     const point = evt.touches ? evt.touches[0] : evt;
     return { x: (point.clientX - rect.left) * (canvas.width / rect.width), y: (point.clientY - rect.top) * (canvas.height / rect.height) };
   },
-  _riSigStart(evt) {
+  _sigPadStart(canvasId, evt) {
     evt.preventDefault();
-    const canvas = document.getElementById('ri-signature-canvas');
+    const canvas = document.getElementById(canvasId);
     if (!canvas) return;
-    this._riSigDrawing = true;
-    const { x, y } = this._riSigPos(canvas, evt);
+    this._sigPads[canvasId] = this._sigPads[canvasId] || {};
+    this._sigPads[canvasId].drawing = true;
+    const { x, y } = this._sigPadPos(canvas, evt);
     const ctx = canvas.getContext('2d');
     ctx.beginPath();
     ctx.moveTo(x, y);
   },
-  _riSigMove(evt) {
-    if (!this._riSigDrawing) return;
+  _sigPadMove(canvasId, evt) {
+    const state = this._sigPads[canvasId];
+    if (!state?.drawing) return;
     evt.preventDefault();
-    const canvas = document.getElementById('ri-signature-canvas');
+    const canvas = document.getElementById(canvasId);
     if (!canvas) return;
-    const { x, y } = this._riSigPos(canvas, evt);
+    const { x, y } = this._sigPadPos(canvas, evt);
     const ctx = canvas.getContext('2d');
     ctx.lineTo(x, y);
     ctx.strokeStyle = '#111';
     ctx.lineWidth = 2;
     ctx.lineCap = 'round';
     ctx.stroke();
-    this._riSigHasDrawn = true;
+    state.hasDrawn = true;
   },
-  _riSigEnd() { this._riSigDrawing = false; },
-  _riSigClear() {
-    const canvas = document.getElementById('ri-signature-canvas');
+  _sigPadEnd(canvasId) {
+    const state = this._sigPads[canvasId];
+    if (state) state.drawing = false;
+  },
+  _sigPadClear(canvasId) {
+    const canvas = document.getElementById(canvasId);
     if (!canvas) return;
     canvas.getContext('2d').clearRect(0, 0, canvas.width, canvas.height);
-    this._riSigHasDrawn = false;
+    if (this._sigPads[canvasId]) this._sigPads[canvasId].hasDrawn = false;
   },
-  _riSigInit() {
-    this._riSigDrawing = false;
-    this._riSigHasDrawn = false;
-    const canvas = document.getElementById('ri-signature-canvas');
+  _sigPadInit(canvasId) {
+    this._sigPads = this._sigPads || {};
+    this._sigPads[canvasId] = { drawing: false, hasDrawn: false };
+    const canvas = document.getElementById(canvasId);
     if (!canvas) return;
-    canvas.addEventListener('mousedown', e => this._riSigStart(e));
-    canvas.addEventListener('mousemove', e => this._riSigMove(e));
-    window.addEventListener('mouseup', () => this._riSigEnd());
-    canvas.addEventListener('touchstart', e => this._riSigStart(e));
-    canvas.addEventListener('touchmove', e => this._riSigMove(e));
-    canvas.addEventListener('touchend', () => this._riSigEnd());
+    canvas.addEventListener('mousedown', e => this._sigPadStart(canvasId, e));
+    canvas.addEventListener('mousemove', e => this._sigPadMove(canvasId, e));
+    window.addEventListener('mouseup', () => this._sigPadEnd(canvasId));
+    canvas.addEventListener('touchstart', e => this._sigPadStart(canvasId, e));
+    canvas.addEventListener('touchmove', e => this._sigPadMove(canvasId, e));
+    canvas.addEventListener('touchend', () => this._sigPadEnd(canvasId));
   },
+  _sigPadHasDrawn(canvasId) { return !!this._sigPads?.[canvasId]?.hasDrawn; },
+  _sigPadDataUrl(canvasId) { return document.getElementById(canvasId)?.toDataURL('image/png'); },
 
   async confirmIssueRental(id) {
     const deliveryDriverEl = document.getElementById('ri-delivery-driver');
@@ -6009,14 +6034,14 @@ const App = {
     if (deliveryDriverEl && !deliveryDriverEl.value) { this.alert('Select a driver for delivery', 'error'); return; }
     if (operatorEl && !operatorEl.value) { this.alert('Select an operator', 'error'); return; }
     if (!securityEl?.value) { this.alert('Select the security employee who verified this item leaving', 'error'); return; }
-    if (!this._riSigHasDrawn) { this.alert('Customer signature is required to issue this rental', 'error'); return; }
+    if (!this._sigPadHasDrawn('ri-guard-sig')) { this.alert("The security employee's signature is required to issue this rental", 'error'); return; }
+    if (!this._sigPadHasDrawn('ri-customer-sig')) { this.alert('Customer signature is required to issue this rental', 'error'); return; }
     const issuedAtRaw = document.getElementById('ri-issued-at')?.value;
     if (!issuedAtRaw) { this.alert('Enter a start date/time', 'error'); return; }
     // The datetime-local input has no timezone of its own — new Date() here
     // resolves it against the browser's local clock, then toISOString() makes
     // it unambiguous for the server regardless of what timezone it runs in.
     const issuedAt = new Date(issuedAtRaw).toISOString();
-    const signatureCanvas = document.getElementById('ri-signature-canvas');
     try {
       const agreement = await this.api('PATCH', `/rentals/agreements/${id}/issue`, {
         employee_id: this.currentUser?.id || null,
@@ -6024,7 +6049,8 @@ const App = {
         operator_id: operatorEl ? parseInt(operatorEl.value) || null : null,
         issued_at: issuedAt,
         security_employee_id: parseInt(securityEl.value),
-        customer_signature: signatureCanvas.toDataURL('image/png'),
+        security_signature: this._sigPadDataUrl('ri-guard-sig'),
+        customer_signature: this._sigPadDataUrl('ri-customer-sig'),
       });
       this.closeModal();
       this.alert(`Rental ${agreement.agreement_number} issued — clock started`);
@@ -6100,12 +6126,14 @@ const App = {
               ${!drivers.length ? `<div style="font-size:11px;color:var(--text-muted);margin-top:2px">No employees are flagged as a driver yet.</div>` : ''}
             </div>
           </div>
+          ${this._sigPadHtml('rr-guard-sig', 'Guard Signature', 'required — the security employee above signs to confirm')}
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
           <button class="btn btn-primary" onclick="App.saveRentalReturn(${id}, [${outstanding.map(i=>i.id).join(',')}])">Confirm Return</button>
         </div>
       </div>`);
+    this._sigPadInit('rr-guard-sig');
   },
 
   async saveRentalReturn(agreementId, itemIds) {
@@ -6123,6 +6151,7 @@ const App = {
     if (!securityEl?.value) { this.alert('Select the security employee signing this item back in', 'error'); return; }
     const collectingDriverEl = document.getElementById('rr-collecting-driver');
     if (!collectingDriverEl?.value) { this.alert('Select the driver confirming collection of this item', 'error'); return; }
+    if (!this._sigPadHasDrawn('rr-guard-sig')) { this.alert("The security employee's signature is required to complete this return", 'error'); return; }
     const returnedAtRaw = document.getElementById('rr-returned-at').value;
     if (!returnedAtRaw) { this.alert('Enter a return date/time', 'error'); return; }
     // The datetime-local input has no timezone of its own — new Date() here
@@ -6137,6 +6166,7 @@ const App = {
         returned_at: returnedAt,
         return_security_employee_id: parseInt(securityEl.value),
         return_driver_employee_id: parseInt(collectingDriverEl.value),
+        security_signature: this._sigPadDataUrl('rr-guard-sig'),
       });
       this.closeModal();
       this.alert(`Return processed — settlement ${updated.settlement_transaction_id ? 'recorded' : ''}`);

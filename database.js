@@ -1017,6 +1017,12 @@ async function _init() {
     'ALTER TABLE rental_agreements ADD COLUMN return_security_confirmed_at DATETIME',
     'ALTER TABLE rental_agreements ADD COLUMN return_driver_employee_id INTEGER REFERENCES employees(id)',
     'ALTER TABLE rental_agreements ADD COLUMN return_driver_confirmed_at DATETIME',
+    // The guard's part of the checkpoint was originally just picking their
+    // name (a "check off") — upgraded to an actual drawn signature at both
+    // Issue and Return, stored separately from issue_customer_signature so
+    // the two are never conflated in the UI (each has its own View button).
+    'ALTER TABLE rental_agreements ADD COLUMN issue_security_signature TEXT',
+    'ALTER TABLE rental_agreements ADD COLUMN return_security_signature TEXT',
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch(e) {}
