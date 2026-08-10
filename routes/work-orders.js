@@ -32,7 +32,7 @@ router.get('/', requirePermission('work_orders'), async (req, res) => {
     let sql = `${WO_LIST_SELECT} WHERE 1=1`;
     const params = [];
     if (view === 'active') { sql += " AND wo.status NOT IN ('picked_up','cancelled')"; }
-    else if (view === 'awaiting_pickup') { sql += " AND wo.status = 'awaiting_pickup'"; }
+    else if (view === 'awaiting_pickup' || view === 'picked_up' || view === 'cancelled') { sql += ' AND wo.status = ?'; params.push(view); }
     else if (status) { sql += ' AND wo.status = ?'; params.push(status); }
     if (customer_id) { sql += ' AND wo.customer_id = ?'; params.push(customer_id); }
     if (branch_id) { sql += ' AND wo.branch_id = ?'; params.push(branch_id); }
@@ -540,6 +540,63 @@ router.post('/tasks/:id/clock-out', requirePermission('wo_technician'), async (r
     if (!openEntry) return res.status(400).json({ error: 'No active timer on this task' });
     await db.execute({ sql: 'UPDATE work_order_task_time_entries SET ended_at = CURRENT_TIMESTAMP WHERE id = ?', args: [openEntry.id] });
     const { rows: [updated] } = await db.execute({ sql: 'SELECT * FROM work_order_tasks WHERE id = ?', args: [req.params.id] });
+    res.json(updated);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Completion sign-off, customer notification, pickup ────────────────────
+
+// Supervisor-only — requires every task be marked complete first (an open
+// timer would already block that task's own completion, so this is really
+// just re-checking nothing was left pending).
+router.patch('/:id/signoff', requirePermission('wo_signoff'), async (req, res) => {
+  try {
+    const { employee_id, comment } = req.body;
+    const { rows: [wo] } = await db.execute({ sql: 'SELECT * FROM work_orders WHERE id = ?', args: [req.params.id] });
+    if (!wo) return res.status(404).json({ error: 'Not found' });
+    if (!['in_progress', 'awaiting_signoff'].includes(wo.status)) return res.status(400).json({ error: `This work order is ${wo.status}, not awaiting sign-off` });
+    const { rows: tasks } = await db.execute({ sql: 'SELECT id, status FROM work_order_tasks WHERE work_order_id = ?', args: [req.params.id] });
+    if (!tasks.length) return res.status(400).json({ error: 'This work order has no tasks yet' });
+    const incomplete = tasks.filter(t => t.status !== 'complete');
+    if (incomplete.length) return res.status(400).json({ error: `${incomplete.length} task(s) are not yet marked complete` });
+
+    await db.execute({ sql: `UPDATE work_orders SET status = 'complete', completed_at = CURRENT_TIMESTAMP, completed_by = ? WHERE id = ?`, args: [employee_id || null, req.params.id] });
+    await logStatus(db, req.params.id, 'complete', comment || 'Signed off by supervisor', employee_id);
+    const { rows: [updated] } = await db.execute({ sql: `${WO_LIST_SELECT} WHERE wo.id = ?`, args: [req.params.id] });
+    res.json(updated);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Records how the customer was told it's ready — email sending itself
+// happens via a separate POST /email/send-work-order-ready/:id call from
+// the frontend (same split every other "email this document" action in
+// this app uses), this just logs which method was used and moves the WO
+// into the awaiting-pickup queue.
+router.patch('/:id/notify', requirePermission('work_orders'), async (req, res) => {
+  try {
+    const { notification_method, employee_id } = req.body;
+    if (!['email', 'phone'].includes(notification_method)) return res.status(400).json({ error: 'A notification method (email or phone) is required' });
+    const { rows: [wo] } = await db.execute({ sql: 'SELECT * FROM work_orders WHERE id = ?', args: [req.params.id] });
+    if (!wo) return res.status(404).json({ error: 'Not found' });
+    if (wo.status !== 'complete') return res.status(400).json({ error: `This work order is ${wo.status}, not yet complete` });
+
+    await db.execute({ sql: `UPDATE work_orders SET status = 'awaiting_pickup', notification_method = ?, notified_at = CURRENT_TIMESTAMP, notified_by = ? WHERE id = ?`, args: [notification_method, employee_id || null, req.params.id] });
+    await logStatus(db, req.params.id, 'awaiting_pickup', `Customer notified by ${notification_method}`, employee_id);
+    const { rows: [updated] } = await db.execute({ sql: `${WO_LIST_SELECT} WHERE wo.id = ?`, args: [req.params.id] });
+    res.json(updated);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/:id/picked-up', requirePermission('work_orders'), async (req, res) => {
+  try {
+    const { employee_id } = req.body;
+    const { rows: [wo] } = await db.execute({ sql: 'SELECT * FROM work_orders WHERE id = ?', args: [req.params.id] });
+    if (!wo) return res.status(404).json({ error: 'Not found' });
+    if (wo.status !== 'awaiting_pickup') return res.status(400).json({ error: `This work order is ${wo.status}, not awaiting pickup` });
+
+    await db.execute({ sql: `UPDATE work_orders SET status = 'picked_up', picked_up_at = CURRENT_TIMESTAMP WHERE id = ?`, args: [req.params.id] });
+    await logStatus(db, req.params.id, 'picked_up', 'Item picked up by customer', employee_id);
+    const { rows: [updated] } = await db.execute({ sql: `${WO_LIST_SELECT} WHERE wo.id = ?`, args: [req.params.id] });
     res.json(updated);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

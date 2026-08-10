@@ -775,4 +775,58 @@ router.post('/test', requirePermission('settings'), async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+function buildWorkOrderReadyHtml(wo, s) {
+  const storeName = s.store_name || 'My Store';
+
+  return `<!DOCTYPE html>
+<html>
+<head><meta charset="utf-8"><title>Work Order ${wo.wo_number} Ready</title></head>
+<body style="margin:0;padding:0;background:#f5f5f5;font-family:Arial,sans-serif">
+<table width="100%" cellpadding="0" cellspacing="0" style="background:#f5f5f5;padding:24px 0">
+<tr><td align="center">
+  <table width="480" cellpadding="0" cellspacing="0" style="background:#fff;border-radius:8px;overflow:hidden;box-shadow:0 1px 4px rgba(0,0,0,.1)">
+    ${docHeader(storeName, wo.branch_name, s.store_address, s.store_phone, 'Ready for Pickup', `Ref: ${wo.wo_number}`)}
+    <tr><td style="padding:0 24px 20px">
+      ${wo.customer_name ? docRow('Customer', wo.customer_name) : ''}
+      ${wo.item_label ? docRow('Item', wo.item_label) : ''}
+      ${docRow('Completed', wo.completed_at ? new Date(wo.completed_at).toLocaleString() : '—')}
+      ${docRow('Pickup By', wo.pickup_due_date ? new Date(wo.pickup_due_date).toLocaleDateString() : '—', '#dc2626')}
+      <div style="text-align:center;margin-top:20px;font-size:14px;color:#333">Your item is ready for pickup. Please bring this reference number with you.</div>
+      <div style="text-align:center;margin-top:16px;font-size:11px;color:#999">Pickup must happen by the date above.</div>
+    </td></tr>
+  </table>
+</td></tr>
+</table>
+</body>
+</html>`;
+}
+
+// Mirrors send-cancellation-receipt exactly — same getSettings/
+// createTransporter/sendMail sequence every other doc-email route uses.
+router.post('/send-work-order-ready/:id', requireAuth, async (req, res) => {
+  const { to } = req.body;
+  if (!to) return res.status(400).json({ error: 'Recipient email is required' });
+  try {
+    const { rows: [wo] } = await db.execute({ sql: `SELECT wo.*, c.first_name || ' ' || c.last_name as customer_name, b.name as branch_name
+      FROM work_orders wo LEFT JOIN customers c ON wo.customer_id = c.id LEFT JOIN branches b ON wo.branch_id = b.id WHERE wo.id = ?`, args: [req.params.id] });
+    if (!wo) return res.status(404).json({ error: 'Work order not found' });
+
+    const s = await getSettings();
+    try {
+      const transporter = createTransporter(s);
+      const fromName = s.email_from_name || s.store_name || 'POS System';
+      const fromAddr = s.email_smtp_user || s.store_email || '';
+      await transporter.sendMail({
+        from: `"${fromName}" <${fromAddr}>`,
+        to,
+        subject: `Ready for Pickup - ${wo.wo_number} from ${s.store_name || 'Our Store'}`,
+        html: buildWorkOrderReadyHtml(wo, s),
+      });
+      res.json({ success: true, message: `Notification sent to ${to}` });
+    } catch (e) {
+      res.status(500).json({ error: `Failed to send email: ${e.message}` });
+    }
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 module.exports = router;

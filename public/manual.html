@@ -374,7 +374,11 @@
       <p>A managed <strong>skill catalog</strong> ("Manage Skills" on the Work Orders list) lets you define what a technician can do (e.g. "Engine Repair", "Electrical"). Skills are assigned to technicians from their employee edit form, and can optionally be tagged as required on a task — the schedule board shows which skills each technician has next to unassigned tasks so it's obvious who's a fit.</p>
       <p>The <strong>📅 Schedule</strong> button opens a day-by-day board: pick a date, see every unscheduled task (with its required skills, if any) on one side, and everyone already assigned to that day on the other. Assigning a technician to a task for a given day doesn't lock anything — it's a planning aid, not a hard reservation, and can be removed and reassigned freely.</p>
 
-      <p><em>Completion sign-off/customer notification is the final phase of this module and will be documented here once it ships.</em></p>
+      <h3>Sign-off, notification &amp; pickup</h3>
+      <p><strong>Supervisor Sign-Off</strong> (needs <span class="perm-pill">wo_signoff</span>) is only available once every task on the work order is marked Complete — signing off moves the WO to <strong>Complete</strong> and records who signed off and when.</p>
+      <p><strong>Notify Customer</strong> then offers two ways to reach them: <strong>Send Email Notification</strong> (only shown if the customer has an email on file) sends a "ready for pickup" email and records it, or <strong>Mark as Called</strong> logs that they were reached by phone without sending anything. Either way, the WO moves to <strong>Awaiting Pickup</strong>.</p>
+      <p>Once the customer collects the item, <strong>Mark Picked Up</strong> closes the work order out.</p>
+      <div class="callout note"><strong>The pickup-due badge keeps running the whole time</strong>Remember the 30-day pickup window counts from when the WO was <em>opened</em>, not from completion — a work order can already show "Pickup overdue" on the Awaiting Pickup list the moment it lands there, if the repair itself took a while. That's expected, not a bug — it's meant to flag exactly that situation.</div>
     </section>
 
     <section class="module" id="promotions">

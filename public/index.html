@@ -6618,6 +6618,9 @@ const App = {
           ${wo.status==='assessed' && this.can('wo_assess') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showWOEstimateModal(${wo.id})">Enter Estimate</button>` : ''}
           ${wo.status==='pending_deposit' && this.can('wo_assess') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showWODepositModal(${wo.id})">Process Deposit</button>` : ''}
           ${['in_progress','awaiting_signoff'].includes(wo.status) && this.can('work_orders') ? `<button class="btn btn-secondary" onclick="App.closeModal();App.showWOStatusCommentModal(${wo.id})">Add Status Update</button>` : ''}
+          ${['in_progress','awaiting_signoff'].includes(wo.status) && this.can('wo_signoff') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showWOSignoffModal(${wo.id})">Supervisor Sign-Off</button>` : ''}
+          ${wo.status==='complete' && this.can('work_orders') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showWONotifyModal(${wo.id})">Notify Customer</button>` : ''}
+          ${wo.status==='awaiting_pickup' && this.can('work_orders') ? `<button class="btn btn-primary" onclick="App.woMarkPickedUp(${wo.id})">Mark Picked Up</button>` : ''}
           ${['intake','assessed','pending_deposit'].includes(wo.status) && this.can('work_orders') ? `<button class="btn btn-danger" onclick="App.closeModal();App.showWOCancelModal(${wo.id})">Cancel Work Order</button>` : ''}
           <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
         </div>
@@ -7168,6 +7171,82 @@ const App = {
     try {
       await this.api('DELETE', `/work-orders/schedule/${scheduleId}`);
       this.loadWOSchedule();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  // ─── Sign-off, notification, pickup ─────────────────────────────────────────
+
+  showWOSignoffModal(id) {
+    this.showModal(`
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header"><span class="modal-title">Supervisor Sign-Off</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <p style="font-size:13px;color:var(--text-muted)">This confirms every task on this work order is complete and the item is ready to hand back to the customer. All tasks must already be marked Complete.</p>
+          <div class="form-group"><label>Comment (optional)</label><textarea id="wo-signoff-comment" rows="2"></textarea></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="App.confirmWOSignoff(${id})">Sign Off</button>
+        </div>
+      </div>`);
+  },
+
+  async confirmWOSignoff(id) {
+    const comment = document.getElementById('wo-signoff-comment').value.trim();
+    try {
+      await this.api('PATCH', `/work-orders/${id}/signoff`, { comment, employee_id: this.currentUser.id });
+      this.closeModal();
+      this.alert('Work order signed off — complete');
+      this.renderWorkOrders();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  async showWONotifyModal(id) {
+    const wo = await this.api('GET', `/work-orders/${id}`);
+    this.showModal(`
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header"><span class="modal-title">Notify Customer</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <p style="font-size:13px;color:var(--text-muted)">Let the customer know their item is ready for pickup.</p>
+          ${wo.customer_email ? `
+          <div class="form-group"><label>Email</label><input id="wo-notify-email" value="${this.escapeAttr(wo.customer_email)}"></div>
+          <button class="btn btn-primary" style="width:100%;margin-bottom:8px" onclick="App.sendWONotifyEmail(${id})">📧 Send Email Notification</button>` : `<p style="font-size:12px;color:var(--warning)">No email on file for this customer.</p>`}
+          <button class="btn btn-secondary" style="width:100%" onclick="App.markWONotifyCalled(${id})">☎ Mark as Called</button>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
+        </div>
+      </div>`);
+  },
+
+  async sendWONotifyEmail(id) {
+    const to = document.getElementById('wo-notify-email').value.trim();
+    if (!to) { this.alert('An email address is required', 'error'); return; }
+    try {
+      await this.api('POST', `/email/send-work-order-ready/${id}`, { to });
+      await this.api('PATCH', `/work-orders/${id}/notify`, { notification_method: 'email', employee_id: this.currentUser.id });
+      this.closeModal();
+      this.alert('Customer notified by email');
+      this.renderWorkOrders();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  async markWONotifyCalled(id) {
+    try {
+      await this.api('PATCH', `/work-orders/${id}/notify`, { notification_method: 'phone', employee_id: this.currentUser.id });
+      this.closeModal();
+      this.alert('Marked as called');
+      this.renderWorkOrders();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  async woMarkPickedUp(id) {
+    if (!confirm('Confirm the customer has picked up this item?')) return;
+    try {
+      await this.api('PATCH', `/work-orders/${id}/picked-up`, { employee_id: this.currentUser.id });
+      this.closeModal();
+      this.alert('Marked as picked up');
+      this.renderWorkOrders();
     } catch(e) { this.alert(e.message, 'error'); }
   },
 
