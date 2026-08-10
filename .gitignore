@@ -7,10 +7,14 @@ uploads/products/*
 uploads/po-attachments/*
 uploads/branding/*
 uploads/customer-ids/*
+uploads/rental-signatures/*
+uploads/rental-po-attachments/*
 !uploads/products/.gitkeep
 !uploads/po-attachments/.gitkeep
 !uploads/branding/.gitkeep
 !uploads/customer-ids/.gitkeep
+!uploads/rental-signatures/.gitkeep
+!uploads/rental-po-attachments/.gitkeep
 .env
 .vercel
 test-results/

@@ -128,6 +128,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       ra.checkout_datetime as rental_checkout_datetime, ra.due_date as rental_due_date, ra.returned_at as rental_returned_at,
       ra.deposit_total as rental_deposit_total, ra.deposit_refunded as rental_deposit_refunded,
       ra.duration_adjustment_total as rental_duration_adjustment_total, ra.damage_fee_total as rental_damage_fee_total,
+      ra.customer_po_number as rental_po_number,
       CASE WHEN ra.checkout_transaction_id = t.id THEN 'checkout' WHEN ra.settlement_transaction_id = t.id THEN 'settlement' END as rental_role
       FROM transactions t LEFT JOIN customers c ON t.customer_id = c.id LEFT JOIN employees e ON t.employee_id = e.id LEFT JOIN branches b ON t.branch_id = b.id LEFT JOIN quotations q ON q.converted_to_tx = t.id LEFT JOIN employees qe ON q.employee_id = qe.id LEFT JOIN returns r ON t.source_return_id = r.id LEFT JOIN shipments sh ON sh.transaction_id = t.id
       LEFT JOIN employees ve ON t.voided_by = ve.id
@@ -138,6 +139,12 @@ router.get('/:id', requireAuth, async (req, res) => {
     tx.items = items;
     const { rows: payments } = await db.execute({ sql: 'SELECT * FROM transaction_payments WHERE transaction_id = ? ORDER BY id', args: [req.params.id] });
     tx.payments = payments;
+    // Pause history is agreement-level, not tied to which transaction (checkout
+    // vs settlement) this is — shown on either printed invoice for the same rental.
+    if (tx.rental_agreement_id) {
+      const { rows: pauses } = await db.execute({ sql: 'SELECT reason, notes, started_at, ended_at FROM rental_agreement_pauses WHERE agreement_id = ? ORDER BY id', args: [tx.rental_agreement_id] });
+      tx.rental_pauses = pauses;
+    }
     res.json(tx);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

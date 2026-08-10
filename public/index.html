@@ -3293,6 +3293,7 @@ const App = {
       <div><label>Date</label>${this.fmtDateTime(tx.created_at)}</div>
       ${tx.customer_name ? `<div><label>Customer</label>${tx.customer_name}</div>` : ''}
       ${tx.rental_agreement_number ? `<div><label>Rental Agreement</label>${tx.rental_agreement_number}</div>` : ''}
+      ${tx.rental_po_number ? `<div><label>Customer PO</label>${tx.rental_po_number}</div>` : ''}
     </div>
     <table>
       <thead><tr><th>Item</th><th style="text-align:center">Qty</th><th style="text-align:right">Unit Price</th><th style="text-align:right">Total</th></tr></thead>
@@ -3304,6 +3305,19 @@ const App = {
       <tr><td>Payment</td><td style="text-align:right">${tx.payment_method.replace('_',' ').toUpperCase()}</td></tr>
       ${tenderRows.map(([l,v]) => `<tr><td>${l}</td><td style="text-align:right">${v}</td></tr>`).join('')}
     </table>
+    ${tx.rental_pauses?.length ? `
+    <div style="margin-top:20px">
+      <div style="font-size:11px;font-weight:bold;text-transform:uppercase;color:#555;margin-bottom:6px">Paused Periods</div>
+      <table>
+        <thead><tr><th>Reason</th><th>Notes</th><th>Start</th><th>Stop</th></tr></thead>
+        <tbody>${tx.rental_pauses.map(p => `<tr>
+          <td style="text-transform:capitalize">${p.reason}</td>
+          <td>${p.notes || '—'}</td>
+          <td>${this.fmtDateTime(p.started_at)}</td>
+          <td>${p.ended_at ? this.fmtDateTime(p.ended_at) : 'Ongoing'}</td>
+        </tr>`).join('')}</tbody>
+      </table>
+    </div>` : ''}
     ${tx.rental_agreement_number ? `
     <div style="display:flex;justify-content:space-between;margin-top:70px;gap:24px">
       <div style="flex:1;text-align:center"><div style="border-top:1px solid #333;padding-top:6px;font-size:11px;color:#555">Customer Signature</div></div>
@@ -4891,7 +4905,7 @@ const App = {
     const view = this.rentalTab === 'all' ? '' : this.rentalTab;
     const agreements = await this.api('GET', `/rentals/agreements${view ? '?view='+view : ''}`);
     if (!document.getElementById('rental-content')) return;
-    const sc = { pending:'badge-warning', awaiting_issue:'badge-warning', active:'badge-info', overdue:'badge-danger', returned:'badge-success', cancelled:'badge-secondary' };
+    const sc = { pending:'badge-warning', awaiting_issue:'badge-warning', active:'badge-info', overdue:'badge-danger', paused:'badge-warning', returned:'badge-success', cancelled:'badge-secondary' };
     const none = '<span style="color:var(--text-muted)">None</span>';
     const notAssigned = '<span style="color:var(--text-muted)">Not yet assigned</span>';
     const customerPickupTag = '<span class="badge-pill badge-secondary" style="font-size:11px">Customer Pickup</span>';
@@ -4904,7 +4918,7 @@ const App = {
           <td>${a.customer_name||'—'}</td>
           <td>${a.branch_name||'—'}</td>
           <td>${(a.status==='pending'||a.status==='awaiting_issue') ? '—' : this.fmtDate(a.checkout_date)}</td>
-          <td>${this.fmtDate(a.due_date)}</td>
+          <td>${this.fmtDate(a.due_date)}${a.current_pause_started_at ? `<div style="font-size:11px;color:var(--warning)">Paused since ${this.fmtDateTime(a.current_pause_started_at)}</div>` : ''}</td>
           <td>${(a.status==='pending'||a.status==='awaiting_issue') ? '—' : this.rentalDurationLabel(a.checkout_date, a.due_date, a.returned_at)}</td>
           <td><span class="badge badge-info">${a.item_count}</span></td>
           <td>${a.delivery_required ? (a.delivery_driver_name || notAssigned) : (a.customer_pickup ? customerPickupTag : none)}</td>
@@ -5072,6 +5086,19 @@ const App = {
             ${a.operator_required ? `<div>Operator — ${this.fmt(a.operator_fee)}${a.operator_name ? ` — ${a.operator_name}` : ' — not yet assigned'}</div>` : ''}
             ${a.pickup_required ? `<div>Pickup — ${this.fmt(a.pickup_cost)}${a.pickup_driver_name ? ` — ${a.pickup_driver_name}` : ' — driver not yet assigned'}</div>` : ''}
           </div>` : ''}
+          ${a.customer_po_number ? `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:12px">
+            <strong style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Customer PO</strong>
+            <div>PO # ${a.customer_po_number}${a.customer_po_attachment_path ? ` <a href="/api/rentals/agreements/${a.id}/po-attachment/download" target="_blank" class="btn btn-sm btn-outline" style="padding:1px 8px;font-size:11px;margin-left:6px">Download PO</a>` : ''}</div>
+          </div>` : ''}
+          ${a.is_paused ? `<div style="padding:8px 12px;background:rgba(217,119,6,0.1);border-left:3px solid #d97706;border-radius:4px;font-size:12px;color:#d97706;margin-bottom:12px">Paused — this rental is currently out for ${a.pauses?.[a.pauses.length-1]?.reason || 'maintenance'}. Resume it before processing a return.</div>` : ''}
+          ${a.pauses?.length ? `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:12px">
+            <strong style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Pause History</strong>
+            ${a.pauses.map(p => `<div style="margin-top:4px">
+              <strong style="text-transform:capitalize">${p.reason}</strong> — ${this.fmtDateTime(p.started_at)} → ${p.ended_at ? this.fmtDateTime(p.ended_at) : '<span style="color:var(--warning)">Ongoing</span>'}
+              ${p.notes ? `<div style="color:var(--text-muted)">${p.notes}</div>` : ''}
+              <div style="color:var(--text-muted);font-size:11px">Paused by ${p.paused_by_name||'—'}, authorized by ${p.authorized_by_name||'—'}${p.ended_at ? `, resumed by ${p.resumed_by_name||'—'}` : ''}${p.due_date_after ? ` — due date extended to ${this.fmtDate(p.due_date_after)}` : ''}</div>
+            </div>`).join('')}
+          </div>` : ''}
           ${!notYetIssued ? `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:12px">
             <strong style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Chain of Custody</strong>
             <div>Issue — ${a.issue_security_employee_name ? `Security: ${a.issue_security_employee_name} (${this.fmtDateTime(a.issue_security_confirmed_at)})` : '<span style="color:var(--text-muted)">no security record (issued before this check existed)</span>'}
@@ -5111,11 +5138,77 @@ const App = {
           ${a.status==='pending' && this.can('pos') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showFinalizeRentalModal(${a.id})">Process Payment</button>` : ''}
           ${a.status==='awaiting_issue' && this.can('rentals_issue') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showIssueRentalModal(${a.id})">Issue Rental</button>` : ''}
           ${a.status==='active' ? `<button class="btn btn-secondary" onclick="App.printRentalDeliveryNote(${a.id})">🖨️ Delivery Note</button>` : ''}
-          ${a.status==='active' && this.can('rentals_returns') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showRentalReturnModal(${a.id})">Process Return</button>` : ''}
+          ${a.status==='active' && !a.is_paused ? `<button class="btn btn-secondary" onclick="App.closeModal();App.showPauseRentalModal(${a.id})">⏸ Pause Rental</button>` : ''}
+          ${a.status==='active' && a.is_paused ? `<button class="btn btn-primary" onclick="App.resumeRentalAgreement(${a.id})">▶ Resume Rental</button>` : ''}
+          ${a.status==='active' && !a.is_paused && this.can('rentals_returns') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showRentalReturnModal(${a.id})">Process Return</button>` : ''}
           ${(a.status==='active'||a.status==='pending'||a.status==='awaiting_issue') && !a.items.some(i=>i.quantity_returned>0) && this.can('rentals_returns') ? `<button class="btn btn-danger" onclick="App.cancelRentalAgreement(${a.id})">${a.status==='pending'?'Cancel Hold':'Cancel Agreement'}</button>` : ''}
           <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
         </div>
       </div>`);
+  },
+
+  // Pausing is the exceptional, billing-affecting action — it requires a
+  // manager PIN entered on the spot, same layout/UX as the existing "Void
+  // Line" override modal (see voidCartLine) — visible to anyone who can see
+  // the agreement, the PIN is what actually gates it.
+  showPauseRentalModal(id) {
+    this.showModal(`
+      <div class="modal" style="max-width:420px">
+        <div class="modal-header">
+          <span class="modal-title">Pause Rental — Manager Override</span>
+          <button class="modal-close">✕</button>
+        </div>
+        <div class="modal-body">
+          <p style="font-size:13px;color:var(--text-muted);margin-bottom:14px">Pausing stops the billing clock and pushes the due date out by however long it lasts — the customer isn't charged for downtime that isn't their fault.</p>
+          <div class="form-group"><label>Reason</label>
+            <select id="pr-reason">
+              <option value="maintenance">Maintenance</option>
+              <option value="replacement">Replacement of Item</option>
+              <option value="other">Other</option>
+            </select>
+          </div>
+          <div class="form-group"><label>Notes</label><textarea id="pr-notes" rows="3" placeholder="What's happening and why"></textarea></div>
+          <div class="form-group"><label>Override PIN</label>
+            <input type="password" id="pr-pin" maxlength="8" placeholder="Manager PIN" style="letter-spacing:4px;font-size:18px;text-align:center" onkeydown="if(event.key==='Enter')App.submitPauseRental(${id})">
+          </div>
+          <div id="pr-err" style="color:var(--danger);font-size:13px;min-height:16px;text-align:center"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="App.submitPauseRental(${id})">Pause Rental</button>
+        </div>
+      </div>`);
+    setTimeout(() => document.getElementById('pr-notes')?.focus(), 50);
+  },
+
+  async submitPauseRental(id) {
+    const reason = document.getElementById('pr-reason').value;
+    const notes = document.getElementById('pr-notes').value.trim();
+    const pin = document.getElementById('pr-pin').value;
+    const errEl = document.getElementById('pr-err');
+    if (!notes) { if (errEl) errEl.textContent = 'Notes are required.'; return; }
+    if (!pin) { if (errEl) errEl.textContent = 'PIN is required.'; return; }
+    try {
+      await this.api('POST', `/rentals/agreements/${id}/pause`, { reason, notes, override_pin: pin, employee_id: this.currentUser.id });
+      this.closeModal();
+      this.alert('Rental paused');
+      this.renderRentals();
+    } catch(e) {
+      if (errEl) errEl.textContent = e.message;
+      document.getElementById('pr-pin').value = '';
+      document.getElementById('pr-pin').focus();
+    }
+  },
+
+  // No PIN — ending downtime isn't the exceptional action, starting it was.
+  async resumeRentalAgreement(id) {
+    if (!confirm('Resume this rental? The due date will be extended by however long it was paused.')) return;
+    try {
+      await this.api('PATCH', `/rentals/agreements/${id}/resume`, { employee_id: this.currentUser.id });
+      this.alert('Rental resumed — due date extended');
+      this.viewRentalAgreement(id);
+      this.renderRentals();
+    } catch(e) { this.alert(e.message, 'error'); }
   },
 
   // A rental agreement can now carry up to three separate signatures
@@ -5826,6 +5919,11 @@ const App = {
   async showFinalizeRentalModal(id) {
     const a = await this.api('GET', `/rentals/agreements/${id}`);
     if (a.status !== 'pending') { this.alert('This rental is not awaiting checkout', 'warning'); return; }
+    // Reset per-modal upload state — tracked outside the DOM since the PO
+    // attachment uploads to the agreement immediately (before Complete
+    // Checkout is even clicked), independent of the rest of this form.
+    this._rfPoAttachmentPath = a.customer_po_attachment_path || null;
+    this._rfPoAttachmentName = a.customer_po_attachment_name || null;
     this.showModal(`
       <div class="modal" style="max-width:480px">
         <div class="modal-header">
@@ -5851,12 +5949,21 @@ const App = {
           </div>
           <p style="font-size:11px;color:var(--text-muted);margin-top:-6px">Rental fee and deposit are calculated now, based on the rental period starting today. Any delivery/pickup/operator fees above are charged with this payment.</p>
           <div class="form-group"><label>Payment Method</label>
-            <select id="rf-paymethod">
+            <select id="rf-paymethod" onchange="App._toggleRentalPOFields()">
               <option value="cash">Cash</option>
               <option value="credit_card">Card</option>
               <option value="check">Check</option>
               <option value="credit">Charge Account (Credit)</option>
             </select>
+          </div>
+          <div id="rf-po-block" style="display:none;border:1px solid var(--border);border-radius:6px;padding:10px;margin-top:4px">
+            <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">Customer PO — required for credit account rentals</div>
+            <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">PO Number</label><input id="rf-po-number" placeholder="Customer's purchase order #" value="${a.customer_po_number || ''}"></div>
+            <div class="form-group" style="margin-bottom:0">
+              <label style="font-size:11px">PO Document</label>
+              <input type="file" id="rf-po-file" accept="application/pdf,image/*" onchange="App.uploadRentalPO(${id},this)">
+              <div id="rf-po-status" style="font-size:11px;color:${this._rfPoAttachmentName?'var(--success)':'var(--text-muted)'};margin-top:4px">${this._rfPoAttachmentName ? `Uploaded: ${this._rfPoAttachmentName} ✓` : 'No document uploaded yet'}</div>
+            </div>
           </div>
         </div>
         <div class="modal-footer">
@@ -5864,15 +5971,47 @@ const App = {
           <button class="btn btn-primary" onclick="App.finalizeRentalCheckout(${id})">Complete Checkout</button>
         </div>
       </div>`);
+    this._toggleRentalPOFields();
+  },
+
+  _toggleRentalPOFields() {
+    const block = document.getElementById('rf-po-block');
+    if (block) block.style.display = document.getElementById('rf-paymethod')?.value === 'credit' ? 'block' : 'none';
+  },
+
+  async uploadRentalPO(agreementId, input) {
+    const file = input.files[0];
+    if (!file) return;
+    const statusEl = document.getElementById('rf-po-status');
+    if (statusEl) { statusEl.textContent = 'Uploading…'; statusEl.style.color = 'var(--text-muted)'; }
+    const fd = new FormData();
+    fd.append('file', file);
+    try {
+      const res = await fetch(`/api/rentals/agreements/${agreementId}/po-attachment`, { method: 'POST', body: fd });
+      const json = await res.json();
+      if (!res.ok) throw new Error(json.error || 'Upload failed');
+      this._rfPoAttachmentPath = json.customer_po_attachment_path;
+      this._rfPoAttachmentName = json.customer_po_attachment_name;
+      if (statusEl) { statusEl.textContent = `Uploaded: ${json.customer_po_attachment_name} ✓`; statusEl.style.color = 'var(--success)'; }
+    } catch(e) {
+      this._rfPoAttachmentPath = null;
+      if (statusEl) { statusEl.textContent = e.message; statusEl.style.color = 'var(--danger)'; }
+    }
   },
 
   async finalizeRentalCheckout(id) {
     const payment_method = document.getElementById('rf-paymethod').value;
+    const customer_po_number = document.getElementById('rf-po-number')?.value.trim() || null;
+    if (payment_method === 'credit') {
+      if (!customer_po_number) { this.alert('A customer PO number is required for credit account rentals', 'error'); return; }
+      if (!this._rfPoAttachmentPath) { this.alert('The customer PO document must be attached before completing this checkout', 'error'); return; }
+    }
     try {
       const agreement = await this.api('PATCH', `/rentals/agreements/${id}/checkout`, {
         payment_method,
         employee_id: this.currentUser.id,
         drawer_session_id: this.currentDrawerSession?.id || null,
+        customer_po_number,
       });
       this.closeModal();
       this.alert(`Rental ${agreement.agreement_number} checked out`);
@@ -12359,6 +12498,7 @@ const App = {
       { key: 'rentals_checkout', label: 'Check Out Rentals' },
       { key: 'rentals_returns', label: 'Process Returns & Cancellations' },
       { key: 'rentals_issue', label: 'Issue / Dispatch Rentals' },
+      { key: 'rentals_pause', label: 'Authorize Rental Pauses' },
     ]},
     { key: 'layaway', label: 'Layaway', subs: [
       { key: 'layaway_create', label: 'Create Layaway Plans' },

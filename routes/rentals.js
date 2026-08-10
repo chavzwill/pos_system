@@ -3,14 +3,26 @@ const router = express.Router();
 const { db } = require('../database');
 const { getOutstandingQty } = require('../lib/rentalAvailability');
 const { getBranchStock, feeFor, buildRentalLines, insertPendingAgreement, assertRentalCustomerEligible } = require('../lib/rentals');
-const { requirePermission, requireAnyPermission } = require('../lib/permissions');
+const { requirePermission, requireAnyPermission, can } = require('../lib/permissions');
 const { runCreditCheck } = require('./customers');
 const { nextNumber } = require('../lib/nextNumber');
 const { calcRentalCommission } = require('./commissions');
 const { logActivity } = require('./crm');
 const path = require('path');
 const fs = require('fs');
+const multer = require('multer');
 const { cloudUpload } = require('../lib/cloudinary');
+
+const localPoAttachmentDir = path.join(__dirname, '../uploads/rental-po-attachments');
+
+const uploadPoAttachment = multer({
+  storage: multer.memoryStorage(),
+  limits: { fileSize: 20 * 1024 * 1024 },
+  fileFilter: (req, file, cb) => {
+    const allowed = ['application/pdf','image/jpeg','image/png','image/gif','image/webp'];
+    cb(null, allowed.includes(file.mimetype));
+  },
+});
 
 // A canvas signature pad already gives us a base64 PNG client-side, so this
 // skips multer/multipart entirely — same cloudUpload-or-local-disk fallback
@@ -56,7 +68,8 @@ router.get('/agreements', requirePermission('rentals'), async (req, res) => {
       rde.first_name || ' ' || rde.last_name as return_driver_employee_name,
       (SELECT COUNT(*) FROM rental_agreement_items WHERE agreement_id = ra.id AND parent_item_id IS NULL) as item_count,
       (SELECT GROUP_CONCAT(product_name || ' x' || quantity, ', ') FROM rental_agreement_items WHERE agreement_id = ra.id AND parent_item_id IS NULL) as item_summary,
-      CASE WHEN ra.status = 'active' AND ra.due_date < date('now') THEN 'overdue' ELSE ra.status END as display_status
+      (SELECT started_at FROM rental_agreement_pauses WHERE agreement_id = ra.id AND ended_at IS NULL LIMIT 1) as current_pause_started_at,
+      CASE WHEN ra.status = 'active' AND ra.is_paused = 1 THEN 'paused' WHEN ra.status = 'active' AND ra.due_date < date('now') THEN 'overdue' ELSE ra.status END as display_status
       FROM rental_agreements ra
       LEFT JOIN customers c ON ra.customer_id = c.id
       LEFT JOIN branches b ON ra.branch_id = b.id
@@ -99,7 +112,7 @@ router.get('/agreements/:id', requirePermission('rentals'), async (req, res) => 
       ise.first_name || ' ' || ise.last_name as issue_security_employee_name,
       rse.first_name || ' ' || rse.last_name as return_security_employee_name,
       rde.first_name || ' ' || rde.last_name as return_driver_employee_name,
-      CASE WHEN ra.status = 'active' AND ra.due_date < date('now') THEN 'overdue' ELSE ra.status END as display_status
+      CASE WHEN ra.status = 'active' AND ra.is_paused = 1 THEN 'paused' WHEN ra.status = 'active' AND ra.due_date < date('now') THEN 'overdue' ELSE ra.status END as display_status
       FROM rental_agreements ra
       LEFT JOIN customers c ON ra.customer_id = c.id
       LEFT JOIN branches b ON ra.branch_id = b.id
@@ -118,6 +131,13 @@ router.get('/agreements/:id', requirePermission('rentals'), async (req, res) => 
     if (!agreement) return res.status(404).json({ error: 'Not found' });
     const { rows: items } = await db.execute({ sql: 'SELECT * FROM rental_agreement_items WHERE agreement_id = ?', args: [req.params.id] });
     agreement.items = items;
+    const { rows: pauses } = await db.execute({ sql: `SELECT rp.*, pb.first_name || ' ' || pb.last_name as paused_by_name, ab.first_name || ' ' || ab.last_name as authorized_by_name, rb.first_name || ' ' || rb.last_name as resumed_by_name
+      FROM rental_agreement_pauses rp
+      LEFT JOIN employees pb ON rp.paused_by = pb.id
+      LEFT JOIN employees ab ON rp.authorized_by = ab.id
+      LEFT JOIN employees rb ON rp.resumed_by = rb.id
+      WHERE rp.agreement_id = ? ORDER BY rp.id`, args: [req.params.id] });
+    agreement.pauses = pauses;
     res.json(agreement);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -211,7 +231,7 @@ router.post('/agreements', requirePermission('rentals_checkout'), async (req, re
 // held orders.
 router.patch('/agreements/:id/checkout', requireAnyPermission('rentals_checkout', 'pos'), async (req, res) => {
   try {
-    const { payment_method, amount_tendered, drawer_session_id, employee_id } = req.body;
+    const { payment_method, amount_tendered, drawer_session_id, employee_id, customer_po_number } = req.body;
     const { rows: [agreement] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
     if (!agreement) return res.status(404).json({ error: 'Not found' });
     if (agreement.status !== 'pending') return res.status(400).json({ error: `This agreement is ${agreement.status}, not awaiting checkout` });
@@ -227,6 +247,11 @@ router.patch('/agreements/:id/checkout', requireAnyPermission('rentals_checkout'
       if (!cust) return res.status(400).json({ error: 'Customer not found' });
       if (cust.customer_type !== 'credit') return res.status(400).json({ error: 'Customer does not have a credit account' });
       if (cust.account_blocked) return res.status(400).json({ error: 'Customer account is blocked due to overdue payment. Please settle the outstanding balance first.' });
+      // A credit rental charges straight to the customer's account with no
+      // cash/card in hand — the PO is what ties that charge back to the
+      // customer's own paperwork, so it's required before the charge posts.
+      if (!customer_po_number || !customer_po_number.trim()) return res.status(400).json({ error: 'A customer PO number is required for credit account rentals' });
+      if (!agreement.customer_po_attachment_path) return res.status(400).json({ error: 'The customer PO document must be attached before completing this checkout' });
       creditCustomer = cust;
     }
 
@@ -309,7 +334,7 @@ router.patch('/agreements/:id/checkout', requireAnyPermission('rentals_checkout'
       // checkout_date/checkout_datetime are NOT written here anymore — the
       // rental clock only starts once the item is actually issued/dispatched
       // (PATCH .../issue), which writes those same two columns for real.
-      await tx.execute({ sql: `UPDATE rental_agreements SET checkout_transaction_id = ?, deposit_total = ?, status = 'awaiting_issue', employee_id = ? WHERE id = ?`, args: [checkoutTxId, depositTotal, finalizeEmployeeId || null, req.params.id] });
+      await tx.execute({ sql: `UPDATE rental_agreements SET checkout_transaction_id = ?, deposit_total = ?, status = 'awaiting_issue', employee_id = ?, customer_po_number = ? WHERE id = ?`, args: [checkoutTxId, depositTotal, finalizeEmployeeId || null, isCredit ? customer_po_number.trim() : null, req.params.id] });
       await tx.commit();
       committed = true;
       if (isCredit) { try { await runCreditCheck(agreement.customer_id); } catch(e) {} }
@@ -332,6 +357,55 @@ router.patch('/agreements/:id/checkout', requireAnyPermission('rentals_checkout'
       if (!committed) await tx.rollback();
       res.status(committed ? 500 : 400).json({ error: e.message });
     }
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Customer PO attachment (required before finalizing a credit rental) ──
+
+// Uploadable while the agreement is still 'pending' (it already has a real
+// id from the hold step) — decoupled from checkout finalize so the file
+// picker can upload immediately rather than being bundled into the JSON
+// checkout payload. Same cloudUpload-or-local-disk-fallback pattern as
+// routes/purchase-orders.js's PO attachments, but a single slot on the
+// agreement itself (not a join table) — a rental only ever has one customer PO.
+router.post('/agreements/:id/po-attachment', requireAnyPermission('rentals_checkout', 'pos'), uploadPoAttachment.single('file'), async (req, res) => {
+  try {
+    const { rows: [agreement] } = await db.execute({ sql: 'SELECT id FROM rental_agreements WHERE id = ?', args: [req.params.id] });
+    if (!agreement) return res.status(404).json({ error: 'Not found' });
+    if (!req.file) return res.status(400).json({ error: 'No file uploaded or file type not allowed' });
+
+    const cloudResult = await cloudUpload(req.file.buffer, {
+      folder: 'pos-system/rental-po-attachments',
+      public_id: `rental-${req.params.id}-po-${Date.now()}`,
+      resource_type: 'auto',
+    });
+
+    let storedName;
+    if (cloudResult) {
+      storedName = cloudResult.secure_url;
+    } else {
+      fs.mkdirSync(localPoAttachmentDir, { recursive: true });
+      storedName = `rental-${req.params.id}-po-${Date.now()}${path.extname(req.file.originalname)}`;
+      fs.writeFileSync(path.join(localPoAttachmentDir, storedName), req.file.buffer);
+    }
+
+    await db.execute({ sql: 'UPDATE rental_agreements SET customer_po_attachment_path = ?, customer_po_attachment_name = ? WHERE id = ?', args: [storedName, req.file.originalname, req.params.id] });
+    res.status(201).json({ customer_po_attachment_path: storedName, customer_po_attachment_name: req.file.originalname });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.get('/agreements/:id/po-attachment/download', async (req, res) => {
+  try {
+    const { rows: [agreement] } = await db.execute({ sql: 'SELECT customer_po_attachment_path, customer_po_attachment_name FROM rental_agreements WHERE id = ?', args: [req.params.id] });
+    if (!agreement || !agreement.customer_po_attachment_path) return res.status(404).json({ error: 'Not found' });
+    if (agreement.customer_po_attachment_path.startsWith('https://')) {
+      const downloadUrl = agreement.customer_po_attachment_path.replace('/upload/', '/upload/fl_attachment/');
+      return res.redirect(downloadUrl);
+    }
+    const filePath = path.join(localPoAttachmentDir, agreement.customer_po_attachment_path);
+    if (!fs.existsSync(filePath)) return res.status(404).json({ error: 'File missing on server' });
+    res.setHeader('Content-Disposition', `attachment; filename="${agreement.customer_po_attachment_name || 'purchase-order'}"`);
+    res.sendFile(filePath);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -400,6 +474,110 @@ router.patch('/agreements/:id/issue', requirePermission('rentals_issue'), async 
     const { rows: agItems } = await db.execute({ sql: 'SELECT * FROM rental_agreement_items WHERE agreement_id = ?', args: [req.params.id] });
     updated.items = agItems;
     res.json(updated);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Pause / Resume (Maintenance, replacement, or other downtime) ─────────
+
+// Same PIN-authorization lookup POST /employees/validate-pin uses (matches
+// the frontend's "Void Line" override UX) — duplicated narrowly here rather
+// than calling that route, since routes in this app call each other via
+// exported functions, not internal HTTP, and no shared helper exists yet.
+async function validateOverridePin(pin, permission) {
+  const { rows: employees } = await db.execute({ sql: 'SELECT e.id, e.first_name, e.last_name, e.pin, sg.permissions FROM employees e LEFT JOIN security_groups sg ON e.security_group_id = sg.id WHERE e.active = 1', args: [] });
+  // Uses the same bidirectional can() the rest of the app's permission checks
+  // use (see lib/permissions.js) — a group with just the parent `rentals`
+  // flag set (e.g. the seeded Administrator group, which predates this
+  // sub-key) still authorizes, rather than requiring every group to be
+  // re-saved before the override works at all.
+  return employees.find(e => {
+    if (e.pin !== String(pin)) return false;
+    try { return can(JSON.parse(e.permissions || '{}'), permission); } catch { return false; }
+  }) || null;
+}
+
+// Pausing is the exceptional, billing-affecting action — it requires a
+// manager PIN on the spot (checked against rentals_pause), same UX pattern
+// as voiding a cart line. The button to open this is visible to anyone who
+// can see the agreement; the PIN is what actually gates it, not a separate
+// permission on visibility.
+router.post('/agreements/:id/pause', requirePermission('rentals'), async (req, res) => {
+  try {
+    const { reason, notes, override_pin, employee_id } = req.body;
+    if (!['maintenance', 'replacement', 'other'].includes(reason)) return res.status(400).json({ error: 'A valid reason (maintenance, replacement, or other) is required' });
+    if (!notes || !notes.trim()) return res.status(400).json({ error: 'Notes are required to pause a rental' });
+    if (!override_pin) return res.status(400).json({ error: 'Manager override PIN is required' });
+
+    const { rows: [agreement] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
+    if (!agreement) return res.status(404).json({ error: 'Not found' });
+    if (agreement.status !== 'active') return res.status(400).json({ error: `Cannot pause a ${agreement.status} agreement — only active (issued) rentals can be paused` });
+    if (agreement.is_paused) return res.status(400).json({ error: 'This rental is already paused' });
+
+    const authorizer = await validateOverridePin(override_pin, 'rentals_pause');
+    if (!authorizer) return res.status(403).json({ error: 'Invalid PIN or insufficient privilege' });
+
+    const tx = await db.transaction('write');
+    let committed = false;
+    try {
+      await tx.execute({ sql: 'INSERT INTO rental_agreement_pauses (agreement_id, reason, notes, paused_by, authorized_by) VALUES (?,?,?,?,?)', args: [req.params.id, reason, notes.trim(), employee_id || null, authorizer.id] });
+      await tx.execute({ sql: 'UPDATE rental_agreements SET is_paused = 1 WHERE id = ?', args: [req.params.id] });
+      await tx.commit();
+      committed = true;
+      try {
+        await logActivity({
+          customerId: agreement.customer_id, employeeId: employee_id,
+          type: 'rental', subject: `Rental ${agreement.agreement_number} paused — ${reason}`,
+          description: notes.trim(), completed: true,
+        });
+      } catch(e) {}
+      const { rows: [updated] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
+      res.json(updated);
+    } catch(e) {
+      if (!committed) await tx.rollback();
+      res.status(committed ? 500 : 400).json({ error: e.message });
+    }
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Resuming just closes out the downtime and pushes the due date out by
+// however long it lasted — not the exceptional action pausing was, so no
+// PIN here. Rounds the extension UP to a whole day, in the customer's favor.
+router.patch('/agreements/:id/resume', requirePermission('rentals'), async (req, res) => {
+  try {
+    const { employee_id } = req.body;
+    const { rows: [agreement] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
+    if (!agreement) return res.status(404).json({ error: 'Not found' });
+    if (!agreement.is_paused) return res.status(400).json({ error: 'This rental is not currently paused' });
+
+    const { rows: [openPause] } = await db.execute({ sql: 'SELECT * FROM rental_agreement_pauses WHERE agreement_id = ? AND ended_at IS NULL ORDER BY id DESC LIMIT 1', args: [req.params.id] });
+    if (!openPause) return res.status(400).json({ error: 'No open pause found on this agreement' });
+
+    const now = new Date();
+    const pausedMs = Math.max(0, now - new Date(openPause.started_at));
+    const pausedDays = Math.ceil(pausedMs / 86400000);
+    const dueDateBefore = agreement.due_date;
+    const dueDateAfter = new Date(new Date(`${dueDateBefore}T00:00:00.000Z`).getTime() + pausedDays * 86400000).toISOString().slice(0, 10);
+
+    const tx = await db.transaction('write');
+    let committed = false;
+    try {
+      await tx.execute({ sql: 'UPDATE rental_agreement_pauses SET ended_at = ?, resumed_by = ?, due_date_before = ?, due_date_after = ? WHERE id = ?', args: [now.toISOString(), employee_id || null, dueDateBefore, dueDateAfter, openPause.id] });
+      await tx.execute({ sql: 'UPDATE rental_agreements SET is_paused = 0, due_date = ? WHERE id = ?', args: [dueDateAfter, req.params.id] });
+      await tx.commit();
+      committed = true;
+      try {
+        await logActivity({
+          customerId: agreement.customer_id, employeeId: employee_id,
+          type: 'rental', subject: `Rental ${agreement.agreement_number} resumed — due date extended to ${dueDateAfter}`,
+          description: `Paused ${pausedDays} day${pausedDays === 1 ? '' : 's'} for ${openPause.reason}`, completed: true,
+        });
+      } catch(e) {}
+      const { rows: [updated] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
+      res.json(updated);
+    } catch(e) {
+      if (!committed) await tx.rollback();
+      res.status(committed ? 500 : 400).json({ error: e.message });
+    }
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -506,6 +684,7 @@ router.patch('/agreements/:id/return', requirePermission('rentals_returns'), asy
     const { rows: [agreement] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
     if (!agreement) return res.status(404).json({ error: 'Not found' });
     if (agreement.status !== 'active') return res.status(400).json({ error: `Cannot return items on a ${agreement.status} agreement` });
+    if (agreement.is_paused) return res.status(400).json({ error: 'This rental is currently paused — resume it before processing a return' });
 
     const { rows: existingItems } = await db.execute({ sql: 'SELECT * FROM rental_agreement_items WHERE agreement_id = ?', args: [req.params.id] });
     const outstandingIds = existingItems.filter(i => i.quantity_returned < i.quantity).map(i => i.id);
@@ -547,6 +726,15 @@ router.patch('/agreements/:id/return', requirePermission('rentals_returns'), asy
     const guardSigPath = await uploadSignature(security_signature, `rental-${req.params.id}-return-guard`);
     if (!guardSigPath) return res.status(400).json({ error: 'Invalid security signature image' });
 
+    // Time the item spent paused (maintenance/replacement/other) shouldn't be
+    // billed — the customer didn't have functional use of it. Only closed
+    // pause windows count (an open one would have blocked this return above).
+    // Subtracted from the fee-calculation window only; the real `now` is
+    // still used everywhere else (return timestamp, damage fee, etc.).
+    const { rows: closedPauses } = await db.execute({ sql: 'SELECT started_at, ended_at FROM rental_agreement_pauses WHERE agreement_id = ? AND ended_at IS NOT NULL', args: [req.params.id] });
+    const totalPausedMs = closedPauses.reduce((sum, p) => sum + Math.max(0, new Date(p.ended_at) - new Date(p.started_at)), 0);
+    const effectiveNow = new Date(Math.max(new Date(checkoutDateTime).getTime(), now.getTime() - totalPausedMs));
+
     const tx = await db.transaction('write');
     try {
       let durationAdjustmentTotal = 0, damageFeeTotal = 0, taxAdjustmentTotal = 0;
@@ -565,7 +753,8 @@ router.patch('/agreements/:id/return', requirePermission('rentals_returns'), asy
 
         // Recompute the real fee for the units returned right now, using the
         // item's own snapshotted classification/rates over the ACTUAL elapsed
-        // time (checkout -> this moment) — this replaces the old flat late fee.
+        // time (checkout -> this moment, minus any paused time) — this
+        // replaces the old flat late fee.
         let actualFeePerUnit = 0;
         if (!item.is_mandatory) {
           actualFeePerUnit = feeFor({
@@ -574,7 +763,7 @@ router.patch('/agreements/:id/return', requirePermission('rentals_returns'), asy
             rental_weekly_rate: item.weekly_rate,
             rental_monthly_rate: item.monthly_rate,
             rental_hourly_rate: item.hourly_rate,
-          }, 1, checkoutDateTime, now);
+          }, 1, checkoutDateTime, effectiveNow);
         }
         const thisReturnActualFee = parseFloat((actualFeePerUnit * qty).toFixed(2));
         const originalEstimatePerUnit = item.quantity ? item.rental_fee / item.quantity : 0;

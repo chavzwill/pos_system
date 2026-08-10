@@ -495,6 +495,20 @@ async function _init() {
       damage_fee REAL DEFAULT 0,
       returned_at DATETIME
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS rental_agreement_pauses (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      agreement_id INTEGER NOT NULL REFERENCES rental_agreements(id),
+      reason TEXT NOT NULL,
+      notes TEXT,
+      started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      ended_at DATETIME,
+      due_date_before DATE,
+      due_date_after DATE,
+      paused_by INTEGER REFERENCES employees(id),
+      authorized_by INTEGER REFERENCES employees(id),
+      resumed_by INTEGER REFERENCES employees(id),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS product_accessories (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       product_id INTEGER NOT NULL REFERENCES products(id),
@@ -1023,6 +1037,15 @@ async function _init() {
     // the two are never conflated in the UI (each has its own View button).
     'ALTER TABLE rental_agreements ADD COLUMN issue_security_signature TEXT',
     'ALTER TABLE rental_agreements ADD COLUMN return_security_signature TEXT',
+    // Customer PO reference for credit-account rentals — required at
+    // checkout finalize when payment_method is 'credit' (see routes/rentals.js).
+    'ALTER TABLE rental_agreements ADD COLUMN customer_po_number TEXT',
+    'ALTER TABLE rental_agreements ADD COLUMN customer_po_attachment_path TEXT',
+    'ALTER TABLE rental_agreements ADD COLUMN customer_po_attachment_name TEXT',
+    // Whether the agreement is currently paused (maintenance/replacement/
+    // other) — full history lives in rental_agreement_pauses; this is a
+    // denormalized flag for cheap list/status-badge checks.
+    'ALTER TABLE rental_agreements ADD COLUMN is_paused INTEGER NOT NULL DEFAULT 0',
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch(e) {}
