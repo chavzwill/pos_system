@@ -370,7 +370,11 @@
       <div class="callout note"><strong>One timer per technician</strong>A technician can only be clocked into one task at a time, anywhere in the system — clocking into a second task while still clocked into another is blocked with a message telling them to clock out of the first one first. This is what keeps the time data trustworthy enough to actually evaluate whether tasks are completed on time.</div>
       <p>The <strong>⏱ Active Tasks</strong> button on the Work Orders list header opens a live popup (refreshing every 15 seconds) showing every technician currently clocked in, which task, which WO, and elapsed vs. allotted time — a quick way for a supervisor to see who's working on what without opening each WO individually.</p>
 
-      <p><em>Technician skills/scheduling and completion sign-off/customer notification are later phases of this module and will be documented here as they ship.</em></p>
+      <h3>Skills &amp; scheduling</h3>
+      <p>A managed <strong>skill catalog</strong> ("Manage Skills" on the Work Orders list) lets you define what a technician can do (e.g. "Engine Repair", "Electrical"). Skills are assigned to technicians from their employee edit form, and can optionally be tagged as required on a task — the schedule board shows which skills each technician has next to unassigned tasks so it's obvious who's a fit.</p>
+      <p>The <strong>📅 Schedule</strong> button opens a day-by-day board: pick a date, see every unscheduled task (with its required skills, if any) on one side, and everyone already assigned to that day on the other. Assigning a technician to a task for a given day doesn't lock anything — it's a planning aid, not a hard reservation, and can be removed and reassigned freely.</p>
+
+      <p><em>Completion sign-off/customer notification is the final phase of this module and will be documented here once it ships.</em></p>
     </section>
 
     <section class="module" id="promotions">

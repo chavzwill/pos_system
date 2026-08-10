@@ -1015,6 +1015,7 @@ const App = {
     if (section === 'transfer-dispatch') return this.can('transfers');
     if (section === 'purchase-requests') return this.can('purchase_requests');
     if (section === 'work-orders') return this.can('work_orders');
+    if (section === 'wo-schedule') return this.can('work_orders');
     return this.can(section);
   },
 
@@ -1196,7 +1197,7 @@ const App = {
 
   async showSection(name) {
     const perms = this.currentUser?.permissions;
-    const sectionAllowed = name === 'driver-dashboard' ? !!this.currentUser?.is_driver : name === 'guard-dashboard' ? !!this.currentUser?.is_security : name === 'online-orders' ? this.can('transactions') : name === 'rental-items' ? this.can('rentals') : name === 'rental-deposits' ? this.can('rentals') : name === 'rental-dispatch' ? this.can('rentals') : name === 'transfer-dispatch' ? this.can('transfers') : name === 'purchase-requests' ? this.can('purchase_requests') : name === 'work-orders' ? this.can('work_orders') : this._hubGroups[name] ? this.canAccessHub(name) : this.can(name);
+    const sectionAllowed = name === 'driver-dashboard' ? !!this.currentUser?.is_driver : name === 'guard-dashboard' ? !!this.currentUser?.is_security : name === 'online-orders' ? this.can('transactions') : name === 'rental-items' ? this.can('rentals') : name === 'rental-deposits' ? this.can('rentals') : name === 'rental-dispatch' ? this.can('rentals') : name === 'transfer-dispatch' ? this.can('transfers') : name === 'purchase-requests' ? this.can('purchase_requests') : name === 'work-orders' ? this.can('work_orders') : name === 'wo-schedule' ? this.can('work_orders') : this._hubGroups[name] ? this.canAccessHub(name) : this.can(name);
     if (perms && !sectionAllowed) return;
     this.section = name;
     this.closeModal();
@@ -1206,7 +1207,7 @@ const App = {
       const hub = this._hubGroups[ds];
       el.classList.toggle('active', ds === name || !!(hub && hub.children.some(c => c.section === name)));
     });
-    const titles = { dashboard: 'Dashboard', 'driver-dashboard': 'My Deliveries', 'guard-dashboard': 'My Verifications', pos: 'Point of Sale', inventory: 'Retail Inventory Management', services: 'Services & Non-Inventory Items', rentals: 'Rentals', 'rental-items': 'Rental Items', 'work-orders': 'Work Orders', dispatch: 'Dispatch', 'rental-dispatch': 'Rental Dispatch', 'transfer-dispatch': 'Branch Transfer Dispatch', 'rental-deposits': 'Rental Deposits & Credit Notes', 'purchase-requests': 'Purchase Requests', layaway: 'Layaway', customers: 'Customers', transactions: 'Transactions', 'online-orders': 'Online Orders', reports: 'Reports & Analytics', employees: 'Employees', settings: 'Settings', suppliers: 'Suppliers', purchasing: 'Purchasing', quotations: 'Quotations', accounts: 'Accounts Receivable', branches: 'Branch Management', security: 'Security Groups', transfers: 'Branch Transfers', crm: 'CRM & Sales', commissions: 'Commission Tracking', warehouse: 'Warehouse Management', shipping: 'Shipping', 'cycle-counts': 'Cycle Counts', drawers: 'Cash Drawers', promotions: 'Promotions', 'discount-cards': 'Discount Cards', 'cash-back-cards': 'Cash Back Cards', 'purchasing-hub': 'Purchasing', 'sales-hub': 'Sales', 'accounts-hub': 'Accounts', 'warehouse-hub': 'Warehouse', 'admin-hub': 'Admin' };
+    const titles = { dashboard: 'Dashboard', 'driver-dashboard': 'My Deliveries', 'guard-dashboard': 'My Verifications', pos: 'Point of Sale', inventory: 'Retail Inventory Management', services: 'Services & Non-Inventory Items', rentals: 'Rentals', 'rental-items': 'Rental Items', 'work-orders': 'Work Orders', 'wo-schedule': 'Technician Schedule', dispatch: 'Dispatch', 'rental-dispatch': 'Rental Dispatch', 'transfer-dispatch': 'Branch Transfer Dispatch', 'rental-deposits': 'Rental Deposits & Credit Notes', 'purchase-requests': 'Purchase Requests', layaway: 'Layaway', customers: 'Customers', transactions: 'Transactions', 'online-orders': 'Online Orders', reports: 'Reports & Analytics', employees: 'Employees', settings: 'Settings', suppliers: 'Suppliers', purchasing: 'Purchasing', quotations: 'Quotations', accounts: 'Accounts Receivable', branches: 'Branch Management', security: 'Security Groups', transfers: 'Branch Transfers', crm: 'CRM & Sales', commissions: 'Commission Tracking', warehouse: 'Warehouse Management', shipping: 'Shipping', 'cycle-counts': 'Cycle Counts', drawers: 'Cash Drawers', promotions: 'Promotions', 'discount-cards': 'Discount Cards', 'cash-back-cards': 'Cash Back Cards', 'purchasing-hub': 'Purchasing', 'sales-hub': 'Sales', 'accounts-hub': 'Accounts', 'warehouse-hub': 'Warehouse', 'admin-hub': 'Admin' };
     document.getElementById('topbar-title').innerHTML = this.buildBreadcrumb(name, titles[name] || name);
     const content = document.getElementById('content');
     content.style.padding = name === 'pos' ? '0' : '20px';
@@ -1217,7 +1218,7 @@ const App = {
     // terminal layout; the POS page's own Exit button calls showSection()
     // with a different name to leave kiosk mode again.
     document.body.classList.toggle('pos-kiosk', name === 'pos');
-    const renders = { dashboard: () => this.renderDashboard(), 'driver-dashboard': () => this.renderDriverDashboard(), 'guard-dashboard': () => this.renderGuardDashboard(), pos: () => this.renderPOS(), inventory: () => this.renderInventory(), services: () => this.renderServices(), rentals: () => this.renderRentals(), 'rental-items': () => this.renderRentalItems(), 'work-orders': () => this.renderWorkOrders(), dispatch: () => this.renderHub('dispatch'), 'rental-dispatch': () => this.renderRentalDispatch(), 'transfer-dispatch': () => this.renderTransferDispatch(), 'rental-deposits': () => this.renderRentalDeposits(), 'purchase-requests': () => this.renderPurchasing('requests'), layaway: () => this.renderLayaway(), customers: () => this.renderCustomers(), transactions: () => this.renderTransactions(), 'online-orders': () => this.renderOnlineOrders(), reports: () => this.renderReports(), employees: () => this.renderEmployees(), settings: () => this.renderSettings(), suppliers: () => this.renderSuppliers(), purchasing: () => this.renderPurchasing(), quotations: () => this.renderQuotations(), accounts: () => this.renderAccounts(), branches: () => this.renderBranches(), security: () => this.renderSecurity(), transfers: () => this.renderTransfers(), crm: () => this.renderCRM(), commissions: () => this.renderCommissions(), warehouse: () => this.renderWarehouse(), shipping: () => this.renderShipping(), 'cycle-counts': () => this.renderCycleCounts(), drawers: () => this.renderDrawers(), promotions: () => this.renderPromotions(), 'discount-cards': () => this.renderDiscountCards(), 'cash-back-cards': () => this.renderCashBackCards(), 'purchasing-hub': () => this.renderHub('purchasing-hub'), 'sales-hub': () => this.renderHub('sales-hub'), 'accounts-hub': () => this.renderHub('accounts-hub'), 'warehouse-hub': () => this.renderHub('warehouse-hub'), 'admin-hub': () => this.renderHub('admin-hub') };
+    const renders = { dashboard: () => this.renderDashboard(), 'driver-dashboard': () => this.renderDriverDashboard(), 'guard-dashboard': () => this.renderGuardDashboard(), pos: () => this.renderPOS(), inventory: () => this.renderInventory(), services: () => this.renderServices(), rentals: () => this.renderRentals(), 'rental-items': () => this.renderRentalItems(), 'work-orders': () => this.renderWorkOrders(), 'wo-schedule': () => this.renderWOSchedule(), dispatch: () => this.renderHub('dispatch'), 'rental-dispatch': () => this.renderRentalDispatch(), 'transfer-dispatch': () => this.renderTransferDispatch(), 'rental-deposits': () => this.renderRentalDeposits(), 'purchase-requests': () => this.renderPurchasing('requests'), layaway: () => this.renderLayaway(), customers: () => this.renderCustomers(), transactions: () => this.renderTransactions(), 'online-orders': () => this.renderOnlineOrders(), reports: () => this.renderReports(), employees: () => this.renderEmployees(), settings: () => this.renderSettings(), suppliers: () => this.renderSuppliers(), purchasing: () => this.renderPurchasing(), quotations: () => this.renderQuotations(), accounts: () => this.renderAccounts(), branches: () => this.renderBranches(), security: () => this.renderSecurity(), transfers: () => this.renderTransfers(), crm: () => this.renderCRM(), commissions: () => this.renderCommissions(), warehouse: () => this.renderWarehouse(), shipping: () => this.renderShipping(), 'cycle-counts': () => this.renderCycleCounts(), drawers: () => this.renderDrawers(), promotions: () => this.renderPromotions(), 'discount-cards': () => this.renderDiscountCards(), 'cash-back-cards': () => this.renderCashBackCards(), 'purchasing-hub': () => this.renderHub('purchasing-hub'), 'sales-hub': () => this.renderHub('sales-hub'), 'accounts-hub': () => this.renderHub('accounts-hub'), 'warehouse-hub': () => this.renderHub('warehouse-hub'), 'admin-hub': () => this.renderHub('admin-hub') };
     if (renders[name]) await renders[name]();
   },
 
@@ -6367,6 +6368,8 @@ const App = {
         <h2>Work Orders</h2>
         <div id="wo-header-actions">
           ${this.can('work_orders') ? `<button class="btn btn-secondary btn-sm" style="margin-right:8px" onclick="App.showActiveTasksPopup()">⏱ Active Tasks</button>` : ''}
+          ${this.can('work_orders') ? `<button class="btn btn-secondary btn-sm" style="margin-right:8px" onclick="App.showSection('wo-schedule')">📅 Schedule</button>` : ''}
+          ${this.can('work_orders') ? `<button class="btn btn-secondary btn-sm" style="margin-right:8px" onclick="App.showSkillsManager()">Manage Skills</button>` : ''}
           ${this.can('wo_intake') ? `<button class="btn btn-primary btn-sm" onclick="App.showWOIntakeModal()">+ New Work Order</button>` : ''}
         </div>
       </div>
@@ -7036,6 +7039,136 @@ const App = {
           </tr>`;
         }).join('')}</tbody>
       </table>`;
+  },
+
+  // ─── Technician skills (catalog + assignment) ──────────────────────────────
+
+  async showSkillsManager() {
+    const skills = await this.api('GET', '/work-orders/skills');
+    this.showModal(`
+      <div class="modal" style="max-width:460px">
+        <div class="modal-header"><span class="modal-title">Technician Skills</span><button class="modal-close">✕</button></div>
+        <div class="modal-body" style="padding:0">
+          <div style="padding:12px 16px;border-bottom:1px solid var(--border);display:flex;justify-content:flex-end">
+            <button class="btn btn-primary btn-sm" onclick="App.showSkillForm()">+ Add Skill</button>
+          </div>
+          <table style="width:100%;border-collapse:collapse">
+            <tbody>
+              ${skills.length ? skills.map(s => `<tr style="border-top:1px solid var(--border)">
+                <td style="padding:10px 16px;font-weight:600">${s.name}</td>
+                <td style="padding:10px 16px;text-align:right">
+                  <button class="btn btn-secondary btn-sm" onclick="App.showSkillForm(${s.id},'${(s.name||'').replace(/'/g,"\\'")}')">Edit</button>
+                  <button class="btn btn-danger btn-sm" onclick="App.deactivateSkill(${s.id})">Remove</button>
+                </td>
+              </tr>`).join('') : '<tr><td style="padding:24px;text-align:center;color:var(--text-muted)">No skills defined yet</td></tr>'}
+            </tbody>
+          </table>
+        </div>
+        <div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Close</button></div>
+      </div>`);
+  },
+
+  showSkillForm(id, name = '') {
+    this.showModal(`
+      <div class="modal" style="max-width:360px">
+        <div class="modal-header"><span class="modal-title">${id?'Edit':'New'} Skill</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <div class="form-group"><label>Name</label><input id="skill-name" value="${this.escapeAttr(name)}" placeholder="e.g. Engine Repair"></div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="App.showSkillsManager()">Cancel</button>
+          <button class="btn btn-primary" onclick="App.saveSkill(${id||'null'})">Save</button>
+        </div>
+      </div>`);
+  },
+
+  async saveSkill(id) {
+    const name = document.getElementById('skill-name').value.trim();
+    if (!name) { this.alert('A skill name is required', 'error'); return; }
+    try {
+      if (id) await this.api('PUT', `/work-orders/skills/${id}`, { name });
+      else await this.api('POST', '/work-orders/skills', { name });
+      this.showSkillsManager();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  async deactivateSkill(id) {
+    if (!confirm('Remove this skill? Technicians already assigned it will keep it on record.')) return;
+    try {
+      await this.api('DELETE', `/work-orders/skills/${id}`);
+      this.showSkillsManager();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  // ─── Day-ahead technician schedule ──────────────────────────────────────────
+
+  async renderWOSchedule() {
+    this.woScheduleDate = this.woScheduleDate || new Date().toISOString().slice(0,10);
+    document.getElementById('content').innerHTML = `
+      <div class="section-header"><h2>Technician Schedule</h2></div>
+      <div class="form-group" style="max-width:220px;margin-bottom:14px">
+        <label>Date</label>
+        <input type="date" id="wo-sched-date" value="${this.woScheduleDate}" onchange="App.woScheduleDate=this.value;App.loadWOSchedule()">
+      </div>
+      <div id="wo-schedule-content"></div>`;
+    await this.loadWOSchedule();
+  },
+
+  async loadWOSchedule() {
+    const el = document.getElementById('wo-schedule-content');
+    if (!el) return;
+    const [data, employees] = await Promise.all([
+      this.api('GET', `/work-orders/schedule?date=${this.woScheduleDate}`),
+      this.api('GET', '/employees'),
+    ]);
+    if (!document.getElementById('wo-schedule-content')) return;
+    const byEmployee = {};
+    data.scheduled.forEach(s => { (byEmployee[s.employee_id] = byEmployee[s.employee_id] || []).push(s); });
+    document.getElementById('wo-schedule-content').innerHTML = `
+      <div class="two-col">
+        <div class="card">
+          <div class="card-header"><span class="card-title">Unscheduled Tasks</span></div>
+          ${data.unscheduled.length ? data.unscheduled.map(t => `
+            <div style="border-top:1px solid var(--border);padding:8px 0;font-size:13px">
+              <strong>${t.description}</strong> <span style="color:var(--text-muted)">(${t.wo_number})</span>
+              ${t.required_skills ? `<div style="font-size:11px;color:var(--text-muted)">Needs: ${t.required_skills}</div>` : ''}
+              <div style="display:flex;gap:6px;margin-top:4px;align-items:center">
+                <select id="wo-sched-tech-${t.id}" style="flex:1">
+                  <option value="">-- Assign technician --</option>
+                  ${employees.map(e => `<option value="${e.id}">${e.first_name} ${e.last_name}${e.skills?.length ? ` (${e.skills.map(s=>s.name).join(', ')})` : ''}</option>`).join('')}
+                </select>
+                <button class="btn btn-sm btn-primary" onclick="App.assignWOSchedule(${t.id})">Assign</button>
+              </div>
+            </div>`).join('') : '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">Nothing unscheduled for this date</div>'}
+        </div>
+        <div class="card">
+          <div class="card-header"><span class="card-title">Assigned — ${this.fmtDate(this.woScheduleDate)}</span></div>
+          ${Object.keys(byEmployee).length ? Object.entries(byEmployee).map(([empId, rows]) => `
+            <div style="border-top:1px solid var(--border);padding:8px 0">
+              <strong style="font-size:13px">${rows[0].employee_name||'—'}</strong>
+              ${rows.map(r => `<div style="font-size:12px;color:var(--text-muted);margin-top:2px;display:flex;justify-content:space-between;align-items:center">
+                <span>${r.task_description || r.notes || '—'} ${r.wo_number?`(${r.wo_number})`:''}</span>
+                <button class="btn btn-sm btn-outline" style="padding:1px 8px;font-size:11px" onclick="App.unassignWOSchedule(${r.id})">✕</button>
+              </div>`).join('')}
+            </div>`).join('') : '<div style="color:var(--text-muted);font-size:12px;padding:8px 0">No one scheduled for this date yet</div>'}
+        </div>
+      </div>`;
+  },
+
+  async assignWOSchedule(taskId) {
+    const employee_id = document.getElementById(`wo-sched-tech-${taskId}`).value;
+    if (!employee_id) { this.alert('Select a technician', 'error'); return; }
+    try {
+      await this.api('POST', '/work-orders/schedule', { employee_id, work_order_task_id: taskId, scheduled_date: this.woScheduleDate });
+      this.loadWOSchedule();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  async unassignWOSchedule(scheduleId) {
+    try {
+      await this.api('DELETE', `/work-orders/schedule/${scheduleId}`);
+      this.loadWOSchedule();
+    } catch(e) { this.alert(e.message, 'error'); }
   },
 
   // ─── Layaway ──────────────────────────────────────────────────────────────
@@ -9483,12 +9616,14 @@ const App = {
   },
 
   async showEmployeeForm(id) {
-    const [empList, secGroups, branches] = await Promise.all([
+    const [empList, secGroups, branches, skills] = await Promise.all([
       this.api('GET', '/employees'),
       this.api('GET', '/security-groups'),
       this.api('GET', '/branches'),
+      this.api('GET', '/work-orders/skills').catch(() => []),
     ]);
     const emp = (id ? empList.find(x => x.id === id) : null) || {};
+    const empSkillIds = (emp.skills || []).map(s => s.id);
     this.showModal(`
       <div class="modal" style="max-width:520px">
         <div class="modal-header"><span class="modal-title">${id ? 'Edit Employee' : 'Add Employee'}</span><button class="modal-close">✕</button></div>
@@ -9556,6 +9691,15 @@ const App = {
               </label>
             </div>
           </div>
+          ${skills.length ? `<div style="border-top:1px solid var(--border);margin:8px 0 0;padding-top:12px">
+            <div style="font-size:12px;font-weight:600;color:var(--text-muted);text-transform:uppercase;letter-spacing:.5px;margin-bottom:8px">Technician Skills</div>
+            <div style="display:flex;flex-wrap:wrap;gap:10px">
+              ${skills.map(s => `<label style="display:flex;align-items:center;gap:6px;cursor:pointer;font-weight:normal;font-size:13px">
+                <input type="checkbox" class="ef-skill" value="${s.id}" ${empSkillIds.includes(s.id)?'checked':''} style="width:16px;height:16px;cursor:pointer">
+                ${s.name}
+              </label>`).join('')}
+            </div>
+          </div>` : ''}
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
@@ -9581,6 +9725,7 @@ const App = {
       is_driver: document.getElementById('ef-driver').checked ? 1 : 0,
       is_operator: document.getElementById('ef-operator').checked ? 1 : 0,
       is_security: document.getElementById('ef-security').checked ? 1 : 0,
+      skill_ids: Array.from(document.querySelectorAll('.ef-skill:checked')).map(el => parseInt(el.value)),
     };
     if (!data.pin) delete data.pin;
     if (!data.password) delete data.password;

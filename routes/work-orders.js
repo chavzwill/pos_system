@@ -93,6 +93,94 @@ router.get('/active-tasks', requirePermission('work_orders'), async (req, res) =
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+// ─── Skills catalog + scheduling (registered before GET /:id — see
+// active-tasks' comment above for why single-segment routes need to come
+// first) ─────────────────────────────────────────────────────────────────
+
+router.get('/skills', requirePermission('work_orders'), async (req, res) => {
+  try {
+    const { rows } = await db.execute({ sql: 'SELECT * FROM technician_skills WHERE active = 1 ORDER BY name', args: [] });
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/skills', requirePermission('work_orders'), async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'A skill name is required' });
+    const result = await db.execute({ sql: 'INSERT INTO technician_skills (name) VALUES (?)', args: [name.trim()] });
+    const { rows: [row] } = await db.execute({ sql: 'SELECT * FROM technician_skills WHERE id = ?', args: [Number(result.lastInsertRowid)] });
+    res.status(201).json(row);
+  } catch(e) { res.status(400).json({ error: e.message }); }
+});
+
+router.put('/skills/:id', requirePermission('work_orders'), async (req, res) => {
+  try {
+    const { name } = req.body;
+    if (!name || !name.trim()) return res.status(400).json({ error: 'A skill name is required' });
+    await db.execute({ sql: 'UPDATE technician_skills SET name = ? WHERE id = ?', args: [name.trim(), req.params.id] });
+    const { rows: [row] } = await db.execute({ sql: 'SELECT * FROM technician_skills WHERE id = ?', args: [req.params.id] });
+    res.json(row);
+  } catch(e) { res.status(400).json({ error: e.message }); }
+});
+
+// Deactivated rather than deleted — same reasoning as branches/employees:
+// past employee_skills/work_order_task_skills rows referencing it should
+// keep working, just hidden from future assignment.
+router.delete('/skills/:id', requirePermission('work_orders'), async (req, res) => {
+  try {
+    await db.execute({ sql: 'UPDATE technician_skills SET active = 0 WHERE id = ?', args: [req.params.id] });
+    res.json({ success: true });
+  } catch(e) { res.status(400).json({ error: e.message }); }
+});
+
+// Day-ahead schedule board — everything scheduled for a given date, plus
+// (separately) every unscheduled in-progress task, so the frontend can show
+// "needs scheduling" vs "already assigned to a day" side by side.
+router.get('/schedule', requirePermission('work_orders'), async (req, res) => {
+  try {
+    const { date } = req.query;
+    if (!date) return res.status(400).json({ error: 'A date is required' });
+    const { rows: scheduled } = await db.execute({
+      sql: `SELECT ts.*, e.first_name || ' ' || e.last_name as employee_name,
+              t.description as task_description, t.allotted_minutes, t.status as task_status,
+              wo.wo_number, wo.id as work_order_id
+            FROM technician_schedule ts
+            LEFT JOIN employees e ON ts.employee_id = e.id
+            LEFT JOIN work_order_tasks t ON ts.work_order_task_id = t.id
+            LEFT JOIN work_orders wo ON t.work_order_id = wo.id
+            WHERE ts.scheduled_date = ? ORDER BY ts.employee_id`,
+      args: [date],
+    });
+    const { rows: unscheduled } = await db.execute({
+      sql: `SELECT t.*, wo.wo_number, wo.id as work_order_id,
+              (SELECT GROUP_CONCAT(ts2.name, ', ') FROM work_order_task_skills wts JOIN technician_skills ts2 ON wts.skill_id = ts2.id WHERE wts.task_id = t.id) as required_skills
+            FROM work_order_tasks t JOIN work_orders wo ON t.work_order_id = wo.id
+            WHERE t.status != 'complete' AND NOT EXISTS (SELECT 1 FROM technician_schedule ts WHERE ts.work_order_task_id = t.id AND ts.scheduled_date = ?)
+            ORDER BY t.id`,
+      args: [date],
+    });
+    res.json({ scheduled, unscheduled });
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/schedule', requirePermission('work_orders'), async (req, res) => {
+  try {
+    const { employee_id, work_order_task_id, scheduled_date, notes } = req.body;
+    if (!employee_id || !scheduled_date) return res.status(400).json({ error: 'A technician and date are required' });
+    const result = await db.execute({ sql: 'INSERT INTO technician_schedule (employee_id, work_order_task_id, scheduled_date, notes) VALUES (?,?,?,?)', args: [employee_id, work_order_task_id || null, scheduled_date, notes || null] });
+    const { rows: [row] } = await db.execute({ sql: 'SELECT * FROM technician_schedule WHERE id = ?', args: [Number(result.lastInsertRowid)] });
+    res.status(201).json(row);
+  } catch(e) { res.status(400).json({ error: e.message }); }
+});
+
+router.delete('/schedule/:id', requirePermission('work_orders'), async (req, res) => {
+  try {
+    await db.execute({ sql: 'DELETE FROM technician_schedule WHERE id = ?', args: [req.params.id] });
+    res.json({ success: true });
+  } catch(e) { res.status(400).json({ error: e.message }); }
+});
+
 router.get('/:id', requirePermission('work_orders'), async (req, res) => {
   try {
     const { rows: [wo] } = await db.execute({ sql: `${WO_LIST_SELECT} WHERE wo.id = ?`, args: [req.params.id] });
@@ -105,7 +193,8 @@ router.get('/:id', requirePermission('work_orders'), async (req, res) => {
       sql: `SELECT t.*, tech.first_name || ' ' || tech.last_name as technician_name,
               (SELECT id FROM work_order_task_time_entries WHERE task_id = t.id AND ended_at IS NULL LIMIT 1) as open_time_entry_id,
               (SELECT started_at FROM work_order_task_time_entries WHERE task_id = t.id AND ended_at IS NULL LIMIT 1) as open_time_entry_started_at,
-              (SELECT COALESCE(SUM((julianday(ended_at) - julianday(started_at)) * 24 * 60), 0) FROM work_order_task_time_entries WHERE task_id = t.id AND ended_at IS NOT NULL) as actual_minutes
+              (SELECT COALESCE(SUM((julianday(ended_at) - julianday(started_at)) * 24 * 60), 0) FROM work_order_task_time_entries WHERE task_id = t.id AND ended_at IS NOT NULL) as actual_minutes,
+              (SELECT GROUP_CONCAT(ts.name, ', ') FROM work_order_task_skills wts JOIN technician_skills ts ON wts.skill_id = ts.id WHERE wts.task_id = t.id) as required_skills
             FROM work_order_tasks t LEFT JOIN employees tech ON t.technician_id = tech.id
             WHERE t.work_order_id = ? ORDER BY t.id`,
       args: [req.params.id],
@@ -377,22 +466,32 @@ router.patch('/:id/cancel', requirePermission('work_orders'), async (req, res) =
 
 // ─── Tasks & time tracking ──────────────────────────────────────────────────
 
+async function syncTaskSkills(taskId, skillIds) {
+  if (!Array.isArray(skillIds)) return;
+  await db.execute({ sql: 'DELETE FROM work_order_task_skills WHERE task_id = ?', args: [taskId] });
+  for (const skillId of skillIds) {
+    await db.execute({ sql: 'INSERT OR IGNORE INTO work_order_task_skills (task_id, skill_id) VALUES (?,?)', args: [taskId, skillId] });
+  }
+}
+
 router.post('/:id/tasks', requirePermission('wo_technician'), async (req, res) => {
   try {
-    const { description, allotted_minutes, technician_id } = req.body;
+    const { description, allotted_minutes, technician_id, skill_ids } = req.body;
     if (!description || !description.trim()) return res.status(400).json({ error: 'A task description is required' });
     const { rows: [wo] } = await db.execute({ sql: 'SELECT id, status FROM work_orders WHERE id = ?', args: [req.params.id] });
     if (!wo) return res.status(404).json({ error: 'Not found' });
     if (!['in_progress', 'awaiting_signoff'].includes(wo.status)) return res.status(400).json({ error: `Cannot add tasks to a ${wo.status} work order` });
     const result = await db.execute({ sql: 'INSERT INTO work_order_tasks (work_order_id, description, allotted_minutes, technician_id) VALUES (?,?,?,?)', args: [req.params.id, description.trim(), parseInt(allotted_minutes) || 0, technician_id || null] });
-    const { rows: [task] } = await db.execute({ sql: 'SELECT * FROM work_order_tasks WHERE id = ?', args: [Number(result.lastInsertRowid)] });
+    const taskId = Number(result.lastInsertRowid);
+    await syncTaskSkills(taskId, skill_ids);
+    const { rows: [task] } = await db.execute({ sql: 'SELECT * FROM work_order_tasks WHERE id = ?', args: [taskId] });
     res.status(201).json(task);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 router.patch('/tasks/:id', requirePermission('wo_technician'), async (req, res) => {
   try {
-    const { description, allotted_minutes, technician_id, status } = req.body;
+    const { description, allotted_minutes, technician_id, status, skill_ids } = req.body;
     const { rows: [task] } = await db.execute({ sql: 'SELECT * FROM work_order_tasks WHERE id = ?', args: [req.params.id] });
     if (!task) return res.status(404).json({ error: 'Not found' });
     if (status && !['pending', 'in_progress', 'complete'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
@@ -407,6 +506,7 @@ router.patch('/tasks/:id', requirePermission('wo_technician'), async (req, res) 
       status || task.status,
       req.params.id,
     ] });
+    await syncTaskSkills(req.params.id, skill_ids);
     const { rows: [updated] } = await db.execute({ sql: 'SELECT * FROM work_order_tasks WHERE id = ?', args: [req.params.id] });
     res.json(updated);
   } catch(e) { res.status(500).json({ error: e.message }); }

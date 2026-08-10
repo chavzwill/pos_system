@@ -37,6 +37,14 @@ router.get('/', requireAuth, async (req, res) => {
       const byEmployee = {};
       for (const row of allBranches) { (byEmployee[row.employee_id] = byEmployee[row.employee_id] || []).push(row); }
       for (const emp of employees) emp.branches = byEmployee[emp.id] || [];
+
+      const { rows: allSkills } = await db.execute({
+        sql: `SELECT es.employee_id, ts.id, ts.name FROM technician_skills ts JOIN employee_skills es ON ts.id = es.skill_id WHERE es.employee_id IN (${placeholders})`,
+        args: employees.map(e => e.id),
+      });
+      const skillsByEmployee = {};
+      for (const row of allSkills) { (skillsByEmployee[row.employee_id] = skillsByEmployee[row.employee_id] || []).push(row); }
+      for (const emp of employees) emp.skills = skillsByEmployee[emp.id] || [];
     }
     res.json(employees);
   } catch(e) { res.status(500).json({ error: e.message }); }
@@ -48,7 +56,7 @@ router.get('/', requireAuth, async (req, res) => {
 // them individually), so enforcing a sub-key here would 403 users the UI
 // itself let through.
 router.post('/', requirePermission('employees'), async (req, res) => {
-  const { first_name, last_name, username, pin, password, must_change_password, security_group_id, default_branch_id, is_driver, is_operator, is_security } = req.body;
+  const { first_name, last_name, username, pin, password, must_change_password, security_group_id, default_branch_id, is_driver, is_operator, is_security, skill_ids } = req.body;
   if (!first_name || !last_name || !username || !pin) return res.status(400).json({ error: 'Required fields missing' });
   try {
     const employee_number = await nextNumber(db, 'employees', 'employee_number', 'EMP-', 4);
@@ -57,6 +65,11 @@ router.post('/', requirePermission('employees'), async (req, res) => {
     const newId = Number(result.lastInsertRowid);
     if (default_branch_id) {
       await db.execute({ sql: 'INSERT OR IGNORE INTO employee_branches (employee_id, branch_id, is_default) VALUES (?,?,1)', args: [newId, default_branch_id] });
+    }
+    if (Array.isArray(skill_ids)) {
+      for (const skillId of skill_ids) {
+        await db.execute({ sql: 'INSERT OR IGNORE INTO employee_skills (employee_id, skill_id) VALUES (?,?)', args: [newId, skillId] });
+      }
     }
     const { rows: [emp] } = await db.execute({ sql: `SELECT e.id,e.employee_number,e.first_name,e.last_name,e.username,e.role,e.active,e.security_group_id,e.default_branch_id,e.is_driver,e.is_operator,e.is_security,sg.name as security_group_name,b.name as default_branch_name FROM employees e LEFT JOIN security_groups sg ON e.security_group_id=sg.id LEFT JOIN branches b ON e.default_branch_id=b.id WHERE e.id=?`, args: [newId] });
     res.status(201).json(emp);
@@ -85,7 +98,7 @@ router.put('/:id/change-password', requireAuth, async (req, res) => {
 
 // Same reasoning as POST / above — matches the "Edit" button's actual gate.
 router.put('/:id', requirePermission('employees'), async (req, res) => {
-  const { first_name, last_name, username, pin, password, must_change_password, active, security_group_id, default_branch_id, is_driver, is_operator, is_security } = req.body;
+  const { first_name, last_name, username, pin, password, must_change_password, active, security_group_id, default_branch_id, is_driver, is_operator, is_security, skill_ids } = req.body;
   try {
     // The edit form omits `password` entirely when left blank ("leave blank
     // to keep") — preserve the existing (already-hashed) value in that case
@@ -105,6 +118,12 @@ router.put('/:id', requirePermission('employees'), async (req, res) => {
     if (default_branch_id) {
       await db.execute({ sql: 'INSERT OR IGNORE INTO employee_branches (employee_id, branch_id, is_default) VALUES (?,?,1)', args: [req.params.id, default_branch_id] });
       await db.execute({ sql: 'UPDATE employee_branches SET is_default = CASE WHEN branch_id = ? THEN 1 ELSE 0 END WHERE employee_id = ?', args: [default_branch_id, req.params.id] });
+    }
+    if (Array.isArray(skill_ids)) {
+      await db.execute({ sql: 'DELETE FROM employee_skills WHERE employee_id = ?', args: [req.params.id] });
+      for (const skillId of skill_ids) {
+        await db.execute({ sql: 'INSERT OR IGNORE INTO employee_skills (employee_id, skill_id) VALUES (?,?)', args: [req.params.id, skillId] });
+      }
     }
     const { rows: [emp] } = await db.execute({ sql: `SELECT e.id,e.employee_number,e.first_name,e.last_name,e.username,e.role,e.active,e.security_group_id,e.default_branch_id,e.is_driver,e.is_operator,e.is_security,sg.name as security_group_name,b.name as default_branch_name FROM employees e LEFT JOIN security_groups sg ON e.security_group_id=sg.id LEFT JOIN branches b ON e.default_branch_id=b.id WHERE e.id=?`, args: [req.params.id] });
     res.json(emp);

@@ -377,6 +377,31 @@ async function _init() {
       started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
       ended_at DATETIME
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS technician_skills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT UNIQUE NOT NULL,
+      active INTEGER DEFAULT 1
+    )` },
+    { sql: `CREATE TABLE IF NOT EXISTS employee_skills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_id INTEGER NOT NULL REFERENCES employees(id),
+      skill_id INTEGER NOT NULL REFERENCES technician_skills(id),
+      UNIQUE(employee_id, skill_id)
+    )` },
+    { sql: `CREATE TABLE IF NOT EXISTS work_order_task_skills (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL REFERENCES work_order_tasks(id),
+      skill_id INTEGER NOT NULL REFERENCES technician_skills(id),
+      UNIQUE(task_id, skill_id)
+    )` },
+    { sql: `CREATE TABLE IF NOT EXISTS technician_schedule (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      employee_id INTEGER NOT NULL REFERENCES employees(id),
+      work_order_task_id INTEGER REFERENCES work_order_tasks(id),
+      scheduled_date DATE NOT NULL,
+      notes TEXT,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS crm_leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       lead_number TEXT UNIQUE NOT NULL,
