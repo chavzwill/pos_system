@@ -537,6 +537,9 @@
         <li>Branches are never hard-deleted, only deactivated, since almost every other record in the system references one.</li>
       </ul>
       <div class="callout note"><strong>Multi-branch access</strong>Seeing a branch switcher in the UI (rather than being locked to one location) depends on a separate "multi-branch access" flag on your security group, not the Branches permission itself — that permission only controls who can manage branch *records*.</div>
+      <h3>Price Tier %</h3>
+      <p>Each branch carries a <strong>Price Tier %</strong> — a single positive or negative percentage that recalculates every retail item's price at that branch, with no per-product setup. A branch at <code>+10%</code> sells everything 10% above the catalog price; a branch at <code>-15%</code> sells 15% below it. Leave it at <code>0</code> for a branch that should just use the flat catalog price.</p>
+      <div class="callout note"><strong>Where it applies</strong>The tier recalculates prices at the <strong>POS register</strong> (the product grid, cart, and checkout total once a branch is selected), <strong>Quotations</strong> (a quote's line prices follow whichever branch is picked on the quote, re-filling if the branch is changed), and <strong>Reports</strong>' branch retail-value figures. It does <strong>not</strong> affect the WooCommerce/online store, which always sells at the flat catalog price. The computed price is floor-clamped at 0 (a very negative tier can't push a price below zero) and rounded to the nearest cent; the untouched catalog price is always what's edited on the product itself — the tier is a multiplier applied on top, never stored per-product.</div>
       <p>Needs <span class="perm-pill">branches_add</span> / <span class="perm-pill">branches_edit</span> / <span class="perm-pill">branches_delete</span>.</p>
     </section>
 

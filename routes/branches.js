@@ -30,12 +30,12 @@ router.get('/:id', requirePermission('branches'), async (req, res) => {
 });
 
 router.post('/', requirePermission('branches'), async (req, res) => {
-  const { name, address, city, state, zip, phone, email, manager, currency } = req.body;
+  const { name, address, city, state, zip, phone, email, manager, currency, price_tier_percent } = req.body;
   if (!name) return res.status(400).json({ error: 'Name required' });
   try {
     const { rows: [count] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM branches', args: [] });
     const branch_code = `BR-${String(Number(count.c) + 1).padStart(3, '0')}`;
-    const result = await db.execute({ sql: 'INSERT INTO branches (branch_code,name,address,city,state,zip,phone,email,manager,currency) VALUES (?,?,?,?,?,?,?,?,?,?)', args: [branch_code, name, address||null, city||null, state||null, zip||null, phone||null, email||null, manager||null, currency||null] });
+    const result = await db.execute({ sql: 'INSERT INTO branches (branch_code,name,address,city,state,zip,phone,email,manager,currency,price_tier_percent) VALUES (?,?,?,?,?,?,?,?,?,?,?)', args: [branch_code, name, address||null, city||null, state||null, zip||null, phone||null, email||null, manager||null, currency||null, parseFloat(price_tier_percent) || 0] });
     const { rows: [row] } = await db.execute({ sql: 'SELECT * FROM branches WHERE id = ?', args: [Number(result.lastInsertRowid)] });
     res.status(201).json(row);
   } catch(e) {
@@ -44,9 +44,9 @@ router.post('/', requirePermission('branches'), async (req, res) => {
 });
 
 router.put('/:id', requirePermission('branches'), async (req, res) => {
-  const { name, address, city, state, zip, phone, email, manager, active, currency, is_warehouse } = req.body;
+  const { name, address, city, state, zip, phone, email, manager, active, currency, is_warehouse, price_tier_percent } = req.body;
   try {
-    await db.execute({ sql: 'UPDATE branches SET name=?,address=?,city=?,state=?,zip=?,phone=?,email=?,manager=?,active=?,currency=?,is_warehouse=? WHERE id=?', args: [name, address||null, city||null, state||null, zip||null, phone||null, email||null, manager||null, active??1, currency||null, is_warehouse?1:0, req.params.id] });
+    await db.execute({ sql: 'UPDATE branches SET name=?,address=?,city=?,state=?,zip=?,phone=?,email=?,manager=?,active=?,currency=?,is_warehouse=?,price_tier_percent=? WHERE id=?', args: [name, address||null, city||null, state||null, zip||null, phone||null, email||null, manager||null, active??1, currency||null, is_warehouse?1:0, parseFloat(price_tier_percent) || 0, req.params.id] });
     const { rows: [row] } = await db.execute({ sql: 'SELECT * FROM branches WHERE id = ?', args: [req.params.id] });
     res.json(row);
   } catch(e) {

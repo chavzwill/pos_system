@@ -2001,7 +2001,7 @@ const App = {
     const branches = this.currentUser.branches || [];
     const isMulti = this.currentUser.permissions?.multi_branch_access && branches.length > 1;
     const inner = isMulti
-      ? `<select id="pos-branch-select" onchange="App.posBranch=App.currentUser.branches.find(b=>b.id==+this.value)" style="border:none;background:transparent;font-weight:600;font-size:14px;color:var(--brand-black);cursor:pointer;outline:none;max-width:260px">
+      ? `<select id="pos-branch-select" onchange="App.switchPOSBranch(+this.value)" style="border:none;background:transparent;font-weight:600;font-size:14px;color:var(--brand-black);cursor:pointer;outline:none;max-width:260px">
            ${branches.map(b => `<option value="${b.id}" ${this.posBranch?.id===b.id?'selected':''}>${b.name}</option>`).join('')}
          </select>`
       : `<span style="font-weight:600;font-size:14px;color:var(--brand-black)">${this.posBranch?.name || 'No Branch'}</span>`;
@@ -2020,21 +2020,45 @@ const App = {
     }
   },
 
-  async renderPOS() {
-    [this.allCategories, this.allProducts] = await Promise.all([
-      this.api('GET', '/categories'),
-      this.api('GET', '/products?active=1&is_rental=0'),
-    ]);
-    if (this.section !== 'pos') return;
-    this.posCategory = 'all';
-    this.posSearch = '';
-    this._selectedCartLine = null;
+  // Re-fetches the product grid against the new branch so its tiered price
+  // and per-branch stock are correct — blocked while a ticket is in
+  // progress rather than trying to re-price already-added cart lines, since
+  // a ticket is conceptually "for" whichever branch it was started under.
+  async switchPOSBranch(branchId) {
+    if (this.cart.length) {
+      this.alert('Complete or cancel the current ticket before switching branches', 'warning');
+      this.renderPOSBranchBar();
+      return;
+    }
+    const branch = this.currentUser.branches.find(b => b.id === branchId);
+    if (!branch) return;
+    this.posBranch = branch;
+    this.allProducts = await this.api('GET', `/products?active=1&is_rental=0&branch_id=${branchId}`);
+    this.renderProductGrid();
+    this.renderPOSBranchBar();
+  },
 
+  async renderPOS() {
+    // Resolved before the products fetch (depends only on currentUser.branches,
+    // already loaded at login — no async call needed) so branch_id can be
+    // passed in immediately. This is also what makes the branch-scoped price
+    // tier and per-branch stock actually show up in the grid, neither of
+    // which worked before this was wired through.
     const branches = this.currentUser.branches || [];
     const defaultBranch = branches.find(b => b.is_default) || branches[0] || null;
     if (!this.posBranch || !branches.find(b => b.id === this.posBranch.id)) {
       this.posBranch = defaultBranch;
     }
+    const branchParam = this.posBranch?.id ? `&branch_id=${this.posBranch.id}` : '';
+
+    [this.allCategories, this.allProducts] = await Promise.all([
+      this.api('GET', '/categories'),
+      this.api('GET', `/products?active=1&is_rental=0${branchParam}`),
+    ]);
+    if (this.section !== 'pos') return;
+    this.posCategory = 'all';
+    this.posSearch = '';
+    this._selectedCartLine = null;
 
     // Right-hand action grid — 4 columns, grouped like the reference terminal
     // (lookups / ticket actions / hold&quote / transactional), each button a
@@ -11404,37 +11428,56 @@ const App = {
     });
   },
 
-  updateQuoteItem(idx, productId) {
+  async updateQuoteItem(idx, productId) {
     if (!productId) return;
     const sel = document.getElementById(`qti-prod-${idx}`);
     const opt = sel.options[sel.selectedIndex];
-    document.getElementById(`qti-price-${idx}`).value = opt.dataset.price || '';
+    // Once a branch is picked, its tiered price wins over the option's base
+    // data-price — matches what the register would actually charge at that
+    // branch. No branch chosen yet falls back to the flat base price.
+    const branchId = document.getElementById('qt-branch')?.value;
+    let price = opt.dataset.price || '';
+    if (branchId) {
+      const branchMap = await this.getBranchStock(branchId);
+      const branchPrice = branchMap[productId]?.price;
+      if (branchPrice != null) price = branchPrice;
+    }
+    document.getElementById(`qti-price-${idx}`).value = price;
     this.calcQuoteTotal();
     this.checkQuoteItemStock(idx);
   },
 
-  // Cached per-branch stock lookup — reuses the same branch-scoped
-  // /products?branch_id= call the Transfers UI's onTransferFromChange makes,
-  // so no new endpoint is needed. Returns {productId: stock_qty}.
+  // Cached per-branch stock+price lookup — reuses the same branch-scoped
+  // /products?branch_id= call the Transfers UI's onTransferFromChange makes
+  // (which now also returns the branch's tiered price), so no new endpoint
+  // is needed. Returns {productId: {stock_qty, price}}.
   async getBranchStock(branchId) {
     if (!branchId) return {};
     this._quoteStockCache = this._quoteStockCache || {};
     if (!this._quoteStockCache[branchId]) {
       const all = await this.api('GET', `/products?branch_id=${branchId}`);
       const map = {};
-      all.forEach(p => { map[p.id] = p.stock_qty; });
+      all.forEach(p => { map[p.id] = { stock_qty: p.stock_qty, price: p.price }; });
       this._quoteStockCache[branchId] = map;
     }
     return this._quoteStockCache[branchId];
   },
 
-  // Quote's branch changed — cached stock no longer applies, re-check every row.
+  // Quote's branch changed — cached stock/price no longer applies: re-check
+  // stock and re-fill price for every row that already has a product picked.
   async onQuoteBranchChange() {
     this._quoteStockCache = {};
+    const branchId = document.getElementById('qt-branch')?.value;
+    const branchMap = branchId ? await this.getBranchStock(branchId) : {};
     const rows = document.querySelectorAll('#qt-items > [id^="qt-item-"]');
     for (const row of rows) {
       const idx = row.id.split('-').pop();
-      if (document.getElementById(`qti-prod-${idx}`)) await this.checkQuoteItemStock(idx);
+      const prodSel = document.getElementById(`qti-prod-${idx}`);
+      if (!prodSel) continue;
+      const productId = parseInt(prodSel.value);
+      const branchPrice = productId && branchMap[productId]?.price;
+      if (branchPrice != null) { document.getElementById(`qti-price-${idx}`).value = branchPrice; this.calcQuoteTotal(); }
+      await this.checkQuoteItemStock(idx);
     }
   },
 
@@ -11462,7 +11505,7 @@ const App = {
 
     const stockMap = await this.getBranchStock(branchId);
     if (!stillCurrent()) return;
-    const available = stockMap[productId] || 0;
+    const available = stockMap[productId]?.stock_qty || 0;
     if (qty <= available) { allocDiv.innerHTML = ''; delete allocDiv.dataset.productId; delete allocDiv.dataset.branchId; return; }
 
     const shortfall = qty - available;
@@ -11481,7 +11524,7 @@ const App = {
     await Promise.all(otherBranches.map(b => this.getBranchStock(b.id)));
     if (!stillCurrent()) return;
     const rowsHtml = otherBranches.map(b => {
-      const avail = (this._quoteStockCache[b.id] || {})[productId] || 0;
+      const avail = (this._quoteStockCache[b.id] || {})[productId]?.stock_qty || 0;
       return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:4px">
         <span style="flex:1">${b.name} <span style="color:var(--text-muted)">(avail: ${avail})</span></span>
         <input type="number" min="0" max="${avail}" value="0" style="width:70px" id="qt-alloc-${idx}-b${b.id}" data-branch="${b.id}" data-max="${avail}" oninput="App.recalcQuoteAllocation(${idx})">
@@ -11503,7 +11546,7 @@ const App = {
     const productId = parseInt(prodSel?.value);
     const qty = parseInt(document.getElementById(`qti-qty-${idx}`)?.value) || 0;
     const stockMap = (this._quoteStockCache || {})[branchId] || {};
-    const available = stockMap[productId] || 0;
+    const available = stockMap[productId]?.stock_qty || 0;
     const shortfall = Math.max(0, qty - available);
     let allocated = 0;
     document.querySelectorAll(`[id^="qt-alloc-${idx}-b"]`).forEach(inp => {
@@ -11602,7 +11645,7 @@ const App = {
           // branch's input (capped at what's actually left to cover), then
           // whatever's still unassigned goes to Purchasing (branch_id: null).
           const stockMap = (this._quoteStockCache || {})[branch_id] || {};
-          const available = stockMap[prodSel.value] || 0;
+          const available = stockMap[prodSel.value]?.stock_qty || 0;
           const homeQty = Math.min(quantity, available);
           let remaining = quantity - homeQty;
           const sources = [];
@@ -12271,7 +12314,7 @@ const App = {
       <div class="card">
         <div class="table-wrap">
           <table>
-            <thead><tr><th>Code</th><th>Branch Name</th><th>Location</th><th>Phone</th><th>Manager</th><th>Currency</th><th>Employees</th><th>Status</th><th>Actions</th></tr></thead>
+            <thead><tr><th>Code</th><th>Branch Name</th><th>Location</th><th>Phone</th><th>Manager</th><th>Currency</th><th>Price Tier</th><th>Employees</th><th>Status</th><th>Actions</th></tr></thead>
             <tbody>
               ${branches.length ? branches.map(b => `
                 <tr>
@@ -12281,13 +12324,14 @@ const App = {
                   <td>${b.phone||'-'}</td>
                   <td>${b.manager||'-'}</td>
                   <td>${b.currency ? `<span class="badge-pill badge-purple">${b.currency}</span>` : '<span style="color:var(--text-muted);font-size:12px">Global</span>'}</td>
+                  <td>${b.price_tier_percent ? `<span class="badge-pill ${b.price_tier_percent > 0 ? 'badge-info' : 'badge-warning'}">${b.price_tier_percent > 0 ? '+' : ''}${b.price_tier_percent}%</span>` : '<span style="color:var(--text-muted);font-size:12px">—</span>'}</td>
                   <td><span class="badge-pill badge-info">${b.employee_count} staff</span></td>
                   <td><span class="badge-pill ${b.active ? 'badge-success' : 'badge-danger'}">${b.active ? 'Active' : 'Inactive'}</span></td>
                   <td>
                     <button class="btn btn-sm btn-secondary" onclick="App.showBranchForm(${b.id})">Edit</button>
                     <button class="btn btn-sm btn-outline" onclick="App.manageBranchStaff(${b.id})">Staff</button>
                   </td>
-                </tr>`).join('') : '<tr><td colspan="9" class="empty-state">No branches configured</td></tr>'}
+                </tr>`).join('') : '<tr><td colspan="10" class="empty-state">No branches configured</td></tr>'}
             </tbody>
           </table>
         </div>
@@ -12319,7 +12363,13 @@ const App = {
             <div class="form-group"><label>Currency <span style="color:var(--text-muted);font-weight:400;font-size:11px">(leave blank to use global default)</span></label>
               <select id="bf-currency">${this.currencyOptions(b.currency||'', true)}</select>
             </div>
+            <div class="form-group"><label>Price Tier % <span style="color:var(--text-muted);font-weight:400;font-size:11px">(+/- adjusts every retail item's price at this branch)</span></label>
+              <input id="bf-price-tier" type="number" step="0.01" value="${b.price_tier_percent || 0}">
+            </div>
+          </div>
+          <div class="input-row">
             ${id ? `<div class="form-group"><label>Status</label><select id="bf-active"><option value="1" ${b.active?'selected':''}>Active</option><option value="0" ${!b.active?'selected':''}>Inactive</option></select></div>` : '<div class="form-group"></div>'}
+            <div class="form-group"></div>
           </div>
         </div>
         <div class="modal-footer">
@@ -12340,6 +12390,7 @@ const App = {
       phone: document.getElementById('bf-phone').value.trim(),
       email: document.getElementById('bf-email').value.trim(),
       currency: document.getElementById('bf-currency').value || null,
+      price_tier_percent: parseFloat(document.getElementById('bf-price-tier').value) || 0,
     };
     if (id) data.active = parseInt(document.getElementById('bf-active').value);
     if (!data.name) { this.alert('Branch name required', 'error'); return; }

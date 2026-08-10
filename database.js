@@ -1046,6 +1046,11 @@ async function _init() {
     // other) — full history lives in rental_agreement_pauses; this is a
     // denormalized flag for cheap list/status-badge checks.
     'ALTER TABLE rental_agreements ADD COLUMN is_paused INTEGER NOT NULL DEFAULT 0',
+    // Per-branch retail price adjustment — a positive or negative percentage
+    // applied to products.price wherever a branch context is known (POS,
+    // Quotations, Reports' retail-value figures). See routes/products.js's
+    // branch-scoped GET / for where this gets applied.
+    'ALTER TABLE branches ADD COLUMN price_tier_percent REAL NOT NULL DEFAULT 0',
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch(e) {}

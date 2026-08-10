@@ -98,7 +98,14 @@ router.get('/', requireAuth, async (req, res) => {
         WHERE rai.product_id = p.id AND ra.status IN ('active', 'awaiting_issue')${branchScoped ? ' AND ra.branch_id = ?' : ''}) as rental_outstanding_qty`;
 
     if (branch_id) {
-      sql = `SELECT p.id, p.sku, p.barcode, p.name, p.description, p.category_id, p.price, p.cost, p.tax_rate, p.active, p.created_at, p.supplier_id, p.image_path, p.is_service, p.unit,
+      // price is recalculated against the branch's price_tier_percent (a
+      // positive or negative % set on the branch) — every consumer of this
+      // branch-scoped query (POS cart, quote line default, etc.) reads
+      // `price` as-is and gets the tiered value automatically. list_price is
+      // the untouched base price, kept for anywhere that wants it.
+      sql = `SELECT p.id, p.sku, p.barcode, p.name, p.description, p.category_id, p.price as list_price,
+        MAX(0, ROUND(p.price * (1 + COALESCE(b.price_tier_percent,0)/100.0), 2)) as price,
+        p.cost, p.tax_rate, p.active, p.created_at, p.supplier_id, p.image_path, p.is_service, p.unit,
         p.is_rental, p.rental_rate_type, p.rental_rate, p.rental_deposit, p.rental_late_fee_rate, p.replacement_value,
         p.rental_classification, p.rental_weekly_rate, p.rental_monthly_rate, p.rental_hourly_rate, p.is_accessory, p.is_layaway_eligible, p.is_non_inventory,
         COALESCE(bi.stock_qty, 0) as stock_qty,
@@ -110,9 +117,11 @@ router.get('/', requireAuth, async (req, res) => {
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
         LEFT JOIN branch_inventory bi ON p.id = bi.product_id AND bi.branch_id = ?
+        LEFT JOIN branches b ON b.id = ?
         WHERE 1=1`;
       params.push(branch_id); // for rentalOutstandingExpr's ra.branch_id = ?
       params.push(branch_id); // for the branch_inventory JOIN's bi.branch_id = ?
+      params.push(branch_id); // for the branches JOIN's b.id = ? (price tier)
     } else {
       sql = `SELECT p.*, c.name as category_name, (SELECT COUNT(*) FROM product_variations WHERE product_id = p.id AND active = 1) as has_variations, ${rentalOutstandingExpr(false)},
         (SELECT bi.branch_id FROM branch_inventory bi WHERE bi.product_id = p.id LIMIT 1) as assigned_branch_id,
