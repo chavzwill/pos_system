@@ -362,7 +362,10 @@
       <h3>Cancelling</h3>
       <p>A WO can be cancelled (with a required reason) any time before the deposit is paid. Once it's <strong>In Progress</strong> or further along, it can no longer be cancelled — the deposit has been collected and work has started.</p>
 
-      <p><em>Parts sourcing, technician time tracking, the active-tasks overview, technician skills/scheduling, and completion sign-off/customer notification are later phases of this module and will be documented here as they ship.</em></p>
+      <h3>Parts</h3>
+      <p>Once a WO is <strong>In Progress</strong> (needs <span class="perm-pill">wo_assign_parts</span>), parts can be assigned from the retail catalog. Sourcing works exactly like a retail quotation: if the WO's own branch has enough stock, the part is simply reserved from there; if not, the shortfall can be split across other branches (which auto-creates a real branch transfer) or left unassigned (which auto-creates a Purchase Request). <strong>Save Parts</strong> records what's needed; <strong>Confirm Parts</strong> is the separate, explicit step that actually creates those transfers/purchase requests — the same "confirm what was drafted" split a quotation's Accept step uses. Each part line shows a live status badge (sourced from branch / transfer pending / PR pending / PO received) that updates the same way a quotation's does once its linked purchase order comes in.</p>
+
+      <p><em>Technician time tracking, the active-tasks overview, technician skills/scheduling, and completion sign-off/customer notification are later phases of this module and will be documented here as they ship.</em></p>
     </section>
 
     <section class="module" id="promotions">

@@ -3,6 +3,7 @@ const router = express.Router();
 const { db } = require('../database');
 const { requirePermission, requireAnyPermission } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
+const { processWorkOrderItems, processWorkOrderPartSourcing } = require('../lib/workOrders');
 
 // Statuses a WO can freely log a comment against via PATCH /:id/status without
 // going through a dedicated money-moving endpoint (assessment-paid,
@@ -42,13 +43,114 @@ router.get('/', requirePermission('work_orders'), async (req, res) => {
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+const WO_ITEMS_SELECT = `SELECT woi.*, pr.pr_number as purchase_request_number, pr.status as purchase_request_status
+  FROM work_order_items woi LEFT JOIN purchase_requests pr ON woi.purchase_request_id = pr.id WHERE woi.work_order_id = ?`;
+
+// Attaches each part's branch-sourcing breakdown (item.sources) — mirrors
+// routes/quotations.js's attachQuoteItemSources exactly, scoped to
+// work_order_item_sources/work_order_items.
+async function attachWorkOrderItemSources(items) {
+  if (!items.length) return items;
+  const ids = items.map(i => i.id);
+  const placeholders = ids.map(() => '?').join(',');
+  const { rows: sources } = await db.execute({
+    sql: `SELECT wis.*, b.name as branch_name, bt.transfer_number, bt.status as transfer_status,
+            pr.id as purchase_request_id, pr.pr_number as purchase_request_number
+          FROM work_order_item_sources wis
+          LEFT JOIN branches b ON wis.branch_id = b.id
+          LEFT JOIN branch_transfers bt ON wis.transfer_id = bt.id
+          LEFT JOIN purchase_request_items pri ON wis.purchase_request_item_id = pri.id
+          LEFT JOIN purchase_requests pr ON pri.pr_id = pr.id
+          WHERE wis.work_order_item_id IN (${placeholders})`,
+    args: ids,
+  });
+  const byItem = {};
+  for (const s of sources) { (byItem[s.work_order_item_id] = byItem[s.work_order_item_id] || []).push(s); }
+  for (const item of items) { item.sources = byItem[item.id] || []; }
+  return items;
+}
+
 router.get('/:id', requirePermission('work_orders'), async (req, res) => {
   try {
     const { rows: [wo] } = await db.execute({ sql: `${WO_LIST_SELECT} WHERE wo.id = ?`, args: [req.params.id] });
     if (!wo) return res.status(404).json({ error: 'Not found' });
     const { rows: statusLog } = await db.execute({ sql: `SELECT wsl.*, e.first_name || ' ' || e.last_name as employee_name FROM work_order_status_log wsl LEFT JOIN employees e ON wsl.employee_id = e.id WHERE wsl.work_order_id = ? ORDER BY wsl.id`, args: [req.params.id] });
     wo.status_log = statusLog;
+    const { rows: items } = await db.execute({ sql: WO_ITEMS_SELECT, args: [req.params.id] });
+    wo.items = await attachWorkOrderItemSources(items);
     res.json(wo);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Replaces the WO's part lines wholesale (same delete+reinsert pattern
+// PUT /quotations/:id uses) — computes per-line branch-stock coverage via
+// checkAvailability the same way processQuoteItems' caller does, so this is
+// left to the frontend to resolve (same split-UI flow as quotes) and passed
+// in as `sources`. Only allowed pre-completion — parts can be added/adjusted
+// any time the WO is in progress.
+router.patch('/:id/parts', requirePermission('wo_assign_parts'), async (req, res) => {
+  try {
+    const { items } = req.body;
+    const { rows: [wo] } = await db.execute({ sql: 'SELECT * FROM work_orders WHERE id = ?', args: [req.params.id] });
+    if (!wo) return res.status(404).json({ error: 'Not found' });
+    if (['complete', 'awaiting_pickup', 'picked_up', 'cancelled'].includes(wo.status)) return res.status(400).json({ error: `Cannot edit parts on a ${wo.status} work order` });
+
+    let processedItems;
+    try {
+      processedItems = await processWorkOrderItems(items || []);
+    } catch(e) { return res.status(400).json({ error: e.message }); }
+
+    const tx = await db.transaction('write');
+    let committed = false;
+    try {
+      // Existing sourcing/transfer/PR links are tied to the item rows being
+      // replaced — deleting the items cascades work_order_item_sources, but
+      // the already-created transfers/PR lines themselves are left alone
+      // (same as quotations: re-editing doesn't undo a transfer already in
+      // motion, it just stops tracking it against the old item row).
+      await tx.execute({ sql: 'DELETE FROM work_order_items WHERE work_order_id = ?', args: [req.params.id] });
+      for (const item of processedItems) {
+        const { product_id, product_name, sku, quantity, unit_cost, unit_price, total, sources } = item;
+        const itemResult = await tx.execute({ sql: 'INSERT INTO work_order_items (work_order_id,product_id,product_name,sku,quantity,unit_cost,unit_price,total) VALUES (?,?,?,?,?,?,?,?)', args: [req.params.id, product_id, product_name, sku, quantity, unit_cost, unit_price, total] });
+        const itemId = Number(itemResult.lastInsertRowid);
+        if (sources) {
+          for (const src of sources) {
+            await tx.execute({ sql: 'INSERT INTO work_order_item_sources (work_order_item_id, branch_id, quantity) VALUES (?,?,?)', args: [itemId, src.branch_id, src.quantity] });
+          }
+        }
+      }
+      await tx.commit();
+      committed = true;
+      const { rows: [updated] } = await db.execute({ sql: `${WO_LIST_SELECT} WHERE wo.id = ?`, args: [req.params.id] });
+      const { rows: newItems } = await db.execute({ sql: WO_ITEMS_SELECT, args: [req.params.id] });
+      updated.items = await attachWorkOrderItemSources(newItems);
+      res.json(updated);
+    } catch(e) {
+      if (!committed) await tx.rollback();
+      res.status(committed ? 500 : 400).json({ error: e.message });
+    }
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// Explicit trigger point (mirrors a quote's Accept) — turns whatever
+// branch-split was recorded on PATCH /:id/parts into real inventory moves:
+// a branch_transfers row per source branch, or a purchase_requests line for
+// anything no branch could cover. Safe to call more than once — only
+// still-unprocessed sources (transfer_id/purchase_request_item_id IS NULL)
+// are picked up each time, so confirming again after adding more parts only
+// processes the new ones.
+router.post('/:id/confirm-parts', requirePermission('wo_assign_parts'), async (req, res) => {
+  try {
+    const { rows: [wo] } = await db.execute({ sql: 'SELECT * FROM work_orders WHERE id = ?', args: [req.params.id] });
+    if (!wo) return res.status(404).json({ error: 'Not found' });
+    const { rows: [itemCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM work_order_items WHERE work_order_id = ?', args: [req.params.id] });
+    if (!Number(itemCount.c)) return res.status(400).json({ error: 'No parts to confirm' });
+
+    await processWorkOrderPartSourcing(wo);
+    const { rows: [updated] } = await db.execute({ sql: `${WO_LIST_SELECT} WHERE wo.id = ?`, args: [req.params.id] });
+    const { rows: items } = await db.execute({ sql: WO_ITEMS_SELECT, args: [req.params.id] });
+    updated.items = await attachWorkOrderItemSources(items);
+    res.json(updated);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 

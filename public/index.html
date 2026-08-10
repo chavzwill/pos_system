@@ -6489,9 +6489,36 @@ const App = {
     });
   },
 
+  _woPartStatusBadge(item) {
+    if (!item.sources || !item.sources.length) return `<span class="badge-pill badge-success" style="font-size:10px">Sourced from ${this.escapeAttr(this._woCurrentBranchName||'branch')}</span>`;
+    return item.sources.map(s => {
+      // The WO's own branch's covered portion is stored as a source row too
+      // (needed so sourcesSum === quantity server-side) but was already in
+      // stock there — nothing to transfer or purchase for it.
+      if (String(s.branch_id) === String(this._woCurrentBranchId)) return `<span class="badge-pill badge-success" style="font-size:10px">${s.quantity} from ${this.escapeAttr(this._woCurrentBranchName||'branch')}</span>`;
+      if (s.transfer_id) return `<span class="badge-pill badge-info" style="font-size:10px">Transfer ${s.transfer_number||''} — ${s.transfer_status||'pending'}</span>`;
+      if (s.purchase_request_id) return `<span class="badge-pill ${s.purchase_request_status==='received'||s.purchase_request_status==='closed'?'badge-success':'badge-warning'}" style="font-size:10px">PR ${s.purchase_request_number||''} — ${s.purchase_request_status||'pending'}</span>`;
+      return `<span class="badge-pill badge-warning" style="font-size:10px">${s.branch_name||'Other branch'} pending</span>`;
+    }).join(' ');
+  },
+
   async viewWorkOrder(id) {
     const wo = await this.api('GET', `/work-orders/${id}`);
+    this._woCurrentBranchName = wo.branch_name;
+    this._woCurrentBranchId = wo.branch_id;
     const estimateTotal = (parseFloat(wo.estimate_labor)||0) + (parseFloat(wo.estimate_consumables)||0);
+    const canManageParts = ['in_progress','awaiting_signoff','complete','awaiting_pickup','picked_up'].includes(wo.status);
+    const partsEditable = wo.status === 'in_progress' && this.can('wo_assign_parts');
+    if (partsEditable) {
+      const [products, branches] = await Promise.all([
+        this.api('GET', `/products?is_service=0&is_rental=0&active=1${wo.branch_id?'&branch_id='+wo.branch_id:''}`),
+        this.api('GET', '/branches'),
+      ]);
+      this._woPartsProducts = products;
+      this._woBranches = (branches||[]).filter(b => String(b.id) !== String(wo.branch_id));
+      this._woPartsStockCache = {};
+    }
+    const partsTotal = (wo.items||[]).reduce((s,i) => s + (parseFloat(i.total)||0), 0);
     this.showModal(`
       <div class="modal" style="max-width:640px">
         <div class="modal-header">
@@ -6523,9 +6550,27 @@ const App = {
             <strong style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Fees & Estimate</strong>
             <div style="display:flex;justify-content:space-between;margin-top:4px"><span>Assessment Fee</span><span>${this.fmt(wo.assessment_fee)} ${wo.assessment_transaction_id ? '<span class="badge-pill badge-success" style="font-size:10px">Paid</span>' : '<span style="color:var(--text-muted)">Unpaid</span>'}</span></div>
             ${wo.status !== 'intake' ? `<div style="display:flex;justify-content:space-between"><span>Estimate (labor + consumables)</span><span>${this.fmt(estimateTotal)}</span></div>` : ''}
+            ${partsTotal > 0 ? `<div style="display:flex;justify-content:space-between"><span>Parts</span><span>${this.fmt(partsTotal)}</span></div>` : ''}
             ${wo.deposit_amount > 0 ? `<div style="display:flex;justify-content:space-between"><span>Deposit</span><span>${this.fmt(wo.deposit_amount)} ${wo.deposit_transaction_id ? '<span class="badge-pill badge-success" style="font-size:10px">Paid</span>' : '<span style="color:var(--text-muted)">Unpaid</span>'}</span></div>` : ''}
             ${wo.estimate_notes ? `<div style="color:var(--text-muted);margin-top:4px">${wo.estimate_notes}</div>` : ''}
           </div>
+
+          ${canManageParts ? `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px">
+            <strong style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Parts</strong>
+            <div id="wo-parts-list" style="margin-top:6px">
+              ${(wo.items||[]).length ? `<table class="table" style="font-size:12px"><thead><tr><th>Part</th><th>Qty</th><th>Total</th><th>Source</th></tr></thead><tbody>
+                ${wo.items.map(i => `<tr><td>${i.product_name}</td><td>${i.quantity}</td><td>${this.fmt(i.total)}</td><td>${this._woPartStatusBadge(i)}</td></tr>`).join('')}
+              </tbody></table>` : '<div style="color:var(--text-muted);font-size:12px">No parts assigned yet</div>'}
+            </div>
+            ${partsEditable ? `
+            <div id="wo-parts-new-lines" style="margin-top:8px"></div>
+            <button type="button" class="btn btn-sm btn-outline" style="margin-top:4px" onclick="App.addWOPartLine(${wo.id})">+ Add Part</button>
+            <div style="text-align:right;margin-top:8px;display:flex;gap:6px;justify-content:flex-end">
+              <button class="btn btn-sm btn-secondary" onclick="App.saveWOParts(${wo.id})">Save Parts</button>
+              <button class="btn btn-sm btn-primary" onclick="App.confirmWOParts(${wo.id})">Confirm Parts</button>
+            </div>
+            <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0">Save Parts records what's needed; Confirm Parts is what actually creates the branch transfer or purchase request for anything not in stock here.</p>` : ''}
+          </div>` : ''}
 
           <div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px">
             <strong style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Status History</strong>
@@ -6707,6 +6752,159 @@ const App = {
       await this.api('PATCH', `/work-orders/${id}/cancel`, { reason, employee_id: this.currentUser.id });
       this.closeModal();
       this.renderWorkOrders();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  // ─── Work Order parts (mirrors the quotation item-picker/allocator —
+  // public/index.html's addQuoteItem/checkQuoteItemStock/recalcQuoteAllocation
+  // — copied rather than shared so changes here can't affect the working
+  // quote flow, same reasoning as the rental item picker). Unlike a quote,
+  // a WO's branch is fixed at intake, so there's no branch selector to react
+  // to here — sourcing is always computed against wo.branch_id. ─────────────
+
+  _woNewPartIdx: 0,
+
+  addWOPartLine() {
+    const idx = this._woNewPartIdx++;
+    const container = document.getElementById('wo-parts-new-lines');
+    if (!container) return;
+    const products = this._woPartsProducts || [];
+    const div = document.createElement('div');
+    div.className = 'po-receive-row';
+    div.id = `wo-part-${idx}`;
+    div.innerHTML = `
+      <select style="flex:2" onchange="App.checkWOPartStock(${idx})" id="wop-prod-${idx}">
+        <option value="">-- Select Part --</option>
+        ${products.map(p => `<option value="${p.id}" data-cost="${p.cost}" data-price="${p.price}">${p.name} (${this.fmt(p.price)}, stock: ${p.stock_qty})</option>`).join('')}
+      </select>
+      <input id="wop-qty-${idx}" type="number" min="1" value="1" style="width:70px" placeholder="Qty" oninput="App.checkWOPartStock(${idx})">
+      <button class="btn btn-sm btn-danger" onclick="document.getElementById('wo-part-${idx}').remove();const a=document.getElementById('wo-part-alloc-${idx}');if(a)a.remove()">✕</button>`;
+    container.appendChild(div);
+    const allocDiv = document.createElement('div');
+    allocDiv.id = `wo-part-alloc-${idx}`;
+    container.appendChild(allocDiv);
+  },
+
+  async getWOBranchStock(branchId) {
+    this._woPartsStockCache = this._woPartsStockCache || {};
+    if (!this._woPartsStockCache[branchId]) {
+      const all = await this.api('GET', `/products?branch_id=${branchId}`);
+      const map = {};
+      all.forEach(p => { map[p.id] = { stock_qty: p.stock_qty }; });
+      this._woPartsStockCache[branchId] = map;
+    }
+    return this._woPartsStockCache[branchId];
+  },
+
+  async checkWOPartStock(idx) {
+    const prodSel = document.getElementById(`wop-prod-${idx}`);
+    const allocDiv = document.getElementById(`wo-part-alloc-${idx}`);
+    if (!prodSel || !allocDiv) return;
+    const productId = parseInt(prodSel.value);
+    const qty = parseInt(document.getElementById(`wop-qty-${idx}`)?.value) || 0;
+    if (!productId || !qty) { allocDiv.innerHTML = ''; return; }
+
+    // this._woPartsProducts was already fetched branch-scoped (see
+    // viewWorkOrder), so its stock_qty is the home branch's available qty.
+    const homeProduct = (this._woPartsProducts||[]).find(p => p.id === productId);
+    const available = homeProduct?.stock_qty || 0;
+    if (qty <= available) { allocDiv.innerHTML = ''; delete allocDiv.dataset.productId; return; }
+
+    const shortfall = qty - available;
+    const otherBranches = this._woBranches || [];
+    await Promise.all(otherBranches.map(b => this.getWOBranchStock(b.id)));
+    const rowsHtml = otherBranches.map(b => {
+      const avail = (this._woPartsStockCache[b.id]||{})[productId]?.stock_qty || 0;
+      return `<div style="display:flex;align-items:center;gap:8px;font-size:12px;margin-top:4px">
+        <span style="flex:1">${b.name} <span style="color:var(--text-muted)">(avail: ${avail})</span></span>
+        <input type="number" min="0" max="${avail}" value="0" style="width:70px" id="wo-part-alloc-${idx}-b${b.id}" data-branch="${b.id}" data-max="${avail}" oninput="App.recalcWOPartAllocation(${idx})">
+      </div>`;
+    }).join('');
+    allocDiv.dataset.productId = productId;
+    allocDiv.innerHTML = `
+      <div style="background:var(--bg-card);border:1px solid var(--warning,#f59e0b);border-radius:6px;padding:8px 10px;margin:2px 0 8px">
+        <div style="font-size:12px;color:var(--warning,#f59e0b);font-weight:600;margin-bottom:4px">⚠ Only ${available} available at this branch — source the remaining <span id="wo-part-alloc-${idx}-shortfall">${shortfall}</span> from elsewhere:</div>
+        ${rowsHtml}
+        <div style="font-size:12px;margin-top:6px;font-weight:600">To purchase (no stock available): <span id="wo-part-alloc-${idx}-remainder">${shortfall}</span></div>
+      </div>`;
+  },
+
+  recalcWOPartAllocation(idx) {
+    const prodSel = document.getElementById(`wop-prod-${idx}`);
+    const productId = parseInt(prodSel?.value);
+    const qty = parseInt(document.getElementById(`wop-qty-${idx}`)?.value) || 0;
+    const homeProduct = (this._woPartsProducts||[]).find(p => p.id === productId);
+    const available = homeProduct?.stock_qty || 0;
+    const shortfall = Math.max(0, qty - available);
+    let allocated = 0;
+    document.querySelectorAll(`[id^="wo-part-alloc-${idx}-b"]`).forEach(inp => {
+      let v = parseInt(inp.value) || 0;
+      const max = parseInt(inp.dataset.max) || 0;
+      if (v > max) v = max;
+      if (v < 0) v = 0;
+      inp.value = v;
+      allocated += v;
+    });
+    const remEl = document.getElementById(`wo-part-alloc-${idx}-remainder`);
+    if (remEl) remEl.textContent = Math.max(0, shortfall - allocated);
+  },
+
+  // Rebuilds each line's branch split deterministically so it always sums
+  // exactly to `quantity` — home branch first (up to its available stock),
+  // then each other branch's allocator input (capped at what's actually
+  // left to cover), then whatever's still unassigned goes to Purchasing
+  // (branch_id: null). Exactly mirrors the quotation form's own submit
+  // logic (search homeQty in this file) — the backend's sourcesSum===qty
+  // validation requires the home branch's covered portion to be included
+  // as its own row, not omitted.
+  _collectWOPartLines() {
+    const rows = document.querySelectorAll('#wo-parts-new-lines > [id^="wo-part-"]');
+    const items = [];
+    for (const row of rows) {
+      if (row.id.includes('alloc')) continue;
+      const idx = row.id.replace('wo-part-', '');
+      const prodSel = document.getElementById(`wop-prod-${idx}`);
+      if (!prodSel || !prodSel.value) continue;
+      const productId = parseInt(prodSel.value);
+      const qty = parseInt(document.getElementById(`wop-qty-${idx}`)?.value) || 0;
+      if (!qty) continue;
+      const item = { product_id: productId, quantity: qty };
+      const allocInputs = document.querySelectorAll(`[id^="wo-part-alloc-${idx}-b"]`);
+      if (allocInputs.length) {
+        const homeProduct = (this._woPartsProducts||[]).find(p => p.id === productId);
+        const available = homeProduct?.stock_qty || 0;
+        const homeQty = Math.min(qty, available);
+        let remaining = qty - homeQty;
+        const sources = [];
+        if (homeQty > 0) sources.push({ branch_id: this._woCurrentBranchId, quantity: homeQty });
+        allocInputs.forEach(inp => {
+          if (remaining <= 0) return;
+          const v = Math.min(parseInt(inp.value) || 0, remaining);
+          if (v > 0) { sources.push({ branch_id: parseInt(inp.dataset.branch), quantity: v }); remaining -= v; }
+        });
+        if (remaining > 0) sources.push({ branch_id: null, quantity: remaining });
+        item.sources = sources;
+      }
+      items.push(item);
+    }
+    return items;
+  },
+
+  async saveWOParts(id) {
+    const items = this._collectWOPartLines();
+    try {
+      await this.api('PATCH', `/work-orders/${id}/parts`, { items });
+      this.alert('Parts saved');
+      this.viewWorkOrder(id);
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  async confirmWOParts(id) {
+    try {
+      await this.api('PATCH', `/work-orders/${id}/parts`, { items: this._collectWOPartLines() });
+      await this.api('POST', `/work-orders/${id}/confirm-parts`);
+      this.alert('Parts confirmed — transfers/purchase requests created where needed');
+      this.viewWorkOrder(id);
     } catch(e) { this.alert(e.message, 'error'); }
   },
 

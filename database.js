@@ -340,6 +340,27 @@ async function _init() {
       purchase_request_item_id INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS work_order_items (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+      product_id INTEGER REFERENCES products(id),
+      product_name TEXT NOT NULL,
+      sku TEXT,
+      quantity INTEGER NOT NULL DEFAULT 1,
+      unit_cost REAL DEFAULT 0,
+      unit_price REAL DEFAULT 0,
+      total REAL DEFAULT 0,
+      purchase_request_id INTEGER REFERENCES purchase_requests(id)
+    )` },
+    { sql: `CREATE TABLE IF NOT EXISTS work_order_item_sources (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_order_item_id INTEGER NOT NULL REFERENCES work_order_items(id) ON DELETE CASCADE,
+      branch_id INTEGER REFERENCES branches(id),
+      quantity INTEGER NOT NULL,
+      transfer_id INTEGER REFERENCES branch_transfers(id),
+      purchase_request_item_id INTEGER,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS crm_leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       lead_number TEXT UNIQUE NOT NULL,
@@ -1086,6 +1107,11 @@ async function _init() {
     // Quotations, Reports' retail-value figures). See routes/products.js's
     // branch-scoped GET / for where this gets applied.
     'ALTER TABLE branches ADD COLUMN price_tier_percent REAL NOT NULL DEFAULT 0',
+    // Links a branch_transfers/purchase_request_items row back to the work
+    // order that auto-created it — same pattern as the existing quote_id /
+    // quotation_item_id columns on these same two tables.
+    'ALTER TABLE branch_transfers ADD COLUMN work_order_id INTEGER REFERENCES work_orders(id)',
+    'ALTER TABLE purchase_request_items ADD COLUMN work_order_item_id INTEGER REFERENCES work_order_items(id)',
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch(e) {}
