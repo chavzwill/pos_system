@@ -365,7 +365,12 @@
       <h3>Parts</h3>
       <p>Once a WO is <strong>In Progress</strong> (needs <span class="perm-pill">wo_assign_parts</span>), parts can be assigned from the retail catalog. Sourcing works exactly like a retail quotation: if the WO's own branch has enough stock, the part is simply reserved from there; if not, the shortfall can be split across other branches (which auto-creates a real branch transfer) or left unassigned (which auto-creates a Purchase Request). <strong>Save Parts</strong> records what's needed; <strong>Confirm Parts</strong> is the separate, explicit step that actually creates those transfers/purchase requests — the same "confirm what was drafted" split a quotation's Accept step uses. Each part line shows a live status badge (sourced from branch / transfer pending / PR pending / PO received) that updates the same way a quotation's does once its linked purchase order comes in.</p>
 
-      <p><em>Technician time tracking, the active-tasks overview, technician skills/scheduling, and completion sign-off/customer notification are later phases of this module and will be documented here as they ship.</em></p>
+      <h3>Tasks &amp; time tracking</h3>
+      <p>Once a WO is <strong>In Progress</strong> (needs <span class="perm-pill">wo_technician</span>), it can be broken into tasks — a description, an allotted time in minutes, and an assigned technician. Each task has a <strong>Clock In</strong> / <strong>Clock Out</strong> button: clocking in starts a timer (and flips the task to In Progress); clocking out stops it. Actual time is the sum of every clock-in/clock-out pair on that task, so a technician can pause and resume across a break without losing what's already been logged. Actual time is shown in red once it exceeds the allotted minutes.</p>
+      <div class="callout note"><strong>One timer per technician</strong>A technician can only be clocked into one task at a time, anywhere in the system — clocking into a second task while still clocked into another is blocked with a message telling them to clock out of the first one first. This is what keeps the time data trustworthy enough to actually evaluate whether tasks are completed on time.</div>
+      <p>The <strong>⏱ Active Tasks</strong> button on the Work Orders list header opens a live popup (refreshing every 15 seconds) showing every technician currently clocked in, which task, which WO, and elapsed vs. allotted time — a quick way for a supervisor to see who's working on what without opening each WO individually.</p>
+
+      <p><em>Technician skills/scheduling and completion sign-off/customer notification are later phases of this module and will be documented here as they ship.</em></p>
     </section>
 
     <section class="module" id="promotions">

@@ -70,6 +70,29 @@ async function attachWorkOrderItemSources(items) {
   return items;
 }
 
+// Registered before GET /:id so "active-tasks" isn't swallowed as an :id
+// value — every task with a currently-open time entry, for the live
+// supervisor popup. Polled client-side every ~15s while the popup is open.
+router.get('/active-tasks', requirePermission('work_orders'), async (req, res) => {
+  try {
+    const { rows } = await db.execute({
+      sql: `SELECT te.id as time_entry_id, te.started_at, te.technician_id,
+              tech.first_name || ' ' || tech.last_name as technician_name,
+              t.id as task_id, t.description as task_description, t.allotted_minutes,
+              wo.id as work_order_id, wo.wo_number,
+              (julianday('now') - julianday(te.started_at)) * 24 * 60 as elapsed_minutes
+            FROM work_order_task_time_entries te
+            JOIN work_order_tasks t ON te.task_id = t.id
+            JOIN work_orders wo ON t.work_order_id = wo.id
+            LEFT JOIN employees tech ON te.technician_id = tech.id
+            WHERE te.ended_at IS NULL
+            ORDER BY te.started_at`,
+      args: [],
+    });
+    res.json(rows);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/:id', requirePermission('work_orders'), async (req, res) => {
   try {
     const { rows: [wo] } = await db.execute({ sql: `${WO_LIST_SELECT} WHERE wo.id = ?`, args: [req.params.id] });
@@ -78,6 +101,16 @@ router.get('/:id', requirePermission('work_orders'), async (req, res) => {
     wo.status_log = statusLog;
     const { rows: items } = await db.execute({ sql: WO_ITEMS_SELECT, args: [req.params.id] });
     wo.items = await attachWorkOrderItemSources(items);
+    const { rows: tasks } = await db.execute({
+      sql: `SELECT t.*, tech.first_name || ' ' || tech.last_name as technician_name,
+              (SELECT id FROM work_order_task_time_entries WHERE task_id = t.id AND ended_at IS NULL LIMIT 1) as open_time_entry_id,
+              (SELECT started_at FROM work_order_task_time_entries WHERE task_id = t.id AND ended_at IS NULL LIMIT 1) as open_time_entry_started_at,
+              (SELECT COALESCE(SUM((julianday(ended_at) - julianday(started_at)) * 24 * 60), 0) FROM work_order_task_time_entries WHERE task_id = t.id AND ended_at IS NOT NULL) as actual_minutes
+            FROM work_order_tasks t LEFT JOIN employees tech ON t.technician_id = tech.id
+            WHERE t.work_order_id = ? ORDER BY t.id`,
+      args: [req.params.id],
+    });
+    wo.tasks = tasks;
     res.json(wo);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -338,6 +371,75 @@ router.patch('/:id/cancel', requirePermission('work_orders'), async (req, res) =
     await db.execute({ sql: `UPDATE work_orders SET status = 'cancelled', cancelled_at = CURRENT_TIMESTAMP, cancellation_reason = ? WHERE id = ?`, args: [reason.trim(), req.params.id] });
     await logStatus(db, req.params.id, 'cancelled', reason.trim(), employee_id);
     const { rows: [updated] } = await db.execute({ sql: `${WO_LIST_SELECT} WHERE wo.id = ?`, args: [req.params.id] });
+    res.json(updated);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// ─── Tasks & time tracking ──────────────────────────────────────────────────
+
+router.post('/:id/tasks', requirePermission('wo_technician'), async (req, res) => {
+  try {
+    const { description, allotted_minutes, technician_id } = req.body;
+    if (!description || !description.trim()) return res.status(400).json({ error: 'A task description is required' });
+    const { rows: [wo] } = await db.execute({ sql: 'SELECT id, status FROM work_orders WHERE id = ?', args: [req.params.id] });
+    if (!wo) return res.status(404).json({ error: 'Not found' });
+    if (!['in_progress', 'awaiting_signoff'].includes(wo.status)) return res.status(400).json({ error: `Cannot add tasks to a ${wo.status} work order` });
+    const result = await db.execute({ sql: 'INSERT INTO work_order_tasks (work_order_id, description, allotted_minutes, technician_id) VALUES (?,?,?,?)', args: [req.params.id, description.trim(), parseInt(allotted_minutes) || 0, technician_id || null] });
+    const { rows: [task] } = await db.execute({ sql: 'SELECT * FROM work_order_tasks WHERE id = ?', args: [Number(result.lastInsertRowid)] });
+    res.status(201).json(task);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.patch('/tasks/:id', requirePermission('wo_technician'), async (req, res) => {
+  try {
+    const { description, allotted_minutes, technician_id, status } = req.body;
+    const { rows: [task] } = await db.execute({ sql: 'SELECT * FROM work_order_tasks WHERE id = ?', args: [req.params.id] });
+    if (!task) return res.status(404).json({ error: 'Not found' });
+    if (status && !['pending', 'in_progress', 'complete'].includes(status)) return res.status(400).json({ error: 'Invalid status' });
+    if (status === 'complete') {
+      const { rows: [openEntry] } = await db.execute({ sql: 'SELECT id FROM work_order_task_time_entries WHERE task_id = ? AND ended_at IS NULL', args: [req.params.id] });
+      if (openEntry) return res.status(400).json({ error: 'Clock out of this task before marking it complete' });
+    }
+    await db.execute({ sql: 'UPDATE work_order_tasks SET description = ?, allotted_minutes = ?, technician_id = ?, status = ? WHERE id = ?', args: [
+      description != null ? description.trim() : task.description,
+      allotted_minutes != null ? parseInt(allotted_minutes) || 0 : task.allotted_minutes,
+      technician_id !== undefined ? (technician_id || null) : task.technician_id,
+      status || task.status,
+      req.params.id,
+    ] });
+    const { rows: [updated] } = await db.execute({ sql: 'SELECT * FROM work_order_tasks WHERE id = ?', args: [req.params.id] });
+    res.json(updated);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// A technician can only have one open time entry at once, across every task
+// on every work order — clocking into a second task without clocking out of
+// the first would silently double-count their time.
+router.post('/tasks/:id/clock-in', requirePermission('wo_technician'), async (req, res) => {
+  try {
+    const { technician_id } = req.body;
+    if (!technician_id) return res.status(400).json({ error: 'A technician is required' });
+    const { rows: [task] } = await db.execute({ sql: 'SELECT * FROM work_order_tasks WHERE id = ?', args: [req.params.id] });
+    if (!task) return res.status(404).json({ error: 'Not found' });
+    if (task.status === 'complete') return res.status(400).json({ error: 'This task is already marked complete — reopen it before clocking in again' });
+    const { rows: [existingOpenOnTask] } = await db.execute({ sql: 'SELECT id FROM work_order_task_time_entries WHERE task_id = ? AND ended_at IS NULL', args: [req.params.id] });
+    if (existingOpenOnTask) return res.status(400).json({ error: 'This task already has an active timer' });
+    const { rows: [techBusy] } = await db.execute({ sql: 'SELECT te.id, t.description, wo.wo_number FROM work_order_task_time_entries te JOIN work_order_tasks t ON te.task_id = t.id JOIN work_orders wo ON t.work_order_id = wo.id WHERE te.technician_id = ? AND te.ended_at IS NULL', args: [technician_id] });
+    if (techBusy) return res.status(400).json({ error: `This technician is already clocked into "${techBusy.description}" on ${techBusy.wo_number} — clock out of that first` });
+
+    await db.execute({ sql: 'INSERT INTO work_order_task_time_entries (task_id, technician_id) VALUES (?,?)', args: [req.params.id, technician_id] });
+    if (task.status === 'pending') await db.execute({ sql: `UPDATE work_order_tasks SET status = 'in_progress', technician_id = COALESCE(technician_id, ?) WHERE id = ?`, args: [technician_id, req.params.id] });
+    const { rows: [updated] } = await db.execute({ sql: 'SELECT * FROM work_order_tasks WHERE id = ?', args: [req.params.id] });
+    res.json(updated);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+router.post('/tasks/:id/clock-out', requirePermission('wo_technician'), async (req, res) => {
+  try {
+    const { rows: [openEntry] } = await db.execute({ sql: 'SELECT * FROM work_order_task_time_entries WHERE task_id = ? AND ended_at IS NULL', args: [req.params.id] });
+    if (!openEntry) return res.status(400).json({ error: 'No active timer on this task' });
+    await db.execute({ sql: 'UPDATE work_order_task_time_entries SET ended_at = CURRENT_TIMESTAMP WHERE id = ?', args: [openEntry.id] });
+    const { rows: [updated] } = await db.execute({ sql: 'SELECT * FROM work_order_tasks WHERE id = ?', args: [req.params.id] });
     res.json(updated);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

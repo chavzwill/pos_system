@@ -6365,7 +6365,10 @@ const App = {
     document.getElementById('content').innerHTML = `
       <div class="section-header">
         <h2>Work Orders</h2>
-        <div id="wo-header-actions">${this.can('wo_intake') ? `<button class="btn btn-primary btn-sm" onclick="App.showWOIntakeModal()">+ New Work Order</button>` : ''}</div>
+        <div id="wo-header-actions">
+          ${this.can('work_orders') ? `<button class="btn btn-secondary btn-sm" style="margin-right:8px" onclick="App.showActiveTasksPopup()">⏱ Active Tasks</button>` : ''}
+          ${this.can('wo_intake') ? `<button class="btn btn-primary btn-sm" onclick="App.showWOIntakeModal()">+ New Work Order</button>` : ''}
+        </div>
       </div>
       <div class="crm-tabs" id="wo-tabs-nav">
         ${this._woTabs.map(t=>`<button class="crm-tab ${this.woTab===t.key?'active':''}" onclick="App.filterWorkOrders('${t.key}')">${t.label}</button>`).join('')}
@@ -6518,6 +6521,11 @@ const App = {
       this._woBranches = (branches||[]).filter(b => String(b.id) !== String(wo.branch_id));
       this._woPartsStockCache = {};
     }
+    const tasksSectionVisible = ['in_progress','awaiting_signoff','complete','awaiting_pickup','picked_up'].includes(wo.status);
+    const tasksEditable = ['in_progress','awaiting_signoff'].includes(wo.status) && this.can('wo_technician');
+    if (tasksEditable) {
+      this._woTechnicians = await this.api('GET', '/employees');
+    }
     const partsTotal = (wo.items||[]).reduce((s,i) => s + (parseFloat(i.total)||0), 0);
     this.showModal(`
       <div class="modal" style="max-width:640px">
@@ -6572,6 +6580,26 @@ const App = {
             <p style="font-size:11px;color:var(--text-muted);margin:6px 0 0">Save Parts records what's needed; Confirm Parts is what actually creates the branch transfer or purchase request for anything not in stock here.</p>` : ''}
           </div>` : ''}
 
+          ${tasksSectionVisible ? `<div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px">
+            <strong style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Tasks</strong>
+            <div id="wo-tasks-list" style="margin-top:6px">
+              ${(wo.tasks||[]).length ? wo.tasks.map(t => this._woTaskRowHtml(wo.id, t, tasksEditable)).join('') : '<div style="color:var(--text-muted);font-size:12px">No tasks yet</div>'}
+            </div>
+            ${tasksEditable ? `
+            <div id="wo-task-form" style="display:none;margin-top:8px;border-top:1px dashed var(--border);padding-top:8px">
+              <div class="form-group" style="margin-bottom:6px"><input id="wo-task-desc" placeholder="Task description"></div>
+              <div class="input-row" style="margin-bottom:6px">
+                <div class="form-group"><label style="font-size:11px">Allotted (minutes)</label><input type="number" id="wo-task-allotted" min="0" value="30"></div>
+                <div class="form-group"><label style="font-size:11px">Technician</label>
+                  <select id="wo-task-tech"><option value="">-- Unassigned --</option>${(this._woTechnicians||[]).map(e=>`<option value="${e.id}">${e.first_name} ${e.last_name}</option>`).join('')}</select>
+                </div>
+              </div>
+              <button class="btn btn-sm btn-primary" onclick="App.saveWOTask(${wo.id})">Add Task</button>
+              <button class="btn btn-sm btn-secondary" onclick="document.getElementById('wo-task-form').style.display='none'">Cancel</button>
+            </div>
+            <button type="button" class="btn btn-sm btn-outline" style="margin-top:8px" onclick="document.getElementById('wo-task-form').style.display='block'">+ Add Task</button>` : ''}
+          </div>` : ''}
+
           <div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px">
             <strong style="font-size:11px;color:var(--text-muted);text-transform:uppercase">Status History</strong>
             <div style="max-height:180px;overflow-y:auto;margin-top:6px">
@@ -6603,7 +6631,7 @@ const App = {
     if (!description) { this.alert('Description cannot be empty', 'error'); return; }
     try {
       await this.api('PATCH', `/work-orders/${id}`, { description, employee_id: this.currentUser.id });
-      this.viewWorkOrder(id);
+      await this.viewWorkOrder(id);
     } catch(e) { this.alert(e.message, 'error'); }
   },
 
@@ -6726,7 +6754,7 @@ const App = {
     try {
       await this.api('PATCH', `/work-orders/${id}/status`, { status, comment, employee_id: this.currentUser.id });
       this.closeModal();
-      this.viewWorkOrder(id);
+      await this.viewWorkOrder(id);
       this.renderWorkOrders();
     } catch(e) { this.alert(e.message, 'error'); }
   },
@@ -6895,7 +6923,7 @@ const App = {
     try {
       await this.api('PATCH', `/work-orders/${id}/parts`, { items });
       this.alert('Parts saved');
-      this.viewWorkOrder(id);
+      await this.viewWorkOrder(id);
     } catch(e) { this.alert(e.message, 'error'); }
   },
 
@@ -6904,8 +6932,110 @@ const App = {
       await this.api('PATCH', `/work-orders/${id}/parts`, { items: this._collectWOPartLines() });
       await this.api('POST', `/work-orders/${id}/confirm-parts`);
       this.alert('Parts confirmed — transfers/purchase requests created where needed');
-      this.viewWorkOrder(id);
+      await this.viewWorkOrder(id);
     } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  // ─── Work Order tasks & time tracking ──────────────────────────────────────
+
+  _woMinutesLabel(mins) {
+    const m = Math.round(mins || 0);
+    if (m < 60) return `${m}m`;
+    return `${Math.floor(m/60)}h ${m%60}m`;
+  },
+
+  _woTaskRowHtml(woId, t, editable) {
+    const actual = parseFloat(t.actual_minutes) || 0;
+    const liveElapsed = t.open_time_entry_id ? (Date.now() - new Date(t.open_time_entry_started_at).getTime()) / 60000 : 0;
+    const totalActual = actual + liveElapsed;
+    const overAllotted = t.allotted_minutes > 0 && totalActual > t.allotted_minutes;
+    const statusBadge = { pending: 'badge-secondary', in_progress: 'badge-info', complete: 'badge-success' }[t.status] || 'badge-secondary';
+    return `<div style="border-top:1px solid var(--border);padding:6px 0;font-size:12px">
+      <div style="display:flex;justify-content:space-between;align-items:center">
+        <strong>${t.description}</strong>
+        <span class="badge-pill ${statusBadge}" style="font-size:10px">${t.status.replace('_',' ')}</span>
+      </div>
+      <div style="color:var(--text-muted);margin-top:2px">
+        ${t.technician_name || 'Unassigned'} · Allotted ${this._woMinutesLabel(t.allotted_minutes)} ·
+        <span style="color:${overAllotted?'var(--danger)':'inherit'}">Actual ${this._woMinutesLabel(totalActual)}${t.open_time_entry_id ? ' (running)' : ''}</span>
+      </div>
+      ${editable && t.status !== 'complete' ? `<div style="margin-top:4px;display:flex;gap:6px">
+        ${t.open_time_entry_id
+          ? `<button class="btn btn-sm btn-danger" onclick="App.woClockOut(${woId},${t.id})">Clock Out</button>`
+          : `<button class="btn btn-sm btn-secondary" onclick="App.woClockIn(${woId},${t.id})">Clock In</button>`}
+        ${!t.open_time_entry_id ? `<button class="btn btn-sm btn-outline" onclick="App.woMarkTaskComplete(${woId},${t.id})">Mark Complete</button>` : ''}
+      </div>` : ''}
+    </div>`;
+  },
+
+  async saveWOTask(id) {
+    const description = document.getElementById('wo-task-desc').value.trim();
+    const allotted_minutes = document.getElementById('wo-task-allotted').value;
+    const technician_id = document.getElementById('wo-task-tech').value || null;
+    if (!description) { this.alert('A task description is required', 'error'); return; }
+    try {
+      await this.api('POST', `/work-orders/${id}/tasks`, { description, allotted_minutes, technician_id });
+      await this.viewWorkOrder(id);
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  async woClockIn(woId, taskId) {
+    try {
+      await this.api('POST', `/work-orders/tasks/${taskId}/clock-in`, { technician_id: this.currentUser.id });
+      await this.viewWorkOrder(woId);
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  async woClockOut(woId, taskId) {
+    try {
+      await this.api('POST', `/work-orders/tasks/${taskId}/clock-out`, {});
+      await this.viewWorkOrder(woId);
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  async woMarkTaskComplete(woId, taskId) {
+    try {
+      await this.api('PATCH', `/work-orders/tasks/${taskId}`, { status: 'complete' });
+      await this.viewWorkOrder(woId);
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  // Live supervisor view of every technician currently clocked into a task,
+  // across every work order — polls every 15s while open. The poll clears
+  // itself the moment the popup's own DOM node is gone, regardless of how it
+  // was closed (✕ button or clicking outside the overlay), rather than
+  // needing to hook every close path individually.
+  showActiveTasksPopup() {
+    this.showModal(`
+      <div class="modal" style="max-width:560px">
+        <div class="modal-header"><span class="modal-title">⏱ Active Tasks</span><button class="modal-close">✕</button></div>
+        <div class="modal-body" id="active-tasks-body"><div class="empty-state"><p>Loading…</p></div></div>
+        <div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Close</button></div>
+      </div>`);
+    this._renderActiveTasksPopup();
+    clearInterval(this._activeTasksInterval);
+    this._activeTasksInterval = setInterval(() => this._renderActiveTasksPopup(), 15000);
+  },
+
+  async _renderActiveTasksPopup() {
+    const body = document.getElementById('active-tasks-body');
+    if (!body) { clearInterval(this._activeTasksInterval); return; }
+    const rows = await this.api('GET', '/work-orders/active-tasks').catch(() => []);
+    if (!document.getElementById('active-tasks-body')) { clearInterval(this._activeTasksInterval); return; }
+    body.innerHTML = !rows.length ? '<div class="empty-state"><p>No technicians currently clocked in.</p></div>' : `
+      <table class="table" style="font-size:12px">
+        <thead><tr><th>Technician</th><th>Work Order</th><th>Task</th><th>Elapsed</th><th>Allotted</th></tr></thead>
+        <tbody>${rows.map(r => {
+          const over = r.allotted_minutes > 0 && r.elapsed_minutes > r.allotted_minutes;
+          return `<tr>
+            <td>${r.technician_name||'—'}</td>
+            <td>${r.wo_number}</td>
+            <td>${r.task_description}</td>
+            <td style="color:${over?'var(--danger)':'inherit'};font-weight:${over?'700':'400'}">${this._woMinutesLabel(r.elapsed_minutes)}</td>
+            <td>${this._woMinutesLabel(r.allotted_minutes)}</td>
+          </tr>`;
+        }).join('')}</tbody>
+      </table>`;
   },
 
   // ─── Layaway ──────────────────────────────────────────────────────────────

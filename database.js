@@ -361,6 +361,22 @@ async function _init() {
       purchase_request_item_id INTEGER,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS work_order_tasks (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+      description TEXT NOT NULL,
+      allotted_minutes INTEGER NOT NULL DEFAULT 0,
+      technician_id INTEGER REFERENCES employees(id),
+      status TEXT NOT NULL DEFAULT 'pending',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )` },
+    { sql: `CREATE TABLE IF NOT EXISTS work_order_task_time_entries (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      task_id INTEGER NOT NULL REFERENCES work_order_tasks(id),
+      technician_id INTEGER REFERENCES employees(id),
+      started_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      ended_at DATETIME
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS crm_leads (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       lead_number TEXT UNIQUE NOT NULL,
