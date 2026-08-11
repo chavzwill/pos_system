@@ -150,6 +150,13 @@ router.patch('/:id/receive', requirePermission('purchasing_receive'), async (req
       const anyReceived = poItems.some(i => (i.quantity_received || 0) > 0);
       const newStatus = allReceived ? 'received' : anyReceived ? 'partial' : po.status;
       await tx.execute({ sql: 'UPDATE purchase_orders SET status = ?, received_at = ? WHERE id = ?', args: [newStatus, allReceived ? new Date().toISOString() : po.received_at, req.params.id] });
+      // A PR that was converted to this PO is otherwise stuck at status='converted'
+      // forever — nothing else advances it, which left dependents (e.g. a work
+      // order's part-sourcing badge) reading a stale "pending" even once the
+      // goods actually landed. Mirror the PO's fully-received state back onto it.
+      if (allReceived) {
+        await tx.execute({ sql: `UPDATE purchase_requests SET status = 'received' WHERE converted_to_po_id = ? AND status != 'received'`, args: [req.params.id] });
+      }
       await tx.commit();
     } catch(e) {
       await tx.rollback();
@@ -165,11 +172,12 @@ router.patch('/:id/receive', requirePermission('purchasing_receive'), async (req
 
 // Link a received PO line item to a product — either an existing one or a
 // brand-new one created on the spot. PO items with no product_id (typically
-// a "Q" custom item quoted before it existed in the catalog) get skipped
-// entirely by /receive's stock update, so this is how their received
+// a "Q" custom item quoted/requested before it existed in the catalog) get
+// skipped entirely by /receive's stock update, so this is how their received
 // quantity actually lands in inventory. If the item traces back to a
-// quotation's "Q" line (quotation_item_id), that quote item is flipped over
-// to the new product too, closing the loop back to where it started.
+// quotation's or work order's "Q" line (quotation_item_id /
+// work_order_item_id), that quote/WO item is flipped over to the new
+// product too, closing the loop back to where it started.
 router.post('/:id/items/:itemId/link-product', async (req, res) => {
   try {
     const { rows: [po] } = await db.execute({ sql: 'SELECT * FROM purchase_orders WHERE id = ?', args: [req.params.id] });
@@ -191,11 +199,12 @@ router.post('/:id/items/:itemId/link-product', async (req, res) => {
       } else {
         if (!sku || !name) throw new Error('SKU and name are required to create a new product');
         const qty = item.quantity_received || 0;
-        // Items that trace back to a quotation's "Q" line were purchased to
-        // fulfill that one quote — tag the new product non-inventory so it
-        // stays out of the normal Inventory list until someone explicitly
-        // orders more for general stock (see PATCH /:id/promote-to-inventory).
-        const nonInventory = item.quotation_item_id ? 1 : 0;
+        // Items that trace back to a quotation's or work order's "Q" line
+        // were purchased to fulfill that one job — tag the new product
+        // non-inventory so it stays out of the normal Inventory list until
+        // someone explicitly orders more for general stock (see PATCH
+        // /:id/promote-to-inventory).
+        const nonInventory = (item.quotation_item_id || item.work_order_item_id) ? 1 : 0;
         const result = await tx.execute({
           sql: 'INSERT INTO products (sku,barcode,name,category_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,is_non_inventory) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
           args: [sku, null, name, category_id||null, parseFloat(price)||0, parseFloat(cost)||item.unit_cost||0, tax_rate??8.5, qty, 5, 1, po.supplier_id||null, nonInventory]
@@ -238,10 +247,22 @@ router.post('/:id/items/:itemId/link-product', async (req, res) => {
         }
       }
 
+      // Same close-the-loop as above, scoped to a work order's "Q" line — no
+      // tax/total to recompute since work_order_items carries neither.
+      let workOrderUpdated = false;
+      if (item.work_order_item_id) {
+        const { rows: [woItem] } = await tx.execute({ sql: 'SELECT * FROM work_order_items WHERE id = ?', args: [item.work_order_item_id] });
+        if (woItem) {
+          const { rows: [product] } = await tx.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [productId] });
+          await tx.execute({ sql: 'UPDATE work_order_items SET product_id=?, sku=?, is_temp_item=0 WHERE id=?', args: [productId, product.sku, woItem.id] });
+          workOrderUpdated = true;
+        }
+      }
+
       await tx.commit();
       committed = true;
       const { rows: [updatedItem] } = await db.execute({ sql: 'SELECT * FROM purchase_order_items WHERE id = ?', args: [item.id] });
-      res.json({ item: updatedItem, quotation_updated: quotationUpdated });
+      res.json({ item: updatedItem, quotation_updated: quotationUpdated, work_order_updated: workOrderUpdated });
     } catch(e) {
       // Once committed, the link is saved — rolling back a closed transaction
       // throws and would crash the process (unhandled rejection), so only

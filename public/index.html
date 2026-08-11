@@ -2886,18 +2886,25 @@ const App = {
     const customerId = this.cartCustomer?.id;
     const ordersUrl = customerId ? `/transactions?status=hold&customer_id=${customerId}` : '/transactions?status=hold&limit=50';
     const rentalsUrl = customerId ? `/rentals/agreements?view=pending&customer_id=${customerId}` : '/rentals/agreements?view=pending';
+    // Work orders awaiting an assessment fee (status='intake') or a deposit
+    // (status='pending_deposit') are collected here rather than by whoever
+    // did the assessment — keeps cash handling with the cashier/drawer, same
+    // as the pending-rentals flow below.
+    const woUrl = customerId ? `/work-orders?view=awaiting_payment&customer_id=${customerId}` : '/work-orders?view=awaiting_payment&limit=50';
     try {
-      const [held, pendingRentals] = await Promise.all([
+      const [held, pendingRentals, pendingWOs] = await Promise.all([
         this.api('GET', ordersUrl),
         this.can('rentals') ? this.api('GET', rentalsUrl).catch(() => []) : Promise.resolve([]),
+        this.can('work_orders') ? this.api('GET', woUrl).catch(() => []) : Promise.resolve([]),
       ]);
-      if (!held.length && !pendingRentals.length) {
+      if (!held.length && !pendingRentals.length && !pendingWOs.length) {
         this.alert(customerId ? `No held orders for ${this.cartCustomer.first_name} ${this.cartCustomer.last_name}` : 'No held orders', 'info');
         return;
       }
       const combined = [
         ...held.map(h => ({ type: 'order', created_at: h.created_at, data: h })),
         ...pendingRentals.map(r => ({ type: 'rental', created_at: r.created_at, data: r })),
+        ...pendingWOs.map(w => ({ type: 'work_order', created_at: w.created_at, data: w })),
       ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       this.showModal(`
         <div class="modal">
@@ -2917,7 +2924,7 @@ const App = {
                     Total: <strong>${this.fmt(h.total)}</strong> &bull; ${new Date(h.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
                     ${h.notes ? `&bull; ${h.notes}` : ''}
                   </div>
-                </div>`)(entry.data) : (r => `
+                </div>`)(entry.data) : entry.type === 'rental' ? (r => `
                 <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''" onclick="App.closeModal();App.showFinalizeRentalModal(${r.id})">
                   <div style="display:flex;justify-content:space-between;align-items:center">
                     <strong style="font-size:14px">${r.customer_name || '—'} <span class="badge-pill badge-warning" style="font-size:10px;margin-left:4px">RENTAL</span>${r.source_quote_number ? ` <span class="badge-pill badge-info" style="font-size:10px;margin-left:2px">QUOTE</span>` : ''}</strong>
@@ -2925,6 +2932,18 @@ const App = {
                   </div>
                   <div style="font-size:13px;color:var(--text-muted);margin-top:3px">
                     ${r.item_count} item${r.item_count===1?'':'s'} &bull; Due ${this.fmtDate(r.due_date)} &bull; ${new Date(r.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
+                  </div>
+                </div>`)(entry.data) : (w => `
+                <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''" onclick="App.closeModal();${w.status==='intake' ? `App.showWOAssessmentFeeModal(${w.id})` : w.status==='pending_deposit' ? `App.showWODepositModal(${w.id})` : `App.showWOFinalPaymentModal(${w.id})`}">
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <strong style="font-size:14px">${w.customer_name || '—'} <span class="badge-pill badge-warning" style="font-size:10px;margin-left:4px">WORK ORDER</span></strong>
+                    <span style="font-size:12px;color:var(--text-muted);font-family:monospace">${w.wo_number}</span>
+                  </div>
+                  <div style="font-size:13px;color:var(--text-muted);margin-top:3px">
+                    ${w.status==='intake' ? `Assessment Fee: <strong>${this.fmt(w.assessment_fee)}</strong>`
+                      : w.status==='pending_deposit' ? `Deposit: <strong>${this.fmt(w.deposit_amount)}</strong>`
+                      : `Balance Due: <strong>${this.fmt(Math.max(0, (parseFloat(w.estimate_labor)||0) + (parseFloat(w.estimate_consumables)||0) + (parseFloat(w.parts_total)||0) - (parseFloat(w.deposit_amount)||0)))}</strong>`}
+                    &bull; ${new Date(w.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
                   </div>
                 </div>`)(entry.data)).join('')}
             </div>
@@ -6496,6 +6515,11 @@ const App = {
   },
 
   _woPartStatusBadge(item) {
+    if (item.is_customer_supplied) return `<span class="badge-pill badge-info" style="font-size:10px">Customer Supplied</span>`;
+    if (item.is_temp_item) {
+      const prLink = item.purchase_request_number ? ` <a href="#" style="font-size:10px;color:var(--primary);text-decoration:none" onclick="event.preventDefault();App.closeModal();App.viewPR(${item.purchase_request_id})">${item.purchase_request_number}</a>` : '';
+      return `<span class="badge-pill badge-warning" style="font-size:10px" title="Flagged for Purchasing to order">Q</span>${prLink}`;
+    }
     if (!item.sources || !item.sources.length) return `<span class="badge-pill badge-success" style="font-size:10px">Sourced from ${this.escapeAttr(this._woCurrentBranchName||'branch')}</span>`;
     return item.sources.map(s => {
       // The WO's own branch's covered portion is stored as a source row too
@@ -6513,8 +6537,12 @@ const App = {
     this._woCurrentBranchName = wo.branch_name;
     this._woCurrentBranchId = wo.branch_id;
     const estimateTotal = (parseFloat(wo.estimate_labor)||0) + (parseFloat(wo.estimate_consumables)||0);
-    const canManageParts = ['in_progress','awaiting_signoff','complete','awaiting_pickup','picked_up'].includes(wo.status);
-    const partsEditable = wo.status === 'in_progress' && this.can('wo_assign_parts');
+    // Parts can be identified and assigned as soon as the item's in the door —
+    // mirrors what the backend already allows (any pre-completion status), so
+    // a tech isn't blocked from pulling/ordering parts just because the
+    // customer hasn't paid a deposit yet.
+    const canManageParts = wo.status !== 'cancelled';
+    const partsEditable = !['complete','awaiting_pickup','picked_up','cancelled'].includes(wo.status) && this.can('wo_assign_parts');
     if (partsEditable) {
       const [products, branches] = await Promise.all([
         this.api('GET', `/products?is_service=0&is_rental=0&active=1${wo.branch_id?'&branch_id='+wo.branch_id:''}`),
@@ -6563,6 +6591,7 @@ const App = {
             ${wo.status !== 'intake' ? `<div style="display:flex;justify-content:space-between"><span>Estimate (labor + consumables)</span><span>${this.fmt(estimateTotal)}</span></div>` : ''}
             ${partsTotal > 0 ? `<div style="display:flex;justify-content:space-between"><span>Parts</span><span>${this.fmt(partsTotal)}</span></div>` : ''}
             ${wo.deposit_amount > 0 ? `<div style="display:flex;justify-content:space-between"><span>Deposit</span><span>${this.fmt(wo.deposit_amount)} ${wo.deposit_transaction_id ? '<span class="badge-pill badge-success" style="font-size:10px">Paid</span>' : '<span style="color:var(--text-muted)">Unpaid</span>'}</span></div>` : ''}
+            ${['complete','awaiting_pickup','picked_up'].includes(wo.status) ? `<div style="display:flex;justify-content:space-between;margin-top:4px;border-top:1px solid var(--border);padding-top:4px"><strong>Balance Due</strong><strong>${this.fmt(Math.max(0, estimateTotal + partsTotal - (parseFloat(wo.deposit_amount)||0)))} ${wo.final_transaction_id ? '<span class="badge-pill badge-success" style="font-size:10px">Paid</span>' : (wo.status === 'picked_up' ? '' : '<span style="color:var(--text-muted)">Unpaid</span>')}</strong></div>` : ''}
             ${wo.estimate_notes ? `<div style="color:var(--text-muted);margin-top:4px">${wo.estimate_notes}</div>` : ''}
           </div>
 
@@ -6614,13 +6643,13 @@ const App = {
           </div>
         </div>
         <div class="modal-footer" style="flex-wrap:wrap">
-          ${wo.status==='intake' && this.can('wo_assess') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showWOAssessmentFeeModal(${wo.id})">Process Assessment Fee</button>` : ''}
+          ${wo.status==='intake' ? `<span class="badge-pill badge-warning" style="align-self:center;padding:6px 10px" title="Collected at the register — open Hold Recall in POS to take payment">On hold — awaiting cashier</span>` : ''}
           ${wo.status==='assessed' && this.can('wo_assess') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showWOEstimateModal(${wo.id})">Enter Estimate</button>` : ''}
-          ${wo.status==='pending_deposit' && this.can('wo_assess') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showWODepositModal(${wo.id})">Process Deposit</button>` : ''}
+          ${wo.status==='pending_deposit' ? `<span class="badge-pill badge-warning" style="align-self:center;padding:6px 10px" title="Collected at the register — open Hold Recall in POS to take payment">On hold — awaiting cashier</span>` : ''}
           ${['in_progress','awaiting_signoff'].includes(wo.status) && this.can('work_orders') ? `<button class="btn btn-secondary" onclick="App.closeModal();App.showWOStatusCommentModal(${wo.id})">Add Status Update</button>` : ''}
           ${['in_progress','awaiting_signoff'].includes(wo.status) && this.can('wo_signoff') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showWOSignoffModal(${wo.id})">Supervisor Sign-Off</button>` : ''}
           ${wo.status==='complete' && this.can('work_orders') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showWONotifyModal(${wo.id})">Notify Customer</button>` : ''}
-          ${wo.status==='awaiting_pickup' && this.can('work_orders') ? `<button class="btn btn-primary" onclick="App.woMarkPickedUp(${wo.id})">Mark Picked Up</button>` : ''}
+          ${wo.status==='awaiting_pickup' ? `<span class="badge-pill badge-warning" style="align-self:center;padding:6px 10px" title="Collected at the register — open Hold Recall in POS to take payment">On hold — awaiting cashier</span>` : ''}
           ${['intake','assessed','pending_deposit'].includes(wo.status) && this.can('work_orders') ? `<button class="btn btn-danger" onclick="App.closeModal();App.showWOCancelModal(${wo.id})">Cancel Work Order</button>` : ''}
           <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
         </div>
@@ -6666,7 +6695,7 @@ const App = {
       });
       this.closeModal();
       this.alert(`Assessment fee collected for ${wo.wo_number}`);
-      this.renderWorkOrders();
+      if (this.section === 'work-orders') this.renderWorkOrders();
     } catch(e) { this.alert(e.message, 'error'); }
   },
 
@@ -6728,7 +6757,7 @@ const App = {
       });
       this.closeModal();
       this.alert(`Deposit collected for ${wo.wo_number} — now in progress`);
-      this.renderWorkOrders();
+      if (this.section === 'work-orders') this.renderWorkOrders();
     } catch(e) { this.alert(e.message, 'error'); }
   },
 
@@ -6806,17 +6835,52 @@ const App = {
     const div = document.createElement('div');
     div.className = 'po-receive-row';
     div.id = `wo-part-${idx}`;
+    div.style.flexWrap = 'wrap';
     div.innerHTML = `
-      <select style="flex:2" onchange="App.checkWOPartStock(${idx})" id="wop-prod-${idx}">
-        <option value="">-- Select Part --</option>
-        ${products.map(p => `<option value="${p.id}" data-cost="${p.cost}" data-price="${p.price}">${p.name} (${this.fmt(p.price)}, stock: ${p.stock_qty})</option>`).join('')}
+      <select style="flex:0 0 190px" id="wop-type-${idx}" onchange="App.toggleWOPartLineType(${idx})">
+        <option value="product">Catalog Product (in stock or elsewhere)</option>
+        <option value="custom">Not In Our Catalog — Order It</option>
+        <option value="customer">Customer Brought Their Own</option>
       </select>
-      <input id="wop-qty-${idx}" type="number" min="1" value="1" style="width:70px" placeholder="Qty" oninput="App.checkWOPartStock(${idx})">
-      <button class="btn btn-sm btn-danger" onclick="document.getElementById('wo-part-${idx}').remove();const a=document.getElementById('wo-part-alloc-${idx}');if(a)a.remove()">✕</button>`;
+      <span id="wop-product-fields-${idx}" style="display:flex;flex:1;gap:8px;min-width:260px">
+        <select style="flex:2" onchange="App.checkWOPartStock(${idx})" id="wop-prod-${idx}">
+          <option value="">-- Select Part --</option>
+          ${products.map(p => `<option value="${p.id}" data-cost="${p.cost}" data-price="${p.price}">${p.name} (${this.fmt(p.price)}, stock: ${p.stock_qty})</option>`).join('')}
+        </select>
+        <input id="wop-qty-${idx}" type="number" min="1" value="1" style="width:70px" placeholder="Qty" oninput="App.checkWOPartStock(${idx})">
+      </span>
+      <span id="wop-custom-fields-${idx}" style="display:none;flex:1;gap:8px;min-width:260px">
+        <input id="wop-desc-${idx}" placeholder="Item description" style="flex:2">
+        <input id="wop-custom-qty-${idx}" type="number" min="1" value="1" style="width:70px" placeholder="Qty">
+        <input id="wop-price-${idx}" type="number" min="0" step="0.01" style="width:90px" placeholder="Unit price">
+      </span>
+      <span id="wop-customer-fields-${idx}" style="display:none;flex:1;gap:8px;min-width:260px">
+        <input id="wop-cs-desc-${idx}" placeholder="Item description" style="flex:2">
+        <input id="wop-cs-qty-${idx}" type="number" min="1" value="1" style="width:70px" placeholder="Qty">
+      </span>
+      <button class="btn btn-sm btn-danger" onclick="document.getElementById('wo-part-${idx}').remove();const a=document.getElementById('wo-part-alloc-${idx}');if(a)a.remove();const h=document.getElementById('wo-part-hint-${idx}');if(h)h.remove()">✕</button>
+      <div id="wo-part-hint-${idx}" style="flex-basis:100%;font-size:11px;color:var(--text-muted);margin-top:2px">Checked against this branch's stock — a shortfall is auto-sourced from another branch or sent to Purchasing.</div>`;
     container.appendChild(div);
     const allocDiv = document.createElement('div');
     allocDiv.id = `wo-part-alloc-${idx}`;
     container.appendChild(allocDiv);
+  },
+
+  _woPartTypeHints: {
+    product: "Checked against this branch's stock — a shortfall is auto-sourced from another branch or sent to Purchasing.",
+    custom: "Not in the catalog at all — automatically sent to Purchasing to order once you Confirm Parts. Enter your best price estimate; Purchasing can adjust it later.",
+    customer: "The customer brought this part themselves — no charge, and it's never sourced or sent to Purchasing. It just shows up on the WO for the technician.",
+  },
+
+  toggleWOPartLineType(idx) {
+    const type = document.getElementById(`wop-type-${idx}`)?.value;
+    document.getElementById(`wop-product-fields-${idx}`).style.display = type === 'product' ? 'flex' : 'none';
+    document.getElementById(`wop-custom-fields-${idx}`).style.display = type === 'custom' ? 'flex' : 'none';
+    document.getElementById(`wop-customer-fields-${idx}`).style.display = type === 'customer' ? 'flex' : 'none';
+    const hintDiv = document.getElementById(`wo-part-hint-${idx}`);
+    if (hintDiv) hintDiv.textContent = this._woPartTypeHints[type] || '';
+    const allocDiv = document.getElementById(`wo-part-alloc-${idx}`);
+    if (allocDiv && type !== 'product') allocDiv.innerHTML = '';
   },
 
   async getWOBranchStock(branchId) {
@@ -6897,6 +6961,24 @@ const App = {
     for (const row of rows) {
       if (row.id.includes('alloc')) continue;
       const idx = row.id.replace('wo-part-', '');
+      const type = document.getElementById(`wop-type-${idx}`)?.value || 'product';
+
+      if (type === 'custom') {
+        const description = document.getElementById(`wop-desc-${idx}`)?.value.trim();
+        const qty = parseInt(document.getElementById(`wop-custom-qty-${idx}`)?.value) || 0;
+        const unit_price = parseFloat(document.getElementById(`wop-price-${idx}`)?.value) || 0;
+        if (!description || !qty) continue;
+        items.push({ description, quantity: qty, unit_price });
+        continue;
+      }
+      if (type === 'customer') {
+        const description = document.getElementById(`wop-cs-desc-${idx}`)?.value.trim();
+        const qty = parseInt(document.getElementById(`wop-cs-qty-${idx}`)?.value) || 0;
+        if (!description || !qty) continue;
+        items.push({ description, quantity: qty, is_customer_supplied: true });
+        continue;
+      }
+
       const prodSel = document.getElementById(`wop-prod-${idx}`);
       if (!prodSel || !prodSel.value) continue;
       const productId = parseInt(prodSel.value);
@@ -7240,13 +7322,44 @@ const App = {
     } catch(e) { this.alert(e.message, 'error'); }
   },
 
-  async woMarkPickedUp(id) {
-    if (!confirm('Confirm the customer has picked up this item?')) return;
+  async showWOFinalPaymentModal(id) {
     try {
-      await this.api('PATCH', `/work-orders/${id}/picked-up`, { employee_id: this.currentUser.id });
+      const wo = await this.api('GET', `/work-orders/${id}`);
+      const estimateTotal = (parseFloat(wo.estimate_labor)||0) + (parseFloat(wo.estimate_consumables)||0);
+      const partsTotal = (wo.items||[]).reduce((s,i) => s + (parseFloat(i.total)||0), 0);
+      const balance = Math.max(0, parseFloat((estimateTotal + partsTotal - (parseFloat(wo.deposit_amount)||0)).toFixed(2)));
+      this.showModal(`
+        <div class="modal" style="max-width:440px">
+          <div class="modal-header"><span class="modal-title">Process Final Payment — ${wo.wo_number}</span><button class="modal-close">✕</button></div>
+          <div class="modal-body">
+            <div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:13px">
+              <div style="display:flex;justify-content:space-between"><span>Estimate (labor + consumables)</span><span>${this.fmt(estimateTotal)}</span></div>
+              <div style="display:flex;justify-content:space-between"><span>Parts</span><span>${this.fmt(partsTotal)}</span></div>
+              <div style="display:flex;justify-content:space-between"><span>Less deposit paid</span><span>-${this.fmt(wo.deposit_amount)}</span></div>
+              <div style="display:flex;justify-content:space-between;margin-top:4px;border-top:1px solid var(--border);padding-top:4px"><strong>Balance Due</strong><strong>${this.fmt(balance)}</strong></div>
+            </div>
+            ${balance > 0 ? `<div class="form-group"><label>Payment Method</label>
+              <select id="wo-final-paymethod"><option value="cash">Cash</option><option value="credit_card">Card</option><option value="check">Check</option></select>
+            </div>` : `<p style="font-size:13px;color:var(--text-muted)">No balance due — the deposit already covers the final cost.</p>`}
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="App.confirmWOFinalPayment(${id})">${balance > 0 ? 'Confirm Payment' : 'Complete Pickup'}</button>
+          </div>
+        </div>`);
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  async confirmWOFinalPayment(id) {
+    const paymethodEl = document.getElementById('wo-final-paymethod');
+    const payment_method = paymethodEl ? paymethodEl.value : undefined;
+    try {
+      const wo = await this.api('PATCH', `/work-orders/${id}/final-payment`, {
+        payment_method, employee_id: this.currentUser.id, drawer_session_id: this.currentDrawerSession?.id || null,
+      });
       this.closeModal();
-      this.alert('Marked as picked up');
-      this.renderWorkOrders();
+      this.alert(`${wo.wo_number} picked up${payment_method ? ' — final payment collected' : ''}`);
+      if (this.section === 'work-orders') this.renderWorkOrders();
     } catch(e) { this.alert(e.message, 'error'); }
   },
 
@@ -11446,13 +11559,16 @@ const App = {
     this._linkPOId = poId;
     this._linkItemId = itemId;
     this._linkQuotationItemId = item.quotation_item_id || null;
+    this._linkWorkOrderItemId = item.work_order_item_id || null;
     this._linkMode = 'new';
     const fromQuote = !!item.quotation_item_id;
+    const fromWorkOrder = !!item.work_order_item_id;
+    const fromCustomJob = fromQuote || fromWorkOrder;
     this.showSecondaryModal(`
       <div class="modal" style="max-width:520px">
-        <div class="modal-header"><span class="modal-title">${fromQuote ? `Add "${item.product_name}" as Non-Inventory Item` : `Add "${item.product_name}" to Inventory`}</span><button class="modal-close">✕</button></div>
+        <div class="modal-header"><span class="modal-title">${fromCustomJob ? `Add "${item.product_name}" as Non-Inventory Item` : `Add "${item.product_name}" to Inventory`}</span><button class="modal-close">✕</button></div>
         <div class="modal-body">
-          ${fromQuote ? `<p style="font-size:12px;color:var(--text-muted);margin-top:0;margin-bottom:14px">This item was quoted for a specific customer — it'll show under Inventory → Non-Inventory Items, not the main list, until someone orders more for general stock.</p>` : ''}
+          ${fromCustomJob ? `<p style="font-size:12px;color:var(--text-muted);margin-top:0;margin-bottom:14px">This item was ${fromWorkOrder ? 'requested for a work order' : 'quoted for a specific customer'} — it'll show under Inventory → Non-Inventory Items, not the main list, until someone orders more for general stock.</p>` : ''}
           <div style="display:flex;gap:0;border:1px solid var(--border);border-radius:6px;overflow:hidden;width:fit-content;margin-bottom:14px">
             <button id="link-mode-new" class="btn" style="border-radius:0;border:none;padding:8px 16px;background:var(--primary);color:#fff;font-weight:600" onclick="App._setLinkMode('new')">Create New Product</button>
             <button id="link-mode-existing" class="btn" style="border-radius:0;border:none;padding:8px 16px;background:var(--card);color:var(--text)" onclick="App._setLinkMode('existing')">Link Existing Product</button>
@@ -11479,7 +11595,7 @@ const App = {
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="App.closeSecondaryModal()">Cancel</button>
-          <button class="btn btn-primary" onclick="App.linkPOItemToProduct()">${fromQuote ? 'Add as Non-Inventory Item' : 'Add to Inventory'}</button>
+          <button class="btn btn-primary" onclick="App.linkPOItemToProduct()">${fromCustomJob ? 'Add as Non-Inventory Item' : 'Add to Inventory'}</button>
         </div>
       </div>`);
   },
@@ -11497,7 +11613,7 @@ const App = {
     // Only a brand-new product gets tagged non-inventory (see link-product route) —
     // linking to an existing product leaves its inventory status untouched.
     const submitBtn = document.querySelector('.modal-footer .btn-primary');
-    if (submitBtn && this._linkQuotationItemId) {
+    if (submitBtn && (this._linkQuotationItemId || this._linkWorkOrderItemId)) {
       submitBtn.textContent = mode === 'new' ? 'Add as Non-Inventory Item' : 'Add to Inventory';
     }
   },
@@ -11518,9 +11634,10 @@ const App = {
     try {
       const result = await this.api('POST', `/purchase-orders/${this._linkPOId}/items/${this._linkItemId}/link-product`, payload);
       this.closeSecondaryModal();
-      const nonInventory = this._linkMode === 'new' && this._linkQuotationItemId;
+      const nonInventory = this._linkMode === 'new' && (this._linkQuotationItemId || this._linkWorkOrderItemId);
       const base = nonInventory ? 'Added as a non-inventory item (see Inventory → Non-Inventory Items)' : 'Added to inventory';
-      this.alert(result.quotation_updated ? `${base} — the original quote was updated too` : base);
+      const linkedBackTo = result.quotation_updated ? ' — the original quote was updated too' : result.work_order_updated ? ' — the work order was updated too' : '';
+      this.alert(`${base}${linkedBackTo}`);
       this.viewPO(this._linkPOId);
     } catch(e) { this.alert(e.message, 'error'); }
   },

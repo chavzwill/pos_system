@@ -19,7 +19,8 @@ async function logStatus(executor, workOrderId, status, comment, employeeId) {
 const WO_LIST_SELECT = `SELECT wo.*, c.first_name || ' ' || c.last_name as customer_name, c.phone as customer_phone, c.email as customer_email,
   e.first_name || ' ' || e.last_name as employee_name, b.name as branch_name,
   cb.first_name || ' ' || cb.last_name as completed_by_name,
-  julianday('now') - julianday(wo.pickup_due_date) as days_past_pickup_due
+  julianday('now') - julianday(wo.pickup_due_date) as days_past_pickup_due,
+  (SELECT COALESCE(SUM(total),0) FROM work_order_items WHERE work_order_id = wo.id) as parts_total
   FROM work_orders wo
   LEFT JOIN customers c ON wo.customer_id = c.id
   LEFT JOIN employees e ON wo.employee_id = e.id
@@ -32,6 +33,10 @@ router.get('/', requirePermission('work_orders'), async (req, res) => {
     let sql = `${WO_LIST_SELECT} WHERE 1=1`;
     const params = [];
     if (view === 'active') { sql += " AND wo.status NOT IN ('picked_up','cancelled')"; }
+    // Assessment fee (status='intake'), deposit (status='pending_deposit'), or the
+    // final balance (status='awaiting_pickup') due — surfaced in the POS Hold
+    // Recall list so a cashier can pick it up and take payment there.
+    else if (view === 'awaiting_payment') { sql += " AND wo.status IN ('intake','pending_deposit','awaiting_pickup')"; }
     else if (view === 'awaiting_pickup' || view === 'picked_up' || view === 'cancelled') { sql += ' AND wo.status = ?'; params.push(view); }
     else if (status) { sql += ' AND wo.status = ?'; params.push(status); }
     if (customer_id) { sql += ' AND wo.customer_id = ?'; params.push(customer_id); }
@@ -55,7 +60,7 @@ async function attachWorkOrderItemSources(items) {
   const placeholders = ids.map(() => '?').join(',');
   const { rows: sources } = await db.execute({
     sql: `SELECT wis.*, b.name as branch_name, bt.transfer_number, bt.status as transfer_status,
-            pr.id as purchase_request_id, pr.pr_number as purchase_request_number
+            pr.id as purchase_request_id, pr.pr_number as purchase_request_number, pr.status as purchase_request_status
           FROM work_order_item_sources wis
           LEFT JOIN branches b ON wis.branch_id = b.id
           LEFT JOIN branch_transfers bt ON wis.transfer_id = bt.id
@@ -232,8 +237,8 @@ router.patch('/:id/parts', requirePermission('wo_assign_parts'), async (req, res
       // motion, it just stops tracking it against the old item row).
       await tx.execute({ sql: 'DELETE FROM work_order_items WHERE work_order_id = ?', args: [req.params.id] });
       for (const item of processedItems) {
-        const { product_id, product_name, sku, quantity, unit_cost, unit_price, total, sources } = item;
-        const itemResult = await tx.execute({ sql: 'INSERT INTO work_order_items (work_order_id,product_id,product_name,sku,quantity,unit_cost,unit_price,total) VALUES (?,?,?,?,?,?,?,?)', args: [req.params.id, product_id, product_name, sku, quantity, unit_cost, unit_price, total] });
+        const { product_id, product_name, sku, quantity, unit_cost, unit_price, total, is_temp_item, is_customer_supplied, sources } = item;
+        const itemResult = await tx.execute({ sql: 'INSERT INTO work_order_items (work_order_id,product_id,product_name,sku,quantity,unit_cost,unit_price,total,is_temp_item,is_customer_supplied) VALUES (?,?,?,?,?,?,?,?,?,?)', args: [req.params.id, product_id, product_name, sku, quantity, unit_cost, unit_price, total, is_temp_item ? 1 : 0, is_customer_supplied ? 1 : 0] });
         const itemId = Number(itemResult.lastInsertRowid);
         if (sources) {
           for (const src of sources) {
@@ -587,15 +592,44 @@ router.patch('/:id/notify', requirePermission('work_orders'), async (req, res) =
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.patch('/:id/picked-up', requirePermission('work_orders'), async (req, res) => {
+// Hard-gates pickup on the final balance — labor + consumables + parts, less
+// the deposit already paid — the same cash-handling pattern as the
+// assessment fee and deposit above (requireAnyPermission wo_assess/pos,
+// frontend button only shown to 'pos'). If the deposit already covers the
+// final cost the balance is 0 and no transaction/payment method is needed,
+// but the WO still only advances to picked_up through this single endpoint —
+// there's no separate no-payment "mark picked up" path anymore.
+router.patch('/:id/final-payment', requireAnyPermission('wo_assess', 'pos'), async (req, res) => {
   try {
-    const { employee_id } = req.body;
-    const { rows: [wo] } = await db.execute({ sql: 'SELECT * FROM work_orders WHERE id = ?', args: [req.params.id] });
+    const { payment_method, amount_tendered, employee_id, drawer_session_id, branch_id } = req.body;
+    const { rows: [wo] } = await db.execute({ sql: `${WO_LIST_SELECT} WHERE wo.id = ?`, args: [req.params.id] });
     if (!wo) return res.status(404).json({ error: 'Not found' });
     if (wo.status !== 'awaiting_pickup') return res.status(400).json({ error: `This work order is ${wo.status}, not awaiting pickup` });
 
-    await db.execute({ sql: `UPDATE work_orders SET status = 'picked_up', picked_up_at = CURRENT_TIMESTAMP WHERE id = ?`, args: [req.params.id] });
-    await logStatus(db, req.params.id, 'picked_up', 'Item picked up by customer', employee_id);
+    const estimateTotal = (parseFloat(wo.estimate_labor) || 0) + (parseFloat(wo.estimate_consumables) || 0);
+    const balance = Math.max(0, parseFloat((estimateTotal + (parseFloat(wo.parts_total) || 0) - (parseFloat(wo.deposit_amount) || 0)).toFixed(2)));
+
+    const tx = await db.transaction('write');
+    let committed = false;
+    try {
+      let txId = null;
+      if (balance > 0) {
+        const method = payment_method || 'cash';
+        const tendered = parseFloat(amount_tendered || balance);
+        const changeAmt = Math.max(0, parseFloat((tendered - balance).toFixed(2)));
+        const transaction_number = await nextNumber(db, 'transactions', 'transaction_number', 'TXN-', 6);
+        const txResult = await tx.execute({ sql: `INSERT INTO transactions (transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,total,payment_method,amount_tendered,change_amount,notes,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [transaction_number, wo.customer_id, employee_id || null, branch_id || wo.branch_id || null, drawer_session_id || null, balance, 0, balance, method, tendered, changeAmt, `Work order final payment ${wo.wo_number}`, 'pos'] });
+        txId = Number(txResult.lastInsertRowid);
+        await tx.execute({ sql: `INSERT INTO transaction_items (transaction_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES (?,?,?,?,?,?,?)`, args: [txId, 'Work Order Balance', 'WO-FINAL', 1, balance, 0, balance] });
+      }
+      await tx.execute({ sql: `UPDATE work_orders SET final_transaction_id = ?, status = 'picked_up', picked_up_at = CURRENT_TIMESTAMP WHERE id = ?`, args: [txId, req.params.id] });
+      await logStatus(tx, req.params.id, 'picked_up', balance > 0 ? `Final payment collected (${payment_method || 'cash'}) — ${balance}` : 'Item picked up — no balance due', employee_id);
+      await tx.commit();
+      committed = true;
+    } catch(e) {
+      if (!committed) await tx.rollback();
+      return res.status(committed ? 500 : 400).json({ error: e.message });
+    }
     const { rows: [updated] } = await db.execute({ sql: `${WO_LIST_SELECT} WHERE wo.id = ?`, args: [req.params.id] });
     res.json(updated);
   } catch(e) { res.status(500).json({ error: e.message }); }

@@ -1153,6 +1153,22 @@ async function _init() {
     // quotation_item_id columns on these same two tables.
     'ALTER TABLE branch_transfers ADD COLUMN work_order_id INTEGER REFERENCES work_orders(id)',
     'ALTER TABLE purchase_request_items ADD COLUMN work_order_item_id INTEGER REFERENCES work_order_items(id)',
+    // The balance collected when the customer picks up the item — labor +
+    // consumables + parts, less the deposit already paid. Mirrors
+    // assessment_transaction_id / deposit_transaction_id above.
+    'ALTER TABLE work_orders ADD COLUMN final_transaction_id INTEGER REFERENCES transactions(id)',
+    // A "Q" line — a part the WO needs that isn't in the catalog yet — mirrors
+    // quotation_items.is_temp_item exactly: no product_id, flows through the
+    // same PR/PO purchasing pipeline, and gets flipped back to a real
+    // product_id once received (see routes/purchase-orders.js's
+    // link-product). is_customer_supplied marks the other kind of
+    // non-catalog line: the customer brought their own part, so it's tracked
+    // for the technician but never sourced, purchased, or charged.
+    'ALTER TABLE work_order_items ADD COLUMN is_temp_item INTEGER NOT NULL DEFAULT 0',
+    'ALTER TABLE work_order_items ADD COLUMN is_customer_supplied INTEGER NOT NULL DEFAULT 0',
+    // Same "Q" item close-the-loop link purchase_order_items already has for
+    // quotation_item_id, scoped to work_order_items instead.
+    'ALTER TABLE purchase_order_items ADD COLUMN work_order_item_id INTEGER REFERENCES work_order_items(id)',
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch(e) {}
