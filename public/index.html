@@ -3021,11 +3021,12 @@ const App = {
 
   async updateHoldBadge() {
     try {
-      const [held, pendingRentals] = await Promise.all([
+      const [held, pendingRentals, pendingWOs] = await Promise.all([
         this.api('GET', '/transactions?status=hold&limit=50'),
         this.can('rentals') ? this.api('GET', '/rentals/agreements?view=pending').catch(() => []) : Promise.resolve([]),
+        this.can('work_orders') ? this.api('GET', '/work-orders?view=awaiting_payment&limit=50').catch(() => []) : Promise.resolve([]),
       ]);
-      const count = held.length + pendingRentals.length;
+      const count = held.length + pendingRentals.length + pendingWOs.length;
       const badge = document.getElementById('hold-count-badge');
       if (!badge) return;
       if (count > 0) {
