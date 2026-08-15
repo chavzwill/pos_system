@@ -3356,6 +3356,7 @@ const App = {
       <div><label>Date</label>${this.fmtDateTime(tx.created_at)}</div>
       ${tx.customer_name ? `<div><label>Customer</label>${tx.customer_name}</div>` : ''}
       ${tx.rental_agreement_number ? `<div><label>Rental Agreement</label>${tx.rental_agreement_number}</div>` : ''}
+      ${tx.rental_due_date ? `<div><label>Due Date</label>${this.fmtDate(tx.rental_due_date)}</div>` : ''}
       ${tx.rental_po_number ? `<div><label>Customer PO</label>${tx.rental_po_number}</div>` : ''}
     </div>
     <table>
@@ -5200,6 +5201,7 @@ const App = {
         <div class="modal-footer">
           ${a.status==='pending' && this.can('pos') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showFinalizeRentalModal(${a.id})">Process Payment</button>` : ''}
           ${a.status==='awaiting_issue' && this.can('rentals_issue') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showIssueRentalModal(${a.id})">Issue Rental</button>` : ''}
+          ${a.checkout_transaction_id ? `<button class="btn btn-secondary" onclick="App.printRentalInvoice(${a.id})">🖨️ Tax Invoice</button>` : ''}
           ${a.status==='active' ? `<button class="btn btn-secondary" onclick="App.printRentalDeliveryNote(${a.id})">🖨️ Delivery Note</button>` : ''}
           ${a.status==='active' && !a.is_paused ? `<button class="btn btn-secondary" onclick="App.closeModal();App.showPauseRentalModal(${a.id})">⏸ Pause Rental</button>` : ''}
           ${a.status==='active' && a.is_paused ? `<button class="btn btn-primary" onclick="App.resumeRentalAgreement(${a.id})">▶ Resume Rental</button>` : ''}
@@ -5387,6 +5389,21 @@ const App = {
     <script>window.onload=()=>{window.print()}<\/script>
     </body></html>`);
     win.document.close();
+  },
+
+  // Reprints the letter-size RENTAL TAX INVOICE for an already-checked-out
+  // agreement — same document (and same printReceiptLetter renderer) shown
+  // right after Process Payment completes, just re-fetched from the
+  // checkout transaction on demand rather than held in session state.
+  async printRentalInvoice(id) {
+    const a = await this.api('GET', `/rentals/agreements/${id}`);
+    if (!a.checkout_transaction_id) { this.alert('This rental has not been checked out yet', 'warning'); return; }
+    const tx = await this.api('GET', `/transactions/${a.checkout_transaction_id}`);
+    this._lastReceiptTx = tx;
+    this._lastReceiptChange = 0;
+    this._lastReceiptCash = null;
+    this._lastReceiptSplitForeign = null;
+    this.printReceiptLetter();
   },
 
   cancelRentalAgreement(id) {
@@ -5987,6 +6004,7 @@ const App = {
     // Checkout is even clicked), independent of the rest of this form.
     this._rfPoAttachmentPath = a.customer_po_attachment_path || null;
     this._rfPoAttachmentName = a.customer_po_attachment_name || null;
+    this._rfEstimatedTotal = a.estimated_total || 0;
     this.showModal(`
       <div class="modal" style="max-width:480px">
         <div class="modal-header">
@@ -6001,16 +6019,23 @@ const App = {
           <div style="border:1px solid var(--border);border-radius:6px;padding:10px;margin-bottom:12px">
             ${a.items.filter(i=>!i.parent_item_id).map(i => {
               const accs = a.items.filter(x => x.parent_item_id === i.id);
-              return `<div style="font-size:13px;margin-bottom:4px"><strong>${i.product_name}</strong> × ${i.quantity}
-                ${accs.length ? `<div style="font-size:11px;color:var(--text-muted)">+ ${accs.map(x=>x.product_name).join(', ')}</div>` : ''}</div>`;
+              return `<div style="font-size:13px;margin-bottom:4px;display:flex;justify-content:space-between">
+                <span><strong>${i.product_name}</strong> × ${i.quantity}
+                ${accs.length ? `<div style="font-size:11px;color:var(--text-muted)">+ ${accs.map(x=>x.product_name).join(', ')}</div>` : ''}</span>
+                <span>${this.fmt(i.estimated_rental_fee || 0)}</span>
+              </div>`;
             }).join('')}
-            ${(a.delivery_required || a.pickup_required || a.operator_required) ? `<div style="border-top:1px dashed var(--border);margin-top:8px;padding-top:8px;font-size:13px">
+            <div style="border-top:1px dashed var(--border);margin-top:8px;padding-top:8px;font-size:13px">
+              <div>Rental Fee <span style="float:right">${this.fmt(a.estimated_rental_subtotal || 0)}</span></div>
+              <div>Refundable Deposit <span style="float:right">${this.fmt(a.estimated_deposit_total || 0)}</span></div>
+              ${a.estimated_tax ? `<div>Tax <span style="float:right">${this.fmt(a.estimated_tax)}</span></div>` : ''}
               ${a.delivery_required ? `<div>Delivery Fee <span style="float:right">${this.fmt(a.delivery_cost)}</span></div>` : ''}
               ${a.pickup_required ? `<div>Pickup Fee <span style="float:right">${this.fmt(a.pickup_cost)}</span></div>` : ''}
               ${a.operator_required ? `<div>Operator Fee <span style="float:right">${this.fmt(a.operator_fee)}</span></div>` : ''}
-            </div>` : ''}
+            </div>
+            <div style="border-top:1px solid var(--border);margin-top:8px;padding-top:8px;font-size:15px;font-weight:600">Total Due <span style="float:right">${this.fmt(a.estimated_total || 0)}</span></div>
           </div>
-          <p style="font-size:11px;color:var(--text-muted);margin-top:-6px">Rental fee and deposit are calculated now, based on the rental period starting today. Any delivery/pickup/operator fees above are charged with this payment.</p>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:-6px">Rental fee and deposit are estimated as of now and will be finalized at the moment you click Complete Checkout.</p>
           <div class="form-group"><label>Payment Method</label>
             <select id="rf-paymethod" onchange="App._toggleRentalPOFields()">
               <option value="cash">Cash</option>
@@ -6019,6 +6044,11 @@ const App = {
               <option value="credit">Charge Account (Credit)</option>
             </select>
           </div>
+          <div class="form-group" id="rf-tendered-group" style="display:none">
+            <label>Amount Tendered</label>
+            <input type="number" id="rf-tendered" step="any" placeholder="${(a.estimated_total || 0).toFixed(2)}" oninput="App._updateRentalTenderChange()" style="font-size:16px;font-weight:600">
+          </div>
+          <div id="rf-change-info" style="display:none;font-size:13px;font-weight:600;text-align:right;margin:-6px 0 8px"></div>
           <div id="rf-po-block" style="display:none;border:1px solid var(--border);border-radius:6px;padding:10px;margin-top:4px">
             <div style="font-size:11px;color:var(--text-muted);text-transform:uppercase;margin-bottom:6px">Customer PO — required for credit account rentals</div>
             <div class="form-group" style="margin-bottom:8px"><label style="font-size:11px">PO Number</label><input id="rf-po-number" placeholder="Customer's purchase order #" value="${a.customer_po_number || ''}"></div>
@@ -6031,15 +6061,45 @@ const App = {
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
-          <button class="btn btn-primary" onclick="App.finalizeRentalCheckout(${id})">Complete Checkout</button>
+          <button class="btn btn-primary" id="rf-complete-btn" onclick="App.finalizeRentalCheckout(${id})">Complete Checkout</button>
         </div>
       </div>`);
     this._toggleRentalPOFields();
   },
 
   _toggleRentalPOFields() {
+    const method = document.getElementById('rf-paymethod')?.value;
     const block = document.getElementById('rf-po-block');
-    if (block) block.style.display = document.getElementById('rf-paymethod')?.value === 'credit' ? 'block' : 'none';
+    if (block) block.style.display = method === 'credit' ? 'block' : 'none';
+    // Amount Tendered only makes sense for tender types actually handed
+    // over at the counter — card settles for the exact total, credit isn't
+    // tendered at all.
+    const showTender = method === 'cash' || method === 'check';
+    const tenderGroup = document.getElementById('rf-tendered-group');
+    if (tenderGroup) tenderGroup.style.display = showTender ? 'block' : 'none';
+    const infoEl = document.getElementById('rf-change-info');
+    if (!showTender && infoEl) infoEl.style.display = 'none';
+    this._updateRentalTenderChange();
+  },
+
+  _updateRentalTenderChange() {
+    const infoEl = document.getElementById('rf-change-info');
+    const tenderGroup = document.getElementById('rf-tendered-group');
+    const tenderedEl = document.getElementById('rf-tendered');
+    if (!infoEl || !tenderedEl || !tenderGroup) return;
+    if (tenderGroup.style.display === 'none') { infoEl.style.display = 'none'; return; }
+    const tendered = parseFloat(tenderedEl.value);
+    const total = this._rfEstimatedTotal || 0;
+    if (isNaN(tendered) || tendered <= 0) { infoEl.style.display = 'none'; return; }
+    const change = parseFloat((tendered - total).toFixed(2));
+    infoEl.style.display = 'block';
+    if (change >= 0) {
+      infoEl.style.color = 'var(--success)';
+      infoEl.textContent = `Change Due: ${this.fmt(change)}`;
+    } else {
+      infoEl.style.color = 'var(--danger)';
+      infoEl.textContent = `Short ${this.fmt(Math.abs(change))}`;
+    }
   },
 
   async uploadRentalPO(agreementId, input) {
@@ -6069,18 +6129,55 @@ const App = {
       if (!customer_po_number) { this.alert('A customer PO number is required for credit account rentals', 'error'); return; }
       if (!this._rfPoAttachmentPath) { this.alert('The customer PO document must be attached before completing this checkout', 'error'); return; }
     }
+    // Amount Tendered is only collected for cash/check (see
+    // _toggleRentalPOFields) — the estimated total is what's on screen when
+    // the cashier types it in; the real total (computed fresh at the moment
+    // checkout posts, per feeFor in routes/rentals.js) may drift by a few
+    // seconds' worth of rental fee, so this is a UX guard, not authoritative.
+    let amount_tendered = null;
+    if (payment_method === 'cash' || payment_method === 'check') {
+      const tenderedRaw = document.getElementById('rf-tendered')?.value;
+      amount_tendered = tenderedRaw ? parseFloat(tenderedRaw) : this._rfEstimatedTotal;
+      if (isNaN(amount_tendered) || amount_tendered < this._rfEstimatedTotal - 0.01) {
+        this.alert('Amount tendered is less than the total due', 'error');
+        return;
+      }
+    }
+    // Without this guard a fast double-click (or a slow response tempting a
+    // second tap) fires two overlapping PATCH requests — the first commits
+    // the checkout, the second then fails (agreement no longer 'pending',
+    // and/or a colliding transaction_number) and flashes a raw error toast
+    // even though the rental already went through.
+    const btn = document.getElementById('rf-complete-btn');
+    if (btn.disabled) return;
+    btn.disabled = true;
+    btn.textContent = 'Processing…';
     try {
       const agreement = await this.api('PATCH', `/rentals/agreements/${id}/checkout`, {
         payment_method,
         employee_id: this.currentUser.id,
         drawer_session_id: this.currentDrawerSession?.id || null,
         customer_po_number,
+        amount_tendered,
       });
       this.closeModal();
       this.alert(`Rental ${agreement.agreement_number} checked out`);
       this.renderRentals();
       this.updateHoldBadge();
-    } catch(e) { this.alert(e.message, 'error'); }
+      // The checkout transaction (rental fee + deposit + delivery/pickup/
+      // operator fees, all itemized) is what showReceipt/printReceiptLetter
+      // renders as the letter-size RENTAL TAX INVOICE — same receipt flow a
+      // normal POS sale gets, just reached from the rental checkout path
+      // instead of the cart.
+      if (agreement.checkout_transaction_id) {
+        const tx = await this.api('GET', `/transactions/${agreement.checkout_transaction_id}`);
+        this.showReceipt(tx, tx.change_amount || 0);
+      }
+    } catch(e) {
+      this.alert(e.message, 'error');
+      btn.disabled = false;
+      btn.textContent = 'Complete Checkout';
+    }
   },
 
   async showIssueRentalModal(id) {

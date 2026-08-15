@@ -139,6 +139,39 @@ router.get('/agreements/:id', requirePermission('rentals'), async (req, res) => 
     if (!agreement) return res.status(404).json({ error: 'Not found' });
     const { rows: items } = await db.execute({ sql: 'SELECT * FROM rental_agreement_items WHERE agreement_id = ?', args: [req.params.id] });
     agreement.items = items;
+    // A 'pending' agreement (held, not yet paid) hasn't been charged yet —
+    // the real rental_fee/deposit_amount on each item are still 0 (see
+    // insertPendingAgreement) because they're only computed for real at
+    // PATCH .../checkout, based on the actual checkout instant. Mirror that
+    // same math here (checkout instant = now) purely for display, so the
+    // Process Payment modal can show an estimated total — this is NOT
+    // persisted and will be recomputed for real when checkout completes.
+    if (agreement.status === 'pending' && items.length) {
+      const estCheckoutDateTime = new Date();
+      const estDueDateTime = new Date(`${agreement.due_date}T${estCheckoutDateTime.toISOString().slice(11, 19)}.000Z`);
+      let estRentalSubtotal = 0, estTax = 0, estDepositTotal = 0;
+      for (const item of items) {
+        const estFee = item.is_mandatory ? 0 : feeFor({
+          rental_classification: item.rental_classification,
+          rental_rate: item.daily_rate,
+          rental_weekly_rate: item.weekly_rate,
+          rental_monthly_rate: item.monthly_rate,
+          rental_hourly_rate: item.hourly_rate,
+        }, item.quantity, estCheckoutDateTime, estDueDateTime);
+        item.estimated_rental_fee = estFee;
+        item.estimated_deposit_amount = estFee;
+        estRentalSubtotal += estFee;
+        estTax += parseFloat((estFee * (item.tax_rate || 0) / 100).toFixed(2));
+        estDepositTotal += estFee;
+      }
+      const deliveryCost = agreement.delivery_required ? parseFloat(agreement.delivery_cost || 0) : 0;
+      const pickupCost = agreement.pickup_required ? parseFloat(agreement.pickup_cost || 0) : 0;
+      const operatorFee = agreement.operator_required ? parseFloat(agreement.operator_fee || 0) : 0;
+      agreement.estimated_rental_subtotal = parseFloat(estRentalSubtotal.toFixed(2));
+      agreement.estimated_tax = parseFloat(estTax.toFixed(2));
+      agreement.estimated_deposit_total = parseFloat(estDepositTotal.toFixed(2));
+      agreement.estimated_total = parseFloat((estRentalSubtotal + estTax + estDepositTotal + deliveryCost + pickupCost + operatorFee).toFixed(2));
+    }
     const { rows: pauses } = await db.execute({ sql: `SELECT rp.*, pb.first_name || ' ' || pb.last_name as paused_by_name, ab.first_name || ' ' || ab.last_name as authorized_by_name, rb.first_name || ' ' || rb.last_name as resumed_by_name
       FROM rental_agreement_pauses rp
       LEFT JOIN employees pb ON rp.paused_by = pb.id
