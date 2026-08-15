@@ -2886,24 +2886,30 @@ const App = {
     const customerId = this.cartCustomer?.id;
     const ordersUrl = customerId ? `/transactions?status=hold&customer_id=${customerId}` : '/transactions?status=hold&limit=50';
     const rentalsUrl = customerId ? `/rentals/agreements?view=pending&customer_id=${customerId}` : '/rentals/agreements?view=pending';
+    // A rental returned with a balance still owed (see needsCashierHold in
+    // routes/rentals.js's /return handler) lands here the same way — item's
+    // already back in stock, only the settlement payment is outstanding.
+    const rentalBalanceUrl = customerId ? `/rentals/agreements?view=awaiting_payment&customer_id=${customerId}` : '/rentals/agreements?view=awaiting_payment&limit=50';
     // Work orders awaiting an assessment fee (status='intake') or a deposit
     // (status='pending_deposit') are collected here rather than by whoever
     // did the assessment — keeps cash handling with the cashier/drawer, same
     // as the pending-rentals flow below.
     const woUrl = customerId ? `/work-orders?view=awaiting_payment&customer_id=${customerId}` : '/work-orders?view=awaiting_payment&limit=50';
     try {
-      const [held, pendingRentals, pendingWOs] = await Promise.all([
+      const [held, pendingRentals, pendingRentalBalances, pendingWOs] = await Promise.all([
         this.api('GET', ordersUrl),
         this.can('rentals') ? this.api('GET', rentalsUrl).catch(() => []) : Promise.resolve([]),
+        this.can('rentals') ? this.api('GET', rentalBalanceUrl).catch(() => []) : Promise.resolve([]),
         this.can('work_orders') ? this.api('GET', woUrl).catch(() => []) : Promise.resolve([]),
       ]);
-      if (!held.length && !pendingRentals.length && !pendingWOs.length) {
+      if (!held.length && !pendingRentals.length && !pendingRentalBalances.length && !pendingWOs.length) {
         this.alert(customerId ? `No held orders for ${this.cartCustomer.first_name} ${this.cartCustomer.last_name}` : 'No held orders', 'info');
         return;
       }
       const combined = [
         ...held.map(h => ({ type: 'order', created_at: h.created_at, data: h })),
         ...pendingRentals.map(r => ({ type: 'rental', created_at: r.created_at, data: r })),
+        ...pendingRentalBalances.map(r => ({ type: 'rental_balance', created_at: r.returned_at || r.created_at, data: r })),
         ...pendingWOs.map(w => ({ type: 'work_order', created_at: w.created_at, data: w })),
       ].sort((a, b) => new Date(b.created_at) - new Date(a.created_at));
       this.showModal(`
@@ -2932,6 +2938,15 @@ const App = {
                   </div>
                   <div style="font-size:13px;color:var(--text-muted);margin-top:3px">
                     ${r.item_count} item${r.item_count===1?'':'s'} &bull; Due ${this.fmtDate(r.due_date)} &bull; ${new Date(r.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
+                  </div>
+                </div>`)(entry.data) : entry.type === 'rental_balance' ? (r => `
+                <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''" onclick="App.closeModal();App.showRentalBalanceDueModal(${r.id})">
+                  <div style="display:flex;justify-content:space-between;align-items:center">
+                    <strong style="font-size:14px">${r.customer_name || '—'} <span class="badge-pill badge-warning" style="font-size:10px;margin-left:4px">RENTAL BALANCE DUE</span></strong>
+                    <span style="font-size:12px;color:var(--text-muted);font-family:monospace">${r.agreement_number}</span>
+                  </div>
+                  <div style="font-size:13px;color:var(--text-muted);margin-top:3px">
+                    Balance Due: <strong>${this.fmt(r.balance_due)}</strong> &bull; returned ${new Date(r.returned_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
                   </div>
                 </div>`)(entry.data) : (w => `
                 <div style="border:1px solid var(--border);border-radius:8px;padding:12px 14px;margin-bottom:8px;cursor:pointer;transition:background 0.15s" onmouseover="this.style.background='#f0f4ff'" onmouseout="this.style.background=''" onclick="App.closeModal();${w.status==='intake' ? `App.showWOAssessmentFeeModal(${w.id})` : w.status==='pending_deposit' ? `App.showWODepositModal(${w.id})` : `App.showWOFinalPaymentModal(${w.id})`}">
@@ -3021,12 +3036,13 @@ const App = {
 
   async updateHoldBadge() {
     try {
-      const [held, pendingRentals, pendingWOs] = await Promise.all([
+      const [held, pendingRentals, pendingRentalBalances, pendingWOs] = await Promise.all([
         this.api('GET', '/transactions?status=hold&limit=50'),
         this.can('rentals') ? this.api('GET', '/rentals/agreements?view=pending').catch(() => []) : Promise.resolve([]),
+        this.can('rentals') ? this.api('GET', '/rentals/agreements?view=awaiting_payment&limit=50').catch(() => []) : Promise.resolve([]),
         this.can('work_orders') ? this.api('GET', '/work-orders?view=awaiting_payment&limit=50').catch(() => []) : Promise.resolve([]),
       ]);
-      const count = held.length + pendingRentals.length + pendingWOs.length;
+      const count = held.length + pendingRentals.length + pendingRentalBalances.length + pendingWOs.length;
       const badge = document.getElementById('hold-count-badge');
       if (!badge) return;
       if (count > 0) {
@@ -6355,8 +6371,63 @@ const App = {
         security_signature: this._sigPadDataUrl('rr-guard-sig'),
       });
       this.closeModal();
-      this.alert(`Return processed — settlement ${updated.settlement_transaction_id ? 'recorded' : ''}`);
+      if (updated.settlement_transaction_id) {
+        const tx = await this.api('GET', `/transactions/${updated.settlement_transaction_id}`);
+        this.showReceipt(tx, tx.change_amount || 0);
+      } else {
+        const balanceDue = (updated.damage_fee_total || 0) + (updated.duration_adjustment_total || 0) - (updated.deposit_total || 0) + (updated.tax_adjustment_total || 0);
+        if (balanceDue > 0) {
+          this.alert(`Item signed in. Balance of ${this.fmt(balanceDue)} is due — send the customer to the register to complete payment.`, 'success');
+        } else {
+          this.alert('Return processed');
+        }
+      }
       this.renderRentals();
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  // A rental returned with a balance owed shows up in POS Hold Recall
+  // (view=awaiting_payment) rather than being settled by whoever processed
+  // the physical return — same cash-with-the-cashier pattern as
+  // showWOFinalPaymentModal below.
+  async showRentalBalanceDueModal(id) {
+    try {
+      const a = await this.api('GET', `/rentals/agreements/${id}`);
+      const balance = parseFloat(((a.damage_fee_total||0) + (a.duration_adjustment_total||0) - (a.deposit_total||0) + (a.tax_adjustment_total||0)).toFixed(2));
+      this.showModal(`
+        <div class="modal" style="max-width:440px">
+          <div class="modal-header"><span class="modal-title">Collect Rental Balance — ${a.agreement_number}</span><button class="modal-close">✕</button></div>
+          <div class="modal-body">
+            <div style="border:1px solid var(--border);border-radius:6px;padding:8px 10px;margin-bottom:12px;font-size:13px">
+              <div style="display:flex;justify-content:space-between"><span>Customer</span><span>${a.customer_name || '—'}</span></div>
+              <div style="display:flex;justify-content:space-between"><span>Damage fees</span><span>${this.fmt(a.damage_fee_total)}</span></div>
+              <div style="display:flex;justify-content:space-between"><span>Duration adjustment</span><span>${this.fmt(a.duration_adjustment_total)}</span></div>
+              <div style="display:flex;justify-content:space-between"><span>Tax adjustment</span><span>${this.fmt(a.tax_adjustment_total)}</span></div>
+              <div style="display:flex;justify-content:space-between"><span>Less deposit</span><span>-${this.fmt(a.deposit_total)}</span></div>
+              <div style="display:flex;justify-content:space-between;margin-top:4px;border-top:1px solid var(--border);padding-top:4px"><strong>Balance Due</strong><strong>${this.fmt(balance)}</strong></div>
+            </div>
+            <div class="form-group"><label>Payment Method</label>
+              <select id="rb-paymethod"><option value="cash">Cash</option><option value="credit_card">Card</option><option value="check">Check</option></select>
+            </div>
+          </div>
+          <div class="modal-footer">
+            <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+            <button class="btn btn-primary" onclick="App.confirmRentalBalancePayment(${id})">Confirm Payment</button>
+          </div>
+        </div>`);
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  async confirmRentalBalancePayment(id) {
+    const payment_method = document.getElementById('rb-paymethod')?.value;
+    try {
+      const settled = await this.api('PATCH', `/rentals/agreements/${id}/collect-balance`, {
+        payment_method, employee_id: this.currentUser.id, drawer_session_id: this.currentDrawerSession?.id || null,
+      });
+      this.closeModal();
+      const tx = await this.api('GET', `/transactions/${settled.id}`);
+      this.showReceipt(tx, tx.change_amount || 0);
+      if (this.section === 'rentals') this.renderRentals();
     } catch(e) { this.alert(e.message, 'error'); }
   },
 

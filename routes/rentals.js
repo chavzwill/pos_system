@@ -69,7 +69,8 @@ router.get('/agreements', requirePermission('rentals'), async (req, res) => {
       (SELECT COUNT(*) FROM rental_agreement_items WHERE agreement_id = ra.id AND parent_item_id IS NULL) as item_count,
       (SELECT GROUP_CONCAT(product_name || ' x' || quantity, ', ') FROM rental_agreement_items WHERE agreement_id = ra.id AND parent_item_id IS NULL) as item_summary,
       (SELECT started_at FROM rental_agreement_pauses WHERE agreement_id = ra.id AND ended_at IS NULL LIMIT 1) as current_pause_started_at,
-      CASE WHEN ra.status = 'active' AND ra.is_paused = 1 THEN 'paused' WHEN ra.status = 'active' AND ra.due_date < date('now') THEN 'overdue' ELSE ra.status END as display_status
+      CASE WHEN ra.status = 'active' AND ra.is_paused = 1 THEN 'paused' WHEN ra.status = 'active' AND ra.due_date < date('now') THEN 'overdue' ELSE ra.status END as display_status,
+      (ra.damage_fee_total + ra.duration_adjustment_total - ra.deposit_total + ra.tax_adjustment_total) as balance_due
       FROM rental_agreements ra
       LEFT JOIN customers c ON ra.customer_id = c.id
       LEFT JOIN branches b ON ra.branch_id = b.id
@@ -89,6 +90,12 @@ router.get('/agreements', requirePermission('rentals'), async (req, res) => {
     if (branch_id) { sql += ' AND ra.branch_id = ?'; params.push(branch_id); }
     if (view === 'overdue') { sql += " AND ra.status = 'active' AND ra.due_date < date('now')"; }
     else if (view === 'active') { sql += " AND ra.status = 'active'"; }
+    // Physically returned (item's back in stock) but the balance owed on a
+    // non-credit checkout hasn't been collected yet — see needsCashierHold
+    // in the /return handler. settlement_transaction_id stays NULL until a
+    // cashier collects it via /collect-balance, same pending-until-paid shape
+    // Work Orders use for 'awaiting_pickup'.
+    else if (view === 'awaiting_payment') { sql += ' AND ra.status = ? AND ra.settlement_transaction_id IS NULL AND (ra.damage_fee_total + ra.duration_adjustment_total - ra.deposit_total + ra.tax_adjustment_total) > 0'; params.push('returned'); }
     else if (view === 'returned' || view === 'cancelled' || view === 'pending' || view === 'awaiting_issue') { sql += ' AND ra.status = ?'; params.push(view); }
     sql += ' ORDER BY ra.created_at DESC LIMIT 200';
     const { rows } = await db.execute({ sql, args: params });
@@ -112,7 +119,8 @@ router.get('/agreements/:id', requirePermission('rentals'), async (req, res) => 
       ise.first_name || ' ' || ise.last_name as issue_security_employee_name,
       rse.first_name || ' ' || rse.last_name as return_security_employee_name,
       rde.first_name || ' ' || rde.last_name as return_driver_employee_name,
-      CASE WHEN ra.status = 'active' AND ra.is_paused = 1 THEN 'paused' WHEN ra.status = 'active' AND ra.due_date < date('now') THEN 'overdue' ELSE ra.status END as display_status
+      CASE WHEN ra.status = 'active' AND ra.is_paused = 1 THEN 'paused' WHEN ra.status = 'active' AND ra.due_date < date('now') THEN 'overdue' ELSE ra.status END as display_status,
+      (ra.damage_fee_total + ra.duration_adjustment_total - ra.deposit_total + ra.tax_adjustment_total) as balance_due
       FROM rental_agreements ra
       LEFT JOIN customers c ON ra.customer_id = c.id
       LEFT JOIN branches b ON ra.branch_id = b.id
@@ -812,28 +820,45 @@ router.patch('/agreements/:id/return', requirePermission('rentals_returns'), asy
       const settlementAmount = parseFloat((settlementSubtotal + taxAdjustmentTotal).toFixed(2));
       const depositRefunded = Math.max(0, agreement.deposit_total - (damageFeeTotal + durationAdjustmentTotal + taxAdjustmentTotal));
 
-      const transaction_number = await nextNumber(tx, 'transactions', 'transaction_number', 'TXN-', 6);
-      const method = checkoutIsCredit ? 'credit' : (settlementAmount >= 0 ? (payment_method || 'cash') : 'refund');
-      const settleResult = await tx.execute({ sql: `INSERT INTO transactions (transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,total,payment_method,amount_tendered,change_amount,notes,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [transaction_number, agreement.customer_id, agreement.employee_id, agreement.branch_id, drawer_session_id || null, settlementSubtotal, taxAdjustmentTotal, settlementAmount, method, 0, 0, `Rental settlement ${agreement.agreement_number}`, 'pos'] });
-      const settlementTxId = Number(settleResult.lastInsertRowid);
+      // The item itself comes back into stock the moment security signs it
+      // in, regardless of money owed — but a cash/card balance owed on a
+      // non-credit rental hasn't actually been collected yet at the point
+      // security is processing the physical return (they're not a cashier
+      // and typically have no open drawer). Rather than silently recording
+      // it as paid, this leaves the settlement transaction uncreated here —
+      // the agreement sits fully "returned" with settlement_transaction_id
+      // still NULL, which is exactly what /agreements/:id/collect-balance's
+      // awaiting-payment query below looks for — and hands it to a cashier
+      // via POS Hold Recall, same pattern as Work Orders' awaiting_pickup.
+      // A refund-due or credit-financed settlement still finalizes here:
+      // there's no cash to collect from the customer in either case.
+      const needsCashierHold = !checkoutIsCredit && settlementAmount > 0;
+      let settlementTxId = null;
 
-      if (durationAdjustmentTotal !== 0) {
-        const label = durationAdjustmentTotal > 0 ? 'Additional Rental Time' : 'Rental Fee Credit (returned early)';
-        await tx.execute({ sql: `INSERT INTO transaction_items (transaction_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES (?,?,?,?,?,?,?)`, args: [settlementTxId, label, 'DURATION-ADJ', 1, durationAdjustmentTotal, taxAdjustmentTotal, durationAdjustmentTotal] });
-      }
-      for (const line of settlementLines) {
-        await tx.execute({ sql: `INSERT INTO transaction_items (transaction_id,product_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES (?,?,?,?,?,?,?,?)`, args: [settlementTxId, line.product_id, line.product_name, line.sku, 1, line.total, 0, line.total] });
-      }
-      if (agreement.deposit_total > 0) {
-        await tx.execute({ sql: `INSERT INTO transaction_items (transaction_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES (?,?,?,?,?,?,?)`, args: [settlementTxId, depositRefunded > 0 ? 'Deposit Refunded' : 'Deposit Applied', 'DEPOSIT', 1, -agreement.deposit_total, 0, -agreement.deposit_total] });
-      }
+      if (!needsCashierHold) {
+        const transaction_number = await nextNumber(tx, 'transactions', 'transaction_number', 'TXN-', 6);
+        const method = checkoutIsCredit ? 'credit' : (settlementAmount >= 0 ? (payment_method || 'cash') : 'refund');
+        const settleResult = await tx.execute({ sql: `INSERT INTO transactions (transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,total,payment_method,amount_tendered,change_amount,notes,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [transaction_number, agreement.customer_id, agreement.employee_id, agreement.branch_id, drawer_session_id || null, settlementSubtotal, taxAdjustmentTotal, settlementAmount, method, 0, 0, `Rental settlement ${agreement.agreement_number}`, 'pos'] });
+        settlementTxId = Number(settleResult.lastInsertRowid);
 
-      // settlementAmount is already signed the right way for this: positive
-      // increases what's owed, negative nets the deposit back out — a plain
-      // `+=` handles both charge and refund-style settlements in one line, with
-      // no separate "collect" vs "refund" branch needed for a credit account.
-      if (checkoutIsCredit) {
-        await tx.execute({ sql: 'UPDATE customers SET account_balance = MAX(0, account_balance + ?) WHERE id = ?', args: [settlementAmount, agreement.customer_id] });
+        if (durationAdjustmentTotal !== 0) {
+          const label = durationAdjustmentTotal > 0 ? 'Additional Rental Time' : 'Rental Fee Credit (returned early)';
+          await tx.execute({ sql: `INSERT INTO transaction_items (transaction_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES (?,?,?,?,?,?,?)`, args: [settlementTxId, label, 'DURATION-ADJ', 1, durationAdjustmentTotal, taxAdjustmentTotal, durationAdjustmentTotal] });
+        }
+        for (const line of settlementLines) {
+          await tx.execute({ sql: `INSERT INTO transaction_items (transaction_id,product_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES (?,?,?,?,?,?,?,?)`, args: [settlementTxId, line.product_id, line.product_name, line.sku, 1, line.total, 0, line.total] });
+        }
+        if (agreement.deposit_total > 0) {
+          await tx.execute({ sql: `INSERT INTO transaction_items (transaction_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES (?,?,?,?,?,?,?)`, args: [settlementTxId, depositRefunded > 0 ? 'Deposit Refunded' : 'Deposit Applied', 'DEPOSIT', 1, -agreement.deposit_total, 0, -agreement.deposit_total] });
+        }
+
+        // settlementAmount is already signed the right way for this: positive
+        // increases what's owed, negative nets the deposit back out — a plain
+        // `+=` handles both charge and refund-style settlements in one line, with
+        // no separate "collect" vs "refund" branch needed for a credit account.
+        if (checkoutIsCredit) {
+          await tx.execute({ sql: 'UPDATE customers SET account_balance = MAX(0, account_balance + ?) WHERE id = ?', args: [settlementAmount, agreement.customer_id] });
+        }
       }
 
       await tx.execute({ sql: `UPDATE rental_agreements SET settlement_transaction_id = ?, deposit_refunded = ?, duration_adjustment_total = duration_adjustment_total + ?, tax_adjustment_total = tax_adjustment_total + ?, damage_fee_total = damage_fee_total + ?, pickup_driver_id = ?, status = ?, returned_at = ?, return_security_employee_id = ?, return_security_confirmed_at = ?, return_security_signature = ?, return_driver_employee_id = ?, return_driver_confirmed_at = ? WHERE id = ?`, args: [settlementTxId, depositRefunded, durationAdjustmentTotal, taxAdjustmentTotal, damageFeeTotal, pickupDriverId, newStatus, allReturned ? now.toISOString() : agreement.returned_at, return_security_employee_id, now.toISOString(), guardSigPath, return_driver_employee_id, now.toISOString(), req.params.id] });
@@ -870,6 +895,58 @@ router.patch('/agreements/:id/return', requirePermission('rentals_returns'), asy
     }
 
     res.json(updated);
+  } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+// A rental returned with a balance owed (see needsCashierHold above) lands
+// here with settlement_transaction_id still NULL — the item is already back
+// in stock, only the money hasn't been collected. This is the cashier-facing
+// counterpart, reachable from POS Hold Recall same as a Work Order's
+// final-payment: the settlement transaction is created fresh at the moment
+// payment is actually taken, using the cashier's own drawer session rather
+// than whatever (if anything) security had open at sign-in.
+router.patch('/agreements/:id/collect-balance', requireAnyPermission('pos', 'rentals'), async (req, res) => {
+  try {
+    const { payment_method, amount_tendered, employee_id, drawer_session_id, branch_id } = req.body;
+    const { rows: [agreement] } = await db.execute({ sql: 'SELECT * FROM rental_agreements WHERE id = ?', args: [req.params.id] });
+    if (!agreement) return res.status(404).json({ error: 'Not found' });
+    if (agreement.status !== 'returned') return res.status(400).json({ error: `This rental is ${agreement.status}, not awaiting balance payment` });
+    if (agreement.settlement_transaction_id) return res.status(400).json({ error: 'This rental has already been settled' });
+
+    const balance = parseFloat((agreement.damage_fee_total + agreement.duration_adjustment_total - agreement.deposit_total + agreement.tax_adjustment_total).toFixed(2));
+    if (balance <= 0) return res.status(400).json({ error: 'No balance is due on this rental' });
+
+    let settlementTxId;
+    const tx = await db.transaction('write');
+    try {
+      const method = payment_method || 'cash';
+      const tendered = parseFloat(amount_tendered || balance);
+      const changeAmt = Math.max(0, parseFloat((tendered - balance).toFixed(2)));
+      const transaction_number = await nextNumber(tx, 'transactions', 'transaction_number', 'TXN-', 6);
+      const settleResult = await tx.execute({ sql: `INSERT INTO transactions (transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,total,payment_method,amount_tendered,change_amount,notes,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [transaction_number, agreement.customer_id, employee_id || agreement.employee_id, branch_id || agreement.branch_id, drawer_session_id || null, parseFloat((balance - agreement.tax_adjustment_total).toFixed(2)), agreement.tax_adjustment_total, balance, method, tendered, changeAmt, `Rental settlement ${agreement.agreement_number}`, 'pos'] });
+      settlementTxId = Number(settleResult.lastInsertRowid);
+
+      if (agreement.duration_adjustment_total !== 0) {
+        const label = agreement.duration_adjustment_total > 0 ? 'Additional Rental Time' : 'Rental Fee Credit (returned early)';
+        await tx.execute({ sql: `INSERT INTO transaction_items (transaction_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES (?,?,?,?,?,?,?)`, args: [settlementTxId, label, 'DURATION-ADJ', 1, agreement.duration_adjustment_total, agreement.tax_adjustment_total, agreement.duration_adjustment_total] });
+      }
+      const { rows: damagedItems } = await tx.execute({ sql: 'SELECT product_id, product_name, sku, damage_fee FROM rental_agreement_items WHERE agreement_id = ? AND damage_fee > 0', args: [req.params.id] });
+      for (const item of damagedItems) {
+        await tx.execute({ sql: `INSERT INTO transaction_items (transaction_id,product_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES (?,?,?,?,?,?,?,?)`, args: [settlementTxId, item.product_id, `Damage Fee — ${item.product_name}`, item.sku, 1, item.damage_fee, 0, item.damage_fee] });
+      }
+      if (agreement.deposit_total > 0) {
+        await tx.execute({ sql: `INSERT INTO transaction_items (transaction_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES (?,?,?,?,?,?,?)`, args: [settlementTxId, 'Deposit Applied', 'DEPOSIT', 1, -agreement.deposit_total, 0, -agreement.deposit_total] });
+      }
+
+      await tx.execute({ sql: 'UPDATE rental_agreements SET settlement_transaction_id = ? WHERE id = ?', args: [settlementTxId, req.params.id] });
+      await tx.commit();
+    } catch(e) {
+      await tx.rollback();
+      return res.status(400).json({ error: e.message });
+    }
+
+    const { rows: [settled] } = await db.execute({ sql: 'SELECT * FROM transactions WHERE id = ?', args: [settlementTxId] });
+    res.json(settled);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
