@@ -67,7 +67,16 @@ app.use(express.static(publicDir, { index: false }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use(async (req, res, next) => {
-  try { await ensureReady(); next(); } catch(e) { res.status(500).json({ error: 'Database initialization failed' }); }
+  try {
+    await ensureReady();
+    next();
+  } catch (e) {
+    // Keep the client response generic, but make the real initialization
+    // failure visible in Vercel/runtime logs so a fresh remote database can
+    // be diagnosed without exposing schema or credential details to users.
+    console.error('POS database initialization failed:', e && (e.stack || e.message || e));
+    res.status(500).json({ error: 'Database initialization failed' });
+  }
 });
 
 app.use('/api', apiKeyAuth);
