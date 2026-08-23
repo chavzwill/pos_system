@@ -41,6 +41,17 @@ function getEnhancedIndex() {
     '<script src="/login-controller.js" defer></script>',
   ];
   let html = source;
+
+  // The legacy monolithic page contains print-document templates that embed
+  // script tags inside the page's own inline script. Mobile WebKit/Chrome can
+  // terminate the parent script while tokenizing those sequences, leaving the
+  // global App object undefined. Printing is triggered by the opener after the
+  // document is written, so the embedded auto-print tags are not required for
+  // application initialization. Strip both escaped forms from the served shell.
+  html = html
+    .replaceAll('<script>window.onload=()=>{window.print()}<\\/script>', '')
+    .replaceAll('<script>window.onload=()=>{window.print()}<\\\\/script>', '');
+
   for (const tag of headAssets) {
     const asset = tag.match(/(?:href|src)="([^"]+)/)?.[1];
     if (!asset || !html.includes(asset)) html = html.replace('</head>', `  ${tag}\n</head>`);
