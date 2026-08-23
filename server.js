@@ -4,6 +4,7 @@ const cors = require('cors');
 const bodyParser = require('body-parser');
 const compression = require('compression');
 const path = require('path');
+const fs = require('fs');
 
 const { ensureReady, db } = require('./database');
 const { router: woocommerceRouter, runSyncAll: wooSyncAll } = require('./routes/woocommerce');
@@ -25,6 +26,32 @@ process.on('uncaughtException', (err) => {
 
 const app = express();
 const PORT = process.env.PORT || 3001;
+const publicDir = path.join(__dirname, 'public');
+const indexPath = path.join(publicDir, 'index.html');
+
+// Keep the large legacy SPA intact while layering the Total Tools POS visual
+// system and Guided Mode on top. This is intentionally server-side injection:
+// it avoids a risky 1MB index.html rewrite and keeps the new layer modular.
+let enhancedIndexCache = null;
+function getEnhancedIndex() {
+  if (enhancedIndexCache && process.env.NODE_ENV === 'production') return enhancedIndexCache;
+  const source = fs.readFileSync(indexPath, 'utf8');
+  const cssTag = '<link rel="stylesheet" href="/total-tools-pos.css">';
+  const scriptTag = '<script src="/guided-mode.js" defer></script>';
+  let html = source;
+  if (!html.includes('/total-tools-pos.css')) html = html.replace('</head>', `  ${cssTag}\n</head>`);
+  if (!html.includes('/guided-mode.js')) html = html.replace('</body>', `  ${scriptTag}\n</body>`);
+  if (process.env.NODE_ENV === 'production') enhancedIndexCache = html;
+  return html;
+}
+function sendEnhancedIndex(req, res) {
+  try {
+    res.type('html').send(getEnhancedIndex());
+  } catch (error) {
+    console.error('Unable to render enhanced POS shell:', error);
+    res.sendFile(indexPath);
+  }
+}
 
 // Needed so req.secure reflects X-Forwarded-Proto from a reverse proxy (Vercel,
 // or a self-hosted TLS-terminating proxy) — the session cookie's Secure flag
@@ -41,7 +68,10 @@ app.use(compression());
 // item lists, PO line items, etc.) serialized to JSON — bump it so those
 // requests don't get rejected before reaching the route handler.
 app.use(bodyParser.json({ limit: '10mb' }));
-app.use(express.static(path.join(__dirname, 'public')));
+
+// Serve the enhanced shell before express.static's automatic index handling.
+app.get('/', sendEnhancedIndex);
+app.use(express.static(publicDir, { index: false }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 // Initialize DB before handling any request
@@ -98,9 +128,7 @@ app.use('/api', (err, req, res, next) => {
   res.status(err.status || 500).json({ error: err.message || 'Request failed' });
 });
 
-app.get('*', (req, res) => {
-  res.sendFile(path.join(__dirname, 'public', 'index.html'));
-});
+app.get('*', sendEnhancedIndex);
 
 if (!process.env.VERCEL) {
   app.listen(PORT, () => {
