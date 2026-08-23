@@ -31,12 +31,14 @@ function getEnhancedIndex() {
     '<link rel="stylesheet" href="/total-tools-pos.css">',
     '<link rel="stylesheet" href="/technician-compensation.css">',
     '<link rel="stylesheet" href="/stock-rebalancing.css">',
+    '<link rel="stylesheet" href="/operational-reports.css">',
   ];
   const bodyAssets = [
     '<script src="/pos-guide-map.js" defer></script>',
     '<script src="/guided-mode.js" defer></script>',
     '<script src="/technician-compensation.js" defer></script>',
     '<script src="/stock-rebalancing.js" defer></script>',
+    '<script src="/operational-reports.js" defer></script>',
   ];
   let html = source;
   for (const tag of headAssets) {
