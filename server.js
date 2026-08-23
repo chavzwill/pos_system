@@ -39,6 +39,7 @@ function getEnhancedIndex() {
     '<script src="/technician-compensation.js" defer></script>',
     '<script src="/stock-rebalancing.js" defer></script>',
     '<script src="/operational-reports.js" defer></script>',
+    '<script src="/login-controller.js" defer></script>',
   ];
   let html = source;
   for (const tag of headAssets) {
