@@ -20,17 +20,31 @@ const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
 
-// Keep the large legacy SPA intact while layering the Total Tools POS visual
-// system and Guided Mode on top. This avoids a risky 1MB index.html rewrite.
+// Keep the large legacy SPA intact while layering modular Total Tools POS
+// capabilities on top. This avoids a risky 1MB index.html rewrite while the
+// application is progressively modernized.
 let enhancedIndexCache = null;
 function getEnhancedIndex() {
   if (enhancedIndexCache && process.env.NODE_ENV === 'production') return enhancedIndexCache;
   const source = fs.readFileSync(indexPath, 'utf8');
-  const cssTag = '<link rel="stylesheet" href="/total-tools-pos.css">';
-  const scriptTag = '<script src="/guided-mode.js" defer></script>';
+  const headAssets = [
+    '<link rel="stylesheet" href="/total-tools-pos.css">',
+    '<link rel="stylesheet" href="/technician-compensation.css">',
+  ];
+  const bodyAssets = [
+    '<script src="/pos-guide-map.js" defer></script>',
+    '<script src="/guided-mode.js" defer></script>',
+    '<script src="/technician-compensation.js" defer></script>',
+  ];
   let html = source;
-  if (!html.includes('/total-tools-pos.css')) html = html.replace('</head>', `  ${cssTag}\n</head>`);
-  if (!html.includes('/guided-mode.js')) html = html.replace('</body>', `  ${scriptTag}\n</body>`);
+  for (const tag of headAssets) {
+    const href = tag.match(/href="([^"]+)/)?.[1];
+    if (!href || !html.includes(href)) html = html.replace('</head>', `  ${tag}\n</head>`);
+  }
+  for (const tag of bodyAssets) {
+    const src = tag.match(/src="([^"]+)/)?.[1];
+    if (!src || !html.includes(src)) html = html.replace('</body>', `  ${tag}\n</body>`);
+  }
   if (process.env.NODE_ENV === 'production') enhancedIndexCache = html;
   return html;
 }
