@@ -12,6 +12,16 @@
     button.textContent = busy ? 'Signing In…' : 'Sign In';
   }
 
+  function getApp() {
+    // The legacy POS declares `App` as a global lexical binding rather than
+    // assigning it to window.App. A later classic script can still reference
+    // that binding directly, but `window.App` may be undefined.
+    try {
+      if (typeof App !== 'undefined' && App) return App;
+    } catch (_) {}
+    return window.App || null;
+  }
+
   async function login(button) {
     if (submitting) return;
 
@@ -44,17 +54,18 @@
         throw new Error(payload.error || `Sign in failed (${response.status})`);
       }
 
-      if (window.App) {
-        window.App.currentUser = payload;
-        if (payload.must_change_password && typeof window.App.showChangePasswordModal === 'function') {
-          window.App.showChangePasswordModal(payload.id, true);
-        } else if (typeof window.App.enterApp === 'function') {
-          window.App.enterApp();
-        } else {
-          window.location.reload();
-        }
+      const app = getApp();
+      if (!app) {
+        throw new Error('POS application failed to initialize. Refresh the page and try again.');
+      }
+
+      app.currentUser = payload;
+      if (payload.must_change_password && typeof app.showChangePasswordModal === 'function') {
+        app.showChangePasswordModal(payload.id, true);
+      } else if (typeof app.enterApp === 'function') {
+        app.enterApp();
       } else {
-        window.location.reload();
+        throw new Error('POS application could not enter the authenticated workspace.');
       }
     } catch (error) {
       console.error('POS login failed:', error);
