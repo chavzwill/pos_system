@@ -81,6 +81,7 @@ app.use('/api/transactions',     require('./routes/transactions'));
 app.use('/api/employees',        require('./routes/employees'));
 app.use('/api/reports',          require('./routes/reports'));
 app.use('/api/operational-reports', require('./routes/operational-reports'));
+app.use('/api/erp-intelligence', require('./routes/erp-intelligence'));
 app.use('/api/settings',         require('./routes/settings'));
 app.use('/api/branches',         require('./routes/branches'));
 app.use('/api/suppliers',        require('./routes/suppliers'));
