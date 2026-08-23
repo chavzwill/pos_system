@@ -25,6 +25,7 @@ function getEnhancedIndex() {
   if (enhancedIndexCache && process.env.NODE_ENV === 'production') return enhancedIndexCache;
   const source = fs.readFileSync(indexPath, 'utf8');
   const headAssets = [
+    '<script src="/client-diagnostics.js"></script>',
     '<link rel="stylesheet" href="/total-tools-pos.css">',
     '<link rel="stylesheet" href="/technician-compensation.css">',
     '<link rel="stylesheet" href="/stock-rebalancing.css">',
@@ -41,8 +42,8 @@ function getEnhancedIndex() {
   ];
   let html = source;
   for (const tag of headAssets) {
-    const href = tag.match(/href="([^"]+)/)?.[1];
-    if (!href || !html.includes(href)) html = html.replace('</head>', `  ${tag}\n</head>`);
+    const asset = tag.match(/(?:href|src)="([^"]+)/)?.[1];
+    if (!asset || !html.includes(asset)) html = html.replace('</head>', `  ${tag}\n</head>`);
   }
   for (const tag of bodyAssets) {
     const src = tag.match(/src="([^"]+)/)?.[1];
@@ -60,6 +61,20 @@ app.set('trust proxy', true);
 app.use(cors());
 app.use(compression());
 app.use(bodyParser.json({ limit: '10mb' }));
+
+// Preview-safe browser diagnostic sink. It records only the browser error text,
+// source location and user agent; no credentials, form values or tokens.
+app.post('/client-diagnostics', (req, res) => {
+  const body = req.body || {};
+  console.error('POS client diagnostic:', {
+    kind: String(body.kind || '').slice(0, 80),
+    detail: String(body.detail || '').slice(0, 4000),
+    href: String(body.href || '').slice(0, 500),
+    ua: String(body.ua || '').slice(0, 500),
+    ts: String(body.ts || '').slice(0, 80),
+  });
+  res.status(204).end();
+});
 
 app.get('/', sendEnhancedIndex);
 app.use(express.static(publicDir, { index: false }));
