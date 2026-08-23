@@ -30,11 +30,13 @@ function getEnhancedIndex() {
   const headAssets = [
     '<link rel="stylesheet" href="/total-tools-pos.css">',
     '<link rel="stylesheet" href="/technician-compensation.css">',
+    '<link rel="stylesheet" href="/stock-rebalancing.css">',
   ];
   const bodyAssets = [
     '<script src="/pos-guide-map.js" defer></script>',
     '<script src="/guided-mode.js" defer></script>',
     '<script src="/technician-compensation.js" defer></script>',
+    '<script src="/stock-rebalancing.js" defer></script>',
   ];
   let html = source;
   for (const tag of headAssets) {
@@ -84,6 +86,7 @@ app.use('/api/security-groups',  require('./routes/security-groups'));
 app.use('/api/quotations',       require('./routes/quotations'));
 app.use('/api/accounts',         require('./routes/accounts'));
 app.use('/api/transfers',        require('./routes/transfers'));
+app.use('/api/stock-rebalancing',require('./routes/stock-rebalancing'));
 app.use('/api/crm',              require('./routes/crm'));
 app.use('/api/commissions',      require('./routes/commissions'));
 app.use('/api/email',            require('./routes/email'));
