@@ -103,6 +103,15 @@ router.post('/', requireApiKey, async (req, res) => {
     const service = money(service_amount, 'service_amount');
     const handling = money(handling_amount, 'handling_amount');
     const isTaxExempt = tax_exempt ? 1 : 0;
+    const method = String(payment_method || 'online').trim() || 'online';
+
+    if (method === 'credit') {
+      if (!customer_id) return res.status(400).json({ error: 'Credit orders require a customer_id' });
+      const { rows: [creditCustomer] } = await db.execute({ sql: 'SELECT customer_type, credit_enabled, account_blocked FROM customers WHERE id = ? LIMIT 1', args: [customer_id] });
+      if (!creditCustomer) return res.status(400).json({ error: 'Customer not found' });
+      if (creditCustomer.customer_type !== 'credit' || !creditCustomer.credit_enabled) return res.status(403).json({ error: 'Customer does not have an enabled credit account' });
+      if (creditCustomer.account_blocked) return res.status(403).json({ error: 'Customer credit account is blocked' });
+    }
 
     let subtotal = 0;
     let taxAmount = 0;
@@ -130,7 +139,6 @@ router.post('/', requireApiKey, async (req, res) => {
     subtotal = parseFloat(subtotal.toFixed(2));
     taxAmount = parseFloat(taxAmount.toFixed(2));
     const total = parseFloat((subtotal + taxAmount + delivery + service + handling).toFixed(2));
-    const method = String(payment_method || 'online').trim() || 'online';
     const transactionNumber = await nextNumber(db, 'transactions', 'transaction_number', 'TXN-', 6);
 
     const txn = await db.transaction('write');
@@ -141,6 +149,18 @@ router.post('/', requireApiKey, async (req, res) => {
         await txn.rollback();
         const replay = await loadTransactionByExternalId(externalOrderId);
         return res.status(200).json({ ...replay, idempotent_replay: true });
+      }
+
+      for (const line of processedItems) {
+        const reserved = await txn.execute({
+          sql: 'UPDATE branch_inventory SET stock_qty = stock_qty - ?, updated_at = CURRENT_TIMESTAMP WHERE product_id = ? AND branch_id = ? AND stock_qty >= ?',
+          args: [line.quantity, line.product.id, branchId, line.quantity],
+        });
+        if (!reserved.rowsAffected) {
+          const e = new Error(`Insufficient stock for ${line.product.name}`);
+          e.status = 409;
+          throw e;
+        }
       }
 
       const txResult = await txn.execute({
@@ -169,7 +189,6 @@ router.post('/', requireApiKey, async (req, res) => {
           args: [txId, line.product.id, line.product.name, line.product.sku || '', line.quantity, line.unitPrice, line.lineTax, line.lineTotal],
         });
         await txn.execute({ sql: 'UPDATE products SET stock_qty = MAX(0, stock_qty - ?) WHERE id = ?', args: [line.quantity, line.product.id] });
-        await txn.execute({ sql: 'UPDATE branch_inventory SET stock_qty = MAX(0, stock_qty - ?), updated_at = CURRENT_TIMESTAMP WHERE product_id = ? AND branch_id = ?', args: [line.quantity, line.product.id, branchId] });
         await syncBinQty(txn, line.product.id, branchId, -line.quantity);
       }
 
