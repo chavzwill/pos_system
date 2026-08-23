@@ -20,9 +20,6 @@ const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
 
-// Keep the large legacy SPA intact while layering modular Total Tools POS
-// capabilities on top. This avoids a risky 1MB index.html rewrite while the
-// application is progressively modernized.
 let enhancedIndexCache = null;
 function getEnhancedIndex() {
   if (enhancedIndexCache && process.env.NODE_ENV === 'production') return enhancedIndexCache;
@@ -39,6 +36,7 @@ function getEnhancedIndex() {
     '<script src="/technician-compensation.js" defer></script>',
     '<script src="/stock-rebalancing.js" defer></script>',
     '<script src="/operational-reports.js" defer></script>',
+    '<script src="/pos-upgrade-navigation.js" defer></script>',
     '<script src="/login-controller.js" defer></script>',
   ];
   let html = source;
@@ -72,9 +70,6 @@ app.use(async (req, res, next) => {
     await ensureReady();
     next();
   } catch (e) {
-    // Keep the client response generic, but make the real initialization
-    // failure visible in Vercel/runtime logs so a fresh remote database can
-    // be diagnosed without exposing schema or credential details to users.
     console.error('POS database initialization failed:', e && (e.stack || e.message || e));
     res.status(500).json({ error: 'Database initialization failed' });
   }
