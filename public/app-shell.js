@@ -16,7 +16,7 @@ const featureMap={
  finance:[['Accounting Intelligence','Revenue, margin, receivables and financial exceptions.','accounting-intelligence'],['Accounting Ledger','Double-entry journal and trial-balance controls.','accounting-ledger'],['Supplier Ledger & Payables','Supplier invoices, payments and AP aging.','supplier-ledger'],['Settlement Reconciliation','POS-to-bank/processor settlement matching.','settlement-reconciliation'],['Cash & Commitments','Operating cash and commitment intelligence.','financial-controls-intelligence'],['Reports','Open all operational reports.','legacy']],
  sales:[['Point of Sale','Open checkout and transaction operations.','legacy'],['Transactions','Open transaction history and controls.','legacy'],['Customers','Open customer records.','legacy']],
  rentals:[['Rentals','Open rental agreements and asset workflow.','legacy'],['Dispatch Command Center','Coordinate delivery and collection movements.','logistics-intelligence']],
- purchasing:[['Purchase Requests','Open purchase-request workflow.','legacy'],['Purchase Orders','Open supplier purchase orders.','legacy'],['Inventory Intelligence','Use inventory evidence to guide purchasing.','inventory-intelligence']],
+ purchasing:[['Purchasing Operations','Requests, approvals, purchase orders and receiving in one native workspace.','purchasing-workspace'],['Inventory Intelligence','Use inventory evidence to guide purchasing.','inventory-intelligence'],['Supplier Ledger & Payables','Review supplier liabilities after purchasing activity becomes payable.','supplier-ledger']],
  administration:[['Employees','Employee and role administration.','legacy'],['Branches','Branch configuration.','legacy'],['Security & Permissions','RBAC and security-group administration.','legacy']]
 };
 function navButtons(){const ds=profile.domains||[];return ds.map((d,i)=>`<button data-domain="${esc(d)}" class="${i===0?'is-active':''}">${esc(domainLabels[d]||d)}</button>`).join('');}
@@ -29,6 +29,7 @@ function bindOpenButtons(){root.querySelectorAll('[data-open]').forEach(b=>b.add
 const assets={
 'work-orders-workspace':['/work-orders-workspace.css','/work-orders-workspace.js','TotalToolsWorkOrdersWorkspace'],
 'inventory-workspace':['/inventory-workspace.css','/inventory-workspace.js','TotalToolsInventoryWorkspace'],
+'purchasing-workspace':['/purchasing-workspace.css','/purchasing-workspace.js','TotalToolsPurchasingWorkspace'],
 'repair-operations':['/repair-operations.css','/repair-operations.js','TotalToolsRepairOperations'],
 'repair-communications':['/repair-communications.css','/repair-communications.js','TotalToolsRepairCommunications'],
 'repair-authorizations':['/repair-authorizations.css','/repair-authorizations.js','TotalToolsRepairAuthorizations'],
@@ -44,8 +45,8 @@ const assets={
 'settlement-reconciliation':['/settlement-reconciliation.css','/settlement-reconciliation.js','TotalToolsSettlementReconciliation'],
 'financial-controls-intelligence':['/financial-controls-intelligence.css','/financial-controls-intelligence.js','TotalToolsFinancialControlsIntelligence']};
 async function openFeature(key,title){if(key==='legacy'){location.href='/legacy?from=shell&open='+encodeURIComponent(title||'');return;}const a=assets[key];if(!a)return;const [css,js,global]=a;try{await loadCss(css);await loadJs(js);const api=window[global];if(api?.open)api.open();else throw new Error('Module loaded but did not initialize.');}catch(e){alert(`${title||'Workspace'} could not open: ${e.message}`);}}
-function loadCss(href){return new Promise(resolve=>{let el=[...document.styleSheets].find(x=>x.href&&x.href.includes(href));if(el)return resolve();const l=document.createElement('link');l.rel='stylesheet';l.href=href+'?v=20260824-0810';l.onload=resolve;l.onerror=resolve;document.head.appendChild(l);});}
-function loadJs(src){return new Promise((resolve,reject)=>{const id='shell-'+src.replace(/\W/g,'-');const old=document.getElementById(id);if(old)return resolve();const s=document.createElement('script');s.id=id;s.src=src+'?v=20260824-0810';s.onload=resolve;s.onerror=()=>reject(new Error('Unable to load module'));document.body.appendChild(s);});}
+function loadCss(href){return new Promise(resolve=>{let el=[...document.styleSheets].find(x=>x.href&&x.href.includes(href));if(el)return resolve();const l=document.createElement('link');l.rel='stylesheet';l.href=href+'?v=20260824-0820';l.onload=resolve;l.onerror=resolve;document.head.appendChild(l);});}
+function loadJs(src){return new Promise((resolve,reject)=>{const id='shell-'+src.replace(/\W/g,'-');const old=document.getElementById(id);if(old)return resolve();const s=document.createElement('script');s.id=id;s.src=src+'?v=20260824-0820';s.onload=resolve;s.onerror=()=>reject(new Error('Unable to load module'));document.body.appendChild(s);});}
 window.TotalToolsShellOpen=openFeature;
 boot();
 })();
