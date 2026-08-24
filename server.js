@@ -21,7 +21,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0519';
+const CLIENT_ASSET_VERSION = '20260824-0738';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -39,63 +39,48 @@ function extractLegacyApp(source) {
   return { script, start: scriptStart, end: scriptEnd + '</script>'.length };
 }
 function getLegacyAppScript() {
-  if (legacyAppScriptCache && process.env.NODE_ENV === 'production') return legacyAppScriptCache;
+  if (legacyAppScriptCache) return legacyAppScriptCache;
   const source = fs.readFileSync(indexPath, 'utf8');
-  const extracted = extractLegacyApp(source);
-  if (process.env.NODE_ENV === 'production') legacyAppScriptCache = extracted.script;
-  return extracted.script;
+  legacyAppScriptCache = extractLegacyApp(source).script;
+  return legacyAppScriptCache;
 }
 function getEnhancedIndex() {
-  if (enhancedIndexCache && process.env.NODE_ENV === 'production') return enhancedIndexCache;
+  if (enhancedIndexCache) return enhancedIndexCache;
   const source = fs.readFileSync(indexPath, 'utf8');
   const legacy = extractLegacyApp(source);
-  if (process.env.NODE_ENV === 'production') legacyAppScriptCache = legacy.script;
+  legacyAppScriptCache = legacy.script;
+
+  // Keep initial startup deliberately small. Heavy feature workspaces are loaded
+  // only when the employee opens them through pos-upgrade-navigation.js.
   const headAssets = [
-    '<script src="' + versioned('/client-diagnostics.js') + '"></script>',
+    '<script src="' + versioned('/client-diagnostics.js') + '" defer></script>',
     '<link rel="stylesheet" href="' + versioned('/total-tools-pos.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/pos-experience.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/technician-compensation.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/stock-rebalancing.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/operational-reports.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/repair-operations.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/repair-communications.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/repair-authorizations.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/repair-parts-integrity.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/inventory-intelligence.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/logistics-intelligence.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/scheduling-intelligence.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/accounting-intelligence.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/employee-workspace-home.css') + '">',
   ];
   const bodyAssets = [
     '<script src="' + versioned('/pos-guide-map.js') + '" defer></script>',
     '<script src="' + versioned('/guided-mode.js') + '" defer></script>',
-    '<script src="' + versioned('/technician-compensation.js') + '" defer></script>',
-    '<script src="' + versioned('/stock-rebalancing.js') + '" defer></script>',
-    '<script src="' + versioned('/operational-reports.js') + '" defer></script>',
-    '<script src="' + versioned('/repair-operations.js') + '" defer></script>',
-    '<script src="' + versioned('/repair-communications.js') + '" defer></script>',
-    '<script src="' + versioned('/repair-authorizations.js') + '" defer></script>',
-    '<script src="' + versioned('/repair-parts-integrity.js') + '" defer></script>',
-    '<script src="' + versioned('/inventory-intelligence.js') + '" defer></script>',
-    '<script src="' + versioned('/logistics-intelligence.js') + '" defer></script>',
-    '<script src="' + versioned('/scheduling-intelligence.js') + '" defer></script>',
-    '<script src="' + versioned('/accounting-intelligence.js') + '" defer></script>',
     '<script src="' + versioned('/pos-upgrade-navigation.js') + '" defer></script>',
     '<script src="' + versioned('/navigation-shell.js') + '" defer></script>',
     '<script src="' + versioned('/role-workspace.js') + '" defer></script>',
     '<script src="' + versioned('/employee-workspace-home.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
   ];
-  let html = source.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '"></script>' + source.slice(legacy.end);
+  let html = source.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '" defer></script>' + source.slice(legacy.end);
   for (const tag of headAssets) html = html.replace('</head>', `  ${tag}\n</head>`);
   for (const tag of bodyAssets) html = html.replace('</body>', `  ${tag}\n</body>`);
-  if (process.env.NODE_ENV === 'production') enhancedIndexCache = html;
+  enhancedIndexCache = html;
   return html;
 }
 function sendEnhancedIndex(req, res) {
-  try { res.set('Cache-Control', 'no-store, max-age=0'); res.type('html').send(getEnhancedIndex()); }
-  catch (error) { console.error('Unable to render enhanced POS shell:', error && (error.stack || error.message || error)); res.status(500).type('text').send('POS shell validation failed.'); }
+  try {
+    res.set('Cache-Control', 'private, no-cache, max-age=0, must-revalidate');
+    res.type('html').send(getEnhancedIndex());
+  } catch (error) {
+    console.error('Unable to render enhanced POS shell:', error && (error.stack || error.message || error));
+    res.status(500).type('text').send('POS shell validation failed.');
+  }
 }
 
 app.set('trust proxy', true);
@@ -103,10 +88,18 @@ app.use(cors());
 app.use(compression());
 app.use(bodyParser.json({ limit: '10mb' }));
 app.post('/client-diagnostics', (req, res) => { const body=req.body||{}; console.error('POS client diagnostic:', { kind:String(body.kind||'').slice(0,80), detail:String(body.detail||'').slice(0,4000), href:String(body.href||'').slice(0,500), ua:String(body.ua||'').slice(0,500), ts:String(body.ts||'').slice(0,80) }); res.status(204).end(); });
-app.get('/legacy-pos-app.js', (req,res)=>{ try{res.set('Cache-Control','no-store, max-age=0');res.type('application/javascript').send(getLegacyAppScript());}catch(error){console.error('Unable to serve validated legacy POS application script:',error&&(error.stack||error.message||error));res.status(500).type('application/javascript').send('throw new Error("POS application script validation failed");');}});
+app.get('/legacy-pos-app.js', (req,res)=>{ try{res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400');res.type('application/javascript').send(getLegacyAppScript());}catch(error){console.error('Unable to serve validated legacy POS application script:',error&&(error.stack||error.message||error));res.status(500).type('application/javascript').send('throw new Error("POS application script validation failed");');}});
 app.get('/', sendEnhancedIndex);
-app.use(express.static(publicDir, { index:false, etag:true, maxAge:0, setHeaders:res=>{res.set('Cache-Control','no-cache, must-revalidate');} }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
+app.use(express.static(publicDir, {
+  index:false,
+  etag:true,
+  maxAge:'1h',
+  setHeaders:(res,filePath)=>{
+    if (/\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico)$/i.test(filePath)) res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400');
+    else res.set('Cache-Control','no-cache, must-revalidate');
+  }
+}));
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { maxAge:'1h' }));
 app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.error('POS database initialization failed:',e&&(e.stack||e.message||e));res.status(500).json({error:'Database initialization failed'});}});
 
 app.use('/api', apiKeyAuth);
