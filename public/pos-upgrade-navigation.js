@@ -27,6 +27,7 @@ function sync(){
   if(!loggedIn()){ removeIntegrated(); return; }
   if(!nav()) return;
   addAfter(['work orders','repairs','service'],'nav-repair-equipment','Equipment & Repair History',()=>window.TotalToolsRepairOperations?.open());
+  addAfter(['work orders','repairs','service'],'nav-repair-communications','Customer Communication Timeline',()=>window.TotalToolsRepairCommunications?.open());
   addAfter(['work orders','repairs','service'],'nav-repair-authorizations','Diagnostics & Authorizations',()=>window.TotalToolsRepairAuthorizations?.open());
   addAfter(['work orders','repairs','service'],'nav-repair-parts-integrity','Parts Control & Availability',()=>window.TotalToolsRepairPartsIntegrity?.open());
   addAfter(['work orders','repairs','service'],'nav-scheduling-intelligence','Scheduling & Capacity Intelligence',()=>window.TotalToolsSchedulingIntelligence?.open());
