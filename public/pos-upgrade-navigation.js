@@ -28,6 +28,7 @@ function sync(){
   addAfter(['inventory','stock'],'nav-inventory-intelligence','Inventory Intelligence',()=>window.TotalToolsInventoryIntelligence?.open());
   addAfter(['transfers','branch transfers'],'nav-logistics-intelligence','Dispatch & Logistics Intelligence',()=>window.TotalToolsLogisticsIntelligence?.open());
   addAfter(['transfers','branch transfers'],'nav-smart-transfers','Smart Transfer Recommendations',()=>window.TotalToolsSmartTransfers?.open());
+  addAfter(['reports','reporting'],'nav-financial-controls-intelligence','Cash & Commitments',()=>window.TotalToolsFinancialControlsIntelligence?.open());
   addAfter(['reports','reporting'],'nav-accounting-intelligence','Accounting Intelligence',()=>window.TotalToolsAccountingIntelligence?.open());
   addAfter(['reports','reporting'],'nav-operational-reports','Operational Reports',()=>window.TotalToolsOperationalReports?.open());
   addAfter(['dashboard'],'nav-guided-mode','Guided Mode',openGuided);
