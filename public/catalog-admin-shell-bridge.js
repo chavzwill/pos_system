@@ -1,0 +1,11 @@
+(()=>{'use strict';
+let profile=null,loading=false;
+function can(key){const p=profile?.permissions||{};if(p[key])return true;const prefix=key.replace(/-/g,'_')+'_';return Object.entries(p).some(([k,v])=>v&&(k===key||k.startsWith(prefix)));}
+async function ensure(){if(profile||loading)return;loading=true;try{const r=await fetch('/api/workspace-profile/me',{credentials:'same-origin'});if(r.ok)profile=await r.json();}catch(_){}finally{loading=false;apply();}}
+function relevant(){const t=document.getElementById('shell-title');return t&&/inventory/i.test(t.textContent||'');}
+function apply(){const grid=document.getElementById('shell-grid');if(!grid||!relevant()){ensure();return;}if(!profile){ensure();return;}if(!can('inventory'))return;if(grid.querySelector('[data-catalog-admin-bridge]'))return;const card=document.createElement('article');card.className='shell-card';card.dataset.catalogAdminBridge='1';card.innerHTML='<div><strong>Products & Categories</strong><p>Maintain sellable inventory master data, pricing, categories and online availability natively.</p></div><button data-catalog-admin-open>Open</button>';grid.appendChild(card);card.querySelector('[data-catalog-admin-open]').addEventListener('click',open);}
+function css(){return new Promise(resolve=>{if([...document.styleSheets].some(x=>x.href&&x.href.includes('/catalog-admin-workspace.css')))return resolve();const l=document.createElement('link');l.rel='stylesheet';l.href='/catalog-admin-workspace.css?v=20260824-1043';l.onload=resolve;l.onerror=resolve;document.head.appendChild(l);});}
+function js(){return new Promise((resolve,reject)=>{if(window.TotalToolsCatalogAdmin)return resolve();const old=document.getElementById('catalog-admin-workspace-js');if(old){old.addEventListener('load',resolve,{once:true});return;}const s=document.createElement('script');s.id='catalog-admin-workspace-js';s.src='/catalog-admin-workspace.js?v=20260824-1043';s.onload=resolve;s.onerror=()=>reject(new Error('Unable to load catalog administration'));document.body.appendChild(s);});}
+async function open(){try{await Promise.all([css(),js()]);window.TotalToolsCatalogAdmin?.open();}catch(e){alert(e.message);}}
+new MutationObserver(apply).observe(document.documentElement,{subtree:true,childList:true,characterData:true});window.addEventListener('load',()=>{ensure();apply();});
+})();
