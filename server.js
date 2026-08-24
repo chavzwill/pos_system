@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0403';
+const CLIENT_ASSET_VERSION = '20260824-0418';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -57,6 +57,7 @@ function getEnhancedIndex() {
     '<link rel="stylesheet" href="' + versioned('/stock-rebalancing.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/operational-reports.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/repair-operations.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/repair-communications.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/repair-authorizations.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/repair-parts-integrity.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/inventory-intelligence.css') + '">',
@@ -72,6 +73,7 @@ function getEnhancedIndex() {
     '<script src="' + versioned('/stock-rebalancing.js') + '" defer></script>',
     '<script src="' + versioned('/operational-reports.js') + '" defer></script>',
     '<script src="' + versioned('/repair-operations.js') + '" defer></script>',
+    '<script src="' + versioned('/repair-communications.js') + '" defer></script>',
     '<script src="' + versioned('/repair-authorizations.js') + '" defer></script>',
     '<script src="' + versioned('/repair-parts-integrity.js') + '" defer></script>',
     '<script src="' + versioned('/inventory-intelligence.js') + '" defer></script>',
@@ -155,6 +157,7 @@ app.use('/api/rentals', require('./routes/rentals'));
 app.use('/api/layaway', require('./routes/layaway'));
 app.use('/api/work-orders', require('./routes/work-orders'));
 app.use('/api/repair-operations', require('./routes/repair-operations'));
+app.use('/api/repair-communications', require('./routes/repair-communications'));
 app.use('/api/repair-authorizations', require('./routes/repair-authorizations'));
 app.use('/api/repair-parts-integrity', require('./routes/repair-parts-integrity'));
 app.use('/api/technician-compensation', require('./routes/technician-compensation'));
