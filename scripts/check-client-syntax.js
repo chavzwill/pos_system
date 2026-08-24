@@ -30,6 +30,7 @@ const browserScripts = [
   'repair-authorizations.js',
   'inventory-intelligence.js',
   'logistics-intelligence.js',
+  'scheduling-intelligence.js',
   'pos-upgrade-navigation.js',
   'navigation-shell.js',
   'login-controller.js',
