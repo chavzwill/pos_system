@@ -13,6 +13,14 @@ table{border-color:var(--tt-line)!important}th{color:var(--tt-muted)!important;f
 input,select,textarea{border-color:var(--tt-line-strong)!important;border-radius:10px!important;background:#fff!important;color:var(--tt-ink)!important}input:focus,select:focus,textarea:focus{border-color:var(--tt-green-600)!important;box-shadow:0 0 0 3px rgba(24,131,110,.12)!important}
 .btn-primary,.primary-btn,button.primary,[class*="btn-primary"]{background:var(--tt-green-800)!important;border-color:var(--tt-green-800)!important;color:#fff!important}.btn-primary:hover,.primary-btn:hover,button.primary:hover,[class*="btn-primary"]:hover{background:var(--tt-green-700)!important;border-color:var(--tt-green-700)!important}
 .badge,.status-badge,[class*="status-"]{border-radius:999px!important;font-weight:700!important}
+
+/* Explicit Upgrade Center: these tools must be discoverable in the real POS navigation on desktop and mobile. */
+.tt-upgrade-center{margin:10px 8px 14px;padding:8px;border:1px solid rgba(255,255,255,.14);border-radius:12px;background:rgba(0,0,0,.10)}
+.tt-upgrade-center__heading{padding:7px 8px 8px;color:#fff}.tt-upgrade-center__heading span{display:block;font-size:9px;font-weight:900;letter-spacing:.14em;color:rgba(255,255,255,.72)}.tt-upgrade-center__heading small{display:block;margin-top:2px;font-size:10px;color:rgba(255,255,255,.48)}
+.tt-upgrade-center .tt-upgrade-nav-item{margin:2px 0;padding:9px 8px!important;border-left:0!important;border-radius:8px!important;gap:8px!important;background:transparent!important;color:rgba(255,255,255,.84)!important}
+.tt-upgrade-center .tt-upgrade-nav-item:hover,.tt-upgrade-center .tt-upgrade-nav-item:focus-visible{background:rgba(255,255,255,.10)!important;color:#fff!important}
+.tt-upgrade-nav-icon{width:18px;flex:0 0 18px;text-align:center;color:var(--brand-yellow,#ffd800);font-weight:900}.tt-upgrade-nav-copy{display:flex;min-width:0;flex-direction:column;gap:1px}.tt-upgrade-nav-copy strong{font-size:11.5px;line-height:1.2}.tt-upgrade-nav-copy small{font-size:9px;line-height:1.25;color:rgba(255,255,255,.48);font-weight:500}
+
 .tt-guide-launcher{position:fixed;z-index:2147483000;top:14px;right:18px;display:flex;align-items:center;gap:8px;min-height:40px;padding:0 14px;border:1px solid rgba(255,255,255,.32);border-radius:999px;background:var(--tt-green-900);color:#fff;box-shadow:0 8px 24px rgba(7,59,52,.24);font-weight:800;font-size:13px;cursor:pointer}.tt-guide-launcher:hover{background:var(--tt-green-800);transform:translateY(-1px)}.tt-guide-launcher svg{width:17px;height:17px}
 .tt-guide-backdrop{position:fixed;inset:0;z-index:2147483001;background:rgba(10,22,19,.24);backdrop-filter:blur(2px)}
 .tt-guide{position:fixed;z-index:2147483003;top:66px;right:18px;width:min(420px,calc(100vw - 28px));max-height:calc(100vh - 88px);overflow:auto;background:#fff;border:1px solid var(--tt-line);border-radius:20px;box-shadow:0 24px 70px rgba(11,31,26,.25);color:var(--tt-ink)}
@@ -37,6 +45,9 @@ input,select,textarea{border-color:var(--tt-line-strong)!important;border-radius
   #content{flex:1!important;min-height:0!important;overflow-y:auto!important;overflow-x:hidden!important;-webkit-overflow-scrolling:touch!important;padding:14px!important;scroll-padding-top:14px!important}
   #sidebar{width:min(84vw,320px)!important;max-width:320px!important;height:100dvh!important;z-index:520!important}
   .sidebar-backdrop{z-index:510!important}
+  .tt-upgrade-center{margin:8px 8px 16px!important;padding:7px!important}
+  .tt-upgrade-center .tt-upgrade-nav-item{min-height:48px!important;padding:9px 8px!important}
+  .tt-upgrade-nav-copy strong{font-size:12px}.tt-upgrade-nav-copy small{font-size:9.5px}
   .section-header{gap:10px!important;align-items:flex-start!important;flex-wrap:wrap!important;margin-bottom:12px!important}
   .section-header h2{font-size:20px!important;line-height:1.15!important}
   .stats-grid{grid-template-columns:repeat(2,minmax(0,1fr))!important;gap:10px!important;margin-bottom:12px!important}
