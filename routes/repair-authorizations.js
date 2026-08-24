@@ -6,6 +6,19 @@ const { requirePermission } = require('../lib/permissions');
 let schemaReady = false;
 async function ensureSchema() {
   if (schemaReady) return;
+  await db.execute({ sql: `CREATE TABLE IF NOT EXISTS repair_timeline_events (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    work_order_id INTEGER NOT NULL,
+    event_type TEXT NOT NULL,
+    visibility TEXT NOT NULL DEFAULT 'internal',
+    title TEXT NOT NULL,
+    details TEXT,
+    actor_employee_id INTEGER,
+    source_entity_type TEXT,
+    source_entity_id TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`, args: [] });
+  await db.execute({ sql: 'CREATE INDEX IF NOT EXISTS idx_repair_timeline_work_order ON repair_timeline_events(work_order_id, created_at)', args: [] });
   await db.execute({ sql: `CREATE TABLE IF NOT EXISTS repair_diagnostics (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     work_order_id INTEGER NOT NULL,
