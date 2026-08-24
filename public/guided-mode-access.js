@@ -1,0 +1,18 @@
+(()=>{'use strict';
+let lastTask='',lastStep=0,lastSeenAt=0;
+const sleep=ms=>new Promise(r=>setTimeout(r,ms));
+function launcher(){return document.getElementById('tt-guide-launcher');}
+function guide(){return document.getElementById('tt-guided-mode');}
+function currentTask(){return guide()?.querySelector('.tt-guide__head p')?.textContent?.trim()||'';}
+function currentStep(){const t=guide()?.querySelector('.tt-guide__step-count')?.textContent||'';const m=t.match(/step\s+(\d+)/i);return m?Number(m[1]):0;}
+function remember(){const task=currentTask(),step=currentStep();if(!task||!step)return;lastTask=task;lastStep=step;lastSeenAt=Date.now();try{sessionStorage.setItem('tt-guide-resume',JSON.stringify({task,step,at:lastSeenAt}));}catch(_){}}
+function stored(){try{const v=JSON.parse(sessionStorage.getItem('tt-guide-resume')||'null');return v&&v.task? v:null;}catch(_){return null;}}
+function openGuide(){const btn=launcher();if(btn){btn.click();return true;}return false;}
+function ensureTopbarAccess(){const top=document.querySelector('.shell-topbar');if(!top||document.getElementById('tt-guide-access'))return;const b=document.createElement('button');b.id='tt-guide-access';b.type='button';b.className='tt-guide-access';b.setAttribute('aria-haspopup','dialog');b.innerHTML='<span aria-hidden="true">?</span><span>Help</span>';b.title='Open Guided Mode anytime';b.addEventListener('click',openGuide);top.appendChild(b);}
+function ensureMobileAccess(){if(document.getElementById('tt-guide-quick'))return;const b=document.createElement('button');b.id='tt-guide-quick';b.type='button';b.className='tt-guide-quick';b.setAttribute('aria-label','Open Guided Mode');b.setAttribute('aria-haspopup','dialog');b.textContent='?';b.addEventListener('click',openGuide);document.body.appendChild(b);}
+function enhanceHome(){const g=guide();if(!g)return;const p=g.querySelector('.tt-guide__head p');if(p&&!currentStep())p.textContent='Help is available anytime. Tell me what you need to do and I’ll take you to the right place.';const body=g.querySelector('.tt-guide__body');if(body&&!currentStep()&&!body.querySelector('.tt-guide__availability')){const n=document.createElement('div');n.className='tt-guide__availability';n.innerHTML='<strong>Always available</strong><span>Use Guided Mode whenever you are unsure, learning a task, returning to an infrequent workflow, or checking the safest next step.</span>';body.prepend(n);}const resume=stored();if(body&&!currentStep()&&resume&&!body.querySelector('[data-guide-resume]')){const b=document.createElement('button');b.type='button';b.className='tt-guide__resume';b.dataset.guideResume='1';b.textContent=`Resume: ${resume.task}`;b.addEventListener('click',async()=>{const chips=[...g.querySelectorAll('[data-task]')];const chip=chips.find(x=>x.textContent.trim()===resume.task);if(chip){chip.click();await sleep(80);for(let i=1;i<resume.step;i++){const next=guide()?.querySelector('[data-guide-next]');if(!next||next.disabled)break;next.click();await sleep(55);}}});body.prepend(b);}}
+function enhance(){ensureTopbarAccess();ensureMobileAccess();if(guide()){remember();enhanceHome();}}
+const observer=new MutationObserver(()=>requestAnimationFrame(enhance));observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','hidden']});
+document.addEventListener('keydown',e=>{if((e.key==='?'&&e.shiftKey)||((e.ctrlKey||e.metaKey)&&e.key.toLowerCase()==='h')){if(!/input|textarea|select/i.test(document.activeElement?.tagName||'')){e.preventDefault();openGuide();}}});
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',enhance,{once:true});else enhance();
+})();
