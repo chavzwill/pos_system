@@ -1,0 +1,7 @@
+(()=>{'use strict';
+const VERSION='20260824-0918';
+function css(href){return new Promise(resolve=>{if([...document.styleSheets].some(x=>x.href&&x.href.includes(href)))return resolve();const l=document.createElement('link');l.rel='stylesheet';l.href=`${href}?v=${VERSION}`;l.onload=resolve;l.onerror=resolve;document.head.appendChild(l);});}
+function js(src){return new Promise((resolve,reject)=>{const id='shell-report-'+src.replace(/\W/g,'-');if(document.getElementById(id))return resolve();const s=document.createElement('script');s.id=id;s.src=`${src}?v=${VERSION}`;s.onload=resolve;s.onerror=()=>reject(new Error('Unable to load reporting workspace'));document.body.appendChild(s);});}
+async function openReports(){try{await css('/operational-reports.css');await js('/operational-reports.js');if(!window.TotalToolsOperationalReports?.open)throw new Error('Reporting workspace did not initialize');window.TotalToolsOperationalReports.open();}catch(e){alert(`Reports could not open: ${e.message}`);}}
+document.addEventListener('click',e=>{const b=e.target.closest?.('[data-open="legacy"][data-title="Reports"]');if(!b)return;e.preventDefault();e.stopImmediatePropagation();void openReports();},true);
+})();
