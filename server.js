@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0219';
+const CLIENT_ASSET_VERSION = '20260824-0222';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -68,6 +68,7 @@ function getEnhancedIndex() {
     '<link rel="stylesheet" href="' + versioned('/stock-rebalancing.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/operational-reports.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/repair-operations.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/repair-authorizations.css') + '">',
   ];
   const bodyAssets = [
     '<script src="' + versioned('/pos-guide-map.js') + '" defer></script>',
@@ -76,6 +77,7 @@ function getEnhancedIndex() {
     '<script src="' + versioned('/stock-rebalancing.js') + '" defer></script>',
     '<script src="' + versioned('/operational-reports.js') + '" defer></script>',
     '<script src="' + versioned('/repair-operations.js') + '" defer></script>',
+    '<script src="' + versioned('/repair-authorizations.js') + '" defer></script>',
     '<script src="' + versioned('/pos-upgrade-navigation.js') + '" defer></script>',
     '<script src="' + versioned('/navigation-shell.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
@@ -135,7 +137,7 @@ app.use(async (req, res, next) => {
     await ensureReady();
     next();
   } catch (e) {
-    console.error('POS database initialization failed:', e && (e.stack || e.message || e));
+    console.error('POS database initialization failed:', e && (e.stack || e.message || error));
     res.status(500).json({ error: 'Database initialization failed' });
   }
 });
