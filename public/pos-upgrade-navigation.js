@@ -25,6 +25,13 @@ async function openFinancialControls(){
     window.TotalToolsFinancialControlsIntelligence?.open();
   }catch(e){ console.error('Financial controls workspace failed to load',e); }
 }
+async function openSupplierLedger(){
+  try{
+    loadCss('/supplier-ledger.css?v=20260824-0316','tt-supplier-ledger-css');
+    if(!window.TotalToolsSupplierLedger) await loadScript('/supplier-ledger.js?v=20260824-0316','tt-supplier-ledger-js');
+    window.TotalToolsSupplierLedger?.open();
+  }catch(e){ console.error('Supplier ledger workspace failed to load',e); }
+}
 
 function sync(){
   if(!loggedIn()){ removeIntegrated(); return; }
@@ -37,6 +44,7 @@ function sync(){
   addAfter(['inventory','stock'],'nav-inventory-intelligence','Inventory Intelligence',()=>window.TotalToolsInventoryIntelligence?.open());
   addAfter(['transfers','branch transfers'],'nav-logistics-intelligence','Dispatch & Logistics Intelligence',()=>window.TotalToolsLogisticsIntelligence?.open());
   addAfter(['transfers','branch transfers'],'nav-smart-transfers','Smart Transfer Recommendations',()=>window.TotalToolsSmartTransfers?.open());
+  addAfter(['reports','reporting'],'nav-supplier-ledger','Supplier Ledger & Payables',openSupplierLedger);
   addAfter(['reports','reporting'],'nav-financial-controls-intelligence','Cash & Commitments',openFinancialControls);
   addAfter(['reports','reporting'],'nav-accounting-intelligence','Accounting Intelligence',()=>window.TotalToolsAccountingIntelligence?.open());
   addAfter(['reports','reporting'],'nav-operational-reports','Operational Reports',()=>window.TotalToolsOperationalReports?.open());
