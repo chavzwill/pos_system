@@ -5,6 +5,7 @@ const bodyParser = require('body-parser');
 const compression = require('compression');
 const path = require('path');
 const fs = require('fs');
+const vm = require('vm');
 
 const { ensureReady, db } = require('./database');
 const { router: woocommerceRouter, runSyncAll: wooSyncAll } = require('./routes/woocommerce');
@@ -21,9 +22,41 @@ const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
 
 let enhancedIndexCache = null;
+let legacyAppScriptCache = null;
+
+function extractLegacyApp(source) {
+  const marker = 'const App = {';
+  const markerIndex = source.indexOf(marker);
+  if (markerIndex < 0) throw new Error('Legacy POS App marker not found in public/index.html');
+
+  const scriptStart = source.lastIndexOf('<script', markerIndex);
+  const scriptOpenEnd = scriptStart >= 0 ? source.indexOf('>', scriptStart) : -1;
+  const scriptEnd = source.indexOf('</script>', markerIndex);
+  if (scriptStart < 0 || scriptOpenEnd < 0 || scriptEnd < 0) {
+    throw new Error('Legacy POS App script boundaries could not be resolved');
+  }
+
+  const script = source.slice(scriptOpenEnd + 1, scriptEnd);
+  // Compile the exact script we are about to serve. This prevents Vercel from
+  // reporting a healthy deployment while the browser receives invalid JS.
+  new vm.Script(script, { filename: 'legacy-pos-app.js' });
+  return { script, start: scriptStart, end: scriptEnd + '</script>'.length };
+}
+
+function getLegacyAppScript() {
+  if (legacyAppScriptCache && process.env.NODE_ENV === 'production') return legacyAppScriptCache;
+  const source = fs.readFileSync(indexPath, 'utf8');
+  const extracted = extractLegacyApp(source);
+  if (process.env.NODE_ENV === 'production') legacyAppScriptCache = extracted.script;
+  return extracted.script;
+}
+
 function getEnhancedIndex() {
   if (enhancedIndexCache && process.env.NODE_ENV === 'production') return enhancedIndexCache;
   const source = fs.readFileSync(indexPath, 'utf8');
+  const legacy = extractLegacyApp(source);
+  if (process.env.NODE_ENV === 'production') legacyAppScriptCache = legacy.script;
+
   const headAssets = [
     '<script src="/client-diagnostics.js"></script>',
     '<link rel="stylesheet" href="/total-tools-pos.css">',
@@ -40,17 +73,14 @@ function getEnhancedIndex() {
     '<script src="/pos-upgrade-navigation.js" defer></script>',
     '<script src="/login-controller.js" defer></script>',
   ];
-  let html = source;
 
-  // The legacy monolithic page contains print-document templates that embed
-  // script tags inside the page's own inline script. Mobile WebKit/Chrome can
-  // terminate the parent script while tokenizing those sequences, leaving the
-  // global App object undefined. Printing is triggered by the opener after the
-  // document is written, so the embedded auto-print tags are not required for
-  // application initialization. Strip both escaped forms from the served shell.
-  html = html
-    .replaceAll('<script>window.onload=()=>{window.print()}<\\/script>', '')
-    .replaceAll('<script>window.onload=()=>{window.print()}<\\\\/script>', '');
+  // The legacy POS is more than 1 MB and contains many HTML document strings
+  // inside its JavaScript. Keeping that program inline lets mobile WebKit's
+  // HTML tokenizer mistake script-looking text inside those strings for real
+  // markup and terminate the parent script early. Serve the exact same program
+  // as an external JavaScript resource instead; external JS is parsed only as
+  // JavaScript, eliminating the HTML-tokenizer failure class completely.
+  let html = source.slice(0, legacy.start) + '<script src="/legacy-pos-app.js"></script>' + source.slice(legacy.end);
 
   for (const tag of headAssets) {
     const asset = tag.match(/(?:href|src)="([^"]+)/)?.[1];
@@ -63,9 +93,15 @@ function getEnhancedIndex() {
   if (process.env.NODE_ENV === 'production') enhancedIndexCache = html;
   return html;
 }
+
 function sendEnhancedIndex(req, res) {
-  try { res.type('html').send(getEnhancedIndex()); }
-  catch (error) { console.error('Unable to render enhanced POS shell:', error); res.sendFile(indexPath); }
+  try {
+    res.set('Cache-Control', 'no-store, max-age=0');
+    res.type('html').send(getEnhancedIndex());
+  } catch (error) {
+    console.error('Unable to render enhanced POS shell:', error && (error.stack || error.message || error));
+    res.status(500).type('text').send('POS shell validation failed.');
+  }
 }
 
 app.set('trust proxy', true);
@@ -85,6 +121,16 @@ app.post('/client-diagnostics', (req, res) => {
     ts: String(body.ts || '').slice(0, 80),
   });
   res.status(204).end();
+});
+
+app.get('/legacy-pos-app.js', (req, res) => {
+  try {
+    res.set('Cache-Control', 'no-store, max-age=0');
+    res.type('application/javascript').send(getLegacyAppScript());
+  } catch (error) {
+    console.error('Unable to serve validated legacy POS application script:', error && (error.stack || error.message || error));
+    res.status(500).type('application/javascript').send('throw new Error("POS application script validation failed");');
+  }
 });
 
 app.get('/', sendEnhancedIndex);
