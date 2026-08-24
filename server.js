@@ -21,7 +21,8 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0738';
+const fastShellPath = path.join(publicDir, 'app-shell.html');
+const CLIENT_ASSET_VERSION = '20260824-0800';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -49,9 +50,6 @@ function getEnhancedIndex() {
   const source = fs.readFileSync(indexPath, 'utf8');
   const legacy = extractLegacyApp(source);
   legacyAppScriptCache = legacy.script;
-
-  // Keep initial startup deliberately small. Heavy feature workspaces are loaded
-  // only when the employee opens them through pos-upgrade-navigation.js.
   const headAssets = [
     '<script src="' + versioned('/client-diagnostics.js') + '" defer></script>',
     '<link rel="stylesheet" href="' + versioned('/total-tools-pos.css') + '">',
@@ -82,6 +80,10 @@ function sendEnhancedIndex(req, res) {
     res.status(500).type('text').send('POS shell validation failed.');
   }
 }
+function sendFastShell(req,res) {
+  res.set('Cache-Control','private, no-cache, max-age=0, must-revalidate');
+  res.sendFile(fastShellPath);
+}
 
 app.set('trust proxy', true);
 app.use(cors());
@@ -89,7 +91,8 @@ app.use(compression());
 app.use(bodyParser.json({ limit: '10mb' }));
 app.post('/client-diagnostics', (req, res) => { const body=req.body||{}; console.error('POS client diagnostic:', { kind:String(body.kind||'').slice(0,80), detail:String(body.detail||'').slice(0,4000), href:String(body.href||'').slice(0,500), ua:String(body.ua||'').slice(0,500), ts:String(body.ts||'').slice(0,80) }); res.status(204).end(); });
 app.get('/legacy-pos-app.js', (req,res)=>{ try{res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400');res.type('application/javascript').send(getLegacyAppScript());}catch(error){console.error('Unable to serve validated legacy POS application script:',error&&(error.stack||error.message||error));res.status(500).type('application/javascript').send('throw new Error("POS application script validation failed");');}});
-app.get('/', sendEnhancedIndex);
+app.get('/', sendFastShell);
+app.get('/legacy', sendEnhancedIndex);
 app.use(express.static(publicDir, {
   index:false,
   etag:true,
@@ -159,7 +162,7 @@ app.use('/api/repair-authorizations', require('./routes/repair-authorizations'))
 app.use('/api/repair-parts-integrity', require('./routes/repair-parts-integrity'));
 app.use('/api/technician-compensation', require('./routes/technician-compensation'));
 app.use('/api', (err,req,res,next)=>{if(res.headersSent)return next(err);res.status(err.status||500).json({error:err.message||'Request failed'});});
-app.get('*', sendEnhancedIndex);
+app.get('*', (req,res)=> req.path.startsWith('/legacy') ? sendEnhancedIndex(req,res) : sendFastShell(req,res));
 
 if (!process.env.VERCEL) {
   app.listen(PORT, () => { console.log(`\n  POS System running at http://localhost:${PORT}\n`); });
