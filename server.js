@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0116';
+const CLIENT_ASSET_VERSION = '20260824-0128';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -63,6 +63,7 @@ function getEnhancedIndex() {
   const headAssets = [
     '<script src="' + versioned('/client-diagnostics.js') + '"></script>',
     '<link rel="stylesheet" href="' + versioned('/total-tools-pos.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/pos-experience.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/technician-compensation.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/stock-rebalancing.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/operational-reports.css') + '">',
@@ -74,6 +75,7 @@ function getEnhancedIndex() {
     '<script src="' + versioned('/stock-rebalancing.js') + '" defer></script>',
     '<script src="' + versioned('/operational-reports.js') + '" defer></script>',
     '<script src="' + versioned('/pos-upgrade-navigation.js') + '" defer></script>',
+    '<script src="' + versioned('/navigation-shell.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
   ];
 
