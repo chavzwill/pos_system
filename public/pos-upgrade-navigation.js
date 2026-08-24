@@ -57,6 +57,7 @@ function sync(){
   // New capabilities are incorporated into the business area they improve.
   addAfter(['work orders','repairs','service'],'nav-repair-equipment','Equipment & Repair History',()=>window.TotalToolsRepairOperations?.open());
   addAfter(['work orders','repairs','service'],'nav-repair-authorizations','Diagnostics & Authorizations',()=>window.TotalToolsRepairAuthorizations?.open());
+  addAfter(['work orders','repairs','service'],'nav-repair-parts-integrity','Parts Control & Availability',()=>window.TotalToolsRepairPartsIntegrity?.open());
   addAfter(['work orders','repairs','service'],'nav-scheduling-intelligence','Scheduling & Capacity Intelligence',()=>window.TotalToolsSchedulingIntelligence?.open());
   addAfter(['work orders','repairs','service'],'nav-technician-compensation','Technician Compensation',()=>window.TotalToolsTechnicianCompensation?.open());
   addAfter(['inventory','stock'],'nav-inventory-intelligence','Inventory Intelligence',()=>window.TotalToolsInventoryIntelligence?.open());
