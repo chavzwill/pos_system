@@ -1,0 +1,19 @@
+/* Cross-workspace enterprise quality pass: consistent ergonomics, touch targets, focus, loading and mobile behavior. */
+:root{--tt-workspace-focus:rgba(243,197,29,.58);--tt-workspace-shadow:0 20px 60px rgba(15,29,22,.20)}
+[id^="tt-"][role="dialog"]{isolation:isolate}
+[id^="tt-"][role="dialog"] button:focus-visible,[id^="tt-"][role="dialog"] input:focus-visible,[id^="tt-"][role="dialog"] select:focus-visible,[id^="tt-"][role="dialog"] textarea:focus-visible{outline:3px solid var(--tt-workspace-focus)!important;outline-offset:2px!important}
+.tt-sales__panel,.tt-admin__panel,.tt-wo,.tt-rentals,.tt-inventory,.tt-purchasing,.tt-logistics,.tt-accounting,.tt-ar,.tt-suppliers,.tt-settings,.tt-reports{overscroll-behavior:contain}
+.tt-sales__close,.tt-admin__head>button,.tt-wo__back,[data-close]{touch-action:manipulation}
+.tt-sales__state,.tt-sales__empty,.tt-admin__state,.tt-admin__empty,.tt-wo__loading,.tt-wo__empty{font-weight:600;letter-spacing:-.005em}
+@media(hover:hover){[id^="tt-"][role="dialog"] button:not(:disabled):hover{filter:saturate(1.03)}}
+@media(max-width:900px){
+  [id^="tt-"][role="dialog"]{max-width:100vw;overflow-x:hidden}
+  .tt-sales__close,.tt-admin__head>button,.tt-wo__back,[data-close]{min-width:38px;min-height:38px}
+  .tt-sales__tabs button,.tt-sales__toolbar button,.tt-admin__tabs button{min-height:36px}
+  .tt-sales__products,.tt-wo__list,.tt-admin__body{-webkit-overflow-scrolling:touch}
+}
+@media(max-width:520px){
+  .tt-sales__close,.tt-admin__head>button,.tt-wo__back,[data-close]{min-width:42px;min-height:42px}
+  .tt-sales__actions button{min-height:42px}
+}
+@media(prefers-reduced-motion:reduce){[id^="tt-"][role="dialog"], [id^="tt-"][role="dialog"] *{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
