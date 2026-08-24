@@ -115,6 +115,7 @@ app.use('/api/commerce-sync', require('./routes/commerce-sync'));
 app.use('/api/smartcommerce-orders', require('./routes/smartcommerce-orders'));
 app.use('/api/customer-repair-portal', require('./routes/customer-repair-portal'));
 app.use('/api/customers', require('./routes/customers'));
+app.use('/api/held-sales', require('./routes/held-sales'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/employees', require('./routes/employees'));
 app.use('/api/reports', require('./routes/reports'));
