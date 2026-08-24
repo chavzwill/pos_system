@@ -144,7 +144,9 @@ Initial inspection → diagnostic estimate → customer approval → repair → 
 
 Every authorization must be attributable and auditable.
 
-## Phase 10 — Payments and accounting controls
+## Phase 10 — Finance, accounting controls and accounting intelligence
+
+Transactional accounting controls:
 
 - deposits
 - diagnostic fees
@@ -159,6 +161,37 @@ Every authorization must be attributable and auditable.
 - repair-specific revenue recognition
 - controlled void/refund/adjustment permissions
 - idempotent payment actions
+- accounts receivable and customer balances
+- supplier liabilities / accounts payable visibility
+- branch cash positions and drawer-to-bank reconciliation
+- cost of goods sold, parts cost, labor cost and repair margin tracking
+- inventory valuation and stock-adjustment financial impact
+- technician payroll/compensation accrual visibility
+- purchase-order commitments and outstanding receiving liabilities
+
+Accounting intelligence must sit on top of verified accounting events and should surface decision-ready insight without inventing financial data. It should include:
+
+- real-time revenue, gross profit and contribution margin by branch, category, product, repair type, technician and customer segment
+- repair profitability: quoted vs actual labor, parts cost, discounts, rework cost, warranty recovery and final margin
+- sales vs service revenue mix and trend analysis
+- cash-flow intelligence: expected inflows, overdue receivables, upcoming supplier obligations, payroll exposure and branch cash pressure
+- accounts receivable aging and collection-risk signals
+- accounts payable aging and supplier-payment prioritization
+- warranty receivables and claim-recovery tracking
+- inventory carrying cost, dead stock, shrinkage, write-offs and margin leakage
+- price/discount intelligence: margin erosion, unusual overrides, discount concentration and below-threshold sales
+- refund, void and credit anomaly detection
+- branch profitability and branch-to-branch financial comparison
+- technician economics: labor revenue generated, compensation cost, effective labor margin and rework impact
+- customer profitability and lifetime value using verified transaction/service history
+- supplier economics: landed cost trends, purchase-price variance, payment terms and supplier performance impact
+- budget vs actuals where budgets are configured
+- forecast views for revenue, cash flow, repair backlog value and purchasing demand
+- tax liability summaries based on configured tax rules and posted transactions
+- daily/weekly/monthly management close dashboards with unresolved reconciliation exceptions
+- drill-down from financial summaries to the exact source transactions, repairs, payments, inventory movements and audit events
+
+Accounting intelligence must be permission-controlled, fully auditable, branch-aware, explainable, and traceable to source records. No AI-generated number may be treated as a ledger fact. Predictive or AI-assisted insights must be clearly separated from posted accounting data.
 
 ## Phase 11 — Granular RBAC
 
@@ -175,6 +208,9 @@ Move beyond broad role groups. Permission examples:
 - finalize compensation
 - approve purchase orders
 - approve transfers
+- view accounting intelligence
+- view branch profitability
+- post/reverse financial adjustments
 - change sensitive settings
 
 Permissions should be enforced server-side as well as hidden/disabled in the UI.
@@ -255,6 +291,8 @@ In addition to browser/E2E tests:
 - repair lifecycle tests
 - parts reservation/inventory integrity tests
 - payment/idempotency tests
+- accounting posting/reconciliation tests
+- accounting intelligence source-trace tests
 - permission tests
 - multi-branch tests
 - technician compensation tests
@@ -271,6 +309,8 @@ In addition to browser/E2E tests:
 - database health
 - performance tracing
 - inventory-integrity alerts
+- financial reconciliation alerts
+- accounting exception monitoring
 - operational metrics
 - deployment/runtime diagnostics
 
@@ -287,6 +327,7 @@ Branch-aware behavior must be consistent for:
 - drawers
 - settlement
 - reporting
+- accounting intelligence
 - purchasing
 - customer pickup/fulfillment
 
@@ -314,8 +355,10 @@ Potential AI assistance:
 - recommend technician scheduling
 - answer customer questions
 - summarize customer/equipment history
+- explain financial variances and accounting exceptions using verified source data
+- forecast cash pressure, margin risks and purchasing demand with clear confidence/assumption labels
 
-AI must sit on top of deterministic, auditable operational workflows. It must not silently mutate inventory, money, approvals, or repair state without controlled actions.
+AI must sit on top of deterministic, auditable operational workflows. It must not silently mutate inventory, money, approvals, accounting records, or repair state without controlled actions.
 
 ## Current implementation status snapshot
 
@@ -345,6 +388,7 @@ Not considered complete yet:
 - unified communications layer
 - complete estimates/change-order authorization lifecycle
 - full financial/accounting controls
+- accounting intelligence and management finance layer
 - granular RBAC across every sensitive mutation
 - immutable audit architecture
 - backend decomposition/migrations/domain services
