@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0106';
+const CLIENT_ASSET_VERSION = '20260824-0116';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
