@@ -54,13 +54,13 @@ function sync(){
   if(!loggedIn()){ removeIntegrated(); return; }
   const root=nav(); if(!root) return;
 
-  // Upgrades are part of their native business areas, not a separate bucket.
+  // New capabilities are incorporated into the business area they improve.
+  addAfter(['work orders','repairs','service'],'nav-repair-equipment','Equipment & Repair History',()=>window.TotalToolsRepairOperations?.open());
   addAfter(['work orders','repairs','service'],'nav-technician-compensation','Technician Compensation',()=>window.TotalToolsTechnicianCompensation?.open());
   addAfter(['transfers','branch transfers'],'nav-smart-transfers','Smart Transfer Recommendations',()=>window.TotalToolsSmartTransfers?.open());
   addAfter(['reports','reporting'],'nav-operational-reports','Operational Reports',()=>window.TotalToolsOperationalReports?.open());
 
-  // Guided Mode is a normal navigation destination. Its floating launcher is
-  // deliberately hidden by CSS so it never sits on top of operational UI.
+  // Guided Mode is a normal navigation destination and never floats over content.
   addAfter(['dashboard'],'nav-guided-mode','Guided Mode',openGuided);
 }
 
