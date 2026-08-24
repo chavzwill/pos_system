@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0128';
+const CLIENT_ASSET_VERSION = '20260824-0216';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -67,6 +67,7 @@ function getEnhancedIndex() {
     '<link rel="stylesheet" href="' + versioned('/technician-compensation.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/stock-rebalancing.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/operational-reports.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/repair-operations.css') + '">',
   ];
   const bodyAssets = [
     '<script src="' + versioned('/pos-guide-map.js') + '" defer></script>',
@@ -74,6 +75,7 @@ function getEnhancedIndex() {
     '<script src="' + versioned('/technician-compensation.js') + '" defer></script>',
     '<script src="' + versioned('/stock-rebalancing.js') + '" defer></script>',
     '<script src="' + versioned('/operational-reports.js') + '" defer></script>',
+    '<script src="' + versioned('/repair-operations.js') + '" defer></script>',
     '<script src="' + versioned('/pos-upgrade-navigation.js') + '" defer></script>',
     '<script src="' + versioned('/navigation-shell.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
@@ -175,6 +177,7 @@ app.use('/api/api-keys',         require('./routes/api-keys'));
 app.use('/api/rentals',          require('./routes/rentals'));
 app.use('/api/layaway',          require('./routes/layaway'));
 app.use('/api/work-orders',      require('./routes/work-orders'));
+app.use('/api/repair-operations', require('./routes/repair-operations'));
 app.use('/api/technician-compensation', require('./routes/technician-compensation'));
 
 app.use('/api', (err, req, res, next) => {
