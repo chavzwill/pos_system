@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0102';
+const CLIENT_ASSET_VERSION = '20260824-0106';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -123,14 +123,7 @@ app.get('/legacy-pos-app.js', (req, res) => {
 });
 
 app.get('/', sendEnhancedIndex);
-app.use(express.static(publicDir, {
-  index: false,
-  setHeaders(res, filePath) {
-    if (/\.(?:js|css)$/.test(filePath)) {
-      res.setHeader('Cache-Control', 'no-cache, max-age=0, must-revalidate');
-    }
-  },
-}));
+app.use(express.static(publicDir, { index: false, etag: true, maxAge: 0, setHeaders: res => { res.set('Cache-Control', 'no-cache, must-revalidate'); } }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use(async (req, res, next) => {
