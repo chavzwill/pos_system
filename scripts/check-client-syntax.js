@@ -29,6 +29,7 @@ const browserScripts = [
   'repair-operations.js',
   'repair-authorizations.js',
   'inventory-intelligence.js',
+  'logistics-intelligence.js',
   'pos-upgrade-navigation.js',
   'navigation-shell.js',
   'login-controller.js',
