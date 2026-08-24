@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0436';
+const CLIENT_ASSET_VERSION = '20260824-0455';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -159,6 +159,7 @@ app.use('/api/layaway', require('./routes/layaway'));
 app.use('/api/work-orders', require('./routes/work-orders'));
 app.use('/api/repair-operations', require('./routes/repair-operations'));
 app.use('/api/repair-communications', require('./routes/repair-communications'));
+app.use('/api/repair-notifications', require('./routes/repair-notifications'));
 app.use('/api/repair-authorizations', require('./routes/repair-authorizations'));
 app.use('/api/repair-parts-integrity', require('./routes/repair-parts-integrity'));
 app.use('/api/technician-compensation', require('./routes/technician-compensation'));
