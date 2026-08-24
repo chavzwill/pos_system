@@ -3,7 +3,7 @@ const router=express.Router();
 const {requireAuth}=require('../lib/permissions');
 router.use(requireAuth);
 const DOMAIN_RULES={
-  sales:['pos','transactions','drawers','quotations'],
+  sales:['pos','transactions','drawers','quotations','layaway'],
   service:['work_orders','services'],
   rentals:['rentals'],
   dispatch:['transfers'],
