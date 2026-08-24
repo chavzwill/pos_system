@@ -14,7 +14,7 @@ function compile(source, filename) {
 }
 
 const browserScripts = [
-  'client-diagnostics.js','pos-guide-map.js','guided-mode.js','technician-compensation.js','stock-rebalancing.js','operational-reports.js','repair-operations.js','repair-authorizations.js','repair-parts-integrity.js','inventory-intelligence.js','logistics-intelligence.js','scheduling-intelligence.js','accounting-intelligence.js','financial-controls-intelligence.js','supplier-ledger.js','pos-upgrade-navigation.js','navigation-shell.js','login-controller.js',
+  'client-diagnostics.js','pos-guide-map.js','guided-mode.js','technician-compensation.js','stock-rebalancing.js','operational-reports.js','repair-operations.js','repair-authorizations.js','repair-parts-integrity.js','inventory-intelligence.js','logistics-intelligence.js','scheduling-intelligence.js','accounting-intelligence.js','financial-controls-intelligence.js','supplier-ledger.js','settlement-reconciliation.js','pos-upgrade-navigation.js','navigation-shell.js','login-controller.js',
 ];
 for (const filename of browserScripts) compile(fs.readFileSync(path.join(publicDir, filename), 'utf8'), filename);
 
