@@ -28,6 +28,7 @@ const browserScripts = [
   'operational-reports.js',
   'repair-operations.js',
   'repair-authorizations.js',
+  'repair-parts-integrity.js',
   'inventory-intelligence.js',
   'logistics-intelligence.js',
   'scheduling-intelligence.js',
