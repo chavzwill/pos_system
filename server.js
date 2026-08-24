@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0222';
+const CLIENT_ASSET_VERSION = '20260824-0227';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -69,6 +69,7 @@ function getEnhancedIndex() {
     '<link rel="stylesheet" href="' + versioned('/operational-reports.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/repair-operations.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/repair-authorizations.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/inventory-intelligence.css') + '">',
   ];
   const bodyAssets = [
     '<script src="' + versioned('/pos-guide-map.js') + '" defer></script>',
@@ -78,6 +79,7 @@ function getEnhancedIndex() {
     '<script src="' + versioned('/operational-reports.js') + '" defer></script>',
     '<script src="' + versioned('/repair-operations.js') + '" defer></script>',
     '<script src="' + versioned('/repair-authorizations.js') + '" defer></script>',
+    '<script src="' + versioned('/inventory-intelligence.js') + '" defer></script>',
     '<script src="' + versioned('/pos-upgrade-navigation.js') + '" defer></script>',
     '<script src="' + versioned('/navigation-shell.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
@@ -165,6 +167,7 @@ app.use('/api/quotations',       require('./routes/quotations'));
 app.use('/api/accounts',         require('./routes/accounts'));
 app.use('/api/transfers',        require('./routes/transfers'));
 app.use('/api/stock-rebalancing',require('./routes/stock-rebalancing'));
+app.use('/api/inventory-intelligence', require('./routes/inventory-intelligence'));
 app.use('/api/crm',              require('./routes/crm'));
 app.use('/api/commissions',      require('./routes/commissions'));
 app.use('/api/email',            require('./routes/email'));
