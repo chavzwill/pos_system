@@ -20,9 +20,14 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
+const CLIENT_ASSET_VERSION = '20260824-0102';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
+
+function versioned(asset) {
+  return `${asset}?v=${CLIENT_ASSET_VERSION}`;
+}
 
 function extractLegacyApp(source) {
   const marker = 'const App = {';
@@ -37,8 +42,6 @@ function extractLegacyApp(source) {
   }
 
   const script = source.slice(scriptOpenEnd + 1, scriptEnd);
-  // Compile the exact script we are about to serve. This prevents Vercel from
-  // reporting a healthy deployment while the browser receives invalid JS.
   new vm.Script(script, { filename: 'legacy-pos-app.js' });
   return { script, start: scriptStart, end: scriptEnd + '</script>'.length };
 }
@@ -58,38 +61,26 @@ function getEnhancedIndex() {
   if (process.env.NODE_ENV === 'production') legacyAppScriptCache = legacy.script;
 
   const headAssets = [
-    '<script src="/client-diagnostics.js"></script>',
-    '<link rel="stylesheet" href="/total-tools-pos.css">',
-    '<link rel="stylesheet" href="/technician-compensation.css">',
-    '<link rel="stylesheet" href="/stock-rebalancing.css">',
-    '<link rel="stylesheet" href="/operational-reports.css">',
+    '<script src="' + versioned('/client-diagnostics.js') + '"></script>',
+    '<link rel="stylesheet" href="' + versioned('/total-tools-pos.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/technician-compensation.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/stock-rebalancing.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/operational-reports.css') + '">',
   ];
   const bodyAssets = [
-    '<script src="/pos-guide-map.js" defer></script>',
-    '<script src="/guided-mode.js" defer></script>',
-    '<script src="/technician-compensation.js" defer></script>',
-    '<script src="/stock-rebalancing.js" defer></script>',
-    '<script src="/operational-reports.js" defer></script>',
-    '<script src="/pos-upgrade-navigation.js" defer></script>',
-    '<script src="/login-controller.js" defer></script>',
+    '<script src="' + versioned('/pos-guide-map.js') + '" defer></script>',
+    '<script src="' + versioned('/guided-mode.js') + '" defer></script>',
+    '<script src="' + versioned('/technician-compensation.js') + '" defer></script>',
+    '<script src="' + versioned('/stock-rebalancing.js') + '" defer></script>',
+    '<script src="' + versioned('/operational-reports.js') + '" defer></script>',
+    '<script src="' + versioned('/pos-upgrade-navigation.js') + '" defer></script>',
+    '<script src="' + versioned('/login-controller.js') + '" defer></script>',
   ];
 
-  // The legacy POS is more than 1 MB and contains many HTML document strings
-  // inside its JavaScript. Keeping that program inline lets mobile WebKit's
-  // HTML tokenizer mistake script-looking text inside those strings for real
-  // markup and terminate the parent script early. Serve the exact same program
-  // as an external JavaScript resource instead; external JS is parsed only as
-  // JavaScript, eliminating the HTML-tokenizer failure class completely.
-  let html = source.slice(0, legacy.start) + '<script src="/legacy-pos-app.js"></script>' + source.slice(legacy.end);
+  let html = source.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '"></script>' + source.slice(legacy.end);
 
-  for (const tag of headAssets) {
-    const asset = tag.match(/(?:href|src)="([^"]+)/)?.[1];
-    if (!asset || !html.includes(asset)) html = html.replace('</head>', `  ${tag}\n</head>`);
-  }
-  for (const tag of bodyAssets) {
-    const src = tag.match(/src="([^"]+)/)?.[1];
-    if (!src || !html.includes(src)) html = html.replace('</body>', `  ${tag}\n</body>`);
-  }
+  for (const tag of headAssets) html = html.replace('</head>', `  ${tag}\n</head>`);
+  for (const tag of bodyAssets) html = html.replace('</body>', `  ${tag}\n</body>`);
   if (process.env.NODE_ENV === 'production') enhancedIndexCache = html;
   return html;
 }
@@ -109,8 +100,6 @@ app.use(cors());
 app.use(compression());
 app.use(bodyParser.json({ limit: '10mb' }));
 
-// Preview-safe browser diagnostic sink. It records only the browser error text,
-// source location and user agent; no credentials, form values or tokens.
 app.post('/client-diagnostics', (req, res) => {
   const body = req.body || {};
   console.error('POS client diagnostic:', {
@@ -134,7 +123,14 @@ app.get('/legacy-pos-app.js', (req, res) => {
 });
 
 app.get('/', sendEnhancedIndex);
-app.use(express.static(publicDir, { index: false }));
+app.use(express.static(publicDir, {
+  index: false,
+  setHeaders(res, filePath) {
+    if (/\.(?:js|css)$/.test(filePath)) {
+      res.setHeader('Cache-Control', 'no-cache, max-age=0, must-revalidate');
+    }
+  },
+}));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
 
 app.use(async (req, res, next) => {
