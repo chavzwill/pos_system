@@ -3,8 +3,15 @@
 
 const SUBNAV_CLASS='tt-upgrade-subnav';
 
+function getApp(){
+  try {
+    if(typeof App!=='undefined' && App) return App;
+  } catch (_) {}
+  return window.App || null;
+}
+
 function loggedIn(){
-  try { return !!window.App?.currentUser; } catch { return false; }
+  return !!getApp()?.currentUser;
 }
 
 function makeItem({id,label,parentGuideId,onClick}){
@@ -30,6 +37,13 @@ function removeItems(){
 
 function sync(){
   if(!loggedIn()) { removeItems(); return; }
+
+  makeItem({
+    id:'nav-technician-compensation',
+    label:'Technician Compensation',
+    parentGuideId:'nav-work-orders',
+    onClick:()=>window.TotalToolsTechnicianCompensation?.open()
+  });
 
   makeItem({
     id:'nav-operational-reports',
