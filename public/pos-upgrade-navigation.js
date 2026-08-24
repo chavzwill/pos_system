@@ -59,6 +59,7 @@ function sync(){
   addAfter(['work orders','repairs','service'],'nav-repair-authorizations','Diagnostics & Authorizations',()=>window.TotalToolsRepairAuthorizations?.open());
   addAfter(['work orders','repairs','service'],'nav-technician-compensation','Technician Compensation',()=>window.TotalToolsTechnicianCompensation?.open());
   addAfter(['inventory','stock'],'nav-inventory-intelligence','Inventory Intelligence',()=>window.TotalToolsInventoryIntelligence?.open());
+  addAfter(['transfers','branch transfers'],'nav-logistics-intelligence','Dispatch & Logistics Intelligence',()=>window.TotalToolsLogisticsIntelligence?.open());
   addAfter(['transfers','branch transfers'],'nav-smart-transfers','Smart Transfer Recommendations',()=>window.TotalToolsSmartTransfers?.open());
   addAfter(['reports','reporting'],'nav-operational-reports','Operational Reports',()=>window.TotalToolsOperationalReports?.open());
 
