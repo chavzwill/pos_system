@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0337';
+const CLIENT_ASSET_VERSION = '20260824-0403';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -109,6 +109,7 @@ app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.
 app.use('/api', apiKeyAuth);
 app.use('/api', sessionAuth);
 app.use('/api/workspace-profile', require('./routes/workspace-profile'));
+app.use('/api/employee-workspace-intelligence', require('./routes/employee-workspace-intelligence'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/commerce-sync', require('./routes/commerce-sync'));
