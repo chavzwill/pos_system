@@ -20,13 +20,11 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0256';
+const CLIENT_ASSET_VERSION = '20260824-0304';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
-
 function versioned(asset) { return `${asset}?v=${CLIENT_ASSET_VERSION}`; }
-
 function extractLegacyApp(source) {
   const marker = 'const App = {';
   const markerIndex = source.indexOf(marker);
@@ -39,7 +37,6 @@ function extractLegacyApp(source) {
   new vm.Script(script, { filename: 'legacy-pos-app.js' });
   return { script, start: scriptStart, end: scriptEnd + '</script>'.length };
 }
-
 function getLegacyAppScript() {
   if (legacyAppScriptCache && process.env.NODE_ENV === 'production') return legacyAppScriptCache;
   const source = fs.readFileSync(indexPath, 'utf8');
@@ -47,13 +44,11 @@ function getLegacyAppScript() {
   if (process.env.NODE_ENV === 'production') legacyAppScriptCache = extracted.script;
   return extracted.script;
 }
-
 function getEnhancedIndex() {
   if (enhancedIndexCache && process.env.NODE_ENV === 'production') return enhancedIndexCache;
   const source = fs.readFileSync(indexPath, 'utf8');
   const legacy = extractLegacyApp(source);
   if (process.env.NODE_ENV === 'production') legacyAppScriptCache = legacy.script;
-
   const headAssets = [
     '<script src="' + versioned('/client-diagnostics.js') + '"></script>',
     '<link rel="stylesheet" href="' + versioned('/total-tools-pos.css') + '">',
@@ -67,6 +62,7 @@ function getEnhancedIndex() {
     '<link rel="stylesheet" href="' + versioned('/inventory-intelligence.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/logistics-intelligence.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/scheduling-intelligence.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/accounting-intelligence.css') + '">',
   ];
   const bodyAssets = [
     '<script src="' + versioned('/pos-guide-map.js') + '" defer></script>',
@@ -80,18 +76,17 @@ function getEnhancedIndex() {
     '<script src="' + versioned('/inventory-intelligence.js') + '" defer></script>',
     '<script src="' + versioned('/logistics-intelligence.js') + '" defer></script>',
     '<script src="' + versioned('/scheduling-intelligence.js') + '" defer></script>',
+    '<script src="' + versioned('/accounting-intelligence.js') + '" defer></script>',
     '<script src="' + versioned('/pos-upgrade-navigation.js') + '" defer></script>',
     '<script src="' + versioned('/navigation-shell.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
   ];
-
   let html = source.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '"></script>' + source.slice(legacy.end);
   for (const tag of headAssets) html = html.replace('</head>', `  ${tag}\n</head>`);
   for (const tag of bodyAssets) html = html.replace('</body>', `  ${tag}\n</body>`);
   if (process.env.NODE_ENV === 'production') enhancedIndexCache = html;
   return html;
 }
-
 function sendEnhancedIndex(req, res) {
   try { res.set('Cache-Control', 'no-store, max-age=0'); res.type('html').send(getEnhancedIndex()); }
   catch (error) { console.error('Unable to render enhanced POS shell:', error && (error.stack || error.message || error)); res.status(500).type('text').send('POS shell validation failed.'); }
@@ -101,26 +96,12 @@ app.set('trust proxy', true);
 app.use(cors());
 app.use(compression());
 app.use(bodyParser.json({ limit: '10mb' }));
-
-app.post('/client-diagnostics', (req, res) => {
-  const body = req.body || {};
-  console.error('POS client diagnostic:', { kind: String(body.kind || '').slice(0, 80), detail: String(body.detail || '').slice(0, 4000), href: String(body.href || '').slice(0, 500), ua: String(body.ua || '').slice(0, 500), ts: String(body.ts || '').slice(0, 80) });
-  res.status(204).end();
-});
-
-app.get('/legacy-pos-app.js', (req, res) => {
-  try { res.set('Cache-Control', 'no-store, max-age=0'); res.type('application/javascript').send(getLegacyAppScript()); }
-  catch (error) { console.error('Unable to serve validated legacy POS application script:', error && (error.stack || error.message || error)); res.status(500).type('application/javascript').send('throw new Error("POS application script validation failed");'); }
-});
-
+app.post('/client-diagnostics', (req, res) => { const body=req.body||{}; console.error('POS client diagnostic:', { kind:String(body.kind||'').slice(0,80), detail:String(body.detail||'').slice(0,4000), href:String(body.href||'').slice(0,500), ua:String(body.ua||'').slice(0,500), ts:String(body.ts||'').slice(0,80) }); res.status(204).end(); });
+app.get('/legacy-pos-app.js', (req,res)=>{ try{res.set('Cache-Control','no-store, max-age=0');res.type('application/javascript').send(getLegacyAppScript());}catch(error){console.error('Unable to serve validated legacy POS application script:',error&&(error.stack||error.message||error));res.status(500).type('application/javascript').send('throw new Error("POS application script validation failed");');}});
 app.get('/', sendEnhancedIndex);
-app.use(express.static(publicDir, { index: false, etag: true, maxAge: 0, setHeaders: res => { res.set('Cache-Control', 'no-cache, must-revalidate'); } }));
+app.use(express.static(publicDir, { index:false, etag:true, maxAge:0, setHeaders:res=>{res.set('Cache-Control','no-cache, must-revalidate');} }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads')));
-
-app.use(async (req, res, next) => {
-  try { await ensureReady(); next(); }
-  catch (e) { console.error('POS database initialization failed:', e && (e.stack || e.message || e)); res.status(500).json({ error: 'Database initialization failed' }); }
-});
+app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.error('POS database initialization failed:',e&&(e.stack||e.message||e));res.status(500).json({error:'Database initialization failed'});}});
 
 app.use('/api', apiKeyAuth);
 app.use('/api', sessionAuth);
@@ -132,6 +113,7 @@ app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/employees', require('./routes/employees'));
 app.use('/api/reports', require('./routes/reports'));
 app.use('/api/operational-reports', require('./routes/operational-reports'));
+app.use('/api/accounting-intelligence', require('./routes/accounting-intelligence'));
 app.use('/api/erp-intelligence', require('./routes/erp-intelligence'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/branches', require('./routes/branches'));
@@ -165,34 +147,12 @@ app.use('/api/repair-operations', require('./routes/repair-operations'));
 app.use('/api/repair-authorizations', require('./routes/repair-authorizations'));
 app.use('/api/repair-parts-integrity', require('./routes/repair-parts-integrity'));
 app.use('/api/technician-compensation', require('./routes/technician-compensation'));
-
-app.use('/api', (err, req, res, next) => { if (res.headersSent) return next(err); res.status(err.status || 500).json({ error: err.message || 'Request failed' }); });
+app.use('/api', (err,req,res,next)=>{if(res.headersSent)return next(err);res.status(err.status||500).json({error:err.message||'Request failed'});});
 app.get('*', sendEnhancedIndex);
 
 if (!process.env.VERCEL) {
   app.listen(PORT, () => { console.log(`\n  POS System running at http://localhost:${PORT}\n`); });
-  setInterval(async () => {
-    try {
-      await ensureReady();
-      const { rows: [iRow] } = await db.execute({ sql: "SELECT value FROM settings WHERE key='woo_sync_interval'", args: [] });
-      const mins = parseInt(iRow?.value || '0'); if (!mins) return;
-      const { rows: [lRow] } = await db.execute({ sql: "SELECT value FROM settings WHERE key='woo_last_auto_sync'", args: [] });
-      const last = lRow?.value ? new Date(lRow.value) : new Date(0);
-      if ((Date.now() - last.getTime()) / 60000 >= mins) wooSyncAll().catch(() => {});
-    } catch (e) {}
-  }, 60000);
-  setInterval(async () => {
-    try {
-      await ensureReady();
-      const { rows: overdue } = await db.execute({ sql: "SELECT * FROM rental_agreements WHERE status='active' AND due_date < date('now') AND overdue_notified_at IS NULL", args: [] });
-      for (const agreement of overdue) {
-        try {
-          await db.execute({ sql: 'UPDATE rental_agreements SET overdue_notified_at = CURRENT_TIMESTAMP WHERE id = ?', args: [agreement.id] });
-          await logActivity({ customerId: agreement.customer_id, employeeId: agreement.employee_id, type: 'rental', subject: `Rental ${agreement.agreement_number} is overdue (due ${agreement.due_date})`, dueDate: agreement.due_date, completed: false });
-        } catch(e) {}
-      }
-    } catch (e) {}
-  }, 30 * 60000);
+  setInterval(async()=>{try{await ensureReady();const{rows:[iRow]}=await db.execute({sql:"SELECT value FROM settings WHERE key='woo_sync_interval'",args:[]});const mins=parseInt(iRow?.value||'0');if(!mins)return;const{rows:[lRow]}=await db.execute({sql:"SELECT value FROM settings WHERE key='woo_last_auto_sync'",args:[]});const last=lRow?.value?new Date(lRow.value):new Date(0);if((Date.now()-last.getTime())/60000>=mins)wooSyncAll().catch(()=>{});}catch(e){}},60000);
+  setInterval(async()=>{try{await ensureReady();const{rows:overdue}=await db.execute({sql:"SELECT * FROM rental_agreements WHERE status='active' AND due_date < date('now') AND overdue_notified_at IS NULL",args:[]});for(const agreement of overdue){try{await db.execute({sql:'UPDATE rental_agreements SET overdue_notified_at = CURRENT_TIMESTAMP WHERE id = ?',args:[agreement.id]});await logActivity({customerId:agreement.customer_id,employeeId:agreement.employee_id,type:'rental',subject:`Rental ${agreement.agreement_number} is overdue (due ${agreement.due_date})`,dueDate:agreement.due_date,completed:false});}catch(e){}}}catch(e){}},30*60000);
 }
-
 module.exports = app;
