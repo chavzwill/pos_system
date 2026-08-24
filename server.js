@@ -113,6 +113,7 @@ app.use('/api/employee-workspace-intelligence', require('./routes/employee-works
 app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/commerce-sync', require('./routes/commerce-sync'));
+app.use('/api/smartcommerce-orders', require('./routes/smartcommerce-orders'));
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/employees', require('./routes/employees'));
