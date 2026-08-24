@@ -137,7 +137,7 @@ app.use(async (req, res, next) => {
     await ensureReady();
     next();
   } catch (e) {
-    console.error('POS database initialization failed:', e && (e.stack || e.message || error));
+    console.error('POS database initialization failed:', e && (e.stack || e.message || e));
     res.status(500).json({ error: 'Database initialization failed' });
   }
 });
