@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0323';
+const CLIENT_ASSET_VERSION = '20260824-0329';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -79,6 +79,7 @@ function getEnhancedIndex() {
     '<script src="' + versioned('/accounting-intelligence.js') + '" defer></script>',
     '<script src="' + versioned('/pos-upgrade-navigation.js') + '" defer></script>',
     '<script src="' + versioned('/navigation-shell.js') + '" defer></script>',
+    '<script src="' + versioned('/role-workspace.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
   ];
   let html = source.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '"></script>' + source.slice(legacy.end);
@@ -105,6 +106,7 @@ app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.
 
 app.use('/api', apiKeyAuth);
 app.use('/api', sessionAuth);
+app.use('/api/workspace-profile', require('./routes/workspace-profile'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/commerce-sync', require('./routes/commerce-sync'));
@@ -118,6 +120,7 @@ app.use('/api/financial-controls-intelligence', require('./routes/financial-cont
 app.use('/api/supplier-ledger', require('./routes/supplier-ledger'));
 app.use('/api/settlement-reconciliation', require('./routes/settlement-reconciliation'));
 app.use('/api/accounting-ledger', require('./routes/accounting-ledger'));
+app.use('/api/accounting-source-sync', require('./routes/accounting-source-sync'));
 app.use('/api/erp-intelligence', require('./routes/erp-intelligence'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/branches', require('./routes/branches'));
