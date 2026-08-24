@@ -32,6 +32,13 @@ async function openSupplierLedger(){
     window.TotalToolsSupplierLedger?.open();
   }catch(e){ console.error('Supplier ledger workspace failed to load',e); }
 }
+async function openSettlementReconciliation(){
+  try{
+    loadCss('/settlement-reconciliation.css?v=20260824-0317','tt-settlement-css');
+    if(!window.TotalToolsSettlementReconciliation) await loadScript('/settlement-reconciliation.js?v=20260824-0317','tt-settlement-js');
+    window.TotalToolsSettlementReconciliation?.open();
+  }catch(e){ console.error('Settlement reconciliation workspace failed to load',e); }
+}
 
 function sync(){
   if(!loggedIn()){ removeIntegrated(); return; }
@@ -44,6 +51,7 @@ function sync(){
   addAfter(['inventory','stock'],'nav-inventory-intelligence','Inventory Intelligence',()=>window.TotalToolsInventoryIntelligence?.open());
   addAfter(['transfers','branch transfers'],'nav-logistics-intelligence','Dispatch & Logistics Intelligence',()=>window.TotalToolsLogisticsIntelligence?.open());
   addAfter(['transfers','branch transfers'],'nav-smart-transfers','Smart Transfer Recommendations',()=>window.TotalToolsSmartTransfers?.open());
+  addAfter(['reports','reporting'],'nav-settlement-reconciliation','Settlement Reconciliation',openSettlementReconciliation);
   addAfter(['reports','reporting'],'nav-supplier-ledger','Supplier Ledger & Payables',openSupplierLedger);
   addAfter(['reports','reporting'],'nav-financial-controls-intelligence','Cash & Commitments',openFinancialControls);
   addAfter(['reports','reporting'],'nav-accounting-intelligence','Accounting Intelligence',()=>window.TotalToolsAccountingIntelligence?.open());
