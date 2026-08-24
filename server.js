@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0329';
+const CLIENT_ASSET_VERSION = '20260824-0337';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -63,6 +63,7 @@ function getEnhancedIndex() {
     '<link rel="stylesheet" href="' + versioned('/logistics-intelligence.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/scheduling-intelligence.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/accounting-intelligence.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/employee-workspace-home.css') + '">',
   ];
   const bodyAssets = [
     '<script src="' + versioned('/pos-guide-map.js') + '" defer></script>',
@@ -80,6 +81,7 @@ function getEnhancedIndex() {
     '<script src="' + versioned('/pos-upgrade-navigation.js') + '" defer></script>',
     '<script src="' + versioned('/navigation-shell.js') + '" defer></script>',
     '<script src="' + versioned('/role-workspace.js') + '" defer></script>',
+    '<script src="' + versioned('/employee-workspace-home.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
   ];
   let html = source.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '"></script>' + source.slice(legacy.end);
