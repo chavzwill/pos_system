@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const VERSION='20260824-1535';
+const VERSION='20260824-1540';
 const loaded=new Set();
 const nativeFetch=window.fetch.bind(window);
 let profileResponsePromise=null;
