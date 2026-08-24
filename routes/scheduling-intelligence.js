@@ -75,6 +75,62 @@ function scoreMatch(task, tech, dailyCapacity) {
   return { score: Math.round(score * 100), skill_match: Math.round(skillScore * 100), projected_minutes: projected, reasons };
 }
 
+router.get('/my-day', requirePermission('work_orders'), async (req, res) => {
+  try {
+    const employeeId = req.employee?.id || req.user?.employee_id;
+    if (!employeeId) return res.status(401).json({ error: 'Authenticated employee required' });
+    const date = String(req.query.date || new Date().toISOString().slice(0,10));
+    const { rows: schedule } = await db.execute({
+      sql: `SELECT ts.id AS schedule_id, ts.scheduled_date, ts.notes AS schedule_notes,
+        t.id AS task_id, t.work_order_id, t.description, t.status AS task_status, COALESCE(t.allotted_minutes,0) AS allotted_minutes,
+        wo.wo_number, wo.status AS work_order_status, wo.branch_id, c.first_name || ' ' || c.last_name AS customer_name,
+        EXISTS(SELECT 1 FROM work_order_task_time_entries te WHERE te.task_id=t.id AND te.technician_id=? AND te.ended_at IS NULL) AS timer_running,
+        COALESCE((SELECT SUM((julianday(COALESCE(te.ended_at,CURRENT_TIMESTAMP))-julianday(te.started_at))*24*60)
+          FROM work_order_task_time_entries te WHERE te.task_id=t.id AND te.technician_id=?),0) AS actual_minutes
+        FROM technician_schedule ts
+        JOIN work_order_tasks t ON t.id=ts.work_order_task_id
+        JOIN work_orders wo ON wo.id=t.work_order_id
+        LEFT JOIN customers c ON c.id=wo.customer_id
+        WHERE ts.employee_id=? AND ts.scheduled_date=?
+        ORDER BY CASE WHEN t.status='complete' THEN 1 ELSE 0 END, ts.id`,
+      args: [employeeId, employeeId, employeeId, date],
+    });
+    const { rows: assigned } = await db.execute({
+      sql: `SELECT t.id AS task_id,t.work_order_id,t.description,t.status AS task_status,COALESCE(t.allotted_minutes,0) allotted_minutes,
+        wo.wo_number,wo.status work_order_status,wo.branch_id,c.first_name || ' ' || c.last_name customer_name
+        FROM work_order_tasks t JOIN work_orders wo ON wo.id=t.work_order_id LEFT JOIN customers c ON c.id=wo.customer_id
+        WHERE t.technician_id=? AND t.status!='complete' AND wo.status NOT IN ('picked_up','cancelled')
+        AND NOT EXISTS(SELECT 1 FROM technician_schedule ts WHERE ts.work_order_task_id=t.id AND ts.employee_id=? AND ts.scheduled_date=?)
+        ORDER BY wo.created_at,t.id LIMIT 50`,
+      args: [employeeId, employeeId, date],
+    });
+    const { rows: [totals] } = await db.execute({
+      sql: `SELECT
+        COUNT(*) AS time_entries,
+        COALESCE(SUM((julianday(COALESCE(ended_at,CURRENT_TIMESTAMP))-julianday(started_at))*24*60),0) AS worked_minutes,
+        COALESCE(SUM(CASE WHEN ended_at IS NULL THEN 1 ELSE 0 END),0) AS running_timers
+        FROM work_order_task_time_entries WHERE technician_id=? AND date(started_at)=date(?)`,
+      args: [employeeId, date],
+    });
+    const openSchedule = schedule.filter(x => x.task_status !== 'complete');
+    res.json({
+      date,
+      employee_id: employeeId,
+      summary: {
+        scheduled_tasks: schedule.length,
+        open_scheduled_tasks: openSchedule.length,
+        unscheduled_assigned_tasks: assigned.length,
+        scheduled_minutes: openSchedule.reduce((s,x)=>s+asNumber(x.allotted_minutes),0),
+        worked_minutes: Math.round(asNumber(totals?.worked_minutes)),
+        running_timers: asNumber(totals?.running_timers),
+      },
+      schedule,
+      assigned_not_scheduled: assigned,
+      basis: 'My Day is scoped to the signed-in employee. It shows scheduled tasks, assigned unscheduled tasks, and time captured from repair task time entries.'
+    });
+  } catch (e) { res.status(500).json({ error: e.message }); }
+});
+
 router.get('/board', requirePermission('work_orders'), async (req, res) => {
   try {
     const date = String(req.query.date || new Date().toISOString().slice(0,10));
@@ -140,7 +196,7 @@ router.post('/assign', requirePermission('work_orders'), async (req, res) => {
       const result = await tx.execute({ sql: 'INSERT INTO technician_schedule (employee_id,work_order_task_id,scheduled_date,notes) VALUES (?,?,?,?)', args: [employee_id,work_order_task_id,scheduled_date,notes||'Assigned from scheduling intelligence'] });
       await tx.execute({ sql: 'UPDATE work_order_tasks SET technician_id = ? WHERE id = ?', args: [employee_id, work_order_task_id] });
       await tx.execute({ sql: `INSERT INTO repair_timeline_events (work_order_id,event_type,visibility,title,details,actor_employee_id,source_entity_type,source_entity_id)
-        VALUES (?,?,?,?,?,?,?,?)`, args: [task.work_order_id,'technician_scheduled','internal','Technician scheduled',`Employee ${employee_id} scheduled for ${scheduled_date}`,req.user?.employee_id||null,'work_order_task',String(work_order_task_id)] });
+        VALUES (?,?,?,?,?,?,?,?)`, args: [task.work_order_id,'technician_scheduled','internal','Technician scheduled',`Employee ${employee_id} scheduled for ${scheduled_date}`,req.user?.employee_id||req.employee?.id||null,'work_order_task',String(work_order_task_id)] });
       await tx.commit();
       res.status(201).json({ id: Number(result.lastInsertRowid), employee_id, work_order_task_id, scheduled_date });
     } catch (e) { await tx.rollback(); throw e; }
