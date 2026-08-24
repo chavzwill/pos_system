@@ -22,12 +22,14 @@ async function openFinancialControls(){ try{ loadCss('/financial-controls-intell
 async function openSupplierLedger(){ try{ loadCss('/supplier-ledger.css?v=20260824-0316','tt-supplier-ledger-css'); if(!window.TotalToolsSupplierLedger) await loadScript('/supplier-ledger.js?v=20260824-0316','tt-supplier-ledger-js'); window.TotalToolsSupplierLedger?.open(); }catch(e){ console.error('Supplier ledger workspace failed to load',e); } }
 async function openSettlementReconciliation(){ try{ loadCss('/settlement-reconciliation.css?v=20260824-0317','tt-settlement-css'); if(!window.TotalToolsSettlementReconciliation) await loadScript('/settlement-reconciliation.js?v=20260824-0317','tt-settlement-js'); window.TotalToolsSettlementReconciliation?.open(); }catch(e){ console.error('Settlement reconciliation workspace failed to load',e); } }
 async function openAccountingLedger(){ try{ await fetch('/api/accounting-source-sync/sync',{method:'POST',credentials:'same-origin',headers:{'Content-Type':'application/json'}}).catch(()=>null); loadCss('/accounting-ledger.css?v=20260824-0329','tt-accounting-ledger-css'); if(!window.TotalToolsAccountingLedger) await loadScript('/accounting-ledger.js?v=20260824-0329','tt-accounting-ledger-js'); window.TotalToolsAccountingLedger?.open(); }catch(e){ console.error('Accounting ledger workspace failed to load',e); } }
+async function openRepairNotifications(){ try{ loadCss('/repair-notifications.css?v=20260824-0455','tt-repair-notifications-css'); if(!window.TotalToolsRepairNotifications) await loadScript('/repair-notifications.js?v=20260824-0455','tt-repair-notifications-js'); window.TotalToolsRepairNotifications?.open(); }catch(e){ console.error('Repair notification orchestration failed to load',e); } }
 
 function sync(){
   if(!loggedIn()){ removeIntegrated(); return; }
   if(!nav()) return;
   addAfter(['work orders','repairs','service'],'nav-repair-equipment','Equipment & Repair History',()=>window.TotalToolsRepairOperations?.open());
   addAfter(['work orders','repairs','service'],'nav-repair-communications','Customer Communication Timeline',()=>window.TotalToolsRepairCommunications?.open());
+  addAfter(['work orders','repairs','service'],'nav-repair-notifications','Customer Notification Orchestration',openRepairNotifications);
   addAfter(['work orders','repairs','service'],'nav-repair-authorizations','Diagnostics & Authorizations',()=>window.TotalToolsRepairAuthorizations?.open());
   addAfter(['work orders','repairs','service'],'nav-repair-parts-integrity','Parts Control & Availability',()=>window.TotalToolsRepairPartsIntegrity?.open());
   addAfter(['work orders','repairs','service'],'nav-scheduling-intelligence','Scheduling & Capacity Intelligence',()=>window.TotalToolsSchedulingIntelligence?.open());
