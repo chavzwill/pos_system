@@ -27,6 +27,7 @@ const browserScripts = [
   'stock-rebalancing.js',
   'operational-reports.js',
   'pos-upgrade-navigation.js',
+  'navigation-shell.js',
   'login-controller.js',
 ];
 
