@@ -26,6 +26,7 @@ const browserScripts = [
   'technician-compensation.js',
   'stock-rebalancing.js',
   'operational-reports.js',
+  'repair-operations.js',
   'pos-upgrade-navigation.js',
   'navigation-shell.js',
   'login-controller.js',
