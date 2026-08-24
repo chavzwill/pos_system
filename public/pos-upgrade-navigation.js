@@ -16,6 +16,15 @@ function removeIntegrated(){ document.querySelectorAll('.'+ITEM_CLASS).forEach(e
 function makeItem(id,label,onClick){ const el=document.createElement('div'); el.className=`nav-item ${ITEM_CLASS}`; el.setAttribute('role','button'); el.setAttribute('tabindex','0'); el.dataset.guideId=id; el.innerHTML=`<span class="tt-integrated-nav-icon" aria-hidden="true">↳</span><span>${label}</span>`; const activate=()=>{if(loggedIn())onClick();}; el.addEventListener('click',activate); el.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();activate();}}); return el; }
 function addAfter(parentTerms,id,label,onClick){ if(document.querySelector(`[data-guide-id="${id}"]`))return; const parent=findNative(parentTerms); if(parent)parent.insertAdjacentElement('afterend',makeItem(id,label,onClick)); }
 function openGuided(){ document.getElementById('tt-guide-launcher')?.click(); }
+function loadCss(href,id){ if(document.getElementById(id)) return; const l=document.createElement('link'); l.id=id; l.rel='stylesheet'; l.href=href; document.head.appendChild(l); }
+function loadScript(src,id){ return new Promise((resolve,reject)=>{ const existing=document.getElementById(id); if(existing){ if(existing.dataset.loaded==='1')resolve(); else existing.addEventListener('load',resolve,{once:true}); return; } const s=document.createElement('script'); s.id=id; s.src=src; s.defer=true; s.addEventListener('load',()=>{s.dataset.loaded='1';resolve();},{once:true}); s.addEventListener('error',()=>reject(new Error('Unable to load workspace')),{once:true}); document.body.appendChild(s); }); }
+async function openFinancialControls(){
+  try{
+    loadCss('/financial-controls-intelligence.css?v=20260824-0310','tt-fin-controls-css');
+    if(!window.TotalToolsFinancialControlsIntelligence) await loadScript('/financial-controls-intelligence.js?v=20260824-0310','tt-fin-controls-js');
+    window.TotalToolsFinancialControlsIntelligence?.open();
+  }catch(e){ console.error('Financial controls workspace failed to load',e); }
+}
 
 function sync(){
   if(!loggedIn()){ removeIntegrated(); return; }
@@ -28,7 +37,7 @@ function sync(){
   addAfter(['inventory','stock'],'nav-inventory-intelligence','Inventory Intelligence',()=>window.TotalToolsInventoryIntelligence?.open());
   addAfter(['transfers','branch transfers'],'nav-logistics-intelligence','Dispatch & Logistics Intelligence',()=>window.TotalToolsLogisticsIntelligence?.open());
   addAfter(['transfers','branch transfers'],'nav-smart-transfers','Smart Transfer Recommendations',()=>window.TotalToolsSmartTransfers?.open());
-  addAfter(['reports','reporting'],'nav-financial-controls-intelligence','Cash & Commitments',()=>window.TotalToolsFinancialControlsIntelligence?.open());
+  addAfter(['reports','reporting'],'nav-financial-controls-intelligence','Cash & Commitments',openFinancialControls);
   addAfter(['reports','reporting'],'nav-accounting-intelligence','Accounting Intelligence',()=>window.TotalToolsAccountingIntelligence?.open());
   addAfter(['reports','reporting'],'nav-operational-reports','Operational Reports',()=>window.TotalToolsOperationalReports?.open());
   addAfter(['dashboard'],'nav-guided-mode','Guided Mode',openGuided);
