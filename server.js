@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0418';
+const CLIENT_ASSET_VERSION = '20260824-0436';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -116,6 +116,7 @@ app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/commerce-sync', require('./routes/commerce-sync'));
 app.use('/api/smartcommerce-orders', require('./routes/smartcommerce-orders'));
+app.use('/api/customer-repair-portal', require('./routes/customer-repair-portal'));
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/employees', require('./routes/employees'));
