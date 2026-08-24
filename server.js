@@ -20,7 +20,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0310';
+const CLIENT_ASSET_VERSION = '20260824-0316';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -115,6 +115,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/operational-reports', require('./routes/operational-reports'));
 app.use('/api/accounting-intelligence', require('./routes/accounting-intelligence'));
 app.use('/api/financial-controls-intelligence', require('./routes/financial-controls-intelligence'));
+app.use('/api/supplier-ledger', require('./routes/supplier-ledger'));
 app.use('/api/erp-intelligence', require('./routes/erp-intelligence'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/branches', require('./routes/branches'));
