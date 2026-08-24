@@ -9,6 +9,7 @@ const vm = require('vm');
 
 const { ensureReady, db } = require('./database');
 const { router: woocommerceRouter, runSyncAll: wooSyncAll } = require('./routes/woocommerce');
+const { router: repairNotificationWorkerRouter, processQueue: processRepairNotificationQueue } = require('./routes/repair-notification-worker');
 const { apiKeyAuth } = require('./lib/apiKeyAuth');
 const { sessionAuth } = require('./lib/sessionAuth');
 const { logActivity } = require('./routes/crm');
@@ -20,7 +21,7 @@ const app = express();
 const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
-const CLIENT_ASSET_VERSION = '20260824-0455';
+const CLIENT_ASSET_VERSION = '20260824-0519';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -160,6 +161,7 @@ app.use('/api/work-orders', require('./routes/work-orders'));
 app.use('/api/repair-operations', require('./routes/repair-operations'));
 app.use('/api/repair-communications', require('./routes/repair-communications'));
 app.use('/api/repair-notifications', require('./routes/repair-notifications'));
+app.use('/api/repair-notification-worker', repairNotificationWorkerRouter);
 app.use('/api/repair-authorizations', require('./routes/repair-authorizations'));
 app.use('/api/repair-parts-integrity', require('./routes/repair-parts-integrity'));
 app.use('/api/technician-compensation', require('./routes/technician-compensation'));
@@ -170,5 +172,6 @@ if (!process.env.VERCEL) {
   app.listen(PORT, () => { console.log(`\n  POS System running at http://localhost:${PORT}\n`); });
   setInterval(async()=>{try{await ensureReady();const{rows:[iRow]}=await db.execute({sql:"SELECT value FROM settings WHERE key='woo_sync_interval'",args:[]});const mins=parseInt(iRow?.value||'0');if(!mins)return;const{rows:[lRow]}=await db.execute({sql:"SELECT value FROM settings WHERE key='woo_last_auto_sync'",args:[]});const last=lRow?.value?new Date(lRow.value):new Date(0);if((Date.now()-last.getTime())/60000>=mins)wooSyncAll().catch(()=>{});}catch(e){}},60000);
   setInterval(async()=>{try{await ensureReady();const{rows:overdue}=await db.execute({sql:"SELECT * FROM rental_agreements WHERE status='active' AND due_date < date('now') AND overdue_notified_at IS NULL",args:[]});for(const agreement of overdue){try{await db.execute({sql:'UPDATE rental_agreements SET overdue_notified_at = CURRENT_TIMESTAMP WHERE id = ?',args:[agreement.id]});await logActivity({customerId:agreement.customer_id,employeeId:agreement.employee_id,type:'rental',subject:`Rental ${agreement.agreement_number} is overdue (due ${agreement.due_date})`,dueDate:agreement.due_date,completed:false});}catch(e){}}}catch(e){}},30*60000);
+  setInterval(()=>{ processRepairNotificationQueue(20).catch(e=>console.error('Repair notification worker failed:',e&&e.message||e)); },60000);
 }
 module.exports = app;
