@@ -103,6 +103,18 @@ async function ensureSchema() {
     actor_employee_id INTEGER,
     decided_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`, args: [] });
+  await db.execute({ sql: `CREATE TABLE IF NOT EXISTS customer_repair_portal_actions (
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    external_action_id TEXT NOT NULL UNIQUE,
+    customer_id INTEGER NOT NULL,
+    work_order_id INTEGER NOT NULL,
+    action_type TEXT NOT NULL,
+    target_id TEXT,
+    payload_json TEXT NOT NULL,
+    result_json TEXT,
+    created_at TEXT NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`, args: [] });
+  await db.execute({ sql: 'CREATE INDEX IF NOT EXISTS idx_customer_repair_portal_actions_work_order ON customer_repair_portal_actions(work_order_id,created_at)', args: [] });
   ready = true;
 }
 router.use(async (req,res,next)=>{ try { await ensureSchema(); next(); } catch(e) { res.status(500).json({error:'Customer repair portal schema initialization failed',detail:e.message}); } });
@@ -114,9 +126,21 @@ function access(req,res,next){
 router.use(access);
 
 async function customerExists(id){
-  const {rows:[row]}=await db.execute({sql:'SELECT id,customer_number,first_name,last_name FROM customers WHERE id=? AND active=1',args:[id]});
+  const {rows:[row]}=await db.execute({sql:'SELECT id,customer_number,first_name,last_name,email,phone FROM customers WHERE id=? AND active=1',args:[id]});
   return row;
 }
+async function customerWorkOrder(customerId,workOrderId){
+  const {rows:[row]}=await db.execute({sql:'SELECT id,wo_number,status,customer_id FROM work_orders WHERE id=? AND customer_id=?',args:[workOrderId,customerId]});
+  return row;
+}
+async function existingAction(externalActionId){
+  const {rows:[row]}=await db.execute({sql:'SELECT * FROM customer_repair_portal_actions WHERE external_action_id=?',args:[externalActionId]});
+  if(!row)return null;
+  let result=null;
+  try{result=row.result_json?JSON.parse(row.result_json):null;}catch{}
+  return {...row,result};
+}
+function cleanNotes(value,max=2000){return String(value||'').trim().slice(0,max);}
 
 router.get('/customers/:customerId', async (req,res)=>{
   try {
@@ -172,6 +196,94 @@ router.get('/customers/:customerId', async (req,res)=>{
       privacy_policy:'Only customer-visible repair timeline events, communications and diagnostics are exported. Internal technician notes, compensation, cost controls and staff-only comments are excluded.'
     });
   } catch(e){res.status(500).json({error:e.message});}
+});
+
+router.post('/customers/:customerId/work-orders/:workOrderId/estimate-decisions', async (req,res)=>{
+  try{
+    const customer=await customerExists(req.params.customerId);
+    if(!customer)return res.status(404).json({error:'Customer not found'});
+    const wo=await customerWorkOrder(customer.id,req.params.workOrderId);
+    if(!wo)return res.status(404).json({error:'Repair not found for customer'});
+    const body=req.body||{};
+    const externalActionId=cleanNotes(body.external_action_id,120);
+    if(!externalActionId)return res.status(400).json({error:'external_action_id is required'});
+    const duplicate=await existingAction(externalActionId);
+    if(duplicate)return res.json({replayed:true,...(duplicate.result||{})});
+    const decision=String(body.decision||'').toLowerCase();
+    if(!['approved','rejected'].includes(decision))return res.status(400).json({error:'decision must be approved or rejected'});
+    const estimateId=Number(body.estimate_revision_id);
+    if(!Number.isInteger(estimateId)||estimateId<=0)return res.status(400).json({error:'estimate_revision_id is required'});
+    const {rows:[estimate]}=await db.execute({sql:'SELECT * FROM repair_estimate_revisions WHERE id=? AND work_order_id=?',args:[estimateId,wo.id]});
+    if(!estimate)return res.status(404).json({error:'Estimate revision not found for repair'});
+    if(estimate.status==='superseded')return res.status(409).json({error:'A superseded estimate cannot be authorized'});
+    if(['approved','rejected'].includes(String(estimate.status)))return res.status(409).json({error:`Estimate has already been ${estimate.status}`});
+    const authorizedName=cleanNotes(body.authorized_name,160)||`${customer.first_name||''} ${customer.last_name||''}`.trim();
+    const notes=cleanNotes(body.notes,2000)||null;
+    const payload={decision,estimate_revision_id:estimateId,authorized_name:authorizedName,notes};
+    const tx=await db.transaction('write');
+    try{
+      const actionInsert=await tx.execute({sql:`INSERT INTO customer_repair_portal_actions(external_action_id,customer_id,work_order_id,action_type,target_id,payload_json)
+        VALUES (?,?,?,?,?,?)`,args:[externalActionId,customer.id,wo.id,'estimate_decision',String(estimateId),JSON.stringify(payload)]});
+      await tx.execute({sql:`INSERT INTO repair_authorizations(estimate_revision_id,work_order_id,decision,authorization_method,authorized_name,authorized_contact,notes,actor_employee_id)
+        VALUES (?,?,?,?,?,?,?,NULL)`,args:[estimate.id,wo.id,decision,'portal',authorizedName,customer.email||customer.phone||null,notes]});
+      await tx.execute({sql:'UPDATE repair_estimate_revisions SET status=? WHERE id=?',args:[decision,estimate.id]});
+      await tx.execute({sql:`INSERT INTO repair_timeline_events(work_order_id,event_type,visibility,title,details,actor_employee_id,source_entity_type,source_entity_id)
+        VALUES (?,?,?,?,?,NULL,?,?)`,args:[wo.id,'authorization','customer',`Estimate revision ${estimate.revision_number} ${decision}`,notes||`Customer decision submitted through SmartCommerce portal.`,'repair_estimate_revision',String(estimate.id)]});
+      await tx.execute({sql:`INSERT INTO repair_communications(work_order_id,customer_id,channel,direction,visibility,message_type,subject,body,contact_value,delivery_status,external_reference,requires_response,responded_at,created_by_employee_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP,NULL)`,args:[wo.id,customer.id,'portal','inbound','customer','approval_response',`Estimate revision ${estimate.revision_number} ${decision}`,notes||`Customer ${decision} estimate revision ${estimate.revision_number} through SmartCommerce.`,customer.email||customer.phone||null,'received',externalActionId,0]});
+      const result={ok:true,action_id:Number(actionInsert.lastInsertRowid),work_order_id:Number(wo.id),estimate_revision_id:estimate.id,decision,status:decision};
+      await tx.execute({sql:'UPDATE customer_repair_portal_actions SET result_json=? WHERE external_action_id=?',args:[JSON.stringify(result),externalActionId]});
+      await tx.commit();
+      return res.status(201).json(result);
+    }catch(e){await tx.rollback();throw e;}
+  }catch(e){
+    if(String(e.message||'').includes('UNIQUE constraint failed: customer_repair_portal_actions.external_action_id')){
+      const duplicate=await existingAction(req.body?.external_action_id); if(duplicate)return res.json({replayed:true,...(duplicate.result||{})});
+    }
+    return res.status(400).json({error:e.message});
+  }
+});
+
+router.post('/customers/:customerId/work-orders/:workOrderId/messages', async (req,res)=>{
+  try{
+    const customer=await customerExists(req.params.customerId);
+    if(!customer)return res.status(404).json({error:'Customer not found'});
+    const wo=await customerWorkOrder(customer.id,req.params.workOrderId);
+    if(!wo)return res.status(404).json({error:'Repair not found for customer'});
+    const body=req.body||{};
+    const externalActionId=cleanNotes(body.external_action_id,120);
+    if(!externalActionId)return res.status(400).json({error:'external_action_id is required'});
+    const duplicate=await existingAction(externalActionId);
+    if(duplicate)return res.json({replayed:true,...(duplicate.result||{})});
+    const message=cleanNotes(body.message,4000);
+    if(!message)return res.status(400).json({error:'message is required'});
+    const respondsTo=body.responds_to_communication_id==null?null:Number(body.responds_to_communication_id);
+    if(respondsTo!=null){
+      if(!Number.isInteger(respondsTo)||respondsTo<=0)return res.status(400).json({error:'Invalid responds_to_communication_id'});
+      const {rows:[communication]}=await db.execute({sql:`SELECT id FROM repair_communications WHERE id=? AND work_order_id=? AND customer_id=? AND visibility='customer'`,args:[respondsTo,wo.id,customer.id]});
+      if(!communication)return res.status(404).json({error:'Referenced customer communication not found'});
+    }
+    const payload={message,responds_to_communication_id:respondsTo};
+    const tx=await db.transaction('write');
+    try{
+      const actionInsert=await tx.execute({sql:`INSERT INTO customer_repair_portal_actions(external_action_id,customer_id,work_order_id,action_type,target_id,payload_json)
+        VALUES (?,?,?,?,?,?)`,args:[externalActionId,customer.id,wo.id,'message',respondsTo==null?null:String(respondsTo),JSON.stringify(payload)]});
+      const comm=await tx.execute({sql:`INSERT INTO repair_communications(work_order_id,customer_id,channel,direction,visibility,message_type,subject,body,contact_value,delivery_status,external_reference,requires_response,created_by_employee_id)
+        VALUES (?,?,?,?,?,?,?,?,?,?,?,?,NULL)`,args:[wo.id,customer.id,'portal','inbound','customer','message','Customer portal message',message,customer.email||customer.phone||null,'received',externalActionId,0]});
+      if(respondsTo!=null)await tx.execute({sql:'UPDATE repair_communications SET responded_at=COALESCE(responded_at,CURRENT_TIMESTAMP) WHERE id=?',args:[respondsTo]});
+      await tx.execute({sql:`INSERT INTO repair_timeline_events(work_order_id,event_type,visibility,title,details,actor_employee_id,source_entity_type,source_entity_id)
+        VALUES (?,?,?,?,?,NULL,?,?)`,args:[wo.id,'communication_logged','customer','Customer replied through SmartCommerce',message.slice(0,500),'repair_communication',String(Number(comm.lastInsertRowid))]});
+      const result={ok:true,action_id:Number(actionInsert.lastInsertRowid),communication_id:Number(comm.lastInsertRowid),work_order_id:Number(wo.id)};
+      await tx.execute({sql:'UPDATE customer_repair_portal_actions SET result_json=? WHERE external_action_id=?',args:[JSON.stringify(result),externalActionId]});
+      await tx.commit();
+      return res.status(201).json(result);
+    }catch(e){await tx.rollback();throw e;}
+  }catch(e){
+    if(String(e.message||'').includes('UNIQUE constraint failed: customer_repair_portal_actions.external_action_id')){
+      const duplicate=await existingAction(req.body?.external_action_id); if(duplicate)return res.json({replayed:true,...(duplicate.result||{})});
+    }
+    return res.status(400).json({error:e.message});
+  }
 });
 
 module.exports=router;
