@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const VERSION='20260824-1811';
+const VERSION='20260824-1822';
 const loaded=new Set();
 const nativeFetch=window.fetch.bind(window);
 let profileResponsePromise=null;
@@ -13,6 +13,6 @@ window.fetch=function(input,init){
   return nativeFetch(input,init);
 };
 function add(src){if(loaded.has(src)||document.querySelector(`script[data-shell-deferred="${src}"]`))return;loaded.add(src);const s=document.createElement('script');s.src=`${src}?v=${VERSION}`;s.defer=true;s.dataset.shellDeferred=src;document.body.appendChild(s);}
-function schedule(){const run=()=>{add('/guided-mode.js');add('/guided-mode-orchestrator.js');add('/guided-mode-access.js');add('/guided-mode-completion.js');add('/guided-mode-role-context.js');add('/guided-mode-record-context.js');add('/guided-mode-exact-action.js');add('/guided-mode-hardening.js');add('/guided-mode-integrity.js');add('/guided-mode-adversarial.js');add('/total-tools-identity.js');add('/shell-native-support.js');add('/workspace-quality-pass.js');};if('requestIdleCallback'in window)requestIdleCallback(run,{timeout:450});else setTimeout(run,60);}
+function schedule(){const run=()=>{add('/guided-mode.js');add('/guided-mode-orchestrator.js');add('/guided-mode-access.js');add('/guided-mode-completion.js');add('/guided-mode-role-context.js');add('/guided-mode-record-context.js');add('/guided-mode-exact-action.js');add('/guided-mode-hardening.js');add('/guided-mode-integrity.js');add('/guided-mode-adversarial.js');add('/guided-mode-qa.js');add('/total-tools-identity.js');add('/shell-native-support.js');add('/workspace-quality-pass.js');};if('requestIdleCallback'in window)requestIdleCallback(run,{timeout:450});else setTimeout(run,60);}
 if(document.readyState==='complete')schedule();else window.addEventListener('load',schedule,{once:true});
 })();
