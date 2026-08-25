@@ -54,10 +54,7 @@ async function ensureCompensationSchema() {
   return schemaPromise;
 }
 
-function isoDate(d) {
-  const y = d.getUTCFullYear(); const m = String(d.getUTCMonth()+1).padStart(2,'0'); const day = String(d.getUTCDate()).padStart(2,'0');
-  return `${y}-${m}-${day}`;
-}
+function isoDate(d) { const y=d.getUTCFullYear(); const m=String(d.getUTCMonth()+1).padStart(2,'0'); const day=String(d.getUTCDate()).padStart(2,'0'); return `${y}-${m}-${day}`; }
 function utcDate(y,m,d) { return new Date(Date.UTC(y,m,d)); }
 function payPeriodFor(input) {
   const date = input ? new Date(`${input}T12:00:00Z`) : new Date();
@@ -65,41 +62,35 @@ function payPeriodFor(input) {
   const y=date.getUTCFullYear(), m=date.getUTCMonth(), day=date.getUTCDate();
   if (day >= 14 && day <= 28) return { start: isoDate(utcDate(y,m,14)), end: isoDate(utcDate(y,m,28)), label:'14th–28th' };
   if (day >= 29) return { start: isoDate(utcDate(y,m,29)), end: isoDate(utcDate(y,m+1,13)), label:'29th–13th' };
-  // JavaScript normalizes a non-existent Feb 29 to Mar 1. That preserves the
-  // 14th–28th February period without double-counting Feb 28 in both cycles.
-  const priorStart = utcDate(y,m-1,29);
-  return { start: isoDate(priorStart), end: isoDate(utcDate(y,m,13)), label:'29th–13th' };
+  return { start: isoDate(utcDate(y,m-1,29)), end: isoDate(utcDate(y,m,13)), label:'29th–13th' };
 }
 
 async function rateFor(employeeId, periodEnd) {
-  const { rows:[row] } = await db.execute({
-    sql:`SELECT * FROM technician_pay_rates WHERE employee_id=? AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?) ORDER BY effective_from DESC,id DESC LIMIT 1`,
-    args:[employeeId,periodEnd,periodEnd]
-  });
+  const { rows:[row] } = await db.execute({ sql:`SELECT * FROM technician_pay_rates WHERE employee_id=? AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?) ORDER BY effective_from DESC,id DESC LIMIT 1`, args:[employeeId,periodEnd,periodEnd] });
   return row || null;
+}
+async function rateMapFor(employeeIds, periodEnd) {
+  if (!employeeIds.length) return new Map();
+  const marks=employeeIds.map(()=>'?').join(',');
+  const {rows}=await db.execute({sql:`SELECT * FROM technician_pay_rates WHERE employee_id IN (${marks}) AND effective_from<=? AND (effective_to IS NULL OR effective_to>=?) ORDER BY employee_id,effective_from DESC,id DESC`,args:[...employeeIds,periodEnd,periodEnd]});
+  const map=new Map();
+  for(const row of rows){const id=Number(row.employee_id);if(!map.has(id))map.set(id,row);}
+  return map;
 }
 
 async function evidenceFor(period) {
-  const { rows } = await db.execute({
-    sql:`WITH task_time AS (
-      SELECT te.technician_id, te.task_id,
-        SUM((julianday(te.ended_at)-julianday(te.started_at))*24*60) AS actual_minutes
+  const { rows } = await db.execute({ sql:`WITH task_time AS (
+      SELECT te.technician_id, te.task_id, SUM((julianday(te.ended_at)-julianday(te.started_at))*24*60) AS actual_minutes
       FROM work_order_task_time_entries te
       WHERE te.ended_at IS NOT NULL AND date(te.started_at) BETWEEN ? AND ?
       GROUP BY te.technician_id, te.task_id
     )
     SELECT e.id AS employee_id, e.employee_number, e.first_name, e.last_name,
-      COUNT(tt.task_id) AS timed_tasks,
-      COALESCE(SUM(tt.actual_minutes),0) AS worked_minutes,
+      COUNT(tt.task_id) AS timed_tasks, COALESCE(SUM(tt.actual_minutes),0) AS worked_minutes,
       COALESCE(SUM(CASE WHEN t.status='complete' THEN 1 ELSE 0 END),0) AS completed_tasks,
       COALESCE(SUM(CASE WHEN t.allotted_minutes>0 THEN t.allotted_minutes ELSE 0 END),0) AS allotted_minutes
-    FROM task_time tt
-    JOIN employees e ON e.id=tt.technician_id
-    JOIN work_order_tasks t ON t.id=tt.task_id
-    GROUP BY e.id,e.employee_number,e.first_name,e.last_name
-    ORDER BY e.last_name,e.first_name`,
-    args:[period.start,period.end]
-  });
+    FROM task_time tt JOIN employees e ON e.id=tt.technician_id JOIN work_order_tasks t ON t.id=tt.task_id
+    GROUP BY e.id,e.employee_number,e.first_name,e.last_name ORDER BY e.last_name,e.first_name`, args:[period.start,period.end] });
   return rows;
 }
 
@@ -110,21 +101,26 @@ router.get('/period', requireAnyPermission('work_orders','reports','employees_sa
 
 router.get('/summary', requireAnyPermission('work_orders','reports','employees_salaries'), async (req,res) => {
   try {
+    const startedAt=Date.now();
     await ensureCompensationSchema();
     const period = req.query.start && req.query.end ? { start:String(req.query.start), end:String(req.query.end), label:'custom' } : payPeriodFor(req.query.date);
-    const evidence = await evidenceFor(period);
-    const { rows: adjustments } = await db.execute({ sql:'SELECT employee_id,COALESCE(SUM(amount),0) total FROM technician_pay_adjustments WHERE period_start=? AND period_end=? GROUP BY employee_id', args:[period.start,period.end] });
+    const [evidence,{ rows: adjustments }] = await Promise.all([
+      evidenceFor(period),
+      db.execute({ sql:'SELECT employee_id,COALESCE(SUM(amount),0) total FROM technician_pay_adjustments WHERE period_start=? AND period_end=? GROUP BY employee_id', args:[period.start,period.end] })
+    ]);
+    const employeeIds=evidence.map(x=>Number(x.employee_id)).filter(Boolean);
+    const rates=await rateMapFor(employeeIds,period.end);
     const adjustmentMap = new Map(adjustments.map(a=>[Number(a.employee_id),Number(a.total)||0]));
-    const rows=[];
-    for (const item of evidence) {
-      const rate=await rateFor(item.employee_id,period.end); const worked=Number(item.worked_minutes)||0; const allotted=Number(item.allotted_minutes)||0;
+    const rows=evidence.map(item=>{
+      const rate=rates.get(Number(item.employee_id))||null; const worked=Number(item.worked_minutes)||0; const allotted=Number(item.allotted_minutes)||0;
       const efficiency = worked>0 && allotted>0 ? Number(((allotted/worked)*100).toFixed(1)) : null;
       const basePay = Number(((worked/60)*(Number(rate?.hourly_rate)||0)).toFixed(2)); const adjustmentsTotal=adjustmentMap.get(Number(item.employee_id))||0;
-      rows.push({ ...item, worked_minutes:Number(worked.toFixed(1)), worked_hours:Number((worked/60).toFixed(2)), allotted_minutes:allotted, efficiency_percent:efficiency,
+      return { ...item, worked_minutes:Number(worked.toFixed(1)), worked_hours:Number((worked/60).toFixed(2)), allotted_minutes:allotted, efficiency_percent:efficiency,
         hourly_rate:Number(rate?.hourly_rate)||0, overtime_rate:rate?.overtime_rate==null?null:Number(rate.overtime_rate), base_pay:basePay, adjustments_total:adjustmentsTotal,
-        payable_total:Number((basePay+adjustmentsTotal).toFixed(2)), evidence:{ time_entries:'verified', task_completion:'verified_current_state', attendance:'unavailable', overtime_hours:'unavailable', qc_first_pass:'unavailable', comeback_rework:'unavailable', safety_events:'unavailable' } });
-    }
-    res.json({ period, rows, note:'Base pay uses completed technician timer evidence only. Unavailable quality/attendance evidence is not inferred.' });
+        payable_total:Number((basePay+adjustmentsTotal).toFixed(2)), evidence:{ time_entries:'verified', task_completion:'verified_current_state', attendance:'unavailable', overtime_hours:'unavailable', qc_first_pass:'unavailable', comeback_rework:'unavailable', safety_events:'unavailable' } };
+    });
+    res.set('Server-Timing',`technician-compensation;dur=${Date.now()-startedAt}`);
+    res.json({ period, generated_at:new Date().toISOString(), evaluation_ms:Date.now()-startedAt, rows, note:'Base pay uses completed technician timer evidence only. Pay-rate lookup is batched for the period. Unavailable quality/attendance evidence is not inferred.' });
   } catch(e) { res.status(500).json({ error:e.message }); }
 });
 
