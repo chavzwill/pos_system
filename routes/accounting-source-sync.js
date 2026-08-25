@@ -11,7 +11,8 @@ async function ensureBridgeAccounts(){
   const defs=[
     ['1050','Electronic Settlement Clearing','asset','debit'],
     ['1250','Purchasing & Receiving Clearing','asset','debit'],
-    ['2200','Customer Deposits','liability','credit']
+    ['2200','Customer Deposits','liability','credit'],
+    ['2300','Customer Store Credit','liability','credit']
   ];
   for(const a of defs)await db.execute({sql:`INSERT OR IGNORE INTO ledger_accounts(code,name,account_type,normal_balance,system_account) VALUES(?,?,?,?,1)`,args:a});
 }
@@ -25,6 +26,60 @@ function paymentDebitCode(method){
 async function syncSupplierInvoices(req,stats){if(!(await exists('supplier_invoices')))return;const {rows}=await db.execute({sql:`SELECT * FROM supplier_invoices WHERE status!='void' ORDER BY id`,args:[]});for(const x of rows){try{const j=await postSourceJournal({sourceType:'supplier_invoice',sourceId:x.id,sourceReference:x.invoice_number,entryDate:x.invoice_date,description:`Supplier invoice ${x.invoice_number}`,branchId:x.branch_id,actorId:actor(req),lines:[{code:'1250',debit:x.total,credit:0,description:'Purchasing/receiving clearing'},{code:'2000',debit:0,credit:x.total,description:'Accounts payable'}]});stats.supplier_invoices[j.existing?'existing':'posted']++;}catch(e){stats.errors.push(`supplier_invoice:${x.id}: ${e.message}`);}}}
 async function syncSupplierPayments(req,stats){if(!(await exists('supplier_payments')))return;const {rows}=await db.execute({sql:`SELECT * FROM supplier_payments ORDER BY id`,args:[]});for(const x of rows){try{const method=String(x.payment_method||'').toLowerCase();const cash=method.includes('cash');const j=await postSourceJournal({sourceType:'supplier_payment',sourceId:x.id,sourceReference:x.payment_number,entryDate:x.payment_date,description:`Supplier payment ${x.payment_number}`,branchId:x.branch_id,actorId:actor(req),lines:[{code:'2000',debit:x.amount,credit:0,description:'Reduce accounts payable'},{code:cash?'1000':'1010',debit:0,credit:x.amount,description:cash?'Cash paid':'Bank payment'}]});stats.supplier_payments[j.existing?'existing':'posted']++;}catch(e){stats.errors.push(`supplier_payment:${x.id}: ${e.message}`);}}}
 async function syncSettlements(req,stats){if(!(await exists('settlement_batches')))return;const {rows}=await db.execute({sql:`SELECT sb.* FROM settlement_batches sb WHERE sb.status='reconciled' ORDER BY sb.id`,args:[]});for(const x of rows){try{const gross=Number(x.gross_amount||0),fees=Number(x.fees||0),net=Number(x.net_amount||0);const lines=[{code:'1010',debit:net,credit:0,description:'Bank settlement received'}];if(fees>0)lines.push({code:'5300',debit:fees,credit:0,description:'Processor/bank fees'});lines.push({code:'1050',debit:0,credit:gross,description:'Clear electronic settlement receivable'});const j=await postSourceJournal({sourceType:'settlement_batch',sourceId:x.id,sourceReference:x.reference,entryDate:x.settlement_date,description:`Reconciled settlement ${x.reference||x.id}`,branchId:x.branch_id,actorId:actor(req),lines});stats.settlements[j.existing?'existing':'posted']++;}catch(e){stats.errors.push(`settlement_batch:${x.id}: ${e.message}`);}}}
+async function syncRetailSales(req,stats){
+  if(!(await exists('transactions')))return;
+  const hasPayments=await exists('transaction_payments');
+  const hasRentals=await exists('rental_agreements');
+  const hasWorkOrders=await exists('work_orders');
+  const rentalExclusion=hasRentals?`AND NOT EXISTS (SELECT 1 FROM rental_agreements ra WHERE ra.checkout_transaction_id=t.id OR ra.settlement_transaction_id=t.id)`:'';
+  const workOrderExclusion=hasWorkOrders?`AND NOT EXISTS (SELECT 1 FROM work_orders wo WHERE wo.assessment_transaction_id=t.id OR wo.deposit_transaction_id=t.id OR wo.final_transaction_id=t.id)`:'';
+  const {rows}=await db.execute({sql:`SELECT t.* FROM transactions t WHERE t.status='completed' ${rentalExclusion} ${workOrderExclusion} ORDER BY t.id`,args:[]});
+  if(rows.length&&await exists('transaction_items')){
+    const {rows:cols}=await db.execute({sql:'PRAGMA table_info(transaction_items)',args:[]});
+    const names=new Set(cols.map(c=>String(c.name||'').toLowerCase()));
+    const hasHistoricalCost=['unit_cost','cost','cost_at_sale','unit_cost_at_sale'].some(n=>names.has(n));
+    if(!hasHistoricalCost){
+      stats.evidence_gaps.push({type:'retail_cogs_cost_snapshot_missing',affected_transactions:rows.length,automatic_posting:false,reason:'Retail transaction lines do not preserve historical unit cost. Current product cost may have changed, so Accounting will not invent COGS from today\'s catalog cost.'});
+    }
+  }
+  for(const t of rows){
+    try{
+      const tax=money(t.tax_amount);
+      const storeCredit=money(t.store_credit_applied);
+      const total=money(t.total);
+      const revenue=money(total-tax+storeCredit);
+      if(total<0||tax<0||storeCredit<0||revenue<0){
+        stats.reconciliation_issues.push({transaction_id:t.id,transaction_number:t.transaction_number,type:'retail_sale_negative_component',total,tax,store_credit:storeCredit,revenue});
+        continue;
+      }
+      let payments=[];
+      if(hasPayments){
+        const result=await db.execute({sql:'SELECT payment_method,amount FROM transaction_payments WHERE transaction_id=? ORDER BY id',args:[t.id]});
+        payments=result.rows||[];
+      }
+      if(!payments.length&&total>0)payments=[{payment_method:t.payment_method||'cash',amount:total}];
+      const paymentTotal=money(payments.reduce((s,p)=>s+money(p.amount),0));
+      if(Math.abs(paymentTotal-total)>0.01){
+        stats.reconciliation_issues.push({transaction_id:t.id,transaction_number:t.transaction_number,type:'retail_tender_mismatch',expected:total,actual:paymentTotal});
+        continue;
+      }
+      const byAccount={};
+      for(const p of payments){
+        const amount=money(p.amount);if(amount<=0)continue;
+        const code=paymentDebitCode(p.payment_method);
+        byAccount[code]=money((byAccount[code]||0)+amount);
+      }
+      const lines=[];
+      for(const [code,amount] of Object.entries(byAccount))lines.push({code,debit:amount,credit:0,description:code==='1000'?'Retail cash tender':code==='1100'?'Retail charge-account receivable':'Retail electronic tender clearing'});
+      if(storeCredit>0)lines.push({code:'2300',debit:storeCredit,credit:0,description:'Customer store credit redeemed'});
+      if(revenue>0)lines.push({code:'4000',debit:0,credit:revenue,description:'Retail sales revenue net of discounts and loyalty cash-back'});
+      if(tax>0)lines.push({code:'2100',debit:0,credit:tax,description:'Sales tax payable'});
+      if(!lines.length)continue;
+      const j=await postSourceJournal({sourceType:'retail_sale',sourceId:t.id,sourceReference:t.transaction_number,entryDate:String(t.created_at||new Date().toISOString()).slice(0,10),description:`Retail sale ${t.transaction_number}`,branchId:t.branch_id,actorId:actor(req),lines});
+      stats.retail_sales[j.existing?'existing':'posted']++;
+    }catch(e){stats.errors.push(`retail_sale:${t.id}: ${e.message}`);}
+  }
+}
 async function syncRepairPartUsage(req,stats){
   if(!(await exists('repair_part_reservations'))||!(await exists('work_order_items'))||!(await exists('work_orders')))return;
   const {rows}=await db.execute({sql:`SELECT wo.id,wo.wo_number,wo.branch_id,COALESCE(wo.completed_at,wo.picked_up_at,wo.created_at) AS evidence_date,
@@ -111,12 +166,13 @@ async function syncRepairFinancials(req,stats){
 }
 router.post('/sync',async(req,res)=>{try{
   await ensureBridgeAccounts();
-  const stats={supplier_invoices:{posted:0,existing:0},supplier_payments:{posted:0,existing:0},settlements:{posted:0,existing:0},repair_part_usage:{posted:0,existing:0},repair_assessments:{posted:0,existing:0},repair_deposits:{posted:0,existing:0},repair_service_revenue:{posted:0,existing:0},repair_final_payments:{posted:0,existing:0},reconciliation_issues:[],errors:[]};
+  const stats={supplier_invoices:{posted:0,existing:0},supplier_payments:{posted:0,existing:0},settlements:{posted:0,existing:0},retail_sales:{posted:0,existing:0},repair_part_usage:{posted:0,existing:0},repair_assessments:{posted:0,existing:0},repair_deposits:{posted:0,existing:0},repair_service_revenue:{posted:0,existing:0},repair_final_payments:{posted:0,existing:0},reconciliation_issues:[],evidence_gaps:[],errors:[]};
   await syncSupplierInvoices(req,stats);
   await syncSupplierPayments(req,stats);
   await syncSettlements(req,stats);
+  await syncRetailSales(req,stats);
   await syncRepairPartUsage(req,stats);
   await syncRepairFinancials(req,stats);
-  res.json({success:stats.errors.length===0&&stats.reconciliation_issues.length===0,stats,basis:'Verified repair cash flows are separated by economic substance: assessment fees recognize service revenue when collected; repair deposits remain Customer Deposits liabilities until completion; completed repair value recognizes Service Revenue and any unpaid balance as Accounts Receivable; final payment clears that receivable. Repair parts COGS posts from verified consumed quantities only. All automatic postings are idempotent by source.'});
+  res.json({success:stats.errors.length===0&&stats.reconciliation_issues.length===0,stats,basis:'Verified retail sales are posted separately from rentals and work-order transactions. Retail tenders debit Cash, Accounts Receivable, or Electronic Settlement Clearing according to the recorded payment evidence; redeemed store credit reduces Customer Store Credit liability; sales tax is credited to Taxes Payable; net retail value is credited to Sales Revenue. Historical retail COGS is deliberately not invented when transaction lines lack a sale-time cost snapshot. Repair cash flows remain separated by economic substance: assessment fees recognize service revenue when collected; repair deposits remain Customer Deposits liabilities until completion; completed repair value recognizes Service Revenue and any unpaid balance as Accounts Receivable; final payment clears that receivable. Repair parts COGS posts from verified consumed quantities only. All automatic postings are idempotent by source.'});
 }catch(e){res.status(500).json({error:e.message});}});
 module.exports=router;
