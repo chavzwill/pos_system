@@ -172,4 +172,8 @@ router.get('/snapshots', requireAnyPermission('reports','employees_salaries'), a
   catch(e){res.status(500).json({error:e.message});}
 });
 
+// Performance intelligence is intentionally downstream-safe: it may recommend an incentive review,
+// but it never mutates base pay or payroll automatically.
+router.use('/performance', require('./technician-performance'));
+
 module.exports = router;
