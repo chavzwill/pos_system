@@ -12,10 +12,15 @@ function task(){return guide()?.querySelector('.tt-guide__head p')?.textContent?
 function step(){const t=guide()?.querySelector('.tt-guide__step-count')?.textContent||'';const m=t.match(/step\s+(\d+)/i);return m?Number(m[1]):0;}
 function hasValue(el){return !!el&&String(el.value??'').trim()!=='';}
 function purchasingComposer(){const r=q('#tt-purchasing-workspace');if(!r)return null;const c=q('.tt-purch__composer',r);if(!c)return null;const form=q('#tt-purch-compose-form',c);if(!form)return null;const title=norm(text(q('#tt-purch-compose-title',c)));const isPO=title.includes('purchase order');const t=task(),s=step();if(s!==2)return null;if(isPO&&t!=='Create, edit, copy, cancel or receive a PO')return null;if(!isPO&&t!=='Create or approve a purchase request')return null;
- if(isPO){const supplier=q('select[name="supplier_id"]',form);if(supplier&&!hasValue(supplier))return{target:supplier,label:'1 · Select supplier',why:'Choose the supplier for this purchase order.'};}
- const item=q('[data-line="0"] [data-line-field="product_name"]',form);if(item&&!hasValue(item))return{target:item,label:isPO?'2 · Add item':'1 · Add item',why:'Search the catalog by name or SKU, or enter the sourced item.'};
- const qty=q('[data-line="0"] [data-line-field="quantity"]',form);if(qty&&(Number(qty.value)<=0||!hasValue(qty)))return{target:qty,label:isPO?'3 · Enter quantity':'2 · Enter quantity',why:'Enter the quantity required.'};
- const submit=q('button[type="submit"]',form);if(submit)return{target:submit,label:isPO?'4 · Create purchase order':'3 · Create purchase request',why:isPO?'Review the form, then create the purchase order.':'Review the form, then create the purchase request.'};
+ if(isPO){
+  const supplier=q('select[name="supplier_id"]',form);if(supplier&&!hasValue(supplier))return{target:supplier,label:'1 · Select supplier',why:'Choose the supplier, or use Add supplier for a new vendor.'};
+  const location=q('#tt-po-supplier-location',form);if(location&&location.options.length>1&&!hasValue(location))return{target:location,label:'2 · Supplier location',why:'Choose the supplier location this PO is being sent to.'};
+  const branch=q('#tt-po-inventory-branch',form);if(branch&&!hasValue(branch))return{target:branch,label:'3 · Inventory branch',why:'Choose the branch that will own the received inventory.'};
+  const ship=q('#tt-po-ship-address',form);if(ship&&!hasValue(ship))return{target:ship,label:'4 · Ship-to address',why:'Confirm or edit the physical delivery address. It can differ from the inventory branch.'};
+ }
+ const item=q('[data-line="0"] [data-line-field="product_name"]',form);if(item&&!hasValue(item))return{target:item,label:isPO?'5 · Add item':'1 · Add item',why:'Search the catalog by name or SKU, or enter the sourced item.'};
+ const qty=q('[data-line="0"] [data-line-field="quantity"]',form);if(qty&&(Number(qty.value)<=0||!hasValue(qty)))return{target:qty,label:isPO?'6 · Enter quantity':'2 · Enter quantity',why:'Enter the quantity required.'};
+ const submit=q('button[type="submit"]',form);if(submit)return{target:submit,label:isPO?'7 · Create purchase order':'3 · Create purchase request',why:isPO?'Review supplier, supplier location, ship-to destination, inventory branch, items, quantities and costs, then create the PO.':'Review the form, then create the purchase request.'};
  return null;}
 function purchasing(){const r=q('#tt-purchasing-workspace');if(!r)return null;const composer=purchasingComposer();if(composer)return composer;const t=task(),s=step();if(t==='Create, edit, copy, cancel or receive a PO'&&s===2){const launch=q('#tt-purch-new-po',r);if(launch)return{target:launch,label:'Start · New Purchase Order',why:'Open the purchase order form.'};}
  if(t==='Create or approve a purchase request'&&s===2){const launch=q('#tt-purch-new-pr',r);if(launch)return{target:launch,label:'Start · New Purchase Request',why:'Open the purchase request form.'};}
