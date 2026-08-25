@@ -40,6 +40,19 @@ async function ensureSchema() {
     )` },
     { sql: 'CREATE INDEX IF NOT EXISTS idx_repair_quality_work_order ON repair_quality_reviews(work_order_id, reviewed_at)' },
     { sql: 'CREATE INDEX IF NOT EXISTS idx_repair_comeback_original ON repair_comeback_links(original_work_order_id)' },
+    { sql: `CREATE TRIGGER IF NOT EXISTS trg_work_order_completion_requires_quality
+      BEFORE UPDATE OF status ON work_orders
+      WHEN NEW.status = 'complete' AND OLD.status <> 'complete'
+      BEGIN
+        SELECT CASE WHEN TRIM(COALESCE(NEW.diagnosis,'')) = '' OR TRIM(COALESCE(NEW.repair_notes,'')) = ''
+          THEN RAISE(ABORT,'Work order cannot be completed without diagnosis and repair notes') END;
+        SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM work_order_tasks WHERE work_order_id = NEW.id)
+          THEN RAISE(ABORT,'Work order cannot be completed without repair tasks') END;
+        SELECT CASE WHEN EXISTS (SELECT 1 FROM work_order_tasks WHERE work_order_id = NEW.id AND (status <> 'complete' OR technician_id IS NULL))
+          THEN RAISE(ABORT,'Work order cannot be completed with unfinished or unattributed tasks') END;
+        SELECT CASE WHEN COALESCE((SELECT result FROM repair_quality_reviews WHERE work_order_id = NEW.id ORDER BY reviewed_at DESC,id DESC LIMIT 1),'') <> 'pass'
+          THEN RAISE(ABORT,'Work order cannot be completed before passing QC') END;
+      END` },
   ], 'write').catch(err => { schemaPromise = null; throw err; });
   return schemaPromise;
 }
