@@ -1,36 +1,36 @@
 (()=>{'use strict';
-const VERSION='20260825-0532';
+const VERSION='20260825-0542';
 let profile=null,profilePromise=null;
+const opsAttention={key:'operations-attention',title:'Operational Attention Center',desc:'One evidence-backed management queue across inventory, purchasing, rentals, repairs, finance, cash controls and people risk.',anyPermission:['dashboard','reports','inventory','purchasing','work_orders','transactions','accounts'],css:'/operations-attention-center.css',js:'/operations-attention-center.js',global:'TotalToolsOperationsAttentionCenter'};
 const techPerformance={key:'technician-performance',title:'Technician Performance Intelligence',desc:'Evidence-backed quality, efficiency, timeliness, rework, documentation and incentive-review intelligence.',anyPermission:['work_orders','reports','employees_salaries'],css:'/technician-compensation.css',js:'/technician-compensation.js',global:'TotalToolsTechnicianCompensation'};
 const techCoaching={key:'technician-coaching',title:'Technician Coaching & Follow-up',desc:'Turn performance evidence into accountable coaching, recognition, improvement plans and dated follow-up actions.',permission:'work_orders',css:'/technician-coaching.css',js:'/technician-coaching.js',global:'TotalToolsTechnicianCoaching'};
 const techManagement={key:'technician-management',title:'Technician Management Attention',desc:'Proactively surface overdue follow-ups, comeback risk, QC failures, safety events, timer anomalies and deteriorating timeliness.',anyPermission:['work_orders','reports','employees_salaries'],css:'/technician-management-intelligence.css',js:'/technician-management-intelligence.js',global:'TotalToolsTechnicianManagementIntelligence'};
 const registry={
- sales:[
+ sales:[opsAttention,
   {key:'drawer',title:'Cash Drawer & Reconciliation',desc:'Open drawer sessions, tender evidence, closures and reconciliation status.',permission:'drawers',css:'/cash-drawer-workspace.css',js:'/cash-drawer-workspace.js',global:'TotalToolsCashDrawerWorkspace'},
   {key:'commerce',title:'Online Orders & Commerce Sync',desc:'SmartCommerce and WooCommerce orders, fulfilment evidence and online catalog readiness.',permission:'transactions',css:'/ecommerce-operations-workspace.css',js:'/ecommerce-operations-workspace.js',global:'TotalToolsEcommerceOperations'}
  ],
- service:[techManagement,techPerformance,techCoaching],
- inventory:[
+ service:[opsAttention,techManagement,techPerformance,techCoaching],
+ rentals:[opsAttention],
+ dispatch:[opsAttention],
+ inventory:[opsAttention,
   {key:'warehouse',title:'Warehouse Operations',desc:'Zones, bins, product locations and outbound shipment fulfilment.',permission:'warehouse',css:'/warehouse-operations-workspace.css',js:'/warehouse-operations-workspace.js',global:'TotalToolsWarehouseOperations'},
   {key:'suppliers',title:'Supplier Management',desc:'Supplier records, payment terms and recent purchasing context.',permission:'suppliers',css:'/suppliers-workspace.css',js:'/suppliers-workspace.js',global:'TotalToolsSuppliersWorkspace'},
   {key:'catalog',title:'Products & Categories',desc:'Inventory master data, pricing, categories and online availability.',permission:'inventory',css:'/catalog-admin-workspace.css',js:'/catalog-admin-workspace.js',global:'TotalToolsCatalogAdmin'},
   {key:'commerce',title:'Online Orders & Commerce Sync',desc:'SmartCommerce and WooCommerce orders, fulfilment evidence and online catalog readiness.',permission:'inventory',css:'/ecommerce-operations-workspace.css',js:'/ecommerce-operations-workspace.js',global:'TotalToolsEcommerceOperations'}
  ],
- purchasing:[
+ purchasing:[opsAttention,
   {key:'suppliers',title:'Supplier Management',desc:'Supplier records, payment terms and recent purchasing context.',permission:'suppliers',css:'/suppliers-workspace.css',js:'/suppliers-workspace.js',global:'TotalToolsSuppliersWorkspace'}
  ],
- finance:[
+ finance:[opsAttention,
   {key:'ar',title:'Accounts Receivable',desc:'Customer credit exposure, aging, invoice balances and controlled collections.',permission:'accounts',css:'/accounts-receivable-workspace.css',js:'/accounts-receivable-workspace.js',global:'TotalToolsAccountsReceivableWorkspace'},
   {key:'commissions',title:'Commissions & Incentives',desc:'Commission plans, assignments, earnings, approvals and payment status.',permission:'commissions',css:'/commissions-workspace.css',js:'/commissions-workspace.js',global:'TotalToolsCommissionsWorkspace'},
   {key:'drawer',title:'Cash Drawer & Reconciliation',desc:'Open drawer sessions, tender evidence, closures and reconciliation status.',permission:'drawers',css:'/cash-drawer-workspace.css',js:'/cash-drawer-workspace.js',global:'TotalToolsCashDrawerWorkspace'}
  ],
- people:[
-  techManagement,
-  techPerformance,
-  techCoaching,
+ people:[opsAttention,techManagement,techPerformance,techCoaching,
   {key:'commissions',title:'Commissions & Incentives',desc:'Commission plans, assignments, earnings, approvals and payment status.',permission:'commissions',css:'/commissions-workspace.css',js:'/commissions-workspace.js',global:'TotalToolsCommissionsWorkspace'}
  ],
- administration:[
+ administration:[opsAttention,
   {key:'integrations',title:'Integrations & API Access',desc:'Scoped API credentials and commerce integration readiness without exposing stored secrets.',permission:'settings',css:'/integration-admin-workspace.css',js:'/integration-admin-workspace.js',global:'TotalToolsIntegrationAdmin'},
   {key:'denominations',title:'Cash Denominations',desc:'Configure notes and coins used during drawer counting and reconciliation.',permission:'settings',css:'/denominations-workspace.css',js:'/denominations-workspace.js',global:'TotalToolsDenominationsWorkspace'},
   {key:'commerce',title:'E-commerce Operations',desc:'Operational oversight for connected commerce channels and fulfilment readiness.',permission:'settings',css:'/ecommerce-operations-workspace.css',js:'/ecommerce-operations-workspace.js',global:'TotalToolsEcommerceOperations'}
