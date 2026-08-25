@@ -2,6 +2,7 @@ const express=require('express');
 const router=express.Router();
 const {requireAuth}=require('../lib/permissions');
 router.use(requireAuth);
+router.use('/catalog',require('./catalog-workflow'));
 const DOMAIN_RULES={
   sales:['pos','transactions','drawers','quotations','layaway'],
   service:['work_orders','services'],
