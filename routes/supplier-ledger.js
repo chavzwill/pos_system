@@ -4,63 +4,77 @@ const { db } = require('../database');
 const { requirePermission, requireAnyPermission } = require('../lib/permissions');
 
 let schemaPromise = null;
+async function ensureColumn(table,name,definition){
+  const {rows}=await db.execute({sql:`PRAGMA table_info(${table})`,args:[]});
+  if(!rows.some(r=>String(r.name)===name))await db.execute({sql:`ALTER TABLE ${table} ADD COLUMN ${name} ${definition}`,args:[]});
+}
 async function ensureSchema() {
-  if (!schemaPromise) schemaPromise = db.batch([
-    { sql: `CREATE TABLE IF NOT EXISTS supplier_invoices (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
-      purchase_order_id INTEGER REFERENCES purchase_orders(id),
-      branch_id INTEGER REFERENCES branches(id),
-      invoice_number TEXT NOT NULL,
-      invoice_date DATE NOT NULL,
-      due_date DATE,
-      subtotal REAL NOT NULL DEFAULT 0,
-      tax_amount REAL NOT NULL DEFAULT 0,
-      total REAL NOT NULL DEFAULT 0,
-      status TEXT NOT NULL DEFAULT 'posted',
-      notes TEXT,
-      posted_by INTEGER REFERENCES employees(id),
-      posted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(supplier_id, invoice_number)
-    )` },
-    { sql: `CREATE TABLE IF NOT EXISTS supplier_payments (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      payment_number TEXT NOT NULL UNIQUE,
-      supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
-      branch_id INTEGER REFERENCES branches(id),
-      payment_date DATE NOT NULL,
-      amount REAL NOT NULL,
-      payment_method TEXT,
-      reference TEXT,
-      notes TEXT,
-      recorded_by INTEGER REFERENCES employees(id),
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )` },
-    { sql: `CREATE TABLE IF NOT EXISTS supplier_payment_allocations (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      payment_id INTEGER NOT NULL REFERENCES supplier_payments(id),
-      supplier_invoice_id INTEGER NOT NULL REFERENCES supplier_invoices(id),
-      amount REAL NOT NULL,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(payment_id, supplier_invoice_id)
-    )` },
-    { sql: `CREATE TABLE IF NOT EXISTS supplier_ledger_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      supplier_id INTEGER NOT NULL,
-      event_type TEXT NOT NULL,
-      entity_type TEXT NOT NULL,
-      entity_id INTEGER NOT NULL,
-      amount REAL,
-      details TEXT,
-      actor_employee_id INTEGER,
-      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
-    )` },
-    { sql: 'CREATE INDEX IF NOT EXISTS idx_supplier_invoices_due ON supplier_invoices(status,due_date,supplier_id)' },
-    { sql: 'CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier ON supplier_payments(supplier_id,payment_date)' },
-    { sql: 'CREATE INDEX IF NOT EXISTS idx_supplier_ledger_events_supplier ON supplier_ledger_events(supplier_id,created_at)' },
-  ], 'write').catch(err => { schemaPromise = null; throw err; });
+  if (!schemaPromise) schemaPromise = (async()=>{
+    await db.batch([
+      { sql: `CREATE TABLE IF NOT EXISTS supplier_invoices (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+        purchase_order_id INTEGER REFERENCES purchase_orders(id),
+        branch_id INTEGER REFERENCES branches(id),
+        invoice_number TEXT NOT NULL,
+        invoice_date DATE NOT NULL,
+        due_date DATE,
+        subtotal REAL NOT NULL DEFAULT 0,
+        tax_amount REAL NOT NULL DEFAULT 0,
+        freight_amount REAL NOT NULL DEFAULT 0,
+        duty_amount REAL NOT NULL DEFAULT 0,
+        other_landed_cost_amount REAL NOT NULL DEFAULT 0,
+        tax_treatment TEXT,
+        total REAL NOT NULL DEFAULT 0,
+        status TEXT NOT NULL DEFAULT 'posted',
+        notes TEXT,
+        posted_by INTEGER REFERENCES employees(id),
+        posted_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(supplier_id, invoice_number)
+      )` },
+      { sql: `CREATE TABLE IF NOT EXISTS supplier_payments (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        payment_number TEXT NOT NULL UNIQUE,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+        branch_id INTEGER REFERENCES branches(id),
+        payment_date DATE NOT NULL,
+        amount REAL NOT NULL,
+        payment_method TEXT,
+        reference TEXT,
+        notes TEXT,
+        recorded_by INTEGER REFERENCES employees(id),
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )` },
+      { sql: `CREATE TABLE IF NOT EXISTS supplier_payment_allocations (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        payment_id INTEGER NOT NULL REFERENCES supplier_payments(id),
+        supplier_invoice_id INTEGER NOT NULL REFERENCES supplier_invoices(id),
+        amount REAL NOT NULL,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(payment_id, supplier_invoice_id)
+      )` },
+      { sql: `CREATE TABLE IF NOT EXISTS supplier_ledger_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplier_id INTEGER NOT NULL,
+        event_type TEXT NOT NULL,
+        entity_type TEXT NOT NULL,
+        entity_id INTEGER NOT NULL,
+        amount REAL,
+        details TEXT,
+        actor_employee_id INTEGER,
+        created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+      )` },
+      { sql: 'CREATE INDEX IF NOT EXISTS idx_supplier_invoices_due ON supplier_invoices(status,due_date,supplier_id)' },
+      { sql: 'CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier ON supplier_payments(supplier_id,payment_date)' },
+      { sql: 'CREATE INDEX IF NOT EXISTS idx_supplier_ledger_events_supplier ON supplier_ledger_events(supplier_id,created_at)' },
+    ], 'write');
+    await ensureColumn('supplier_invoices','freight_amount','REAL NOT NULL DEFAULT 0');
+    await ensureColumn('supplier_invoices','duty_amount','REAL NOT NULL DEFAULT 0');
+    await ensureColumn('supplier_invoices','other_landed_cost_amount','REAL NOT NULL DEFAULT 0');
+    await ensureColumn('supplier_invoices','tax_treatment','TEXT');
+  })().catch(err => { schemaPromise = null; throw err; });
   return schemaPromise;
 }
 
@@ -68,6 +82,7 @@ router.use(async (req,res,next)=>{ try { await ensureSchema(); next(); } catch(e
 
 function actor(req){ return req.employee?.id || req.user?.employee_id || null; }
 function paymentNumber(){ return `SP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`; }
+function money(v){const n=Number(v);return Number.isFinite(n)?Number(n.toFixed(2)):NaN;}
 
 router.get('/overview', requirePermission('reports_financial'), async (req,res)=>{
   try {
@@ -117,14 +132,33 @@ router.get('/invoices', requirePermission('reports_financial'), async (req,res)=
 
 router.post('/invoices', requireAnyPermission('purchasing_approve','reports_financial'), async (req,res)=>{
   try{
-    const b=req.body||{}; const supplierId=Number(b.supplier_id),poId=b.purchase_order_id?Number(b.purchase_order_id):null;
-    const subtotal=Number(b.subtotal||0),tax=Number(b.tax_amount||0),total=Number(b.total ?? subtotal+tax);
+    const b=req.body||{};
+    const supplierId=Number(b.supplier_id),poId=b.purchase_order_id?Number(b.purchase_order_id):null;
+    const subtotal=money(b.subtotal||0),tax=money(b.tax_amount||0),freight=money(b.freight_amount||0),duty=money(b.duty_amount||0),otherLanded=money(b.other_landed_cost_amount||0);
+    const components=[subtotal,tax,freight,duty,otherLanded];
+    if(components.some(v=>!Number.isFinite(v)||v<0))return res.status(400).json({error:'Supplier invoice monetary components must be non-negative numbers'});
+    const calculated=Number(components.reduce((s,v)=>s+v,0).toFixed(2));
+    const total=b.total===undefined?calculated:money(b.total);
     if(!supplierId||!String(b.invoice_number||'').trim()||!b.invoice_date||!Number.isFinite(total)||total<=0)return res.status(400).json({error:'supplier_id, invoice_number, invoice_date and a positive total are required'});
-    if(poId){const {rows:[po]}=await db.execute({sql:'SELECT * FROM purchase_orders WHERE id=?',args:[poId]});if(!po)return res.status(404).json({error:'Purchase order not found'});if(Number(po.supplier_id||0)&&Number(po.supplier_id)!==supplierId)return res.status(409).json({error:'Supplier invoice supplier does not match purchase order supplier'});}
+    if(Math.abs(total-calculated)>0.01)return res.status(400).json({error:`Invoice components total ${calculated.toFixed(2)} does not match invoice total ${total.toFixed(2)}`});
+    let taxTreatment=null;
+    if(tax>0){
+      taxTreatment=String(b.tax_treatment||'').trim().toLowerCase();
+      if(!['recoverable','landed_cost','expense'].includes(taxTreatment))return res.status(400).json({error:'tax_treatment is required when supplier tax is present: recoverable, landed_cost, or expense'});
+    }
+    let po=null;
+    if(poId){
+      const result=await db.execute({sql:'SELECT * FROM purchase_orders WHERE id=?',args:[poId]});po=result.rows[0];
+      if(!po)return res.status(404).json({error:'Purchase order not found'});
+      if(Number(po.supplier_id||0)&&Number(po.supplier_id)!==supplierId)return res.status(409).json({error:'Supplier invoice supplier does not match purchase order supplier'});
+      if(b.branch_id&&po.branch_id&&Number(b.branch_id)!==Number(po.branch_id))return res.status(409).json({error:'Supplier invoice branch does not match purchase order receiving branch'});
+    }
+    const branchId=b.branch_id||po?.branch_id||null;
     const tx=await db.transaction('write'); try{
-      const r=await tx.execute({sql:`INSERT INTO supplier_invoices(supplier_id,purchase_order_id,branch_id,invoice_number,invoice_date,due_date,subtotal,tax_amount,total,notes,posted_by)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?)`,args:[supplierId,poId,b.branch_id||null,String(b.invoice_number).trim(),b.invoice_date,b.due_date||null,subtotal,tax,total,b.notes||null,actor(req)]});
-      const id=Number(r.lastInsertRowid); await tx.execute({sql:`INSERT INTO supplier_ledger_events(supplier_id,event_type,entity_type,entity_id,amount,details,actor_employee_id) VALUES(?,?,?,?,?,?,?)`,args:[supplierId,'invoice_posted','supplier_invoice',id,total,`Supplier invoice ${String(b.invoice_number).trim()} posted`,actor(req)]});
+      const r=await tx.execute({sql:`INSERT INTO supplier_invoices(supplier_id,purchase_order_id,branch_id,invoice_number,invoice_date,due_date,subtotal,tax_amount,freight_amount,duty_amount,other_landed_cost_amount,tax_treatment,total,notes,posted_by)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[supplierId,poId,branchId,String(b.invoice_number).trim(),b.invoice_date,b.due_date||null,subtotal,tax,freight,duty,otherLanded,taxTreatment,total,b.notes||null,actor(req)]});
+      const id=Number(r.lastInsertRowid);
+      await tx.execute({sql:`INSERT INTO supplier_ledger_events(supplier_id,event_type,entity_type,entity_id,amount,details,actor_employee_id) VALUES(?,?,?,?,?,?,?)`,args:[supplierId,'invoice_posted','supplier_invoice',id,total,`Supplier invoice ${String(b.invoice_number).trim()} posted; merchandise ${subtotal.toFixed(2)}, tax ${tax.toFixed(2)}, landed costs ${(freight+duty+otherLanded).toFixed(2)}`,actor(req)]});
       await tx.commit(); const {rows:[row]}=await db.execute({sql:'SELECT * FROM supplier_invoices WHERE id=?',args:[id]}); res.status(201).json(row);
     }catch(e){await tx.rollback();throw e;}
   }catch(e){res.status(400).json({error:e.message});}
