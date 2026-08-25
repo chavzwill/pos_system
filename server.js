@@ -93,15 +93,7 @@ app.post('/client-diagnostics', (req, res) => { const body=req.body||{}; console
 app.get('/legacy-pos-app.js', (req,res)=>{ try{res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400');res.type('application/javascript').send(getLegacyAppScript());}catch(error){console.error('Unable to serve validated legacy POS application script:',error&&(error.stack||error.message||error));res.status(500).type('application/javascript').send('throw new Error("POS application script validation failed");');}});
 app.get('/', sendFastShell);
 app.get('/legacy', sendEnhancedIndex);
-app.use(express.static(publicDir, {
-  index:false,
-  etag:true,
-  maxAge:'1h',
-  setHeaders:(res,filePath)=>{
-    if (/\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico)$/i.test(filePath)) res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400');
-    else res.set('Cache-Control','no-cache, must-revalidate');
-  }
-}));
+app.use(express.static(publicDir, { index:false, etag:true, maxAge:'1h', setHeaders:(res,filePath)=>{ if (/\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico)$/i.test(filePath)) res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400'); else res.set('Cache-Control','no-cache, must-revalidate'); } }));
 app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { maxAge:'1h' }));
 app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.error('POS database initialization failed:',e&&(e.stack||e.message||e));res.status(500).json({error:'Database initialization failed'});}});
 
@@ -156,11 +148,13 @@ app.use('/api/rentals', require('./routes/rentals'));
 app.use('/api/layaway', require('./routes/layaway'));
 app.use('/api/work-orders', require('./routes/work-orders'));
 app.use('/api/repair-operations', require('./routes/repair-operations'));
+app.use('/api/repair-quality', require('./routes/repair-quality'));
 app.use('/api/repair-communications', require('./routes/repair-communications'));
 app.use('/api/repair-notifications', require('./routes/repair-notifications'));
 app.use('/api/repair-notification-worker', repairNotificationWorkerRouter);
 app.use('/api/repair-authorizations', require('./routes/repair-authorizations'));
 app.use('/api/repair-parts-integrity', require('./routes/repair-parts-integrity'));
+app.use('/api/technician-compensation/performance', require('./routes/technician-performance'));
 app.use('/api/technician-compensation', require('./routes/technician-compensation'));
 app.use('/api', (err,req,res,next)=>{if(res.headersSent)return next(err);res.status(err.status||500).json({error:err.message||'Request failed'});});
 app.get('*', (req,res)=> req.path.startsWith('/legacy') ? sendEnhancedIndex(req,res) : sendFastShell(req,res));
