@@ -74,26 +74,37 @@ test.describe('Total Tools Operations acceptance', () => {
     expect(failures, failures.join('\n')).toEqual([]);
   });
 
-  test('critical operational workspaces lazy-load without client errors', async ({ page }) => {
+  test('major workflow workspaces initialize through the hardened loader', async ({ page }) => {
     const failures = collectRuntimeFailures(page);
     await loginToOperationsShell(page);
 
     const targets = [
-      { domain: 'sales', title: /Point of Sale/i, global: 'TotalToolsSalesWorkspace' },
-      { domain: 'service', title: /Work Orders/i, global: 'TotalToolsWorkOrdersWorkspace' },
-      { domain: 'inventory', title: /Inventory Operations/i, global: 'TotalToolsInventoryWorkspace' },
-      { domain: 'purchasing', title: /Purchasing Operations/i, global: 'TotalToolsPurchasingWorkspace' },
-      { domain: 'finance', title: /Accounting Intelligence/i, global: 'TotalToolsAccountingIntelligence' },
+      ['sales-workspace','TotalToolsSalesWorkspace'],
+      ['held-sales-workspace','TotalToolsHeldSalesWorkspace'],
+      ['cashier-controls-workspace','TotalToolsCashierControls'],
+      ['quotations-workspace','TotalToolsQuotationsWorkspace'],
+      ['work-orders-workspace','TotalToolsWorkOrdersWorkspace'],
+      ['rentals-workspace','TotalToolsRentalsWorkspace'],
+      ['inventory-workspace','TotalToolsInventoryWorkspace'],
+      ['purchasing-workspace','TotalToolsPurchasingWorkspace'],
+      ['transfers-workspace','TotalToolsTransfersWorkspace'],
+      ['operational-reports','TotalToolsOperationalReports'],
+      ['logistics-intelligence','TotalToolsLogisticsIntelligence'],
+      ['inventory-intelligence','TotalToolsInventoryIntelligence'],
+      ['accounting-intelligence','TotalToolsAccountingIntelligence'],
     ];
 
-    for (const target of targets) {
-      const domain = page.locator(`.shell-nav [data-domain="${target.domain}"]`);
-      if (!(await domain.count())) continue;
-      await domain.click();
-      const card = page.locator('.shell-card').filter({ hasText: target.title }).first();
-      if (!(await card.count())) continue;
-      await card.getByRole('button', { name: /open/i }).click();
-      await expect.poll(async () => page.evaluate(name => Boolean(window[name]), target.global), { timeout: 10_000 }).toBeTruthy();
+    for (const [key, global] of targets) {
+      const result = await page.evaluate(async ({ key, global }) => {
+        if (!window.TotalToolsShellOpen) return { ok:false, error:'TotalToolsShellOpen unavailable' };
+        try {
+          await window.TotalToolsShellOpen(key, key);
+          return { ok:Boolean(window[global]?.open), error:null };
+        } catch (error) {
+          return { ok:false, error:String(error?.message || error) };
+        }
+      }, { key, global });
+      expect(result.ok, `${key}: ${result.error || 'workspace API did not register'}`).toBeTruthy();
       await page.keyboard.press('Escape');
     }
 
