@@ -6,9 +6,9 @@ let readyPromise=null;
 async function ensureRetailCostIntegrity(){
   if(readyPromise)return readyPromise;
   readyPromise=(async()=>{
-    const {rows:cols}=await db.execute({sql:'PRAGMA table_info(transaction_items)',args:[]});
-    const names=new Set(cols.map(c=>String(c.name||'').toLowerCase()));
-    if(!names.has('unit_cost_at_sale')){
+    const {rows:txCols}=await db.execute({sql:'PRAGMA table_info(transaction_items)',args:[]});
+    const txNames=new Set(txCols.map(c=>String(c.name||'').toLowerCase()));
+    if(!txNames.has('unit_cost_at_sale')){
       try{await db.execute({sql:'ALTER TABLE transaction_items ADD COLUMN unit_cost_at_sale REAL',args:[]});}catch(e){
         if(!String(e.message||'').toLowerCase().includes('duplicate column'))throw e;
       }
@@ -21,6 +21,25 @@ async function ensureRetailCostIntegrity(){
         SET unit_cost_at_sale=(SELECT cost FROM products WHERE id=NEW.product_id)
         WHERE id=NEW.id;
       END`,args:[]});
+
+    const {rows:returnTable}=await db.execute({sql:"SELECT name FROM sqlite_master WHERE type='table' AND name='return_items'",args:[]});
+    if(returnTable.length){
+      const {rows:returnCols}=await db.execute({sql:'PRAGMA table_info(return_items)',args:[]});
+      const returnNames=new Set(returnCols.map(c=>String(c.name||'').toLowerCase()));
+      if(!returnNames.has('unit_cost_at_return')){
+        try{await db.execute({sql:'ALTER TABLE return_items ADD COLUMN unit_cost_at_return REAL',args:[]});}catch(e){
+          if(!String(e.message||'').toLowerCase().includes('duplicate column'))throw e;
+        }
+      }
+      await db.execute({sql:`CREATE TRIGGER IF NOT EXISTS trg_return_item_cost_snapshot
+        AFTER INSERT ON return_items
+        WHEN NEW.transaction_item_id IS NOT NULL AND NEW.unit_cost_at_return IS NULL
+        BEGIN
+          UPDATE return_items
+          SET unit_cost_at_return=(SELECT unit_cost_at_sale FROM transaction_items WHERE id=NEW.transaction_item_id)
+          WHERE id=NEW.id;
+        END`,args:[]});
+    }
   })().catch(e=>{readyPromise=null;throw e;});
   return readyPromise;
 }
