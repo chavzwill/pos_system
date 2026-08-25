@@ -2,6 +2,7 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {ensureInventoryCostLayers}=require('../lib/inventory-cost-layers');
+const {ensureInventoryCostRestoration}=require('../lib/inventory-cost-restoration');
 
 let readyPromise=null;
 async function ensureRetailCostIntegrity(){
@@ -35,6 +36,7 @@ async function ensureRetailCostIntegrity(){
     }
 
     await ensureInventoryCostLayers();
+    await ensureInventoryCostRestoration();
   })().catch(e=>{readyPromise=null;throw e;});
   return readyPromise;
 }
