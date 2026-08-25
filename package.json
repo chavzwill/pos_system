@@ -10,11 +10,12 @@
     "check:client-syntax": "node scripts/check-client-syntax.js",
     "test:e2e": "playwright test",
     "test:acceptance": "playwright test tests/operations-acceptance.spec.js",
-    "test:business-integrity": "playwright test tests/business-integrity.spec.js tests/purchase-order-hardening.spec.js tests/technician-compensation.spec.js tests/erp-intelligence.spec.js tests/inventory-intelligence.spec.js tests/logistics-intelligence.spec.js tests/operational-reports.spec.js tests/rentals-integrity.spec.js tests/repair-quality-integrity.spec.js",
+    "test:business-integrity": "playwright test tests/business-integrity.spec.js tests/purchase-order-hardening.spec.js tests/technician-compensation.spec.js tests/erp-intelligence.spec.js tests/inventory-intelligence.spec.js tests/logistics-intelligence.spec.js tests/operational-reports.spec.js tests/rentals-integrity.spec.js tests/repair-quality-integrity.spec.js tests/service-completion-integrity.spec.js",
     "test:security-boundaries": "playwright test tests/security-boundaries.spec.js",
     "test:rentals-integrity": "playwright test tests/rentals-integrity.spec.js",
     "test:repair-integrity": "playwright test tests/repair-quality-integrity.spec.js",
-    "test:release-gate": "npm run check:client-syntax && playwright test tests/operations-acceptance.spec.js tests/business-integrity.spec.js tests/security-boundaries.spec.js tests/purchase-order-hardening.spec.js tests/technician-compensation.spec.js tests/erp-intelligence.spec.js tests/inventory-intelligence.spec.js tests/logistics-intelligence.spec.js tests/operational-reports.spec.js tests/rentals-integrity.spec.js tests/repair-quality-integrity.spec.js",
+    "test:service-integrity": "playwright test tests/service-completion-integrity.spec.js",
+    "test:release-gate": "npm run check:client-syntax && playwright test tests/operations-acceptance.spec.js tests/business-integrity.spec.js tests/security-boundaries.spec.js tests/purchase-order-hardening.spec.js tests/technician-compensation.spec.js tests/erp-intelligence.spec.js tests/inventory-intelligence.spec.js tests/logistics-intelligence.spec.js tests/operational-reports.spec.js tests/rentals-integrity.spec.js tests/repair-quality-integrity.spec.js tests/service-completion-integrity.spec.js",
     "pull-turso-snapshot": "node scripts/pull-turso-snapshot.js"
   },
   "dependencies": {
