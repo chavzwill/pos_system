@@ -19,7 +19,9 @@ check('workspace loader does not own guide Next',!loader.includes('#tt-guided-mo
 check('orchestrator uses hardened loader directly',orchestrator.includes('window.TotalToolsShellOpen'));
 check('setup advances only after workspace verification',orchestrator.includes("if(!ready(ctx))throw new Error('Workspace verification failed.')")&&orchestrator.includes("if(b&&!b.disabled)b.click()"));
 check('purchasing tab selected before setup advances',orchestrator.indexOf("await selectPurchasingTab(ctx.tab)")<orchestrator.indexOf("if(!ready(ctx))throw new Error('Workspace verification failed.')"));
-check('guide backdrop does not block workspace controls',efficiency.includes('.tt-guide-backdrop{pointer-events:none!important}'));
+check('guide backdrop does not block workspace controls',efficiency.includes('.tt-guide-backdrop')&&efficiency.includes('pointer-events:none!important'));
+check('guide backdrop does not blur workspace',efficiency.includes('backdrop-filter:none!important')&&efficiency.includes('-webkit-backdrop-filter:none!important')&&efficiency.includes('background:transparent!important'));
+check('guide root passes pointer interaction through',efficiency.includes('#tt-guided-mode{pointer-events:none!important}')&&efficiency.includes('#tt-guided-mode .tt-guide{pointer-events:auto!important}'));
 check('disabled controls retain visible text',efficiency.includes('color:#6f7b75!important')&&efficiency.includes('background:#edf1ef!important'));
 check('quote workspace selector matches implementation',orchestrator.includes("selector:'#tt-quotes'"));
 check('purchasing tab contexts are distinct',orchestrator.includes("tab:'pr'")&&orchestrator.includes("tab:'po'"));
