@@ -8,6 +8,8 @@
     "dev": "npx nodemon server.js",
     "vercel-build": "node scripts/check-client-syntax.js",
     "check:client-syntax": "node scripts/check-client-syntax.js",
+    "test:e2e": "playwright test",
+    "test:acceptance": "playwright test tests/operations-acceptance.spec.js",
     "pull-turso-snapshot": "node scripts/pull-turso-snapshot.js"
   },
   "dependencies": {
