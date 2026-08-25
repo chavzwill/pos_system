@@ -147,6 +147,7 @@ app.use('/api/woocommerce', woocommerceRouter);
 app.use('/api/api-keys', require('./routes/api-keys'));
 app.use('/api/rentals', require('./routes/rentals'));
 app.use('/api/layaway', require('./routes/layaway'));
+app.use('/api/work-orders', require('./routes/work-order-completion-hardening'));
 app.use('/api/work-orders', require('./routes/work-orders'));
 app.use('/api/repair-operations', require('./routes/repair-operations'));
 app.use('/api/repair-quality', require('./routes/repair-quality'));
@@ -154,6 +155,7 @@ app.use('/api/repair-communications', require('./routes/repair-communications'))
 app.use('/api/repair-notifications', require('./routes/repair-notifications'));
 app.use('/api/repair-notification-worker', repairNotificationWorkerRouter);
 app.use('/api/repair-authorizations', require('./routes/repair-authorizations'));
+app.use('/api/repair-parts-integrity', require('./routes/repair-parts-hardening'));
 app.use('/api/repair-parts-integrity', require('./routes/repair-parts-integrity'));
 app.use('/api/technician-compensation/performance', require('./routes/technician-performance'));
 app.use('/api/technician-compensation', require('./routes/technician-compensation'));
