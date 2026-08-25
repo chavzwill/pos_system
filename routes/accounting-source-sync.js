@@ -3,6 +3,7 @@ const router=express.Router();
 const {db}=require('../database');
 const {requireAnyPermission}=require('../lib/permissions');
 const {ensureLedger,postSourceJournal}=require('../lib/accounting-posting');
+const {syncRetailReturns}=require('../lib/accounting-retail-returns');
 router.use(requireAnyPermission('reports_financial','reports'));
 function actor(req){return req.employee?.id||req.user?.employee_id||null;}
 async function exists(table){const {rows:[r]}=await db.execute({sql:"SELECT name FROM sqlite_master WHERE type='table' AND name=?",args:[table]});return !!r;}
@@ -166,13 +167,14 @@ async function syncRepairFinancials(req,stats){
 }
 router.post('/sync',async(req,res)=>{try{
   await ensureBridgeAccounts();
-  const stats={supplier_invoices:{posted:0,existing:0},supplier_payments:{posted:0,existing:0},settlements:{posted:0,existing:0},retail_sales:{posted:0,existing:0},repair_part_usage:{posted:0,existing:0},repair_assessments:{posted:0,existing:0},repair_deposits:{posted:0,existing:0},repair_service_revenue:{posted:0,existing:0},repair_final_payments:{posted:0,existing:0},reconciliation_issues:[],evidence_gaps:[],errors:[]};
+  const stats={supplier_invoices:{posted:0,existing:0},supplier_payments:{posted:0,existing:0},settlements:{posted:0,existing:0},retail_sales:{posted:0,existing:0},retail_returns:{posted:0,existing:0},retail_return_inventory:{posted:0,existing:0},repair_part_usage:{posted:0,existing:0},repair_assessments:{posted:0,existing:0},repair_deposits:{posted:0,existing:0},repair_service_revenue:{posted:0,existing:0},repair_final_payments:{posted:0,existing:0},reconciliation_issues:[],evidence_gaps:[],errors:[]};
   await syncSupplierInvoices(req,stats);
   await syncSupplierPayments(req,stats);
   await syncSettlements(req,stats);
   await syncRetailSales(req,stats);
+  await syncRetailReturns({actorId:actor(req),stats});
   await syncRepairPartUsage(req,stats);
   await syncRepairFinancials(req,stats);
-  res.json({success:stats.errors.length===0&&stats.reconciliation_issues.length===0,stats,basis:'Verified retail sales are posted separately from rentals and work-order transactions. Retail tenders debit Cash, Accounts Receivable, or Electronic Settlement Clearing according to the recorded payment evidence; redeemed store credit reduces Customer Store Credit liability; sales tax is credited to Taxes Payable; net retail value is credited to Sales Revenue. Historical retail COGS is deliberately not invented when transaction lines lack a sale-time cost snapshot. Repair cash flows remain separated by economic substance: assessment fees recognize service revenue when collected; repair deposits remain Customer Deposits liabilities until completion; completed repair value recognizes Service Revenue and any unpaid balance as Accounts Receivable; final payment clears that receivable. Repair parts COGS posts from verified consumed quantities only. All automatic postings are idempotent by source.'});
+  res.json({success:stats.errors.length===0&&stats.reconciliation_issues.length===0,stats,basis:'Verified retail sales are posted separately from rentals and work-order transactions. Retail tenders debit Cash, Accounts Receivable, or Electronic Settlement Clearing according to recorded payment evidence; redeemed store credit reduces Customer Store Credit liability; sales tax is credited to Taxes Payable; net retail value is credited to Sales Revenue. Refund and credit-note returns reverse revenue and tax only from recorded return evidence; credit notes create Customer Store Credit liability, while cash/card refunds remain Customer Refunds Payable until a real settlement method is recorded. Returned inventory reverses original COGS only when original sale-time cost evidence survives on every returned line. Replacement returns are flagged because the current workflow does not yet preserve a separate outgoing replacement transaction. Repair cash flows remain separated by economic substance, and repair parts COGS posts from verified consumed quantities only. All automatic postings are idempotent by source.'});
 }catch(e){res.status(500).json({error:e.message});}});
 module.exports=router;
