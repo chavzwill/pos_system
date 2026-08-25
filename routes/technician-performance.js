@@ -19,6 +19,23 @@ async function ensureSchema() {
     )` },
     { sql: 'CREATE INDEX IF NOT EXISTS idx_tech_perf_events_tech_date ON technician_performance_events(technician_id, occurred_at)' },
     { sql: 'CREATE INDEX IF NOT EXISTS idx_tech_perf_events_wo ON technician_performance_events(work_order_id)' },
+    { sql: `CREATE TABLE IF NOT EXISTS technician_coaching_actions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      technician_id INTEGER NOT NULL REFERENCES employees(id),
+      review_type TEXT NOT NULL DEFAULT 'coaching',
+      strengths TEXT,
+      focus_area TEXT NOT NULL,
+      action_plan TEXT NOT NULL,
+      target_date DATE,
+      status TEXT NOT NULL DEFAULT 'open',
+      created_by INTEGER REFERENCES employees(id),
+      closed_by INTEGER REFERENCES employees(id),
+      closed_at DATETIME,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )` },
+    { sql: 'CREATE INDEX IF NOT EXISTS idx_tech_coaching_tech_status ON technician_coaching_actions(technician_id, status, created_at)' },
+    { sql: 'CREATE INDEX IF NOT EXISTS idx_tech_coaching_target ON technician_coaching_actions(target_date, status)' },
   ], 'write').catch(err => { schemaPromise = null; throw err; });
   return schemaPromise;
 }
@@ -62,7 +79,6 @@ function scorecard(row, events) {
   let earned=0, availableWeight=0;
   for(const [key,w] of Object.entries(WEIGHTS)){ if(metrics[key].available){ earned += metrics[key].score*w; availableWeight += w; } }
   const overall = availableWeight ? earned/availableWeight : null;
-  const coverage = availableWeight;
   const flags=[];
   if(efficiencyRatio!=null && efficiencyRatio>1.35) flags.push('Efficiency is unusually high; review task allotments and timer evidence before using it for incentives.');
   if(qualityScore!=null && qualityScore<85) flags.push('Quality is below the preferred review threshold; speed should not outweigh first-pass quality.');
@@ -114,6 +130,57 @@ router.post('/events', requirePermission('work_orders'), async (req,res)=>{
 
 router.get('/events', requireAnyPermission('work_orders','reports','employees_salaries'), async (req,res)=>{
   try{await ensureSchema();const p=period(req);const args=[p.start,p.end];let where='date(pe.occurred_at) BETWEEN date(?) AND date(?)';if(req.query.technician_id){where+=' AND pe.technician_id=?';args.push(Number(req.query.technician_id));}const {rows}=await db.execute({sql:`SELECT pe.*,e.employee_number,e.first_name,e.last_name,wo.wo_number FROM technician_performance_events pe JOIN employees e ON e.id=pe.technician_id LEFT JOIN work_orders wo ON wo.id=pe.work_order_id WHERE ${where} ORDER BY pe.occurred_at DESC LIMIT 500`,args});res.json(rows);}catch(e){res.status(500).json({error:e.message});}
+});
+
+const REVIEW_TYPES=new Set(['coaching','recognition','performance_plan','follow_up']);
+const COACHING_STATUSES=new Set(['open','completed','cancelled']);
+router.get('/coaching', requireAnyPermission('work_orders','reports','employees_salaries'), async (req,res)=>{
+  try{
+    await ensureSchema(); const args=[]; const where=[];
+    if(req.query.technician_id){where.push('ca.technician_id=?');args.push(Number(req.query.technician_id));}
+    if(req.query.status){where.push('ca.status=?');args.push(String(req.query.status));}
+    const clause=where.length?'WHERE '+where.join(' AND '):'';
+    const {rows}=await db.execute({sql:`SELECT ca.*,e.employee_number,e.first_name,e.last_name,
+      TRIM(COALESCE(cb.first_name,'')||' '||COALESCE(cb.last_name,'')) created_by_name,
+      TRIM(COALESCE(xb.first_name,'')||' '||COALESCE(xb.last_name,'')) closed_by_name
+      FROM technician_coaching_actions ca
+      JOIN employees e ON e.id=ca.technician_id
+      LEFT JOIN employees cb ON cb.id=ca.created_by
+      LEFT JOIN employees xb ON xb.id=ca.closed_by
+      ${clause}
+      ORDER BY CASE ca.status WHEN 'open' THEN 0 ELSE 1 END, COALESCE(ca.target_date,'9999-12-31'), ca.created_at DESC LIMIT 500`,args});
+    res.json(rows);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.post('/coaching', requirePermission('work_orders'), async (req,res)=>{
+  try{
+    await ensureSchema();
+    const technicianId=Number(req.body.technician_id); const reviewType=String(req.body.review_type||'coaching');
+    const strengths=String(req.body.strengths||'').trim(); const focus=String(req.body.focus_area||'').trim(); const plan=String(req.body.action_plan||'').trim();
+    const targetDate=req.body.target_date?String(req.body.target_date):null;
+    if(!technicianId||!REVIEW_TYPES.has(reviewType)||!focus||!plan) return res.status(400).json({error:'Technician, valid review type, focus area and action plan are required'});
+    if(focus.length>1000||plan.length>3000||strengths.length>1500) return res.status(400).json({error:'Coaching text exceeds the supported length'});
+    const result=await db.execute({sql:`INSERT INTO technician_coaching_actions(technician_id,review_type,strengths,focus_area,action_plan,target_date,created_by) VALUES(?,?,?,?,?,?,?)`,args:[technicianId,reviewType,strengths||null,focus,plan,targetDate,req.employee?.id||null]});
+    const {rows:[row]}=await db.execute({sql:'SELECT * FROM technician_coaching_actions WHERE id=?',args:[Number(result.lastInsertRowid)]});
+    res.status(201).json(row);
+  }catch(e){res.status(400).json({error:e.message});}
+});
+
+router.patch('/coaching/:id', requirePermission('work_orders'), async (req,res)=>{
+  try{
+    await ensureSchema(); const id=Number(req.params.id); if(!id)return res.status(400).json({error:'Valid coaching action id is required'});
+    const {rows:[existing]}=await db.execute({sql:'SELECT * FROM technician_coaching_actions WHERE id=?',args:[id]}); if(!existing)return res.status(404).json({error:'Coaching action not found'});
+    const status=req.body.status==null?existing.status:String(req.body.status); if(!COACHING_STATUSES.has(status))return res.status(400).json({error:'Invalid coaching status'});
+    const focus=req.body.focus_area==null?existing.focus_area:String(req.body.focus_area).trim();
+    const plan=req.body.action_plan==null?existing.action_plan:String(req.body.action_plan).trim();
+    const strengths=req.body.strengths==null?existing.strengths:String(req.body.strengths).trim();
+    const targetDate=req.body.target_date===undefined?existing.target_date:(req.body.target_date?String(req.body.target_date):null);
+    if(!focus||!plan)return res.status(400).json({error:'Focus area and action plan are required'});
+    const closing=status!=='open'&&existing.status==='open'; const reopening=status==='open'&&existing.status!=='open';
+    await db.execute({sql:`UPDATE technician_coaching_actions SET strengths=?,focus_area=?,action_plan=?,target_date=?,status=?,closed_by=?,closed_at=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,args:[strengths||null,focus,plan,targetDate,status,reopening?null:(closing?(req.employee?.id||null):existing.closed_by),reopening?null:(closing?new Date().toISOString():existing.closed_at),id]});
+    const {rows:[row]}=await db.execute({sql:'SELECT * FROM technician_coaching_actions WHERE id=?',args:[id]}); res.json(row);
+  }catch(e){res.status(400).json({error:e.message});}
 });
 
 module.exports=router;
