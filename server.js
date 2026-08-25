@@ -110,6 +110,7 @@ app.use('/api/customer-repair-portal', require('./routes/customer-repair-portal'
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/held-sales', require('./routes/held-sales'));
 app.use('/api/transactions', require('./routes/retail-cost-integrity'));
+app.use('/api/transactions', require('./routes/replacement-return-hardening'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/employees', require('./routes/employees'));
 app.use('/api/reports', require('./routes/reports'));
