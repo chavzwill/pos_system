@@ -13,10 +13,10 @@ function enhance(){
   search.innerHTML='<input type="search" placeholder="Search tools, workspaces, operations…" autocomplete="off"><kbd>⌘K</kbd>';
   const quick=document.createElement('button');
   quick.type='button';quick.className='shell-quick-actions';quick.textContent='⚡ Quick actions';
-  const readiness=document.createElement('button');
-  readiness.type='button';readiness.className='shell-quick-actions shell-readiness';readiness.textContent='✓ System readiness';
+  const health=document.createElement('button');
+  health.type='button';health.className='shell-quick-actions shell-readiness';health.textContent='✓ System health';
   const branch=top.lastElementChild;
-  if(branch&&branch!==left){top.insertBefore(search,branch);top.insertBefore(quick,branch);top.insertBefore(readiness,branch);}else{top.appendChild(search);top.appendChild(quick);top.appendChild(readiness);}
+  if(branch&&branch!==left){top.insertBefore(search,branch);top.insertBefore(quick,branch);top.insertBefore(health,branch);}else{top.appendChild(search);top.appendChild(quick);top.appendChild(health);}
   const input=q('input',search);
   function filter(){const term=input.value.trim().toLowerCase();qa('.shell-card').forEach(card=>{card.hidden=!!term&&!card.textContent.toLowerCase().includes(term)});}
   input.addEventListener('input',filter);
@@ -27,9 +27,9 @@ function enhance(){
     const preferred=buttons.find(b=>/point of sale|purchasing|work orders|operational attention|inventory/i.test(b.closest('.shell-card')?.textContent||''))||buttons[0];
     preferred?.focus();preferred?.scrollIntoView({behavior:'smooth',block:'center'});
   });
-  readiness.addEventListener('click',async()=>{
-    if(!window.TotalToolsMeetingReadiness){readiness.disabled=true;readiness.textContent='Checking loader…';await new Promise(r=>setTimeout(r,120));readiness.disabled=false;readiness.textContent='✓ System readiness';}
-    window.TotalToolsMeetingReadiness?.open?.();
+  health.addEventListener('click',async()=>{
+    if(!window.TotalToolsSystemHealth){health.disabled=true;health.textContent='Loading health checks…';await new Promise(r=>setTimeout(r,120));health.disabled=false;health.textContent='✓ System health';}
+    window.TotalToolsSystemHealth?.open?.();
   });
   const hero=q('.shell-hero p');
   if(hero)hero.textContent='Fast access to the operational tools, intelligence and controls available to your role.';
