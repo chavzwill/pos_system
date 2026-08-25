@@ -57,7 +57,7 @@ router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.s
 router.get('/document-context',async(req,res)=>{
   try{
     const {rows:branches}=await db.execute({sql:'SELECT id,branch_code,name,address,city,state,zip,phone,email FROM branches WHERE active=1 ORDER BY name',args:[]});
-    res.json({branches});
+    res.json({branches,default_branch_id:req.employee?.default_branch_id||null});
   }catch(e){res.status(500).json({error:e.message});}
 });
 router.get('/supplier-locations/:supplierId',async(req,res)=>{
@@ -105,12 +105,13 @@ router.post('/',requirePermission('purchasing_create'),async(req,res,next)=>{
     let loc=null;
     if(b.supplier_location_id){loc=(await db.execute({sql:'SELECT * FROM supplier_locations WHERE id=? AND supplier_id=? AND active=1',args:[b.supplier_location_id,b.supplier_id]})).rows[0];if(!loc)return res.status(400).json({error:'Selected supplier location is invalid'});}
     if(!loc)loc=await defaultSupplierLocation(supplier);
+    const supplierSnapshot={address:b.supplier_address||loc?.address||supplier.address||'',city:b.supplier_city||loc?.city||supplier.city||'',state:b.supplier_state||loc?.state||supplier.state||'',zip:b.supplier_zip||loc?.zip||supplier.zip||'',country:b.supplier_country||loc?.country||'',contact_name:b.supplier_contact||loc?.contact_name||supplier.contact_name||''};
     const originalJson=res.json.bind(res);
     res.json=function(payload){
       if(res.statusCode===201&&payload&&payload.id){
         Promise.resolve().then(async()=>{
-          await db.execute({sql:`UPDATE purchase_orders SET supplier_location_id=?,supplier_address_snapshot=?,supplier_contact_snapshot=?,ship_to_branch_id=?,ship_to_name=?,ship_to_address=?,ship_to_city=?,ship_to_state=?,ship_to_zip=?,ship_to_country=?,ship_to_phone=?,ship_to_email=? WHERE id=?`,args:[loc?.id||null,joinedAddress(loc||supplier),loc?.contact_name||supplier.contact_name||null,b.ship_to_branch_id||b.branch_id||null,b.ship_to_name||null,b.ship_to_address||null,b.ship_to_city||null,b.ship_to_state||null,b.ship_to_zip||null,b.ship_to_country||null,b.ship_to_phone||null,b.ship_to_email||null,payload.id]});
-          Object.assign(payload,{supplier_location_id:loc?.id||null,supplier_address_snapshot:joinedAddress(loc||supplier),ship_to_branch_id:b.ship_to_branch_id||b.branch_id||null,ship_to_name:b.ship_to_name||null,ship_to_address:b.ship_to_address||null,ship_to_city:b.ship_to_city||null,ship_to_state:b.ship_to_state||null,ship_to_zip:b.ship_to_zip||null,ship_to_country:b.ship_to_country||null,ship_to_phone:b.ship_to_phone||null,ship_to_email:b.ship_to_email||null});
+          await db.execute({sql:`UPDATE purchase_orders SET supplier_location_id=?,supplier_address_snapshot=?,supplier_contact_snapshot=?,ship_to_branch_id=?,ship_to_name=?,ship_to_address=?,ship_to_city=?,ship_to_state=?,ship_to_zip=?,ship_to_country=?,ship_to_phone=?,ship_to_email=? WHERE id=?`,args:[loc?.id||null,joinedAddress(supplierSnapshot),supplierSnapshot.contact_name||null,b.ship_to_branch_id||b.branch_id||null,b.ship_to_name||null,b.ship_to_address||null,b.ship_to_city||null,b.ship_to_state||null,b.ship_to_zip||null,b.ship_to_country||null,b.ship_to_phone||null,b.ship_to_email||null,payload.id]});
+          Object.assign(payload,{supplier_location_id:loc?.id||null,supplier_address_snapshot:joinedAddress(supplierSnapshot),supplier_contact_snapshot:supplierSnapshot.contact_name||null,ship_to_branch_id:b.ship_to_branch_id||b.branch_id||null,ship_to_name:b.ship_to_name||null,ship_to_address:b.ship_to_address||null,ship_to_city:b.ship_to_city||null,ship_to_state:b.ship_to_state||null,ship_to_zip:b.ship_to_zip||null,ship_to_country:b.ship_to_country||null,ship_to_phone:b.ship_to_phone||null,ship_to_email:b.ship_to_email||null});
           originalJson(payload);
         }).catch(e=>{console.error('PO address snapshot failed',e);if(!res.headersSent)res.status(500);originalJson({error:'Purchase order was created but its document address snapshot could not be preserved'});});
         return res;
