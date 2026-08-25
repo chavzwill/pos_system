@@ -101,6 +101,7 @@ app.use('/api', apiKeyAuth);
 app.use('/api', sessionAuth);
 app.use('/api/workspace-profile', require('./routes/workspace-profile'));
 app.use('/api/employee-workspace-intelligence', require('./routes/employee-workspace-intelligence'));
+app.use('/api/technician-management-intelligence', require('./routes/technician-management-intelligence'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
 app.use('/api/commerce-sync', require('./routes/commerce-sync'));
