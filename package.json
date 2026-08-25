@@ -10,6 +10,7 @@
     "check:client-syntax": "node scripts/check-client-syntax.js",
     "test:e2e": "playwright test",
     "test:acceptance": "playwright test tests/operations-acceptance.spec.js",
+    "test:business-integrity": "playwright test tests/business-integrity.spec.js tests/purchase-order-hardening.spec.js tests/technician-compensation.spec.js tests/erp-intelligence.spec.js tests/inventory-intelligence.spec.js tests/logistics-intelligence.spec.js tests/operational-reports.spec.js",
     "pull-turso-snapshot": "node scripts/pull-turso-snapshot.js"
   },
   "dependencies": {
