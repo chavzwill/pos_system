@@ -125,6 +125,7 @@ app.use('/api/erp-intelligence', require('./routes/erp-intelligence'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/branches', require('./routes/branches'));
 app.use('/api/suppliers', require('./routes/suppliers'));
+app.use('/api/purchase-orders', require('./routes/purchase-order-document-context'));
 app.use('/api/purchase-orders', require('./routes/purchase-order-hardening'));
 app.use('/api/purchase-orders', require('./routes/purchase-orders'));
 app.use('/api/purchase-requests',require('./routes/purchase-requests'));
