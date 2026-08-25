@@ -1,0 +1,27 @@
+'use strict';
+const fs=require('fs');
+const path=require('path');
+const root=path.join(__dirname,'..');
+const read=f=>fs.readFileSync(path.join(root,f),'utf8');
+const shell=read('public/app-shell.html');
+const deferred=read('public/shell-deferred.js');
+const loader=read('public/workspace-loader-hardening.js');
+const orchestrator=read('public/guided-mode-orchestrator.js');
+const adversarial=read('public/guided-mode-adversarial.js');
+const integrity=read('public/guided-mode-integrity.js');
+const checks=[];
+function check(name,pass,detail=''){checks.push({name,pass:!!pass,detail});}
+check('workspace loader precedes deferred guide',shell.indexOf('/workspace-loader-hardening.js')>=0&&shell.indexOf('/workspace-loader-hardening.js')<shell.indexOf('/shell-deferred.js'));
+check('deferred guide scripts are ordered',deferred.includes('s.async=false')&&deferred.indexOf("'/guided-mode.js'")<deferred.indexOf("'/guided-mode-orchestrator.js'")&&deferred.indexOf("'/guided-mode-orchestrator.js'")<deferred.indexOf("'/guided-mode-integrity.js'"));
+check('single shell loader API',loader.includes('window.TotalToolsShellOpen=openFeature')&&loader.includes('window.TotalToolsWorkspaceLoader'));
+check('workspace loader does not own guide Next',!loader.includes('#tt-guided-mode [data-guide-next]'));
+check('orchestrator uses hardened loader directly',orchestrator.includes('window.TotalToolsShellOpen')&&!orchestrator.includes('autoAdvance'));
+check('quote workspace selector matches implementation',orchestrator.includes("selector:'#tt-quotes'"));
+check('purchasing tab contexts are distinct',orchestrator.includes("tab:'pr'")&&orchestrator.includes("tab:'po'"));
+check('intended step-one navigation is not adversarially blocked',adversarial.includes('stepNumber()===1'));
+check('integrity recognizes transfer workspace',integrity.includes("'#tt-transfers-workspace'"));
+check('integrity recognizes reports workspace',integrity.includes("'#tt-operational-reports'"));
+check('integrity recognizes inventory intelligence',integrity.includes("'#tt-inventory-intelligence'"));
+for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} Guided Mode: ${c.name}${c.detail?' — '+c.detail:''}`);
+if(checks.some(c=>!c.pass))process.exit(1);
+console.log(`Guided Mode contract OK (${checks.length} checks).`);
