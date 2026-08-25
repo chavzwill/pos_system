@@ -54,6 +54,26 @@ async function primaryTechnician(workOrderId, fallbackEmployeeId) {
   const { rows:[row] } = await db.execute({ sql:`SELECT technician_id,COUNT(*) task_count FROM work_order_tasks WHERE work_order_id=? AND technician_id IS NOT NULL GROUP BY technician_id ORDER BY task_count DESC,technician_id LIMIT 1`, args:[workOrderId] });
   return Number(row?.technician_id || fallbackEmployeeId || 0) || null;
 }
+async function readinessFor(wo) {
+  const technicianId=await primaryTechnician(wo.id,wo.employee_id);
+  const [taskResult,partResult]=await Promise.all([
+    db.execute({sql:`SELECT id,description,status,technician_id,allotted_minutes FROM work_order_tasks WHERE work_order_id=? ORDER BY id`,args:[wo.id]}),
+    db.execute({sql:'SELECT id,product_name,quantity FROM work_order_items WHERE work_order_id=?',args:[wo.id]})
+  ]);
+  const tasks=taskResult.rows, parts=partResult.rows;
+  const incompleteTasks=tasks.filter(t=>t.status!=='complete');
+  const missingTaskTech=tasks.filter(t=>!t.technician_id);
+  const checks={
+    technician_assigned:!!technicianId,
+    diagnosis_documented:!!String(wo.diagnosis||'').trim(),
+    repair_notes_documented:!!String(wo.repair_notes||'').trim(),
+    all_tasks_complete:tasks.length>0&&incompleteTasks.length===0,
+    all_tasks_attributed:tasks.length>0&&missingTaskTech.length===0,
+    parts_evidence_present:parts.length>0,
+  };
+  const readyForQc=checks.technician_assigned&&checks.diagnosis_documented&&checks.repair_notes_documented&&checks.all_tasks_complete&&checks.all_tasks_attributed;
+  return { technicianId,tasks,parts,checks,readyForQc,blockingReasons:Object.entries(checks).filter(([k,v])=>!v&&k!=='parts_evidence_present').map(([k])=>k) };
+}
 async function event({technicianId,workOrderId,type,note,actor}) {
   return db.execute({ sql:'INSERT INTO technician_performance_events(technician_id,work_order_id,event_type,note,recorded_by) VALUES(?,?,?,?,?)', args:[technicianId,workOrderId,type,note||null,actor||null] });
 }
@@ -64,21 +84,8 @@ async function timeline(workOrderId,type,title,details,actor) {
 router.get('/work-orders/:id/readiness', requireAnyPermission('work_orders','reports'), async (req,res)=>{
   try {
     const wo=await workOrder(req.params.id); if(!wo)return res.status(404).json({error:'Work order not found'});
-    const technicianId=await primaryTechnician(wo.id,wo.employee_id);
-    const {rows:tasks}=await db.execute({sql:`SELECT id,description,status,technician_id,allotted_minutes FROM work_order_tasks WHERE work_order_id=? ORDER BY id`,args:[wo.id]});
-    const {rows:parts}=await db.execute({sql:'SELECT id,product_name,quantity FROM work_order_items WHERE work_order_id=?',args:[wo.id]});
-    const incompleteTasks=tasks.filter(t=>t.status!=='complete');
-    const missingTaskTech=tasks.filter(t=>!t.technician_id);
-    const checks={
-      technician_assigned:!!technicianId,
-      diagnosis_documented:!!String(wo.diagnosis||'').trim(),
-      repair_notes_documented:!!String(wo.repair_notes||'').trim(),
-      all_tasks_complete:tasks.length>0&&incompleteTasks.length===0,
-      all_tasks_attributed:missingTaskTech.length===0,
-      parts_evidence_present:parts.length>0,
-    };
-    const readyForQc=checks.technician_assigned&&checks.diagnosis_documented&&checks.repair_notes_documented&&checks.all_tasks_complete&&checks.all_tasks_attributed;
-    res.json({work_order_id:wo.id,wo_number:wo.wo_number,status:wo.status,technician_id:technicianId,checks,ready_for_qc:readyForQc,blocking_reasons:Object.entries(checks).filter(([k,v])=>!v&&k!=='parts_evidence_present').map(([k])=>k),note:'Parts evidence is informative because some repairs legitimately require no parts.'});
+    const readiness=await readinessFor(wo);
+    res.json({work_order_id:wo.id,wo_number:wo.wo_number,status:wo.status,technician_id:readiness.technicianId,checks:readiness.checks,ready_for_qc:readiness.readyForQc,blocking_reasons:readiness.blockingReasons,note:'Parts evidence is informative because some repairs legitimately require no parts.'});
   } catch(e){res.status(500).json({error:e.message});}
 });
 
@@ -86,8 +93,15 @@ router.post('/work-orders/:id/qc', requirePermission('work_orders'), async (req,
   try {
     const wo=await workOrder(req.params.id); if(!wo)return res.status(404).json({error:'Work order not found'});
     const result=String(req.body.result||'').toLowerCase(); if(!['pass','fail'].includes(result))return res.status(400).json({error:'QC result must be pass or fail'});
-    const technicianId=Number(req.body.technician_id)||await primaryTechnician(wo.id,wo.employee_id); if(!technicianId)return res.status(400).json({error:'A technician must be attributable before QC can be recorded'});
+    const readiness=await readinessFor(wo);
+    const requestedTechnicianId=Number(req.body.technician_id)||null;
+    const technicianId=requestedTechnicianId||readiness.technicianId;
+    if(!technicianId)return res.status(400).json({error:'A technician must be attributable before QC can be recorded'});
+    if(requestedTechnicianId && readiness.technicianId && requestedTechnicianId!==readiness.technicianId) {
+      return res.status(409).json({error:'QC technician must match the technician attributable from the work order evidence',attributable_technician_id:readiness.technicianId});
+    }
     const checklist=req.body.checklist&&typeof req.body.checklist==='object'?req.body.checklist:{}; const note=String(req.body.note||'').trim();
+    if(result==='pass'&&!readiness.readyForQc) return res.status(409).json({error:'Work order is not ready to pass QC',blocking_reasons:readiness.blockingReasons,checks:readiness.checks});
     if(result==='fail'&&!note)return res.status(400).json({error:'A reason is required when QC fails'});
     const actor=req.employee?.id||null;
     const tx=await db.transaction('write'); let committed=false;
@@ -109,6 +123,11 @@ router.post('/work-orders/:id/comeback', requirePermission('work_orders'), async
     const reason=String(req.body.reason||'').trim(); if(!reason)return res.status(400).json({error:'A comeback reason is required'});
     const technicianId=Number(req.body.technician_id)||await primaryTechnician(wo.id,wo.employee_id); if(!technicianId)return res.status(400).json({error:'A technician must be attributable before a comeback can be recorded'});
     const comebackId=req.body.comeback_work_order_id==null?null:Number(req.body.comeback_work_order_id); const confirmed=req.body.confirmed===false?0:1; const actor=req.employee?.id||null;
+    if(comebackId!=null){
+      if(!Number.isInteger(comebackId)||comebackId<=0)return res.status(400).json({error:'A valid comeback work order id is required'});
+      if(comebackId===Number(wo.id))return res.status(409).json({error:'A work order cannot be recorded as its own comeback'});
+      const comeback=await workOrder(comebackId); if(!comeback)return res.status(404).json({error:'Comeback work order not found'});
+    }
     const result=await db.execute({sql:'INSERT INTO repair_comeback_links(original_work_order_id,comeback_work_order_id,technician_id,confirmed,reason,recorded_by) VALUES(?,?,?,?,?,?)',args:[wo.id,comebackId,technicianId,confirmed,reason,actor]});
     await event({technicianId,workOrderId:wo.id,type:confirmed?'comeback_confirmed':'comeback_clear',note:reason,actor});
     await timeline(wo.id,confirmed?'comeback_confirmed':'comeback_clear',confirmed?'Confirmed repair comeback':'Comeback review cleared',reason,actor);
@@ -118,12 +137,13 @@ router.post('/work-orders/:id/comeback', requirePermission('work_orders'), async
 
 router.get('/work-orders/:id/quality-history', requireAnyPermission('work_orders','reports','employees_salaries'), async (req,res)=>{
   try {
+    const wo=await workOrder(req.params.id); if(!wo)return res.status(404).json({error:'Work order not found'});
     const [reviews,comebacks,events]=await Promise.all([
       db.execute({sql:`SELECT qr.*,e.first_name||' '||e.last_name technician_name,r.first_name||' '||r.last_name reviewer_name FROM repair_quality_reviews qr LEFT JOIN employees e ON e.id=qr.technician_id LEFT JOIN employees r ON r.id=qr.reviewed_by WHERE qr.work_order_id=? ORDER BY qr.reviewed_at DESC`,args:[req.params.id]}),
       db.execute({sql:`SELECT rc.*,e.first_name||' '||e.last_name technician_name FROM repair_comeback_links rc LEFT JOIN employees e ON e.id=rc.technician_id WHERE rc.original_work_order_id=? ORDER BY rc.created_at DESC`,args:[req.params.id]}),
       db.execute({sql:`SELECT * FROM technician_performance_events WHERE work_order_id=? ORDER BY occurred_at DESC,id DESC`,args:[req.params.id]})
     ]);
-    res.json({quality_reviews:reviews.rows.map(r=>({...r,checklist:JSON.parse(r.checklist_json||'{}')})),comebacks:comebacks.rows,performance_events:events.rows});
+    res.json({work_order_id:wo.id,wo_number:wo.wo_number,quality_reviews:reviews.rows.map(r=>({...r,checklist:JSON.parse(r.checklist_json||'{}')})),comebacks:comebacks.rows,performance_events:events.rows});
   } catch(e){res.status(500).json({error:e.message});}
 });
 
