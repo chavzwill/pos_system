@@ -1,59 +1,45 @@
 (()=>{'use strict';
 const TASK_CONTEXT={
- 'Complete a sale':{domain:'sales',feature:'sales-workspace'},
- 'Hold or recall a sale':{domain:'sales',feature:'sales-workspace'},
- 'Return or refund a transaction':{domain:'sales',feature:'cashier-controls-workspace'},
+ 'Complete a sale':{domain:'sales',feature:'sales-workspace',selector:'#tt-sales-workspace'},
+ 'Hold or recall a sale':{domain:'sales',feature:'sales-workspace',selector:'#tt-sales-workspace'},
+ 'Return or refund a transaction':{domain:'sales',feature:'cashier-controls-workspace',selector:'#tt-cashier-controls'},
  'Open or close a cash drawer':{domain:'sales'},
- 'Create or work a repair':{domain:'service',feature:'work-orders-workspace'},
- 'Create or manage a rental':{domain:'rentals',feature:'rentals-workspace'},
- 'Dispatch, route or complete a delivery':{domain:'dispatch',feature:'logistics-intelligence'},
- 'Adjust inventory':{domain:'inventory',feature:'inventory-workspace'},
+ 'Create or work a repair':{domain:'service',feature:'work-orders-workspace',selector:'#tt-work-orders-workspace'},
+ 'Create or manage a rental':{domain:'rentals',feature:'rentals-workspace',selector:'#tt-rentals-workspace'},
+ 'Dispatch, route or complete a delivery':{domain:'dispatch',feature:'logistics-intelligence',selector:'#tt-logistics-intelligence'},
+ 'Adjust inventory':{domain:'inventory',feature:'inventory-workspace',selector:'#tt-inventory-workspace'},
  'Run a stock or cycle count':{domain:'inventory'},
- 'Create or approve a purchase request':{domain:'purchasing',feature:'purchasing-workspace',tab:'pr'},
- 'Create, edit, copy, cancel or receive a PO':{domain:'purchasing',feature:'purchasing-workspace',tab:'po'},
- 'Create, dispatch or receive a branch transfer':{domain:'inventory',feature:'transfers-workspace'},
- 'Create or manage a quotation':{domain:'sales',feature:'quotations-workspace'},
- 'Run, export or print a report':{domain:'finance',feature:'operational-reports'},
+ 'Create or approve a purchase request':{domain:'purchasing',feature:'purchasing-workspace',selector:'#tt-purchasing-workspace',tab:'pr'},
+ 'Create, edit, copy, cancel or receive a PO':{domain:'purchasing',feature:'purchasing-workspace',selector:'#tt-purchasing-workspace',tab:'po'},
+ 'Create, dispatch or receive a branch transfer':{domain:'inventory',feature:'transfers-workspace',selector:'#tt-transfers-workspace'},
+ 'Create or manage a quotation':{domain:'sales',feature:'quotations-workspace',selector:'#tt-quotes'},
+ 'Run, export or print a report':{domain:'finance',feature:'operational-reports',selector:'#tt-operational-reports'},
  'Review technician compensation':{domain:'service'},
- 'Use ERP / inventory intelligence':{domain:'purchasing',feature:'inventory-intelligence'}
+ 'Use ERP / inventory intelligence':{domain:'purchasing',feature:'inventory-intelligence',selector:'#tt-inventory-intelligence'}
 };
-const WORKSPACE_IDS={
- 'purchasing-workspace':'tt-purchasing-workspace','sales-workspace':'tt-sales-workspace','work-orders-workspace':'tt-work-orders-workspace','rentals-workspace':'tt-rentals-workspace','transfers-workspace':'tt-transfers-workspace','quotations-workspace':'tt-quotations-workspace','operational-reports':'tt-operational-reports','cashier-controls-workspace':'tt-cashier-controls','inventory-workspace':'tt-inventory-workspace','inventory-intelligence':'tt-inventory-intelligence','logistics-intelligence':'tt-logistics-intelligence'
-};
-let running=false,lastKey='',autoAdvancedKey='';
+let running=false,lastKey='';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
-function visible(el){return !!el&&el.getClientRects().length>0&&getComputedStyle(el).visibility!=='hidden';}
-function taskTitle(){return document.querySelector('#tt-guided-mode .tt-guide__head p')?.textContent?.trim()||'';}
-function stepNumber(){const t=document.querySelector('#tt-guided-mode .tt-guide__step-count')?.textContent||'';const m=t.match(/step\s+(\d+)/i);return m?Number(m[1]):0;}
+const visible=el=>!!el&&el.isConnected&&el.getClientRects().length>0&&getComputedStyle(el).visibility!=='hidden'&&getComputedStyle(el).display!=='none';
+const guideRoot=()=>document.getElementById('tt-guided-mode');
+function taskTitle(){return guideRoot()?.querySelector('.tt-guide__head p')?.textContent?.trim()||'';}
+function stepNumber(){const m=(guideRoot()?.querySelector('.tt-guide__step-count')?.textContent||'').match(/step\s+(\d+)/i);return m?Number(m[1]):0;}
 function clickDomain(domain){const btn=[...document.querySelectorAll('.shell-nav [data-domain]')].find(x=>x.dataset.domain===domain);if(!btn)return false;if(!btn.classList.contains('is-active'))btn.click();return true;}
-function workspaceOpen(key){const id=WORKSPACE_IDS[key];return id?!!document.getElementById(id):false;}
-async function openFeature(key){if(!key)return true;if(workspaceOpen(key))return true;for(let i=0;i<16;i++){const btn=document.querySelector(`[data-open="${CSS.escape(key)}"]`);if(btn&&visible(btn)){btn.click();await sleep(160);if(workspaceOpen(key))return true;}await sleep(90);}return workspaceOpen(key);}
-async function setPurchasingTab(tab){for(let i=0;i<18;i++){const root=document.getElementById('tt-purchasing-workspace');if(root){const btn=root.querySelector(`[data-tab="${tab}"]`);if(btn){if(!btn.classList.contains('is-active'))btn.click();return true;}}await sleep(80);}return false;}
+function workspaceReady(ctx){if(!ctx?.feature)return true;const el=document.querySelector(ctx.selector||'');if(!visible(el))return false;const apiReady={
+ 'sales-workspace':'TotalToolsSalesWorkspace','cashier-controls-workspace':'TotalToolsCashierControls','work-orders-workspace':'TotalToolsWorkOrdersWorkspace','rentals-workspace':'TotalToolsRentalsWorkspace','logistics-intelligence':'TotalToolsLogisticsIntelligence','inventory-workspace':'TotalToolsInventoryWorkspace','purchasing-workspace':'TotalToolsPurchasingWorkspace','transfers-workspace':'TotalToolsTransfersWorkspace','quotations-workspace':'TotalToolsQuotationsWorkspace','operational-reports':'TotalToolsOperationalReports','inventory-intelligence':'TotalToolsInventoryIntelligence'
+ }[ctx.feature];return !apiReady||typeof window[apiReady]?.open==='function';}
+async function openFeature(ctx,title){if(!ctx?.feature)return true;if(workspaceReady(ctx))return true;if(typeof window.TotalToolsShellOpen!=='function')throw new Error('Workspace loader is not ready. Refresh the application and try again.');await window.TotalToolsShellOpen(ctx.feature,title);for(let i=0;i<25;i++){if(workspaceReady(ctx))return true;await sleep(80);}throw new Error('The workspace did not become ready after loading.');}
+async function setPurchasingTab(tab){if(!tab)return true;for(let i=0;i<20;i++){const root=document.getElementById('tt-purchasing-workspace');const btn=root?.querySelector(`[data-tab="${tab}"]`);if(btn&&visible(btn)){if(!btn.classList.contains('is-active'))btn.click();return true;}await sleep(80);}return false;}
 function announce(text){let n=document.getElementById('tt-guide-live');if(!n){n=document.createElement('div');n.id='tt-guide-live';n.setAttribute('role','status');n.setAttribute('aria-live','polite');n.style.cssText='position:fixed;left:-9999px;width:1px;height:1px;overflow:hidden';document.body.appendChild(n);}n.textContent=text;}
-function guideRoot(){return document.getElementById('tt-guided-mode');}
-function currentTarget(){return [...document.querySelectorAll('.tt-guide-highlight')].find(el=>!el.closest('#tt-guided-mode')&&visible(el))||null;}
-function positionCoach(){const root=guideRoot(),guide=root?.querySelector('.tt-guide'),target=currentTarget();if(!guide||!target)return;const rect=target.getBoundingClientRect();const middle=rect.top+rect.height/2;guide.classList.toggle('tt-guide--top',middle>window.innerHeight/2);guide.classList.toggle('tt-guide--bottom',middle<=window.innerHeight/2);}
-function decorate(){const root=guideRoot();if(!root)return;const task=taskTitle(),step=stepNumber();const counter=root.querySelector('.tt-guide__step-count');if(counter&&!root.querySelector('.tt-guide__progress')){const match=counter.textContent.match(/of\s+(\d+)/i);const total=match?Number(match[1]):0;const p=document.createElement('div');p.className='tt-guide__progress';p.setAttribute('aria-hidden','true');p.innerHTML=`<span style="width:${total?Math.min(100,(step/total)*100):0}%"></span>`;counter.insertAdjacentElement('afterend',p);}
- const card=root.querySelector('.tt-guide__step');if(card&&!card.querySelector('.tt-guide__coach-note')){const note=document.createElement('div');note.className='tt-guide__coach-note';note.textContent=step===1?'I’ll take you to the right area automatically.':'Do the highlighted action. Guided Mode stays with you while the screen changes.';card.appendChild(note);}
- if(task){try{localStorage.setItem('tt-guide-last-task',task);}catch(_){}}
- positionCoach();
-}
-function clickNext(){const next=guideRoot()?.querySelector('[data-guide-next]');if(next&&!next.disabled)next.click();}
-async function autoAdvanceSetup(title,step,ctx,key){if(step!==1||autoAdvancedKey===key)return;const ready=(!ctx.feature||workspaceOpen(ctx.feature));if(!ready)return;autoAdvancedKey=key;announce('Workspace ready. Moving to the first action.');await sleep(260);if(taskTitle()===title&&stepNumber()===1)clickNext();}
-async function orchestrate(){if(running)return;const modal=guideRoot();if(!modal)return;const title=taskTitle(),step=stepNumber(),ctx=TASK_CONTEXT[title];if(!ctx||!step){decorate();return;}const key=`${title}:${step}`;if(key===lastKey){decorate();positionCoach();return;}lastKey=key;running=true;try{
- clickDomain(ctx.domain);await sleep(70);
- await openFeature(ctx.feature);
+function currentTarget(){return [...document.querySelectorAll('.tt-guide-highlight,.tt-guide-exact-highlight')].find(el=>!el.closest('#tt-guided-mode')&&visible(el))||null;}
+function positionCoach(){const guide=guideRoot()?.querySelector('.tt-guide'),target=currentTarget();if(!guide||!target)return;const r=target.getBoundingClientRect(),middle=r.top+r.height/2;guide.classList.toggle('tt-guide--top',middle>innerHeight/2);guide.classList.toggle('tt-guide--bottom',middle<=innerHeight/2);}
+function decorate(){const root=guideRoot();if(!root)return;const step=stepNumber(),counter=root.querySelector('.tt-guide__step-count');if(counter&&!root.querySelector('.tt-guide__progress')){const m=counter.textContent.match(/of\s+(\d+)/i),total=m?Number(m[1]):0,p=document.createElement('div');p.className='tt-guide__progress';p.setAttribute('aria-hidden','true');p.innerHTML=`<span style="width:${total?Math.min(100,(step/total)*100):0}%"></span>`;counter.insertAdjacentElement('afterend',p);}const card=root.querySelector('.tt-guide__step');if(card&&!card.querySelector('.tt-guide__coach-note')){const note=document.createElement('div');note.className='tt-guide__coach-note';note.textContent=step===1?'I’ll open the required workspace and verify it is ready before you continue.':'Do the highlighted action. Guided Mode will only advance when the step is actually complete.';card.appendChild(note);}positionCoach();}
+function pause(message){window.TotalToolsGuidedModeIntegrity?.pause?.(message);announce(message);}
+async function orchestrate(){if(running)return;const modal=guideRoot();if(!modal)return;const title=taskTitle(),step=stepNumber(),ctx=TASK_CONTEXT[title];decorate();if(!ctx||!step)return;const key=`${title}:${step}`;if(key===lastKey&&!(step===1&&!workspaceReady(ctx)))return;lastKey=key;running=true;try{clickDomain(ctx.domain);await sleep(50);if(step===1&&ctx.feature){const next=modal.querySelector('[data-guide-next]');if(next){next.disabled=true;next.setAttribute('aria-disabled','true');next.textContent='Opening…';}try{await openFeature(ctx,title);if(ctx.feature==='purchasing-workspace'&&ctx.tab)await setPurchasingTab(ctx.tab);if(next){next.disabled=false;next.removeAttribute('aria-disabled');next.textContent='Next';}window.TotalToolsGuidedModeIntegrity?.resume?.();announce(`${title} workspace is ready. Continue when you are ready.`);}catch(err){if(next){next.disabled=false;next.removeAttribute('aria-disabled');next.textContent='Retry';}pause(`Guided Mode could not open the required workspace. ${err.message}`);return;}}
  if(ctx.feature==='purchasing-workspace'&&ctx.tab)await setPurchasingTab(ctx.tab);
- if(title==='Create, edit, copy, cancel or receive a PO'&&step===2){const b=document.querySelector('#tt-purchasing-workspace #tt-purch-new-po');if(b&&visible(b)){b.scrollIntoView({block:'center',behavior:'smooth'});b.classList.add('tt-guide-highlight');}}
- if(title==='Create or approve a purchase request'&&step===2){const b=document.querySelector('#tt-purchasing-workspace #tt-purch-new-pr');if(b&&visible(b)){b.scrollIntoView({block:'center',behavior:'smooth'});b.classList.add('tt-guide-highlight');}}
- announce(`Guided Mode prepared ${title}, step ${step}.`);
- modal.dataset.guideContext=`${Date.now()}`;
- await sleep(60);decorate();
- await autoAdvanceSetup(title,step,ctx,key);
+ await sleep(50);decorate();
 }finally{running=false;}}
-function resetIfClosed(){if(!guideRoot()){lastKey='';autoAdvancedKey='';}}
-const observer=new MutationObserver(()=>{if(guideRoot())setTimeout(orchestrate,0);else resetIfClosed();});
-observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','data-guide-context','hidden']});
-document.addEventListener('click',e=>{const guideAction=e.target.closest?.('[data-task],[data-guide-next],[data-guide-prev],[data-guide-home],#tt-guide-launcher');if(guideAction)setTimeout(orchestrate,25);const target=e.target.closest?.('.tt-guide-highlight');if(target&&!target.closest('#tt-guided-mode')){announce('Action selected. Complete any required fields; Guided Mode will remain available for the next step.');setTimeout(()=>{decorate();positionCoach();},120);}},true);
-window.addEventListener('resize',()=>{if(guideRoot())positionCoach();},{passive:true});
+const observer=new MutationObserver(()=>{if(guideRoot())setTimeout(orchestrate,0);else{lastKey='';}});observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','hidden','data-guide-context']});
+document.addEventListener('click',e=>{if(e.target.closest?.('[data-task],[data-guide-next],[data-guide-prev],[data-guide-home],#tt-guide-launcher'))setTimeout(orchestrate,25);if(e.target.closest?.('.tt-guide-highlight,.tt-guide-exact-highlight'))setTimeout(()=>{decorate();positionCoach();},100);},true);
+window.addEventListener('resize',()=>guideRoot()&&positionCoach(),{passive:true});
+window.TotalToolsGuidedModeOrchestrator={recheck:orchestrate,workspaceReady:(title)=>workspaceReady(TASK_CONTEXT[title]),contexts:TASK_CONTEXT};
 })();
