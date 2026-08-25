@@ -1,6 +1,7 @@
 const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
+const {ensureInventoryCostLayers}=require('../lib/inventory-cost-layers');
 
 let readyPromise=null;
 async function ensureRetailCostIntegrity(){
@@ -13,14 +14,6 @@ async function ensureRetailCostIntegrity(){
         if(!String(e.message||'').toLowerCase().includes('duplicate column'))throw e;
       }
     }
-    await db.execute({sql:`CREATE TRIGGER IF NOT EXISTS trg_transaction_item_cost_snapshot
-      AFTER INSERT ON transaction_items
-      WHEN NEW.product_id IS NOT NULL AND NEW.unit_cost_at_sale IS NULL
-      BEGIN
-        UPDATE transaction_items
-        SET unit_cost_at_sale=(SELECT cost FROM products WHERE id=NEW.product_id)
-        WHERE id=NEW.id;
-      END`,args:[]});
 
     const {rows:returnTable}=await db.execute({sql:"SELECT name FROM sqlite_master WHERE type='table' AND name='return_items'",args:[]});
     if(returnTable.length){
@@ -40,6 +33,8 @@ async function ensureRetailCostIntegrity(){
           WHERE id=NEW.id;
         END`,args:[]});
     }
+
+    await ensureInventoryCostLayers();
   })().catch(e=>{readyPromise=null;throw e;});
   return readyPromise;
 }
