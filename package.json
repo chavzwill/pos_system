@@ -8,7 +8,7 @@
     "dev": "npx nodemon server.js",
     "vercel-build": "npm run check:syntax",
     "check:client-syntax": "node scripts/check-client-syntax.js",
-    "check:server-syntax": "node --check server.js && node --check routes/work-order-completion-hardening.js && node --check routes/repair-parts-hardening.js && node --check routes/retail-cost-integrity.js && node --check routes/accounting-source-sync.js",
+    "check:server-syntax": "node --check server.js && node --check routes/work-order-completion-hardening.js && node --check routes/repair-parts-hardening.js && node --check routes/retail-cost-integrity.js && node --check lib/accounting-retail-returns.js && node --check routes/accounting-source-sync.js",
     "check:syntax": "npm run check:client-syntax && npm run check:server-syntax",
     "test:e2e": "playwright test",
     "test:acceptance": "playwright test tests/operations-acceptance.spec.js",
