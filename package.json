@@ -11,6 +11,8 @@
     "test:e2e": "playwright test",
     "test:acceptance": "playwright test tests/operations-acceptance.spec.js",
     "test:business-integrity": "playwright test tests/business-integrity.spec.js tests/purchase-order-hardening.spec.js tests/technician-compensation.spec.js tests/erp-intelligence.spec.js tests/inventory-intelligence.spec.js tests/logistics-intelligence.spec.js tests/operational-reports.spec.js",
+    "test:security-boundaries": "playwright test tests/security-boundaries.spec.js",
+    "test:release-gate": "npm run check:client-syntax && playwright test tests/operations-acceptance.spec.js tests/business-integrity.spec.js tests/security-boundaries.spec.js tests/purchase-order-hardening.spec.js tests/technician-compensation.spec.js tests/erp-intelligence.spec.js tests/inventory-intelligence.spec.js tests/logistics-intelligence.spec.js tests/operational-reports.spec.js",
     "pull-turso-snapshot": "node scripts/pull-turso-snapshot.js"
   },
   "dependencies": {
