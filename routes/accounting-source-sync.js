@@ -5,6 +5,7 @@ const {requireAnyPermission}=require('../lib/permissions');
 const {ensureLedger,postSourceJournal}=require('../lib/accounting-posting');
 const {syncRetailReturns}=require('../lib/accounting-retail-returns');
 const {syncRentalAccounting}=require('../lib/accounting-rentals');
+const {syncPurchasingAccounting}=require('../lib/accounting-purchasing');
 router.use(requireAnyPermission('reports_financial','reports'));
 function actor(req){return req.employee?.id||req.user?.employee_id||null;}
 async function exists(table){const {rows:[r]}=await db.execute({sql:"SELECT name FROM sqlite_master WHERE type='table' AND name=?",args:[table]});return !!r;}
@@ -168,7 +169,8 @@ async function syncRepairFinancials(req,stats){
 }
 router.post('/sync',async(req,res)=>{try{
   await ensureBridgeAccounts();
-  const stats={supplier_invoices:{posted:0,existing:0},supplier_payments:{posted:0,existing:0},settlements:{posted:0,existing:0},retail_sales:{posted:0,existing:0},retail_returns:{posted:0,existing:0},retail_return_inventory:{posted:0,existing:0},retail_replacement_fulfillment:{posted:0,existing:0},rental_checkout:{posted:0,existing:0},rental_settlement:{posted:0,existing:0},repair_part_usage:{posted:0,existing:0},repair_assessments:{posted:0,existing:0},repair_deposits:{posted:0,existing:0},repair_service_revenue:{posted:0,existing:0},repair_final_payments:{posted:0,existing:0},reconciliation_issues:[],evidence_gaps:[],errors:[]};
+  const stats={supplier_invoices:{posted:0,existing:0},supplier_payments:{posted:0,existing:0},purchase_receipts:{posted:0,existing:0},settlements:{posted:0,existing:0},retail_sales:{posted:0,existing:0},retail_returns:{posted:0,existing:0},retail_return_inventory:{posted:0,existing:0},retail_replacement_fulfillment:{posted:0,existing:0},rental_checkout:{posted:0,existing:0},rental_settlement:{posted:0,existing:0},repair_part_usage:{posted:0,existing:0},repair_assessments:{posted:0,existing:0},repair_deposits:{posted:0,existing:0},repair_service_revenue:{posted:0,existing:0},repair_final_payments:{posted:0,existing:0},reconciliation_issues:[],evidence_gaps:[],errors:[]};
+  await syncPurchasingAccounting({actorId:actor(req),stats});
   await syncSupplierInvoices(req,stats);
   await syncSupplierPayments(req,stats);
   await syncSettlements(req,stats);
@@ -177,6 +179,6 @@ router.post('/sync',async(req,res)=>{try{
   await syncRentalAccounting({actorId:actor(req),stats});
   await syncRepairPartUsage(req,stats);
   await syncRepairFinancials(req,stats);
-  res.json({success:stats.errors.length===0&&stats.reconciliation_issues.length===0,stats,basis:'Verified retail sales, retail returns, rentals, and work-order activity are posted by economic substance rather than by generic transaction totals. Retail returns preserve original sale-time cost evidence and audited replacements preserve outgoing replacement inventory plus quarantine evidence. Rental checkout separates rental/service revenue, sales tax, and refundable deposit liability; rental return settlement releases the deposit, records verified duration/damage/tax adjustments, and leaves negative non-credit settlements in Customer Refunds Payable instead of inventing a cash refund. Positive rental balances are not posted until the cashier settlement transaction exists. Repair cash flows remain separated by assessment revenue, deposit liability, completed service revenue, final payment, and verified parts COGS. All automatic postings are idempotent by source and reconciliation mismatches are surfaced instead of guessed.'});
+  res.json({success:stats.errors.length===0&&stats.reconciliation_issues.length===0,stats,basis:'Verified purchase receipts now debit Inventory and credit Purchasing & Receiving Clearing from immutable receipt-time quantity and cost evidence; supplier invoices then debit that clearing account and credit Accounts Payable, while receipt/invoice value mismatches are surfaced instead of guessed. Verified retail sales, retail returns, rentals, and work-order activity are posted by economic substance rather than by generic transaction totals. Retail returns preserve original sale-time cost evidence and audited replacements preserve outgoing replacement inventory plus quarantine evidence. Rental checkout separates rental/service revenue, sales tax, and refundable deposit liability; rental return settlement releases the deposit, records verified duration/damage/tax adjustments, and leaves negative non-credit settlements in Customer Refunds Payable instead of inventing a cash refund. Positive rental balances are not posted until the cashier settlement transaction exists. Repair cash flows remain separated by assessment revenue, deposit liability, completed service revenue, final payment, and verified parts COGS. All automatic postings are idempotent by source and reconciliation mismatches are surfaced instead of guessed.'});
 }catch(e){res.status(500).json({error:e.message});}});
 module.exports=router;
