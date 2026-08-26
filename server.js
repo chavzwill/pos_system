@@ -144,6 +144,7 @@ app.use('/api/crm', require('./routes/crm'));
 app.use('/api/commissions', require('./routes/commissions'));
 app.use('/api/email', require('./routes/email'));
 app.use('/api/warehouse', require('./routes/warehouse'));
+app.use('/api/drawers', require('./routes/drawer-session-hardening'));
 app.use('/api/drawers', require('./routes/drawers'));
 app.use('/api/promotions', require('./routes/promotions'));
 app.use('/api/discount-cards', require('./routes/discount-cards'));
