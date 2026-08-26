@@ -1,4 +1,7 @@
 {
+  "git": {
+    "deploymentEnabled": false
+  },
   "functions": {
     "server.js": {
       "maxDuration": 30
