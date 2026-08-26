@@ -18,7 +18,7 @@ const checks=[
  ['retail UOM guard is mounted before serial lot reservation',trace.indexOf("router.use(require('./retail-uom-guard'))")<trace.indexOf('reserveIdentities')],
  ['retail keeps entered quantity and UOM evidence',retail.includes('entered_quantity')&&retail.includes('entered_uom')],
  ['retail converts to authoritative base quantity',retail.includes('line.quantity=baseQuantity')],
- ['retail conversion history snapshots after transaction',retail.includes("sourceType:'transaction'")],
+ ['retail conversion history snapshots after transaction',retail.includes("guard('transaction')")&&retail.includes('saveEvidence(req,payload,sourceType)')],
  ['purchase UOM guard resolves purchase-only conversion',po.includes("resolveProductUom(db,productId,item.uom_code||item.unit||null,'purchase')")],
  ['purchase economics are normalized by factor',po.includes('enteredUnitCost/factor')],
  ['purchase order converts quantity to base inventory units',po.includes('item.quantity_ordered=baseQuantity')],
