@@ -6,6 +6,8 @@ const {db}=require('../database');
 const {requirePermission}=require('../lib/permissions');
 const {ensureInventoryTraceability,getTrackingProfile}=require('../lib/inventory-traceability');
 
+router.use(require('./retail-uom-guard'));
+
 let readyPromise=null;
 async function ensureSaleTraceability(){
   if(readyPromise)return readyPromise;
