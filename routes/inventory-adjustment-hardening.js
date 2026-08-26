@@ -22,7 +22,7 @@ router.patch('/:id/stock',requirePermission('inventory_adjust'),async(req,res)=>
 
     const tx=await db.transaction('write');let committed=false;
     try{
-      let currentQty;
+      let currentQty;let selectedBin=null;
       const {rows:branchRows}=await tx.execute({sql:'SELECT * FROM branch_inventory WHERE product_id=?',args:[productId]});
       if(!branchId&&branchRows.length)throw Object.assign(new Error('Select the branch whose physical stock is being adjusted; global stock cannot be edited independently of branch inventory'),{status:409});
       if(branchId){
@@ -35,7 +35,6 @@ router.patch('/:id/stock',requirePermission('inventory_adjust'),async(req,res)=>
           if(state.available<Math.abs(adjustment))throw Object.assign(new Error(`Only ${state.available} unrestricted, unreserved units can be reduced; ${state.restricted} restricted and ${state.reserved||0} reserved units are protected`),{status:409});
         }
         const {rows:bins}=await tx.execute({sql:'SELECT * FROM product_bin_assignments WHERE product_id=? AND branch_id=? ORDER BY is_primary DESC,id',args:[productId,branchId]});
-        let selectedBin=null;
         if(bins.length){
           if(binId)selectedBin=bins.find(x=>String(x.bin_id)===String(binId));
           else if(bins.length===1)selectedBin=bins[0];
@@ -54,7 +53,7 @@ router.patch('/:id/stock',requirePermission('inventory_adjust'),async(req,res)=>
         currentQty=Number(product.stock_qty||0);
         if(currentQty+adjustment<0)throw Object.assign(new Error(`Adjustment would make global stock negative (${currentQty} available)`),{status:409});
       }
-      const {rows:[sum]}=await tx.execute({sql:'SELECT COALESCE(SUM(stock_qty),0) qty,COUNT(*) rows_count FROM branch_inventory WHERE product_id=?',args:[productId]});
+      const {rows:[sum]}=await tx.execute({sql:'SELECT COALESCE(SUM(stock_qty),0) qty FROM branch_inventory WHERE product_id=?',args:[productId]});
       const newGlobal=branchId?Number(sum?.qty||0):currentQty+adjustment;
       await tx.execute({sql:'UPDATE products SET stock_qty=? WHERE id=?',args:[newGlobal,productId]});
       const mov=await tx.execute({sql:`INSERT INTO stock_movements(product_id,branch_id,quantity_change,type,reason,reference) VALUES(?,?,?,?,?,?)`,args:[productId,branchId||null,adjustment,'adjustment',reason,`ADJ-${Date.now()}`]});
