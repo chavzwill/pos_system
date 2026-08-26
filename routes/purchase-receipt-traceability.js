@@ -8,6 +8,7 @@ const {ensureInventoryTraceability,validateReceiptIdentity,recordReceiptIdentity
 const {ensurePurchaseReceivingControls,getReceivingControl,evaluateReceiptLine,recordReceiptControls,isPoItemClosed}=require('../lib/purchase-receiving-controls');
 
 router.use(require('./purchase-receipt-uom-guard'));
+router.use('/receiving-controls',require('./purchase-receiving-controls'));
 
 async function ensureReceiptEvidence(){
   await ensureInventoryTraceability();
