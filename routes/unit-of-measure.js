@@ -3,7 +3,7 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {requireAuth,requirePermission,can}=require('../lib/permissions');
-const {STANDARD_UNITS,code,standardDimension,convertStandard,ensureUomSchema,getProfile}=require('../lib/unit-of-measure');
+const {STANDARD_UNITS,code,standardDimension,convertStandard,ensureUomSchema,getProfile,resolveSellEconomics}=require('../lib/unit-of-measure');
 
 router.use(async(req,res,next)=>{try{await ensureUomSchema();next();}catch(e){res.status(500).json({error:'Unit-of-measure initialization failed',detail:e.message});}});
 router.get('/standard-units',requirePermission('inventory'),(req,res)=>res.json(STANDARD_UNITS));
@@ -12,9 +12,12 @@ router.get('/commerce/products/:productId',requireAuth,async(req,res)=>{
   try{
     if(!req.apiKey){const perms=req.employee?.permissions||{};const allowed=['pos','transactions','purchasing','purchase_requests','purchasing_receive','quotations','transfers','inventory'].some(k=>can(perms,k));if(!allowed)return res.status(403).json({error:'Not permitted to view product units of measure'});}
     const productId=Number(req.params.productId);const profile=await getProfile(db,productId);
-    const {rows}=await db.execute({sql:'SELECT uom_code,uom_name,factor_to_base,sell_allowed,purchase_allowed,barcode FROM product_uom_conversions WHERE product_id=? AND active=1 ORDER BY factor_to_base,uom_name',args:[productId]});
-    const base={uom_code:profile.base_uom,uom_name:profile.base_uom,factor_to_base:1,sell_allowed:1,purchase_allowed:1,barcode:null,is_base:true};
-    res.json({profile,units:[base,...rows.map(x=>({...x,is_base:false}))]});
+    const {rows:[product]}=await db.execute({sql:'SELECT id,name,sku,price,tax_rate,stock_qty FROM products WHERE id=?',args:[productId]});if(!product)return res.status(404).json({error:'Product not found'});
+    const {rows}=await db.execute({sql:'SELECT uom_code,uom_name,factor_to_base,sell_allowed,purchase_allowed,barcode,sell_price FROM product_uom_conversions WHERE product_id=? AND active=1 ORDER BY factor_to_base,uom_name',args:[productId]});
+    const baseEconomics=resolveSellEconomics(product.price,{factor_to_base:1,sell_price:null});
+    const base={uom_code:profile.base_uom,uom_name:profile.base_uom,factor_to_base:1,sell_allowed:1,purchase_allowed:1,barcode:null,sell_price:null,is_base:true,effective_sell_price:baseEconomics.entered_unit_price,base_equivalent_sell_price:baseEconomics.base_unit_price,pricing_mode:'base'};
+    const units=[base,...rows.map(x=>{const economics=resolveSellEconomics(product.price,x);return{...x,is_base:false,effective_sell_price:economics.entered_unit_price,base_equivalent_sell_price:economics.base_unit_price,pricing_mode:economics.pricing_mode};})];
+    res.json({profile,product,units});
   }catch(e){res.status(500).json({error:e.message});}
 });
 router.get('/usage',requireAuth,async(req,res)=>{
@@ -41,9 +44,11 @@ router.put('/products/:productId/profile',requirePermission('inventory_edit'),as
 router.post('/products/:productId/conversions',requirePermission('inventory_edit'),async(req,res)=>{
   try{
     const productId=Number(req.params.productId),uom=code(req.body?.uom_code),name=String(req.body?.uom_name||uom).trim(),factor=Number(req.body?.factor_to_base);
+    const rawSellPrice=req.body?.sell_price;const sellPrice=rawSellPrice==null||rawSellPrice===''?null:Number(rawSellPrice);
     if(!uom||!name||!Number.isFinite(factor)||factor<=0)return res.status(400).json({error:'uom_code, uom_name and a positive factor_to_base are required'});
+    if(sellPrice!=null&&(!Number.isFinite(sellPrice)||sellPrice<0))return res.status(400).json({error:'sell_price must be blank or a non-negative amount'});
     const profile=await getProfile(db,productId);if(uom===code(profile.base_uom))return res.status(409).json({error:'Do not create a conversion for the base UOM; its factor is always 1'});
-    await db.execute({sql:`INSERT INTO product_uom_conversions(product_id,uom_code,uom_name,factor_to_base,sell_allowed,purchase_allowed,barcode,active,updated_by_employee_id,updated_at) VALUES(?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(product_id,uom_code) DO UPDATE SET uom_name=excluded.uom_name,factor_to_base=excluded.factor_to_base,sell_allowed=excluded.sell_allowed,purchase_allowed=excluded.purchase_allowed,barcode=excluded.barcode,active=excluded.active,updated_by_employee_id=excluded.updated_by_employee_id,updated_at=CURRENT_TIMESTAMP`,args:[productId,uom,name,factor,req.body?.sell_allowed===false?0:1,req.body?.purchase_allowed===false?0:1,String(req.body?.barcode||'').trim()||null,req.body?.active===false?0:1,req.employee?.id||null]});
+    await db.execute({sql:`INSERT INTO product_uom_conversions(product_id,uom_code,uom_name,factor_to_base,sell_allowed,purchase_allowed,barcode,sell_price,active,updated_by_employee_id,updated_at) VALUES(?,?,?,?,?,?,?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(product_id,uom_code) DO UPDATE SET uom_name=excluded.uom_name,factor_to_base=excluded.factor_to_base,sell_allowed=excluded.sell_allowed,purchase_allowed=excluded.purchase_allowed,barcode=excluded.barcode,sell_price=excluded.sell_price,active=excluded.active,updated_by_employee_id=excluded.updated_by_employee_id,updated_at=CURRENT_TIMESTAMP`,args:[productId,uom,name,factor,req.body?.sell_allowed===false?0:1,req.body?.purchase_allowed===false?0:1,String(req.body?.barcode||'').trim()||null,sellPrice,req.body?.active===false?0:1,req.employee?.id||null]});
     const {rows:[row]}=await db.execute({sql:'SELECT * FROM product_uom_conversions WHERE product_id=? AND uom_code=?',args:[productId,uom]});res.status(201).json(row);
   }catch(e){res.status(500).json({error:e.message});}
 });
