@@ -14,6 +14,26 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
     if (!items.length) return res.status(400).json({error:'No items in transaction'});
     if (!req.apiKey && !body.branch_id) return res.status(400).json({error:'A selling branch is required for a POS transaction'});
 
+    if (!req.apiKey && req.employee) {
+      body.employee_id = req.employee.id;
+      const {rows: drawers} = await db.execute({sql:'SELECT id FROM cash_drawers WHERE branch_id=? AND active=1',args:[body.branch_id]});
+      if (drawers.length) {
+        let activeSession = null;
+        if (body.drawer_session_id) {
+          const {rows:[s]} = await db.execute({sql:"SELECT * FROM drawer_sessions WHERE id=? AND status='open'",args:[body.drawer_session_id]});
+          if (!s) return res.status(409).json({error:'The selected cash drawer session is not open'});
+          if (String(s.employee_id)!==String(req.employee.id)) return res.status(403).json({error:'This cash drawer session belongs to another employee'});
+          if (String(s.branch_id)!==String(body.branch_id)) return res.status(409).json({error:'Cash drawer session does not belong to the selling branch'});
+          activeSession=s;
+        } else {
+          const {rows:[s]} = await db.execute({sql:"SELECT * FROM drawer_sessions WHERE employee_id=? AND branch_id=? AND status='open' ORDER BY opened_at DESC LIMIT 1",args:[req.employee.id,body.branch_id]});
+          activeSession=s||null;
+        }
+        if (!activeSession) return res.status(409).json({error:'Open your cash drawer before completing an in-store sale'});
+        body.drawer_session_id=activeSession.id;
+      }
+    }
+
     const discount = asMoney(body.discount_amount);
     const storeCredit = asMoney(body.store_credit_applied);
     if (!Number.isFinite(discount) || discount < 0) return res.status(400).json({error:'Discount amount cannot be negative'});
