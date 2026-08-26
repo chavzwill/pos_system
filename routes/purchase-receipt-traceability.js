@@ -6,6 +6,8 @@ const {requirePermission}=require('../lib/permissions');
 const {syncBinQty}=require('../lib/binSync');
 const {ensureInventoryTraceability,validateReceiptIdentity,recordReceiptIdentity}=require('../lib/inventory-traceability');
 
+router.use(require('./purchase-receipt-uom-guard'));
+
 async function ensureReceiptEvidence(){
   await ensureInventoryTraceability();
   await db.batch([
@@ -30,12 +32,12 @@ router.patch('/:id/receive',requirePermission('purchasing_receive'),async(req,re
     const seen=new Set(),validated=[];
     for(const line of requested){
       const itemId=Number(line.item_id),qty=Number(line.quantity_received);
-      if(!itemId||!Number.isInteger(qty)||qty<=0)return res.status(400).json({error:'Each receipt line requires an item and positive whole-number quantity'});
+      if(!itemId||!Number.isInteger(qty)||qty<=0)return res.status(400).json({error:'Each receipt line requires an item and positive whole-number base quantity'});
       if(seen.has(itemId))return res.status(400).json({error:`PO item ${itemId} appears more than once in this receipt`});seen.add(itemId);
       const {rows:[item]}=await db.execute({sql:'SELECT * FROM purchase_order_items WHERE id=? AND po_id=?',args:[itemId,req.params.id]});
       if(!item)return res.status(400).json({error:`PO item ${itemId} does not belong to this purchase order`});
       const remaining=Math.max(0,Number(item.quantity_ordered)-Number(item.quantity_received||0));
-      if(qty>remaining)return res.status(400).json({error:`Cannot receive ${qty} of ${item.product_name}; only ${remaining} remain open`});
+      if(qty>remaining)return res.status(400).json({error:`Cannot receive ${qty} base units of ${item.product_name}; only ${remaining} remain open`});
       const unitCost=Number(item.unit_cost||0);if(!Number.isFinite(unitCost)||unitCost<0)return res.status(409).json({error:`Invalid unit cost evidence for ${item.product_name}`});
       const identity=item.product_id?await validateReceiptIdentity(db,{productId:item.product_id,branchId:po.branch_id,quantity:qty,line}):null;
       validated.push({item,qty,unitCost,lineCost:Number((qty*unitCost).toFixed(2)),identity});
