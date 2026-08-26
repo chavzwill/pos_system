@@ -50,38 +50,36 @@ async function originalTenderAvailability(transactionId,transactionTotal){
 router.post('/returns/:returnId/settle',requirePermission('transactions_refund'),async(req,res)=>{
   try{
     const returnId=Number(req.params.returnId);if(!returnId)return res.status(400).json({error:'Invalid return id'});
-    const {rows:[ret]}=await db.execute({sql:`SELECT r.*,t.status original_status,t.transaction_number original_transaction_number,t.payment_method original_payment_method,t.total original_total
-      FROM returns r JOIN transactions t ON t.id=r.original_transaction_id WHERE r.id=?`,args:[returnId]});
+    const {rows:[ret]}=await db.execute({sql:`SELECT r.*,t.status original_status,t.transaction_number original_transaction_number,t.payment_method original_payment_method,t.total original_total,
+      a.external_refund_total,a.store_credit_restored,a.customer_entitlement_total
+      FROM returns r JOIN transactions t ON t.id=r.original_transaction_id
+      LEFT JOIN retail_return_allocations a ON a.return_id=r.id WHERE r.id=?`,args:[returnId]});
     if(!ret)return res.status(404).json({error:'Return not found'});
     if(ret.resolution!=='refund')return res.status(409).json({error:'Only refund returns require cash/payment settlement'});
     if(String(ret.status||'completed')==='cancelled')return res.status(409).json({error:'Cancelled returns cannot be settled'});
     if(ret.original_payment_method==='credit')return res.status(409).json({error:'Charge-account transactions must be reversed through a credit note, not a cash/payment refund'});
     const {rows:[existing]}=await db.execute({sql:'SELECT * FROM retail_refund_settlements WHERE return_id=?',args:[returnId]});
-    if(existing){
-      const {rows:legs}=await db.execute({sql:'SELECT * FROM retail_refund_settlement_legs WHERE settlement_id=? ORDER BY id',args:[existing.id]});
-      return res.json({...existing,legs,replayed:true});
-    }
+    if(existing){const {rows:legs}=await db.execute({sql:'SELECT * FROM retail_refund_settlement_legs WHERE settlement_id=? ORDER BY id',args:[existing.id]});return res.json({...existing,legs,replayed:true});}
+
+    const total=Number(Number(ret.external_refund_total==null?ret.total:ret.external_refund_total).toFixed(2));
+    if(total<=0)return res.status(409).json({error:'This return has no external tender amount to refund; its value was restored as customer/store credit'});
     let legs=Array.isArray(req.body?.tenders)?req.body.tenders:null;
     if(!legs||!legs.length)legs=[{method:req.body?.payment_method,amount:req.body?.amount,reference_code:req.body?.reference_code||req.body?.approval_code}];
     const allowed=new Set(['cash','card','bank_transfer','check']);
     const normalized=[];let sum=0;
     for(const leg of legs){
-      const method=String(leg.method||leg.payment_method||'').trim();
-      const amount=Number(leg.amount);
-      const ref=String(leg.reference_code||leg.approval_code||'').trim()||null;
+      const method=String(leg.method||leg.payment_method||'').trim();const amount=Number(leg.amount);const ref=String(leg.reference_code||leg.approval_code||'').trim()||null;
       if(!allowed.has(method))return res.status(400).json({error:`Unsupported refund method: ${method||'missing'}`});
       if(!Number.isFinite(amount)||amount<=0)return res.status(400).json({error:'Refund settlement amounts must be greater than zero'});
       if((method==='card'||method==='bank_transfer'||method==='check')&&!ref)return res.status(400).json({error:`${method} refund requires settlement/reference evidence`});
       normalized.push({method,amount:Number(amount.toFixed(2)),reference_code:ref});sum+=amount;
     }
-    sum=Number(sum.toFixed(2));const total=Number(Number(ret.total||0).toFixed(2));
-    if(Math.abs(sum-total)>0.01)return res.status(400).json({error:`Refund settlement total (${sum.toFixed(2)}) must equal return total (${total.toFixed(2)})`});
+    sum=Number(sum.toFixed(2));
+    if(Math.abs(sum-total)>0.01)return res.status(400).json({error:`Refund settlement total (${sum.toFixed(2)}) must equal the external refundable amount (${total.toFixed(2)})`});
     const available=await originalTenderAvailability(ret.original_transaction_id,ret.original_total);
     const requested={};for(const leg of normalized)requested[leg.method]=Number(((requested[leg.method]||0)+leg.amount).toFixed(2));
-    for(const [method,amount] of Object.entries(requested)){
-      const cap=Number(available[method]||0);
-      if(amount-cap>0.01)return res.status(409).json({error:`Refund to ${method} exceeds the remaining amount originally tendered by that method (${Math.max(0,cap).toFixed(2)} available)`});
-    }
+    for(const [method,amount] of Object.entries(requested)){const cap=Number(available[method]||0);if(amount-cap>0.01)return res.status(409).json({error:`Refund to ${method} exceeds the remaining amount originally tendered by that method (${Math.max(0,cap).toFixed(2)} available)`});}
+
     const tx=await db.transaction('write');let committed=false;
     try{
       const r=await tx.execute({sql:`INSERT INTO retail_refund_settlements(return_id,original_transaction_id,return_number,branch_id,total,settled_by_employee_id)
@@ -91,7 +89,7 @@ router.post('/returns/:returnId/settle',requirePermission('transactions_refund')
       await tx.commit();committed=true;
       const {rows:[saved]}=await db.execute({sql:'SELECT * FROM retail_refund_settlements WHERE id=?',args:[settlementId]});
       const {rows:savedLegs}=await db.execute({sql:'SELECT * FROM retail_refund_settlement_legs WHERE settlement_id=? ORDER BY id',args:[settlementId]});
-      res.status(201).json({...saved,legs:savedLegs});
+      res.status(201).json({...saved,legs:savedLegs,store_credit_restored:Number(ret.store_credit_restored||0),customer_entitlement_total:Number(ret.customer_entitlement_total||ret.total||0)});
     }catch(e){if(!committed)await tx.rollback();res.status(committed?500:400).json({error:e.message});}
   }catch(e){res.status(500).json({error:e.message});}
 });
