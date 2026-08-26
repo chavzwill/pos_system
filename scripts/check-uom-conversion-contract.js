@@ -10,7 +10,7 @@ const checks=[
  ['standard volume conversions include liters and US gallons',lib.includes('l:1')&&lib.includes('gal_us:3.785411784')],
  ['cross-dimension conversion is rejected',lib.includes('units must share the same dimension')],
  ['base UOM factor is always one',lib.includes('factor_to_base:1')],
- ['sell and purchase permissions are separate',lib.includes("mode==='purchase'?'purchase_allowed':'sell_allowed'")],
+ ['sell and purchase permissions are separate',lib.includes("mode==='purchase'")&&lib.includes('purchase_allowed=1')&&lib.includes("mode==='sell'")&&lib.includes('sell_allowed=1')],
  ['whole-base inventory prevents lossy fractional package conversion',lib.includes('inventory for this product requires whole base units')],
  ['base UOM becomes immutable after transactional history',route.includes('Base UOM or precision cannot be changed after transactional UOM history exists')],
  ['standard conversion endpoint exists',route.includes("router.get('/convert'")],
