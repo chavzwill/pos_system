@@ -22,6 +22,6 @@ const checks=[
  ['failed checkout releases identity reservation',guard.includes("release(key).catch")],
  ['disconnect releases identity reservation',guard.includes("res.on('close'")],
  ['finalization failure is fail-visible',guard.includes('transaction requires reconciliation')],
- ['serial and lot provenance remains in traceability schema',trace.includes('purchase_receipt_item_id')&&trace.includes('supplier_id'))
+ ['serial and lot provenance remains in traceability schema',trace.includes('purchase_receipt_item_id')&&trace.includes('supplier_id')]
 ];
 let failed=0;for(const [n,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Retail traceability: ${n}`);if(!ok)failed++;}if(failed){console.error(`Retail traceability contract FAILED (${failed}/${checks.length} failed).`);process.exit(1);}console.log(`Retail traceability contract OK (${checks.length} checks).`);
