@@ -1,0 +1,16 @@
+'use strict';
+const fs=require('fs');const path=require('path');const root=path.join(__dirname,'..');const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const server=read('server.js'),adj=read('routes/inventory-adjustment-hardening.js'),trf=read('routes/transfer-valuation-hardening.js'),val=read('lib/inventory-movement-valuation.js');
+const checks=[];const check=(n,p)=>checks.push({n,p:!!p});
+check('adjustment hardening mounted before products',server.indexOf("require('./routes/inventory-adjustment-hardening')")>=0&&server.indexOf("require('./routes/inventory-adjustment-hardening')")<server.indexOf("require('./routes/products')"));
+check('transfer hardening mounted before legacy transfers',server.indexOf("require('./routes/transfer-valuation-hardening')")>=0&&server.indexOf("require('./routes/transfer-valuation-hardening')")<server.indexOf("require('./routes/transfers')"));
+check('adjustments reject negative physical stock',adj.includes('Adjustment would make branch stock negative')&&adj.includes('Adjustment would make global stock negative'));
+check('adjustments require reason evidence',adj.includes('A stock-adjustment reason is required'));
+check('positive adjustments remain unknown-cost legacy',val.includes('positive_adjustment_cost_unknown')&&val.includes('legacy-unlayered'));
+check('negative adjustments consume valuation pool',val.includes('removeFromPool')&&val.includes('inventory_adjustment_valuations'));
+check('transfer valuation preserves in-transit composition',val.includes('inventory_transfer_valuations')&&val.includes('tracked_value')&&val.includes('legacy_quantity'));
+check('transfer creation removes source valuation',trf.includes('reserveTransferValuation'));
+check('partial receipt moves valuation to destination',trf.includes('receiveTransferValuation'));
+check('transfer cancellation restores source valuation',trf.includes('cancelTransferValuation'));
+check('transfer receipt cannot exceed pending quantity',trf.includes('Received quantity exceeds pending quantity'));
+for(const c of checks)console.log(`${c.p?'PASS':'FAIL'} Inventory movement: ${c.n}`);if(checks.some(c=>!c.p))process.exit(1);console.log(`Inventory movement contract OK (${checks.length} checks).`);
