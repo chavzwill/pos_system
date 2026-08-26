@@ -5,6 +5,8 @@ const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
 const { ensureInventoryStockStatus, getAvailableQty, moveStockStatus } = require('../lib/inventory-stock-status');
 
+router.use('/writeoffs', require('./inventory-writeoffs'));
+
 router.get('/availability/:productId', requirePermission('inventory'), async (req,res) => {
   try {
     const branchId = Number(req.query.branch_id);
