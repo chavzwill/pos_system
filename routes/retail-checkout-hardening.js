@@ -4,6 +4,7 @@ const router = express.Router();
 const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
 const { getAvailableQty } = require('../lib/inventory-stock-status');
+const { getReservedQty } = require('../lib/inventory-reservations');
 
 const allowedPayments = new Set(['cash','card','credit','bank_transfer']);
 const asMoney = v => Number.parseFloat(v || 0);
@@ -49,17 +50,18 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
       if (!product || !product.active) return res.status(400).json({error:`Product ${line.product_id} is unavailable`});
       if (product.is_service || product.is_rental) return res.status(400).json({error:`${product.name} cannot be sold through standard retail checkout`});
 
-      if (body.branch_id) {
-        const state = await getAvailableQty(db, line.product_id, body.branch_id);
-        if (state.available < qty) return res.status(409).json({error:`Not enough available ${product.name} at the selected branch (${state.available} sellable; ${state.restricted} restricted)`});
+      if (body.branch_id && !line.variation_id) {
+        const state = await getAvailableQty(db, line.product_id, body.branch_id, {excludeReservationKey:req.inventoryReservationKey||null});
+        if (state.available < qty) return res.status(409).json({error:`Not enough available ${product.name} at the selected branch (${state.available} sellable; ${state.restricted} restricted; ${state.reserved||0} reserved)`});
       }
 
       let unitPrice = Number(product.price || 0);
       if (line.variation_id) {
         const {rows:[variation]} = await db.execute({sql:'SELECT * FROM product_variations WHERE id=? AND product_id=?',args:[line.variation_id,line.product_id]});
         if (!variation) return res.status(400).json({error:`Variation ${line.variation_id} is unavailable`});
-        const available = Number(variation.stock_qty || 0);
-        if (available < qty) return res.status(409).json({error:`Not enough stock for ${product.name} (${available} variation units available)`});
+        const otherReserved=body.branch_id?await getReservedQty(db,line.product_id,body.branch_id,{variationId:Number(line.variation_id),excludeReservationKey:req.inventoryReservationKey||null}):0;
+        const available = Math.max(0,Number(variation.stock_qty || 0)-otherReserved);
+        if (available < qty) return res.status(409).json({error:`Not enough stock for ${product.name} (${available} variation units available after reservations)`});
         unitPrice = variation.price != null ? Number(variation.price) : Number(product.price || 0) + Number(variation.price_modifier || 0);
       } else if (!body.branch_id) {
         const available = Number(product.stock_qty || 0);
@@ -110,7 +112,7 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
       if (method === 'cash' && Number(body.amount_tendered || totalBeforeCashback) + 0.001 < totalBeforeCashback) return res.status(400).json({error:'Cash tendered cannot be less than the sale total'});
     }
 
-    req.retailCheckoutEvidence = {authoritativeSubtotal,authoritativeTax,validatedAt:new Date().toISOString()};
+    req.retailCheckoutEvidence = {authoritativeSubtotal,authoritativeTax,validatedAt:new Date().toISOString(),inventoryReservationKey:req.inventoryReservationKey||null};
     next();
   } catch (e) {
     res.status(500).json({error:e.message});
