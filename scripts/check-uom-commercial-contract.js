@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('fs'),path=require('path');const root=path.join(__dirname,'..');const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const lib=read('lib/unit-of-measure.js'),route=read('routes/unit-of-measure.js'),retail=read('routes/retail-uom-guard.js'),checkout=read('routes/retail-checkout-hardening.js'),transactions=read('routes/transactions.js'),quoteGuard=read('routes/quotation-uom-guard.js'),quoteFlow=read('routes/quotation-workflow-hardening.js'),returnGuard=read('routes/retail-return-uom-guard.js'),server=read('server.js'),sales=read('public/sales-workspace.js'),quotes=read('public/quotations-workspace.js');
+const lib=read('lib/unit-of-measure.js'),route=read('routes/unit-of-measure.js'),retail=read('routes/retail-uom-guard.js'),checkout=read('routes/retail-checkout-hardening.js'),transactions=read('routes/transactions.js'),quoteGuard=read('routes/quotation-uom-guard.js'),quoteFlow=read('routes/quotation-workflow-hardening.js'),returnGuard=read('routes/retail-return-uom-guard.js'),server=read('server.js'),sales=read('public/sales-workspace.js'),quotes=read('public/quotations-workspace.js'),scanner=read('public/pos-uom-barcode-scanner.js'),shell=read('public/app-shell.html');
 const checks=[
  ['explicit package sell price is persisted',lib.includes('sell_price REAL')&&route.includes('sell_price=excluded.sell_price')],
  ['derived and explicit sell economics share one authoritative resolver',lib.includes('function resolveSellEconomics')&&lib.includes("pricing_mode:explicit==null?'derived':'explicit'")],
@@ -30,6 +30,9 @@ const checks=[
  ['explicit return UOM converts to authoritative base quantity',returnGuard.includes("resolveProductUom(db,txItem.product_id,requestedUom,'movement')")&&returnGuard.includes('line.quantity=baseQuantity')],
  ['return conversion cannot exceed original sold base quantity',returnGuard.includes('baseQuantity-Number(txItem.quantity||0)>1e-9')],
  ['lot-return allocation follows explicit return conversion',returnGuard.includes('Array.isArray(line.lots)&&explicitUom')&&returnGuard.includes('resolved.factor_to_base')],
- ['return UOM history snapshots entered and base evidence',returnGuard.includes("sourceType:'return'")&&returnGuard.includes('enteredUnitPrice:e.enteredUnitPrice')]
+ ['return UOM history snapshots entered and base evidence',returnGuard.includes("sourceType:'return'")&&returnGuard.includes('enteredUnitPrice:e.enteredUnitPrice')],
+ ['POS scanner resolves package barcode on Enter through authoritative commerce endpoint',scanner.includes("event.key!=='Enter'")&&scanner.includes('/api/inventory-traceability/uom/commerce/resolve-barcode')],
+ ['POS scanner prevents silent cross-UOM cart mutation',scanner.includes('already in the cart as another selling unit')],
+ ['fast app shell loads package barcode scanner bridge',shell.includes('/pos-uom-barcode-scanner.js')]
 ];
 let failed=0;for(const[n,ok]of checks){console.log(`${ok?'PASS':'FAIL'} UOM commercial: ${n}`);if(!ok)failed++;}if(failed){console.error(`UOM commercial contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`UOM commercial contract OK (${checks.length} checks).`);
