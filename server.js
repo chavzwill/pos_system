@@ -102,6 +102,7 @@ app.use('/api', sessionAuth);
 app.use('/api/workspace-profile', require('./routes/workspace-profile'));
 app.use('/api/employee-workspace-intelligence', require('./routes/employee-workspace-intelligence'));
 app.use('/api/technician-management-intelligence', require('./routes/technician-management-intelligence'));
+app.use('/api/inventory-stock-status', require('./routes/inventory-stock-status'));
 app.use('/api/products', require('./routes/inventory-adjustment-hardening'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
