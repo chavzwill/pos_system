@@ -131,6 +131,7 @@ app.use('/api/purchase-orders', require('./routes/purchase-order-hardening'));
 app.use('/api/purchase-orders', require('./routes/purchase-orders'));
 app.use('/api/purchase-requests',require('./routes/purchase-requests'));
 app.use('/api/security-groups', require('./routes/security-groups'));
+app.use('/api/quotations', require('./routes/quotation-workflow-hardening'));
 app.use('/api/quotations', require('./routes/quotations'));
 app.use('/api/accounts', require('./routes/accounts'));
 app.use('/api/transfers', require('./routes/transfers'));
