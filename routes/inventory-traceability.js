@@ -6,6 +6,7 @@ const {requirePermission}=require('../lib/permissions');
 const {MODES,ensureInventoryTraceability,getTrackingProfile}=require('../lib/inventory-traceability');
 
 router.use('/uom',require('./unit-of-measure'));
+router.use('/compositions',require('./product-compositions'));
 router.use(async(req,res,next)=>{try{await ensureInventoryTraceability();next();}catch(e){res.status(500).json({error:'Inventory traceability initialization failed',detail:e.message});}});
 
 router.get('/profiles/:productId',requirePermission('inventory'),async(req,res)=>{
