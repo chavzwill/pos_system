@@ -3,7 +3,7 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {requirePermission}=require('../lib/permissions');
-const {ensureUomSchema,resolveProductUom,toBaseQuantity,snapshot}=require('../lib/unit-of-measure');
+const {ensureUomSchema,resolveProductUom,resolveSellEconomics,toBaseQuantity,snapshot}=require('../lib/unit-of-measure');
 
 async function normalize(req){
   await ensureUomSchema();
@@ -11,10 +11,14 @@ async function normalize(req){
   const evidence=[];
   for(const line of items){
     const productId=Number(line.product_id);if(!productId)continue;
+    const {rows:[product]}=await db.execute({sql:'SELECT id,name,sku,price,tax_rate FROM products WHERE id=?',args:[productId]});if(!product)throw new Error(`Product ${productId} not found`);
     const enteredQuantity=Number(line.quantity);const resolved=await resolveProductUom(db,productId,line.uom_code||line.unit||null,'sell');
-    const baseQuantity=toBaseQuantity(enteredQuantity,resolved);
-    evidence.push({productId,enteredQuantity,resolved,baseQuantity,line});
-    line.entered_quantity=enteredQuantity;line.entered_uom=resolved.uom_code;line.uom_factor_to_base=Number(resolved.factor_to_base);line.base_uom=resolved.profile.base_uom;line.quantity=baseQuantity;
+    if(line.variation_id&&Number(resolved.factor_to_base)!==1)throw new Error('Alternate selling units are not supported together with product variations; use the base unit for this variation');
+    const baseQuantity=toBaseQuantity(enteredQuantity,resolved);const economics=resolveSellEconomics(product.price,resolved);
+    evidence.push({productId,enteredQuantity,resolved,baseQuantity,enteredUnitPrice:economics.entered_unit_price,baseUnitPrice:economics.base_unit_price,line});
+    line.entered_quantity=enteredQuantity;line.entered_uom=resolved.uom_code;line.uom_factor_to_base=Number(resolved.factor_to_base);line.base_uom=resolved.profile.base_uom;
+    line.uom_entered_unit_price=economics.entered_unit_price;line.uom_base_unit_price=economics.base_unit_price;line.uom_pricing_mode=economics.pricing_mode;
+    line.product_name=product.name;line.sku=product.sku||'';line.tax_rate=Number(product.tax_rate||0);line.unit_price=economics.base_unit_price;line.quantity=baseQuantity;
   }
   req.uomEvidence=evidence;
 }
@@ -22,7 +26,7 @@ async function saveEvidence(req,payload,sourceType){
   if(!payload?.id||!req.uomEvidence?.length)return;
   const tx=await db.transaction('write');let committed=false;
   try{
-    for(const e of req.uomEvidence)await snapshot(tx,{sourceType,sourceId:payload.id,sourceLineId:null,productId:e.productId,enteredQuantity:e.enteredQuantity,resolved:e.resolved,baseQuantity:e.baseQuantity});
+    for(const e of req.uomEvidence)await snapshot(tx,{sourceType,sourceId:payload.id,sourceLineId:null,productId:e.productId,enteredQuantity:e.enteredQuantity,resolved:e.resolved,baseQuantity:e.baseQuantity,enteredUnitPrice:e.enteredUnitPrice,baseUnitPrice:e.baseUnitPrice});
     await tx.commit();committed=true;
   }catch(err){if(!committed)await tx.rollback();throw err;}
 }
