@@ -3,6 +3,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
+const { getAvailableQty } = require('../lib/inventory-stock-status');
 
 const allowedPayments = new Set(['cash','card','credit','bank_transfer']);
 const asMoney = v => Number.parseFloat(v || 0);
@@ -48,18 +49,19 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
       if (!product || !product.active) return res.status(400).json({error:`Product ${line.product_id} is unavailable`});
       if (product.is_service || product.is_rental) return res.status(400).json({error:`${product.name} cannot be sold through standard retail checkout`});
 
+      if (body.branch_id) {
+        const state = await getAvailableQty(db, line.product_id, body.branch_id);
+        if (state.available < qty) return res.status(409).json({error:`Not enough available ${product.name} at the selected branch (${state.available} sellable; ${state.restricted} restricted)`});
+      }
+
       let unitPrice = Number(product.price || 0);
       if (line.variation_id) {
         const {rows:[variation]} = await db.execute({sql:'SELECT * FROM product_variations WHERE id=? AND product_id=?',args:[line.variation_id,line.product_id]});
         if (!variation) return res.status(400).json({error:`Variation ${line.variation_id} is unavailable`});
         const available = Number(variation.stock_qty || 0);
-        if (available < qty) return res.status(409).json({error:`Not enough stock for ${product.name} (${available} available)`});
+        if (available < qty) return res.status(409).json({error:`Not enough stock for ${product.name} (${available} variation units available)`});
         unitPrice = variation.price != null ? Number(variation.price) : Number(product.price || 0) + Number(variation.price_modifier || 0);
-      } else if (body.branch_id) {
-        const {rows:[branch]} = await db.execute({sql:'SELECT stock_qty FROM branch_inventory WHERE branch_id=? AND product_id=?',args:[body.branch_id,line.product_id]});
-        const available = branch ? Number(branch.stock_qty || 0) : 0;
-        if (available < qty) return res.status(409).json({error:`Not enough ${product.name} at the selected branch (${available} available)`});
-      } else {
+      } else if (!body.branch_id) {
         const available = Number(product.stock_qty || 0);
         if (available < qty) return res.status(409).json({error:`Not enough stock for ${product.name} (${available} available)`});
       }
