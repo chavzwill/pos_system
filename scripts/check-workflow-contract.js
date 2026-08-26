@@ -12,6 +12,9 @@ const quotes=read('public/quotations-workspace.js');
 const recall=read('routes/held-sale-recall-hardening.js');
 const checkout=read('routes/retail-checkout-hardening.js');
 const drawer=read('routes/drawer-session-hardening.js');
+const customer=read('routes/customer-workflow-hardening.js');
+const refund=read('routes/retail-refund-settlement.js');
+const returnAccounting=read('lib/accounting-retail-returns.js');
 const checks=[];
 const check=(name,pass)=>checks.push({name,pass:!!pass});
 const workflows=[
@@ -60,6 +63,14 @@ check('Drawer hardening mounted before legacy drawer route',server.indexOf("requ
 check('Drawer opening derives employee and branch from evidence',drawer.includes('req.body.employee_id=emp.id')&&drawer.includes('req.body.branch_id=drawer.branch_id'));
 check('Drawer close protects session ownership',drawer.includes('Only the cashier who opened this drawer or a drawer manager can close it'));
 check('Drawer reconciliation protects counted values and reconciler identity',drawer.includes('Denomination quantities must be non-negative whole numbers')&&drawer.includes('req.body.reconciled_by=emp.id'));
+check('Customer workflow hardening mounted before legacy customers route',server.indexOf("require('./routes/customer-workflow-hardening')")>=0&&server.indexOf("require('./routes/customer-workflow-hardening')")<server.indexOf("require('./routes/customers')"));
+check('Customer creation detects duplicate active contact evidence',customer.includes('duplicate')&&customer.includes('active'));
+check('Refund settlement route mounted before transaction engine',server.indexOf("require('./routes/retail-refund-settlement')")>=0&&server.indexOf("require('./routes/retail-refund-settlement')")<server.indexOf("require('./routes/transactions')"));
+check('Refund settlement is idempotent per return',refund.includes('return_id INTEGER NOT NULL UNIQUE'));
+check('Refund settlement binds settling employee from authenticated session',refund.includes('req.employee?.id||null'));
+check('Refund settlement accounting clears customer refunds payable',returnAccounting.includes("code:'2400',debit:settlementTotal")&&returnAccounting.includes("sourceType:'retail_refund_settlement'"));
+check('Refund settlement accounting distinguishes cash bank and electronic clearing',returnAccounting.includes("if(m==='cash')return '1000'")&&returnAccounting.includes("if(m==='bank_transfer'||m==='check')return '1010'")&&returnAccounting.includes("if(m==='card')return '1050'"));
+check('Refund settlement accounting validates settlement against return and tender legs',returnAccounting.includes('refund_settlement_return_mismatch')&&returnAccounting.includes('refund_settlement_leg_mismatch'));
 check('Retail cost integrity mounted before legacy transaction route',server.indexOf("require('./routes/retail-cost-integrity')")<server.indexOf("require('./routes/transactions')"));
 check('Replacement return hardening mounted before legacy transaction route',server.indexOf("require('./routes/replacement-return-hardening')")<server.indexOf("require('./routes/transactions')"));
 check('Quotation hardening mounted before legacy quotation route',server.indexOf("require('./routes/quotation-workflow-hardening')")>=0&&server.indexOf("require('./routes/quotation-workflow-hardening')")<server.indexOf("require('./routes/quotations')"));
