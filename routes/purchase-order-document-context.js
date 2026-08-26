@@ -52,6 +52,7 @@ async function defaultSupplierLocation(supplier){
   return (await db.execute({sql:'SELECT * FROM supplier_locations WHERE id=?',args:[Number(r.lastInsertRowid)]})).rows[0];
 }
 router.use(requirePermission('purchasing'));
+router.use(require('./purchase-uom-guard'));
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Purchase-order document context initialization failed',detail:e.message});}});
 
 router.get('/document-context',async(req,res)=>{
