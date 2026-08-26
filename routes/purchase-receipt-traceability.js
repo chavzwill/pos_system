@@ -4,6 +4,7 @@ const router=express.Router();
 const {db}=require('../database');
 const {requirePermission}=require('../lib/permissions');
 const {syncBinQty}=require('../lib/binSync');
+const {snapshot}=require('../lib/unit-of-measure');
 const {ensureInventoryTraceability,validateReceiptIdentity,recordReceiptIdentity}=require('../lib/inventory-traceability');
 const {ensurePurchaseReceivingControls,getReceivingControl,evaluateReceiptLine,recordReceiptControls,isPoItemClosed}=require('../lib/purchase-receiving-controls');
 
@@ -43,7 +44,8 @@ router.patch('/:id/receive',requirePermission('purchasing_receive'),async(req,re
       const control=await getReceivingControl(db,item.product_id);
       const evaluation=evaluateReceiptLine({req,item,quantity:qty,control,line});
       const identity=item.product_id?await validateReceiptIdentity(db,{productId:item.product_id,branchId:po.branch_id,quantity:qty,line}):null;
-      validated.push({item,qty,unitCost,lineCost:Number((qty*unitCost).toFixed(2)),identity,line,evaluation});
+      const uomEvidence=(req.receiptUomEvidence||[]).find(e=>Number(e.itemId)===itemId)||null;
+      validated.push({item,qty,unitCost,lineCost:Number((qty*unitCost).toFixed(2)),identity,line,evaluation,uomEvidence});
     }
 
     const tx=await db.transaction('write');let committed=false,receiptId=null,receiptNumber=null;
@@ -53,9 +55,10 @@ router.patch('/:id/receive',requirePermission('purchasing_receive'),async(req,re
       const rr=await tx.execute({sql:`INSERT INTO purchase_receipts(receipt_number,po_id,supplier_id,branch_id,received_by_employee_id,total_cost) VALUES(?,?,?,?,?,?)`,args:[receiptNumber,po.id,po.supplier_id||null,po.branch_id,actor(req),receiptTotal]});
       receiptId=Number(rr.lastInsertRowid);
       for(const x of validated){
-        const {item,qty,unitCost,lineCost,identity,line,evaluation}=x;
+        const {item,qty,unitCost,lineCost,identity,line,evaluation,uomEvidence}=x;
         const pri=await tx.execute({sql:`INSERT INTO purchase_receipt_items(receipt_id,po_item_id,product_id,product_name,sku,quantity_received,unit_cost,line_cost) VALUES(?,?,?,?,?,?,?,?)`,args:[receiptId,item.id,item.product_id||null,item.product_name||null,item.sku||null,qty,unitCost,lineCost]});
         const receiptItemId=Number(pri.lastInsertRowid);
+        if(uomEvidence)await snapshot(tx,{sourceType:'purchase_receipt',sourceId:receiptId,sourceLineId:receiptItemId,productId:uomEvidence.productId,enteredQuantity:uomEvidence.enteredQuantity,resolved:uomEvidence.resolved,baseQuantity:uomEvidence.baseQuantity});
         await tx.execute({sql:'UPDATE purchase_order_items SET quantity_received=quantity_received+? WHERE id=?',args:[qty,item.id]});
         if(item.product_id){
           if(identity)await recordReceiptIdentity(tx,{productId:item.product_id,branchId:po.branch_id,supplierId:po.supplier_id,receiptItemId,unitCost,employeeId:actor(req),identity});
