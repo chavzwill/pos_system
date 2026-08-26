@@ -13,21 +13,22 @@ async function normalize(req){
   for(const line of items){
     const txItem=txItems.find(x=>Number(x.id)===Number(line.transaction_item_id));if(!txItem?.product_id)continue;
     const saleSnap=usage.find(x=>String(x.source_line_id)===String(txItem.id))||usage.find(x=>Number(x.product_id)===Number(txItem.product_id));
-    const requestedUom=line.uom_code||line.unit||saleSnap?.entered_uom||saleSnap?.base_uom||null;
+    const explicitUom=String(line.uom_code||line.unit||'').trim();
+    const requestedUom=explicitUom||(line.inherit_sale_uom===true?saleSnap?.entered_uom:null)||saleSnap?.base_uom||null;
     const enteredQuantity=Number(line.quantity);const resolved=await resolveProductUom(db,txItem.product_id,requestedUom,'movement');
     const baseQuantity=toBaseQuantity(enteredQuantity,resolved);
     if(baseQuantity-Number(txItem.quantity||0)>1e-9)throw new Error(`Return quantity converts to ${baseQuantity} ${resolved.profile.base_uom}, exceeding the original sold quantity`);
     line.entered_quantity=enteredQuantity;line.entered_uom=resolved.uom_code;line.uom_factor_to_base=Number(resolved.factor_to_base);line.base_uom=resolved.profile.base_uom;line.quantity=baseQuantity;
-    if(Array.isArray(line.lots)&&Number(resolved.factor_to_base)!==1){
+    if(Array.isArray(line.lots)&&explicitUom&&Number(resolved.factor_to_base)!==1){
       const lotTotal=line.lots.reduce((s,x)=>s+Number(x.quantity||0),0);if(Math.abs(lotTotal-enteredQuantity)<=1e-9)line.lots=line.lots.map(x=>({...x,quantity:Number((Number(x.quantity||0)*Number(resolved.factor_to_base)).toFixed(6))}));
     }
-    evidence.push({productId:Number(txItem.product_id),enteredQuantity,resolved,baseQuantity,enteredUnitPrice:saleSnap?.entered_unit_price??null,baseUnitPrice:saleSnap?.base_unit_price??Number(txItem.unit_price||0)});
+    evidence.push({productId:Number(txItem.product_id),transactionItemId:Number(txItem.id),enteredQuantity,resolved,baseQuantity,enteredUnitPrice:saleSnap?.entered_unit_price??null,baseUnitPrice:saleSnap?.base_unit_price??Number(txItem.unit_price||0)});
   }
   req.returnUomEvidence=evidence;
 }
 async function save(req,payload){
-  if(!payload?.id||!req.returnUomEvidence?.length)return;const tx=await db.transaction('write');let committed=false;
-  try{for(const e of req.returnUomEvidence)await snapshot(tx,{sourceType:'return',sourceId:payload.id,sourceLineId:null,productId:e.productId,enteredQuantity:e.enteredQuantity,resolved:e.resolved,baseQuantity:e.baseQuantity,enteredUnitPrice:e.enteredUnitPrice,baseUnitPrice:e.baseUnitPrice});await tx.commit();committed=true;}catch(err){if(!committed)await tx.rollback();throw err;}
+  if(!payload?.id||!req.returnUomEvidence?.length)return;const tx=await db.transaction('write');let committed=false;const rows=Array.isArray(payload.items)?payload.items:[];
+  try{for(let i=0;i<req.returnUomEvidence.length;i++){const e=req.returnUomEvidence[i],saved=rows[i]||null;await snapshot(tx,{sourceType:'return',sourceId:payload.id,sourceLineId:saved?.id||e.transactionItemId||null,productId:e.productId,enteredQuantity:e.enteredQuantity,resolved:e.resolved,baseQuantity:e.baseQuantity,enteredUnitPrice:e.enteredUnitPrice,baseUnitPrice:e.baseUnitPrice});}await tx.commit();committed=true;}catch(err){if(!committed)await tx.rollback();throw err;}
 }
 router.post('/:id/return',async(req,res,next)=>{
   try{await normalize(req);}catch(e){return res.status(409).json({error:e.message});}
