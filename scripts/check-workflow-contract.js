@@ -55,7 +55,7 @@ check('Held-sale recall uses unique replay evidence',recall.includes('held_trans
 check('Held-sale creation replaces browser price/tax with catalog evidence',recall.includes('unit_price: Number(product.price || 0)')&&recall.includes('tax_rate: Number(product.tax_rate || 0)'));
 check('Retail checkout hardening mounted before transaction engine',server.indexOf("require('./routes/retail-checkout-hardening')")>=0&&server.indexOf("require('./routes/retail-checkout-hardening')")<server.indexOf("require('./routes/transactions')"));
 check('Retail checkout requires selling branch for in-store sale',checkout.includes('A selling branch is required for a POS transaction'));
-check('Retail checkout rejects overselling branch inventory',checkout.includes('Not enough ${product.name} at the selected branch'));
+check('Retail checkout rejects overselling branch inventory',checkout.includes('state.available < qty')&&checkout.includes('selected branch'));
 check('Retail checkout requires customer for charge account',checkout.includes('Charge Account requires a customer'));
 check('Retail checkout enforces customer credit limit',checkout.includes('Sale would exceed the customer credit limit'));
 check('Retail checkout validates store-credit balance',checkout.includes('Store credit exceeds the customer’s available balance'));
