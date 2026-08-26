@@ -11,6 +11,7 @@ const deferred=read('public/shell-deferred.js');
 const quotes=read('public/quotations-workspace.js');
 const recall=read('routes/held-sale-recall-hardening.js');
 const checkout=read('routes/retail-checkout-hardening.js');
+const drawer=read('routes/drawer-session-hardening.js');
 const checks=[];
 const check=(name,pass)=>checks.push({name,pass:!!pass});
 const workflows=[
@@ -53,6 +54,12 @@ check('Retail checkout requires customer for charge account',checkout.includes('
 check('Retail checkout enforces customer credit limit',checkout.includes('Sale would exceed the customer credit limit'));
 check('Retail checkout validates store-credit balance',checkout.includes('Store credit exceeds the customer’s available balance'));
 check('Retail checkout validates card and transfer references',checkout.includes('payment requires an approval/reference code'));
+check('Retail checkout binds employee to authenticated cashier',checkout.includes('body.employee_id = req.employee.id'));
+check('Retail checkout binds configured branch to open cashier drawer',checkout.includes('Open your cash drawer before completing an in-store sale')&&checkout.includes('body.drawer_session_id=activeSession.id'));
+check('Drawer hardening mounted before legacy drawer route',server.indexOf("require('./routes/drawer-session-hardening')")>=0&&server.indexOf("require('./routes/drawer-session-hardening')")<server.indexOf("require('./routes/drawers')"));
+check('Drawer opening derives employee and branch from evidence',drawer.includes('req.body.employee_id=emp.id')&&drawer.includes('req.body.branch_id=drawer.branch_id'));
+check('Drawer close protects session ownership',drawer.includes('Only the cashier who opened this drawer or a drawer manager can close it'));
+check('Drawer reconciliation protects counted values and reconciler identity',drawer.includes('Denomination quantities must be non-negative whole numbers')&&drawer.includes('req.body.reconciled_by=emp.id'));
 check('Retail cost integrity mounted before legacy transaction route',server.indexOf("require('./routes/retail-cost-integrity')")<server.indexOf("require('./routes/transactions')"));
 check('Replacement return hardening mounted before legacy transaction route',server.indexOf("require('./routes/replacement-return-hardening')")<server.indexOf("require('./routes/transactions')"));
 check('Quotation hardening mounted before legacy quotation route',server.indexOf("require('./routes/quotation-workflow-hardening')")>=0&&server.indexOf("require('./routes/quotation-workflow-hardening')")<server.indexOf("require('./routes/quotations')"));
