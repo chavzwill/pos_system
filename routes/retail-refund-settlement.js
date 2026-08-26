@@ -32,14 +32,30 @@ async function ensureSchema(){
 }
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Refund settlement initialization failed',detail:e.message});}});
 
+async function originalTenderAvailability(transactionId,transactionTotal){
+  const {rows:payments}=await db.execute({sql:'SELECT payment_method,amount FROM transaction_payments WHERE transaction_id=? ORDER BY id',args:[transactionId]});
+  const pool={};
+  if(payments.length){for(const p of payments){const m=String(p.payment_method||'').trim();pool[m]=Number(((pool[m]||0)+Number(p.amount||0)).toFixed(2));}}
+  else{
+    const {rows:[tx]}=await db.execute({sql:'SELECT payment_method FROM transactions WHERE id=?',args:[transactionId]});
+    if(tx?.payment_method)pool[String(tx.payment_method)]=Number(Number(transactionTotal||0).toFixed(2));
+  }
+  const {rows:used}=await db.execute({sql:`SELECT l.payment_method,COALESCE(SUM(l.amount),0) amount
+    FROM retail_refund_settlement_legs l JOIN retail_refund_settlements s ON s.id=l.settlement_id
+    WHERE s.original_transaction_id=? GROUP BY l.payment_method`,args:[transactionId]});
+  for(const u of used)pool[u.payment_method]=Number(((pool[u.payment_method]||0)-Number(u.amount||0)).toFixed(2));
+  return pool;
+}
+
 router.post('/returns/:returnId/settle',requirePermission('transactions_refund'),async(req,res)=>{
   try{
     const returnId=Number(req.params.returnId);if(!returnId)return res.status(400).json({error:'Invalid return id'});
-    const {rows:[ret]}=await db.execute({sql:`SELECT r.*,t.status original_status,t.transaction_number original_transaction_number
+    const {rows:[ret]}=await db.execute({sql:`SELECT r.*,t.status original_status,t.transaction_number original_transaction_number,t.payment_method original_payment_method,t.total original_total
       FROM returns r JOIN transactions t ON t.id=r.original_transaction_id WHERE r.id=?`,args:[returnId]});
     if(!ret)return res.status(404).json({error:'Return not found'});
     if(ret.resolution!=='refund')return res.status(409).json({error:'Only refund returns require cash/payment settlement'});
     if(String(ret.status||'completed')==='cancelled')return res.status(409).json({error:'Cancelled returns cannot be settled'});
+    if(ret.original_payment_method==='credit')return res.status(409).json({error:'Charge-account transactions must be reversed through a credit note, not a cash/payment refund'});
     const {rows:[existing]}=await db.execute({sql:'SELECT * FROM retail_refund_settlements WHERE return_id=?',args:[returnId]});
     if(existing){
       const {rows:legs}=await db.execute({sql:'SELECT * FROM retail_refund_settlement_legs WHERE settlement_id=? ORDER BY id',args:[existing.id]});
@@ -60,6 +76,12 @@ router.post('/returns/:returnId/settle',requirePermission('transactions_refund')
     }
     sum=Number(sum.toFixed(2));const total=Number(Number(ret.total||0).toFixed(2));
     if(Math.abs(sum-total)>0.01)return res.status(400).json({error:`Refund settlement total (${sum.toFixed(2)}) must equal return total (${total.toFixed(2)})`});
+    const available=await originalTenderAvailability(ret.original_transaction_id,ret.original_total);
+    const requested={};for(const leg of normalized)requested[leg.method]=Number(((requested[leg.method]||0)+leg.amount).toFixed(2));
+    for(const [method,amount] of Object.entries(requested)){
+      const cap=Number(available[method]||0);
+      if(amount-cap>0.01)return res.status(409).json({error:`Refund to ${method} exceeds the remaining amount originally tendered by that method (${Math.max(0,cap).toFixed(2)} available)`});
+    }
     const tx=await db.transaction('write');let committed=false;
     try{
       const r=await tx.execute({sql:`INSERT INTO retail_refund_settlements(return_id,original_transaction_id,return_number,branch_id,total,settled_by_employee_id)
@@ -76,3 +98,4 @@ router.post('/returns/:returnId/settle',requirePermission('transactions_refund')
 
 module.exports=router;
 module.exports.ensureSchema=ensureSchema;
+module.exports.originalTenderAvailability=originalTenderAvailability;
