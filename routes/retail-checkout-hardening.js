@@ -6,6 +6,8 @@ const { requirePermission } = require('../lib/permissions');
 const { getAvailableQty } = require('../lib/inventory-stock-status');
 const { getReservedQty } = require('../lib/inventory-reservations');
 
+router.use(require('./retail-inventory-reservation'));
+
 const allowedPayments = new Set(['cash','card','credit','bank_transfer']);
 const asMoney = v => Number.parseFloat(v || 0);
 
