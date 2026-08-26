@@ -18,7 +18,7 @@ const checks=[
  ['lot identity variance must equal quantity variance',guard.includes('Lot/status identity variance for ${item.product_name}')],
  ['lot available identity is adjusted exactly',guard.includes('SET available_quantity=available_quantity+?')],
  ['restricted lot identity updates aggregate status',guard.includes('ON CONFLICT(product_id,branch_id,status) DO UPDATE SET quantity=quantity+excluded.quantity')],
- ['identity events link count adjustments to cycle count',guard.includes("'cycle_count'")&&guard.includes("'count_adjustment'"))],
+ ['identity events link count adjustments to cycle count',guard.includes("'cycle_count'")&&guard.includes("'count_adjustment'")],
  ['post-quantity identity failure is fail-visible',guard.includes('cycle count requires reconciliation')],
  ['identity reconciliation ledger exists',guard.includes('cycle_count_identity_reconciliations')],
  ['stock disposition now invokes identity movement atomically',status.includes('moveIdentityStatus(tx')&&status.indexOf('moveIdentityStatus(tx')<status.indexOf('moveStockStatus(tx')],
