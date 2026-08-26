@@ -156,6 +156,7 @@ app.use('/api/scheduling-intelligence', require('./routes/scheduling-intelligenc
 app.use('/api/crm', require('./routes/crm'));
 app.use('/api/commissions', require('./routes/commissions'));
 app.use('/api/email', require('./routes/email'));
+app.use('/api/warehouse', require('./routes/cycle-count-traceability-guard'));
 app.use('/api/warehouse', require('./routes/cycle-count-hardening'));
 app.use('/api/warehouse', require('./routes/warehouse'));
 app.use('/api/drawers', require('./routes/drawer-session-hardening'));
