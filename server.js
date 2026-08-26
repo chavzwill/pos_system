@@ -104,6 +104,7 @@ app.use('/api/employee-workspace-intelligence', require('./routes/employee-works
 app.use('/api/technician-management-intelligence', require('./routes/technician-management-intelligence'));
 app.use('/api/inventory-stock-status', require('./routes/inventory-stock-status'));
 app.use('/api/inventory-traceability', require('./routes/inventory-traceability'));
+app.use('/api/inventory-writeoffs', require('./routes/inventory-writeoff-traceability-guard'));
 app.use('/api/inventory-writeoffs', require('./routes/inventory-writeoffs'));
 app.use('/api/products', require('./routes/inventory-adjustment-hardening'));
 app.use('/api/products', require('./routes/products'));
