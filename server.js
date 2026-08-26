@@ -104,6 +104,7 @@ app.use('/api/employee-workspace-intelligence', require('./routes/employee-works
 app.use('/api/technician-management-intelligence', require('./routes/technician-management-intelligence'));
 app.use('/api/inventory-stock-status', require('./routes/inventory-stock-status'));
 app.use('/api/inventory-traceability', require('./routes/inventory-traceability'));
+app.use('/api/inventory-writeoffs', require('./routes/inventory-writeoffs'));
 app.use('/api/products', require('./routes/inventory-adjustment-hardening'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
@@ -118,6 +119,8 @@ app.use('/api/transactions', require('./routes/retail-traceability-guard'));
 app.use('/api/transactions', require('./routes/retail-checkout-hardening'));
 app.use('/api/transactions', require('./routes/retail-refund-settlement'));
 app.use('/api/transactions', require('./routes/retail-cost-integrity'));
+app.use('/api/transactions', require('./routes/retail-return-traceability-guard'));
+app.use('/api/transactions', require('./routes/retail-return-hardening'));
 app.use('/api/transactions', require('./routes/replacement-return-hardening'));
 app.use('/api/transactions', require('./routes/transactions'));
 app.use('/api/employees', require('./routes/employees'));
