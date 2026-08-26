@@ -47,7 +47,7 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
     let authoritativeTax = 0;
     for (const line of items) {
       const qty = Number(line.quantity);
-      if (!Number.isInteger(qty) || qty <= 0) return res.status(400).json({error:'Sale quantities must be positive whole numbers'});
+      if (!Number.isInteger(qty) || qty <= 0) return res.status(400).json({error:'Sale quantities must be positive whole numbers after UOM conversion'});
       const {rows:[product]} = await db.execute({sql:'SELECT * FROM products WHERE id=?',args:[line.product_id]});
       if (!product || !product.active) return res.status(400).json({error:`Product ${line.product_id} is unavailable`});
       if (product.is_service || product.is_rental) return res.status(400).json({error:`${product.name} cannot be sold through standard retail checkout`});
@@ -57,7 +57,8 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
         if (state.available < qty) return res.status(409).json({error:`Not enough available ${product.name} at the selected branch (${state.available} sellable; ${state.restricted} restricted; ${state.reserved||0} reserved)`});
       }
 
-      let unitPrice = Number(product.price || 0);
+      let unitPrice = line.uom_base_unit_price != null ? Number(line.uom_base_unit_price) : Number(product.price || 0);
+      if (!Number.isFinite(unitPrice) || unitPrice < 0) return res.status(409).json({error:`Authoritative selling price is invalid for ${product.name}`});
       if (line.variation_id) {
         const {rows:[variation]} = await db.execute({sql:'SELECT * FROM product_variations WHERE id=? AND product_id=?',args:[line.variation_id,line.product_id]});
         if (!variation) return res.status(400).json({error:`Variation ${line.variation_id} is unavailable`});
