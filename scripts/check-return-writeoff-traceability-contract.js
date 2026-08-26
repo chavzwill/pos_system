@@ -24,7 +24,7 @@ const checks=[
  ['writeoff approval rechecks lot live quantity',woff.includes('no longer has enough available quantity for write-off')],
  ['successful serial writeoff retires exact identity',woff.includes("SET status='written_off'")],
  ['successful lot writeoff decrements exact lot',woff.includes('SET available_quantity=available_quantity-?')],
- ['writeoff identity event is linked to writeoff source',woff.includes("'inventory_writeoff'")&&woff.includes("'written_off'"))],
+ ['writeoff identity event is linked to writeoff source',woff.includes("'inventory_writeoff'")&&woff.includes("'written_off'")],
  ['writeoff identity failure is fail-visible',woff.includes('write-off requires reconciliation')],
  ['writeoff core still preserves valuation and GL evidence',woffCore.includes('valueStockAdjustment')&&woffCore.includes('postSourceJournal')]
 ];
