@@ -7,6 +7,9 @@ const exists=p=>fs.existsSync(path.join(root,p));
 const server=read('server.js');
 const loader=read('public/workspace-loader-hardening.js');
 const guide=read('public/guided-mode-exact-fallback.js');
+const deferred=read('public/shell-deferred.js');
+const quotes=read('public/quotations-workspace.js');
+const recall=read('routes/held-sale-recall-hardening.js');
 const checks=[];
 const check=(name,pass)=>checks.push({name,pass:!!pass});
 const workflows=[
@@ -38,8 +41,14 @@ for(const w of workflows){
 }
 check('PO document context route mounted before normal PO router',server.indexOf("require('./routes/purchase-order-document-context')")>=0&&server.indexOf("require('./routes/purchase-order-document-context')")<server.indexOf("require('./routes/purchase-order-hardening')"));
 check('PO hardening mounted before legacy PO route',server.indexOf("require('./routes/purchase-order-hardening')")<server.indexOf("require('./routes/purchase-orders')"));
+check('Held-sale recall hardening mounted before transaction engine',server.indexOf("require('./routes/held-sale-recall-hardening')")>=0&&server.indexOf("require('./routes/held-sale-recall-hardening')")<server.indexOf("require('./routes/transactions')"));
+check('Held-sale recall context is served by fast shell',deferred.includes("'/held-sales-recall-context.js'"));
+check('Held-sale recall uses unique replay evidence',recall.includes('held_transaction_id INTEGER NOT NULL UNIQUE')&&recall.includes('completed_transaction_id INTEGER NOT NULL UNIQUE'));
+check('Held-sale creation replaces browser price/tax with catalog evidence',recall.includes('unit_price: Number(product.price || 0)')&&recall.includes('tax_rate: Number(product.tax_rate || 0)'));
 check('Retail cost integrity mounted before legacy transaction route',server.indexOf("require('./routes/retail-cost-integrity')")<server.indexOf("require('./routes/transactions')"));
 check('Replacement return hardening mounted before legacy transaction route',server.indexOf("require('./routes/replacement-return-hardening')")<server.indexOf("require('./routes/transactions')"));
+check('Quotation hardening mounted before legacy quotation route',server.indexOf("require('./routes/quotation-workflow-hardening')")>=0&&server.indexOf("require('./routes/quotation-workflow-hardening')")<server.indexOf("require('./routes/quotations')"));
+check('Quotation sale filter matches persisted retail type',quotes.includes('<option value="retail"')&&!quotes.includes('<option value="sale"'));
 for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} Workflow: ${c.name}`);
 if(checks.some(c=>!c.pass))process.exit(1);
 console.log(`Workflow contract OK (${checks.length} checks across ${workflows.length} workflows).`);
