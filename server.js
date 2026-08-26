@@ -120,6 +120,7 @@ app.use('/api/transactions', require('./routes/retail-traceability-guard'));
 app.use('/api/transactions', require('./routes/retail-checkout-hardening'));
 app.use('/api/transactions', require('./routes/retail-refund-settlement'));
 app.use('/api/transactions', require('./routes/retail-cost-integrity'));
+app.use('/api/transactions', require('./routes/retail-return-uom-guard'));
 app.use('/api/transactions', require('./routes/retail-return-traceability-guard'));
 app.use('/api/transactions', require('./routes/retail-return-hardening'));
 app.use('/api/transactions', require('./routes/replacement-return-hardening'));
