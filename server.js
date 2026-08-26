@@ -114,6 +114,7 @@ app.use('/api/customers', require('./routes/customer-workflow-hardening'));
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/held-sales', require('./routes/held-sales'));
 app.use('/api/transactions', require('./routes/held-sale-recall-hardening'));
+app.use('/api/transactions', require('./routes/retail-traceability-guard'));
 app.use('/api/transactions', require('./routes/retail-checkout-hardening'));
 app.use('/api/transactions', require('./routes/retail-refund-settlement'));
 app.use('/api/transactions', require('./routes/retail-cost-integrity'));
