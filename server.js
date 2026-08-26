@@ -147,6 +147,7 @@ app.use('/api/quotations', require('./routes/quotation-workflow-hardening'));
 app.use('/api/quotations', require('./routes/quotations'));
 app.use('/api/accounts', require('./routes/customer-account-integrity'));
 app.use('/api/accounts', require('./routes/accounts'));
+app.use('/api/transfers', require('./routes/transfer-uom-guard'));
 app.use('/api/transfers', require('./routes/transfer-valuation-hardening'));
 app.use('/api/transfers', require('./routes/transfers'));
 app.use('/api/stock-rebalancing',require('./routes/stock-rebalancing'));
