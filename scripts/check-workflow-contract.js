@@ -10,6 +10,7 @@ const guide=read('public/guided-mode-exact-fallback.js');
 const deferred=read('public/shell-deferred.js');
 const quotes=read('public/quotations-workspace.js');
 const recall=read('routes/held-sale-recall-hardening.js');
+const checkout=read('routes/retail-checkout-hardening.js');
 const checks=[];
 const check=(name,pass)=>checks.push({name,pass:!!pass});
 const workflows=[
@@ -45,6 +46,13 @@ check('Held-sale recall hardening mounted before transaction engine',server.inde
 check('Held-sale recall context is served by fast shell',deferred.includes("'/held-sales-recall-context.js'"));
 check('Held-sale recall uses unique replay evidence',recall.includes('held_transaction_id INTEGER NOT NULL UNIQUE')&&recall.includes('completed_transaction_id INTEGER NOT NULL UNIQUE'));
 check('Held-sale creation replaces browser price/tax with catalog evidence',recall.includes('unit_price: Number(product.price || 0)')&&recall.includes('tax_rate: Number(product.tax_rate || 0)'));
+check('Retail checkout hardening mounted before transaction engine',server.indexOf("require('./routes/retail-checkout-hardening')")>=0&&server.indexOf("require('./routes/retail-checkout-hardening')")<server.indexOf("require('./routes/transactions')"));
+check('Retail checkout requires selling branch for in-store sale',checkout.includes('A selling branch is required for a POS transaction'));
+check('Retail checkout rejects overselling branch inventory',checkout.includes('Not enough ${product.name} at the selected branch'));
+check('Retail checkout requires customer for charge account',checkout.includes('Charge Account requires a customer'));
+check('Retail checkout enforces customer credit limit',checkout.includes('Sale would exceed the customer credit limit'));
+check('Retail checkout validates store-credit balance',checkout.includes('Store credit exceeds the customer’s available balance'));
+check('Retail checkout validates card and transfer references',checkout.includes('payment requires an approval/reference code'));
 check('Retail cost integrity mounted before legacy transaction route',server.indexOf("require('./routes/retail-cost-integrity')")<server.indexOf("require('./routes/transactions')"));
 check('Replacement return hardening mounted before legacy transaction route',server.indexOf("require('./routes/replacement-return-hardening')")<server.indexOf("require('./routes/transactions')"));
 check('Quotation hardening mounted before legacy quotation route',server.indexOf("require('./routes/quotation-workflow-hardening')")>=0&&server.indexOf("require('./routes/quotation-workflow-hardening')")<server.indexOf("require('./routes/quotations')"));
