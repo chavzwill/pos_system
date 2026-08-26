@@ -24,9 +24,13 @@ async function normalize(req){
 }
 async function saveEvidence(req,payload,sourceType){
   if(!payload?.id||!req.uomEvidence?.length)return;
+  const savedItems=Array.isArray(payload.items)?payload.items:[];
   const tx=await db.transaction('write');let committed=false;
   try{
-    for(const e of req.uomEvidence)await snapshot(tx,{sourceType,sourceId:payload.id,sourceLineId:null,productId:e.productId,enteredQuantity:e.enteredQuantity,resolved:e.resolved,baseQuantity:e.baseQuantity,enteredUnitPrice:e.enteredUnitPrice,baseUnitPrice:e.baseUnitPrice});
+    for(let i=0;i<req.uomEvidence.length;i++){
+      const e=req.uomEvidence[i],saved=savedItems[i]||null;
+      await snapshot(tx,{sourceType,sourceId:payload.id,sourceLineId:saved?.id||null,productId:e.productId,enteredQuantity:e.enteredQuantity,resolved:e.resolved,baseQuantity:e.baseQuantity,enteredUnitPrice:e.enteredUnitPrice,baseUnitPrice:e.baseUnitPrice});
+    }
     await tx.commit();committed=true;
   }catch(err){if(!committed)await tx.rollback();throw err;}
 }
