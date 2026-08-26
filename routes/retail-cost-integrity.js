@@ -46,6 +46,9 @@ router.use(async(req,res,next)=>{
   catch(e){res.status(500).json({error:'Retail cost evidence initialization failed',detail:e.message});}
 });
 
+// Return integrity is part of the same retail inventory/accounting boundary.
+router.use(require('./retail-return-hardening'));
+
 // Intercept retail voids before the legacy transaction router so physical stock,
 // valuation pools, variation stock and accounting reversal evidence stay aligned.
 router.use(require('./transaction-void-hardening'));
