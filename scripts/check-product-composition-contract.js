@@ -1,6 +1,7 @@
 'use strict';
-const fs=require('fs'),path=require('path');const root=path.join(__dirname,'..');const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const lib=read('lib/product-composition.js'),advanced=read('lib/product-composition-advanced.js'),route=read('routes/product-compositions.js'),trace=read('routes/inventory-traceability.js'),valuation=read('lib/inventory-movement-valuation.js'),bundle=read('routes/retail-virtual-bundle-guard.js'),retailTrace=read('routes/retail-traceability-guard.js'),uom=read('routes/retail-uom-guard.js'),reservation=read('routes/retail-inventory-reservation.js');
+const fs=require('fs'),path=require('path'),vm=require('vm');const root=path.join(__dirname,'..');const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const lib=read('lib/product-composition.js'),advanced=read('lib/product-composition-advanced.js'),route=read('routes/product-compositions.js'),trace=read('routes/inventory-traceability.js'),valuation=read('lib/inventory-movement-valuation.js'),bundle=read('routes/retail-virtual-bundle-guard.js'),retailTrace=read('routes/retail-traceability-guard.js'),uom=read('routes/retail-uom-guard.js'),reservation=read('routes/retail-inventory-reservation.js'),bundleLifecycle=read('routes/retail-virtual-bundle-lifecycle.js'),returnUom=read('routes/retail-return-uom-guard.js'),returnTrace=read('routes/retail-return-traceability-guard.js');
+new vm.Script(bundleLifecycle,{filename:'retail-virtual-bundle-lifecycle.js'});
 const checks=[
  ['three composition modes exist',lib.includes('virtual_bundle')&&lib.includes('assembled_kit')&&lib.includes('procurement_kit')],
  ['composition definition is separate from component inventory',lib.includes('product_compositions')&&lib.includes('product_composition_components')],
@@ -47,15 +48,28 @@ const checks=[
  ['virtual bundle checkout validates complete real availability',bundle.includes('buildVirtualSalePlan')&&bundle.includes('if(!plan.can_fulfill)')],
  ['virtual parent is never passed to physical stock decrement path',bundle.includes('req.body.items=expanded')&&bundle.includes('component_product_id')],
  ['bundle components enter ordinary atomic quantity reservation',reservation.includes('const lines=Array.isArray(body.items)?body.items:[]')&&bundle.includes('req.body.items=expanded')],
- ['bundle components enter serial and lot reservation after expansion',retailTrace.includes('reserveIdentities(req)')&&retailTrace.indexOf("retail-virtual-bundle-guard")<retailTrace.indexOf('reserveIdentities(req)')],
+ ['bundle components enter serial and lot reservation after expansion',retailTrace.includes('reserveIdentities(req)')&&retailTrace.indexOf('retail-virtual-bundle-guard')<retailTrace.indexOf('reserveIdentities(req)')],
  ['bundle component identity selections are propagated',bundle.includes('bundle_components')&&bundle.includes('serial_numbers')&&bundle.includes('lots')],
  ['nested virtual bundles fail closed',bundle.includes('Nested virtual bundle component')],
  ['mixed tax-rate bundles fail closed',bundle.includes('cannot mix component tax rates')],
  ['commercial bundle price is allocated server-side',bundle.includes('_bundle_server_price:true')&&bundle.includes('bundleLineTotal')&&bundle.includes('allocated_unit_price')],
- ['UOM guard preserves only server-marked bundle allocation',uom.includes("line._bundle_server_price===true")&&uom.includes("pricing_mode:'virtual_bundle_allocation'")],
+ ['UOM guard preserves only server-marked bundle allocation',uom.includes('line._bundle_server_price===true')&&uom.includes("pricing_mode:'virtual_bundle_allocation'")],
  ['bundle parent and component sale evidence is durable',bundle.includes('transaction_virtual_bundle_lines')&&bundle.includes('transaction_virtual_bundle_components')],
  ['bundle evidence links to real transaction item ids',bundle.includes('transaction_item_id')&&bundle.includes('ORDER BY id')],
  ['bundle evidence mismatch fails visibly into reconciliation',bundle.includes('virtual_bundle_reconciliation')&&bundle.includes('bundle_evidence_finalization_failed')],
- ['successful response exposes customer-facing bundle lines',bundle.includes('payload.bundle_lines=bundleLines')]
+ ['successful response exposes customer-facing bundle lines',bundle.includes('payload.bundle_lines=bundleLines')],
+ ['bundle lifecycle module is syntax compiled by contract',bundleLifecycle.includes('ensureBundleLifecycle')],
+ ['bundle return expansion runs before return UOM normalization',returnUom.indexOf("require('./retail-virtual-bundle-lifecycle')")<returnUom.indexOf('async function normalize')],
+ ['bundle returns are expanded to original component transaction lines',bundleLifecycle.includes('transaction_item_id:transactionItemId')&&bundleLifecycle.includes('req.body.items=')],
+ ['bundle return quantity is limited by scarcest remaining component',bundleLifecycle.includes('maxBundles=Math.min')&&bundleLifecycle.includes('remain returnable')],
+ ['bundle and explicit item return overlap is rejected',bundleLifecycle.includes('included in both an explicit item return and a bundle return')],
+ ['tracked bundle components propagate serial and lot selections into return guards',bundleLifecycle.includes('serial_numbers')&&bundleLifecycle.includes('lots')&&returnTrace.includes('Serial-controlled return requires exactly')],
+ ['bundle return evidence is durable and links real return items',bundleLifecycle.includes('return_virtual_bundle_lines')&&bundleLifecycle.includes('return_virtual_bundle_components')&&bundleLifecycle.includes('return_item_id')],
+ ['bundle return evidence failure is fail-visible',bundleLifecycle.includes('bundle_return_evidence_failed')&&bundleLifecycle.includes('reconciliation required')],
+ ['transaction bundle presentation endpoint exists',bundleLifecycle.includes("router.get('/:id/bundles'")&&bundleLifecycle.includes('returnable_bundle_quantity')],
+ ['bundle presentation includes serialized warranty identity',bundleLifecycle.includes('serial_identity')&&bundleLifecycle.includes("event_type='sold'")],
+ ['bundle return presentation endpoint exists',bundleLifecycle.includes("router.get('/:id/returns/:returnId/bundles'")],
+ ['bundle return commercial value uses original bundle price',bundleLifecycle.includes('bundle_unit_price')&&bundleLifecycle.includes('bundle_line_total')],
+ ['bundle lifecycle requires return permission for write path',bundleLifecycle.includes("requirePermission('transactions_returns')")]
 ];
 let failed=0;for(const[n,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Product composition: ${n}`);if(!ok)failed++;}if(failed){console.error(`Product composition contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`Product composition contract OK (${checks.length} checks).`);
