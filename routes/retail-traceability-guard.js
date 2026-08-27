@@ -6,6 +6,7 @@ const {db}=require('../database');
 const {requirePermission}=require('../lib/permissions');
 const {ensureInventoryTraceability,getTrackingProfile}=require('../lib/inventory-traceability');
 
+router.use(require('./retail-virtual-bundle-guard'));
 router.use(require('./retail-uom-guard'));
 
 let readyPromise=null;
