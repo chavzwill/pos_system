@@ -52,7 +52,8 @@ function guard(sourceType){return async(req,res,next)=>{
 };}
 router.post('/',requirePermission('pos'),guard('transaction'));
 router.post('/hold',requirePermission('pos_hold'),guard('held_transaction'));
-// Margin protection must run after bundle/UOM normalization so package economics
-// are evaluated correctly, but before identity/general inventory reservations and checkout.
+// Commercial controls must run after bundle/UOM normalization so package economics
+// and tax exposure are evaluated from server-authoritative quantities/prices.
 router.use(require('./retail-margin-protection'));
+router.use(require('./retail-tax-exemption-protection'));
 module.exports=router;
