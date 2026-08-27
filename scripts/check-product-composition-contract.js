@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('fs'),path=require('path');const root=path.join(__dirname,'..');const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const lib=read('lib/product-composition.js'),advanced=read('lib/product-composition-advanced.js'),route=read('routes/product-compositions.js'),trace=read('routes/inventory-traceability.js'),valuation=read('lib/inventory-movement-valuation.js');
+const lib=read('lib/product-composition.js'),advanced=read('lib/product-composition-advanced.js'),route=read('routes/product-compositions.js'),trace=read('routes/inventory-traceability.js'),valuation=read('lib/inventory-movement-valuation.js'),bundle=read('routes/retail-virtual-bundle-guard.js'),retailTrace=read('routes/retail-traceability-guard.js'),uom=read('routes/retail-uom-guard.js'),reservation=read('routes/retail-inventory-reservation.js');
 const checks=[
  ['three composition modes exist',lib.includes('virtual_bundle')&&lib.includes('assembled_kit')&&lib.includes('procurement_kit')],
  ['composition definition is separate from component inventory',lib.includes('product_compositions')&&lib.includes('product_composition_components')],
@@ -40,6 +40,22 @@ const checks=[
  ['physical transforms require inventory adjustment authority',route.includes("requirePermission('inventory_adjust')")],
  ['composition workflow is mounted under inventory traceability',trace.includes("router.use('/compositions',require('./product-compositions'))")],
  ['valuation primitives are shared rather than duplicated',valuation.includes('removeFromPool,addComposition')],
- ['break-pack and assembly are atomic DB transactions',route.includes("router.post('/:id/break-pack'")&&route.includes("router.post('/:id/assemble'")&&route.includes('await tx.commit()')]
+ ['break-pack and assembly are atomic DB transactions',route.includes("router.post('/:id/break-pack'")&&route.includes("router.post('/:id/assemble'")&&route.includes('await tx.commit()')],
+ ['virtual bundle checkout expands before UOM and identity reservation',retailTrace.indexOf("require('./retail-virtual-bundle-guard')")<retailTrace.indexOf("require('./retail-uom-guard')")],
+ ['client cannot inject trusted bundle pricing markers',bundle.includes("if(key.startsWith('_bundle_'))delete out[key]")],
+ ['virtual bundle checkout uses authoritative active composition',bundle.includes("composition_type='virtual_bundle' AND active=1")],
+ ['virtual bundle checkout validates complete real availability',bundle.includes('buildVirtualSalePlan')&&bundle.includes('if(!plan.can_fulfill)')],
+ ['virtual parent is never passed to physical stock decrement path',bundle.includes('req.body.items=expanded')&&bundle.includes('component_product_id')],
+ ['bundle components enter ordinary atomic quantity reservation',reservation.includes('const lines=Array.isArray(body.items)?body.items:[]')&&bundle.includes('req.body.items=expanded')],
+ ['bundle components enter serial and lot reservation after expansion',retailTrace.includes('reserveIdentities(req)')&&retailTrace.indexOf("retail-virtual-bundle-guard")<retailTrace.indexOf('reserveIdentities(req)')],
+ ['bundle component identity selections are propagated',bundle.includes('bundle_components')&&bundle.includes('serial_numbers')&&bundle.includes('lots')],
+ ['nested virtual bundles fail closed',bundle.includes('Nested virtual bundle component')],
+ ['mixed tax-rate bundles fail closed',bundle.includes('cannot mix component tax rates')],
+ ['commercial bundle price is allocated server-side',bundle.includes('_bundle_server_price:true')&&bundle.includes('bundleLineTotal')&&bundle.includes('allocated_unit_price')],
+ ['UOM guard preserves only server-marked bundle allocation',uom.includes("line._bundle_server_price===true")&&uom.includes("pricing_mode:'virtual_bundle_allocation'")],
+ ['bundle parent and component sale evidence is durable',bundle.includes('transaction_virtual_bundle_lines')&&bundle.includes('transaction_virtual_bundle_components')],
+ ['bundle evidence links to real transaction item ids',bundle.includes('transaction_item_id')&&bundle.includes('ORDER BY id')],
+ ['bundle evidence mismatch fails visibly into reconciliation',bundle.includes('virtual_bundle_reconciliation')&&bundle.includes('bundle_evidence_finalization_failed')],
+ ['successful response exposes customer-facing bundle lines',bundle.includes('payload.bundle_lines=bundleLines')]
 ];
 let failed=0;for(const[n,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Product composition: ${n}`);if(!ok)failed++;}if(failed){console.error(`Product composition contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`Product composition contract OK (${checks.length} checks).`);
