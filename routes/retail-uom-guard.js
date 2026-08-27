@@ -14,7 +14,11 @@ async function normalize(req){
     const {rows:[product]}=await db.execute({sql:'SELECT id,name,sku,price,tax_rate FROM products WHERE id=?',args:[productId]});if(!product)throw new Error(`Product ${productId} not found`);
     const enteredQuantity=Number(line.quantity);const resolved=await resolveProductUom(db,productId,line.uom_code||line.unit||null,'sell');
     if(line.variation_id&&Number(resolved.factor_to_base)!==1)throw new Error('Alternate selling units are not supported together with product variations; use the base unit for this variation');
-    const baseQuantity=toBaseQuantity(enteredQuantity,resolved);const economics=resolveSellEconomics(product.price,resolved);
+    const baseQuantity=toBaseQuantity(enteredQuantity,resolved);
+    const serverBundlePrice=line._bundle_server_price===true?Number(line.uom_base_unit_price):null;
+    if(line._bundle_server_price!==undefined&&line._bundle_server_price!==true)throw new Error('Invalid internal bundle price marker');
+    if(line._bundle_server_price===true&&(!Number.isFinite(serverBundlePrice)||serverBundlePrice<0))throw new Error('Server-authoritative bundle allocation price is invalid');
+    const economics=line._bundle_server_price===true?{entered_unit_price:Number((serverBundlePrice*Number(resolved.factor_to_base||1)).toFixed(6)),base_unit_price:serverBundlePrice,pricing_mode:'virtual_bundle_allocation'}:resolveSellEconomics(product.price,resolved);
     evidence.push({productId,enteredQuantity,resolved,baseQuantity,enteredUnitPrice:economics.entered_unit_price,baseUnitPrice:economics.base_unit_price,line});
     line.entered_quantity=enteredQuantity;line.entered_uom=resolved.uom_code;line.uom_factor_to_base=Number(resolved.factor_to_base);line.base_uom=resolved.profile.base_uom;
     line.uom_entered_unit_price=economics.entered_unit_price;line.uom_base_unit_price=economics.base_unit_price;line.uom_pricing_mode=economics.pricing_mode;
