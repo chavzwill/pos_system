@@ -16,7 +16,7 @@ const checks=[
  ['procurement FX has a controlled base currency',fx.includes('procurement_currency_settings')&&fx.includes("base_currency TEXT NOT NULL DEFAULT 'JMD'")],
  ['foreign FX requires positive evidence-backed rate',fxRoute.includes('Positive rate_to_base and source_reference are required')&&fx.includes('No valid FX rate from ${code} to ${base}')],
  ['base currency conversion is exactly one',fx.includes("if(code===base)return")&&fx.includes('rate_to_base:1')],
- ['mixed-currency sourcing fails closed before recommendation engine',trace.indexOf("require('./procurement-currency-guard')")<trace.indexOf("require('./product-composition-supplier-procurement')")&&currencyGuard.includes('Cross-currency supplier comparison is blocked')],
+ ['non-base sourcing fails closed before recommendation engine',trace.indexOf("require('./procurement-currency-guard')")<trace.indexOf("require('./product-composition-supplier-procurement')")&&currencyGuard.includes('not yet normalized to the procurement base currency')],
  ['currency guard considers procurement-kit parent offers',currencyGuard.includes("composition_type='procurement_kit'")&&currencyGuard.includes('parent_product_id')],
  ['procurement outcome module never creates purchase orders',!outcome.includes('INSERT INTO purchase_orders')],
  ['decision-to-PO links are durable and many-PO capable',outcome.includes('procurement_decision_po_links')&&outcome.includes('UNIQUE(review_id,po_id)')],
