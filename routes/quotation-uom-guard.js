@@ -14,7 +14,10 @@ async function normalize(req){
     const line=items[inputIndex],productId=Number(line.product_id);if(!productId)continue;
     const {rows:[product]}=await db.execute({sql:'SELECT id,name,sku,price,tax_rate FROM products WHERE id=?',args:[productId]});if(!product)throw new Error(`Product ${productId} not found`);
     const enteredQuantity=Number(line.quantity||1);const resolved=await resolveProductUom(db,productId,line.uom_code||line.unit||null,'sell');
-    const baseQuantity=toBaseQuantity(enteredQuantity,resolved);const economics=resolveSellEconomics(product.price,resolved);const factor=Number(resolved.factor_to_base);
+    const baseQuantity=toBaseQuantity(enteredQuantity,resolved);const factor=Number(resolved.factor_to_base);
+    const bundleAllocation=line._bundle_server_price===true;
+    const economics=bundleAllocation?{entered_unit_price:Number(line.unit_price),base_unit_price:Number(line.uom_base_unit_price??line.unit_price),pricing_mode:'virtual_bundle_allocation'}:resolveSellEconomics(product.price,resolved);
+    if(!Number.isFinite(economics.entered_unit_price)||!Number.isFinite(economics.base_unit_price)||economics.entered_unit_price<0||economics.base_unit_price<0)throw new Error(`Authoritative selling price is invalid for ${product.name}`);
     if(Array.isArray(line.sources)&&line.sources.length)line.sources=line.sources.map(src=>({...src,quantity:Number((Number(src.quantity||0)*factor).toFixed(6))}));
     line.entered_quantity=enteredQuantity;line.entered_uom=resolved.uom_code;line.uom_factor_to_base=factor;line.base_uom=resolved.profile.base_uom;
     line.uom_entered_unit_price=economics.entered_unit_price;line.uom_base_unit_price=economics.base_unit_price;line.uom_pricing_mode=economics.pricing_mode;
