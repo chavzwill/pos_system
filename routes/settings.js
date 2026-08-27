@@ -24,7 +24,10 @@ const MANAGED_KEYS = new Set([
   'repair_notify_email_enabled','repair_notify_sms_enabled','repair_notify_whatsapp_enabled',
   'repair_notify_sms_webhook_url','repair_notify_sms_webhook_token',
   'repair_notify_whatsapp_webhook_url','repair_notify_whatsapp_webhook_token',
-  'woo_sync_interval'
+  'woo_sync_interval',
+  'loss_control_min_gross_margin_pct','loss_control_margin_override_allow_self',
+  'loss_control_cash_shortage_threshold','loss_control_return_rate_threshold_pct',
+  'loss_control_return_value_threshold','loss_control_dead_stock_days'
 ]);
 function mayManage(req){ return !!req.apiKey || can(req.employee?.permissions,'settings'); }
 function redact(key,value){ return SECRET_KEYS.has(key) && value ? '••••••••' : value; }
