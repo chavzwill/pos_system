@@ -110,7 +110,7 @@ router.use(async(req,res,next)=>{try{await ensureQuoteBundleSchema();next();}cat
 router.post('/',guard());
 router.put('/:id',guard());
 router.get('/:id/bundles',async(req,res,next)=>{
-  try{const {rows:lines}=await db.execute({sql:'SELECT * FROM quotation_virtual_bundle_lines WHERE quote_id=? ORDER BY id',args:[req.params.id]});if(!lines.length)return next();for(const line of lines){const {rows:components}=await db.execute({sql:`SELECT c.*,qi.product_name,qi.sku,qi.sources FROM quotation_virtual_bundle_components c LEFT JOIN quotation_items qi ON qi.id=c.quotation_item_id WHERE c.bundle_line_id=? ORDER BY c.id`,args:[line.id]});line.components=components;}res.json(lines);}catch(e){res.status(500).json({error:e.message});}
+  try{const {rows:lines}=await db.execute({sql:'SELECT * FROM quotation_virtual_bundle_lines WHERE quote_id=? ORDER BY id',args:[req.params.id]});if(!lines.length)return next();for(const line of lines){const {rows:components}=await db.execute({sql:`SELECT c.*,qi.product_name,qi.sku FROM quotation_virtual_bundle_components c LEFT JOIN quotation_items qi ON qi.id=c.quotation_item_id WHERE c.bundle_line_id=? ORDER BY c.id`,args:[line.id]});for(const component of components){const {rows:sources}=await db.execute({sql:'SELECT * FROM quotation_item_sources WHERE quotation_item_id=? ORDER BY id',args:[component.quotation_item_id]});component.sources=sources;}line.components=components;}res.json(lines);}catch(e){res.status(500).json({error:e.message});}
 });
 module.exports=router;
 module.exports.ensureQuoteBundleSchema=ensureQuoteBundleSchema;
