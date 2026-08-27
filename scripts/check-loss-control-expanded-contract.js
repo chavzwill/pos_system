@@ -1,8 +1,8 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const expanded=read('routes/loss-control-expanded.js'),operational=read('routes/loss-control-operational-leaks.js'),trace=read('routes/inventory-traceability.js'),margin=read('routes/retail-margin-protection.js'),tax=read('routes/retail-tax-exemption-protection.js'),uom=read('routes/retail-uom-guard.js'),invoiceGuard=read('routes/supplier-invoice-loss-prevention.js'),adjustments=read('routes/inventory-adjustment-hardening.js'),server=read('server.js');
-for(const [n,s] of [['expanded loss control',expanded],['operational leakage',operational],['supplier invoice loss prevention',invoiceGuard],['tax exemption protection',tax],['inventory adjustment hardening',adjustments]])new vm.Script(s,{filename:n});
+const expanded=read('routes/loss-control-expanded.js'),operational=read('routes/loss-control-operational-leaks.js'),trace=read('routes/inventory-traceability.js'),margin=read('routes/retail-margin-protection.js'),tax=read('routes/retail-tax-exemption-protection.js'),uom=read('routes/retail-uom-guard.js'),invoiceGuard=read('routes/supplier-invoice-loss-prevention.js'),paymentGuard=read('routes/supplier-payment-loss-prevention.js'),adjustments=read('routes/inventory-adjustment-hardening.js'),server=read('server.js');
+for(const [n,s] of [['expanded loss control',expanded],['operational leakage',operational],['supplier invoice loss prevention',invoiceGuard],['supplier payment loss prevention',paymentGuard],['tax exemption protection',tax],['inventory adjustment hardening',adjustments]])new vm.Script(s,{filename:n});
 const checks=[
  ['expanded loss control requires reports authority',expanded.includes("router.use(requirePermission('reports'))")],
  ['normalized supplier invoice numbers detect punctuation/case duplicates',expanded.includes("normalizeInvoice(v)")&&expanded.includes("supplier_duplicate_invoice")],
@@ -41,6 +41,11 @@ const checks=[
  ['supplier invoice guard contains PO and receipt matching logic',invoiceGuard.includes('remainingReceived')&&invoiceGuard.includes('remainingPo')],
  ['supplier invoice guard prevents unmatched invoices from automatic payment allocation',invoiceGuard.includes("c.match_status IN ('matched','approved_exception')")],
  ['supplier invoice guard never creates purchase orders',!invoiceGuard.includes('INSERT INTO purchase_orders')],
+ ['supplier payment guard is mounted before supplier ledger posting',server.indexOf("app.use('/api/supplier-ledger', require('./routes/supplier-payment-loss-prevention'))")>=0&&server.indexOf("supplier-payment-loss-prevention")<server.indexOf("app.use('/api/supplier-ledger', require('./routes/supplier-ledger'))")],
+ ['supplier payment reference is normalized before comparison',paymentGuard.includes("replace(/[^A-Z0-9]/g,'')")&&paymentGuard.includes('supplier_payments WHERE supplier_id=?')],
+ ['duplicate supplier payment reference requires independent supervisor approval',paymentGuard.includes('Independent supervisor authorization is required when reusing a supplier payment reference')],
+ ['duplicate supplier payment override is durably recorded',paymentGuard.includes('supplier_payment_override_events')&&paymentGuard.includes('prior_payment_ids')],
+ ['raw duplicate-payment PIN is stripped before ledger posting',paymentGuard.includes('delete req.body.duplicate_payment_override_pin')],
  ['operational loss module never mutates inventory',!operational.includes('UPDATE products SET stock_qty')&&!operational.includes('UPDATE branch_inventory SET stock_qty')],
  ['operational loss module never creates supplier payments',!operational.includes('INSERT INTO supplier_payments')],
  ['operational loss module never changes customer credit',!operational.includes('UPDATE customers SET credit')]
