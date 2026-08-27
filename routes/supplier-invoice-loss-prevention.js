@@ -8,39 +8,50 @@ let readyPromise=null;
 const money=v=>Number(Number(v||0).toFixed(2));
 const normalizeInvoiceNumber=v=>String(v||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
 function actor(req){return req.employee?.id||null;}
-function mayOverride(req){return !!req.apiKey||!!req.employee&&can(req.employee.permissions,'purchasing_approve');}
+function mayOverride(req){return !!req.apiKey||!!req.employee&&(can(req.employee.permissions,'purchasing_approve')||can(req.employee.permissions,'reports_financial'));}
 async function ensureSchema(){
   if(readyPromise)return readyPromise;
-  readyPromise=db.batch([
-    {sql:`CREATE TABLE IF NOT EXISTS supplier_invoice_match_controls(
-      supplier_invoice_id INTEGER PRIMARY KEY REFERENCES supplier_invoices(id),
-      supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
-      purchase_order_id INTEGER REFERENCES purchase_orders(id),
-      normalized_invoice_number TEXT NOT NULL,
-      match_status TEXT NOT NULL,
-      po_merchandise_value REAL,
-      received_merchandise_value REAL,
-      prior_billed_merchandise_value REAL NOT NULL DEFAULT 0,
-      invoice_merchandise_value REAL NOT NULL DEFAULT 0,
-      remaining_received_value_before_invoice REAL,
-      merchandise_variance REAL NOT NULL DEFAULT 0,
-      override_reason TEXT,
-      override_by_employee_id INTEGER REFERENCES employees(id),
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(supplier_id,normalized_invoice_number)
-    )`},
-    {sql:`CREATE TABLE IF NOT EXISTS supplier_invoice_match_events(
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      supplier_invoice_id INTEGER NOT NULL REFERENCES supplier_invoices(id),
-      event_type TEXT NOT NULL,
-      employee_id INTEGER REFERENCES employees(id),
-      details TEXT,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )`},
-    {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_invoice_match_po ON supplier_invoice_match_controls(purchase_order_id,match_status)'},
-    {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_invoice_match_status ON supplier_invoice_match_controls(match_status,created_at)'}
-  ],'write').catch(e=>{readyPromise=null;throw e;});
+  readyPromise=(async()=>{
+    await db.batch([
+      {sql:`CREATE TABLE IF NOT EXISTS supplier_invoice_match_controls(
+        supplier_invoice_id INTEGER PRIMARY KEY REFERENCES supplier_invoices(id),
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+        purchase_order_id INTEGER REFERENCES purchase_orders(id),
+        normalized_invoice_number TEXT NOT NULL,
+        match_status TEXT NOT NULL,
+        po_merchandise_value REAL,
+        received_merchandise_value REAL,
+        prior_billed_merchandise_value REAL NOT NULL DEFAULT 0,
+        invoice_merchandise_value REAL NOT NULL DEFAULT 0,
+        remaining_received_value_before_invoice REAL,
+        merchandise_variance REAL NOT NULL DEFAULT 0,
+        override_reason TEXT,
+        override_by_employee_id INTEGER REFERENCES employees(id),
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(supplier_id,normalized_invoice_number)
+      )`},
+      {sql:`CREATE TABLE IF NOT EXISTS supplier_invoice_match_events(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        supplier_invoice_id INTEGER NOT NULL REFERENCES supplier_invoices(id),
+        event_type TEXT NOT NULL,
+        employee_id INTEGER REFERENCES employees(id),
+        details TEXT,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`},
+      {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_invoice_match_po ON supplier_invoice_match_controls(purchase_order_id,match_status)'},
+      {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_invoice_match_status ON supplier_invoice_match_controls(match_status,created_at)'}
+    ],'write');
+    // Existing AP predates three-way match evidence. Do not silently grandfather it
+    // into payment eligibility: create explicit legacy-review records instead.
+    const {rows:legacy}=await db.execute({sql:`SELECT si.id,si.supplier_id,si.purchase_order_id,si.invoice_number,si.subtotal FROM supplier_invoices si LEFT JOIN supplier_invoice_match_controls c ON c.supplier_invoice_id=si.id WHERE c.supplier_invoice_id IS NULL AND si.status!='void' ORDER BY si.id`,args:[]});
+    for(const inv of legacy){
+      const normalized=normalizeInvoiceNumber(inv.invoice_number)||`INVOICE${inv.id}`;
+      await db.execute({sql:`INSERT OR IGNORE INTO supplier_invoice_match_controls(supplier_invoice_id,supplier_id,purchase_order_id,normalized_invoice_number,match_status,invoice_merchandise_value,override_reason)
+        VALUES(?,?,?,?,?,?,?)`,args:[inv.id,inv.supplier_id,inv.purchase_order_id,`${normalized}#LEGACY-${inv.id}`,'legacy_review_required',money(inv.subtotal||0),'Legacy invoice predates automated three-way match controls; human AP/Purchasing review required before payment.']});
+      await db.execute({sql:`INSERT INTO supplier_invoice_match_events(supplier_invoice_id,event_type,details) SELECT ?,'legacy_review_required','Invoice existed before supplier invoice loss-prevention controls and requires human review before payment.' WHERE NOT EXISTS(SELECT 1 FROM supplier_invoice_match_events WHERE supplier_invoice_id=? AND event_type='legacy_review_required')`,args:[inv.id,inv.id]});
+    }
+  })().catch(e=>{readyPromise=null;throw e;});
   return readyPromise;
 }
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Supplier invoice loss-prevention initialization failed',detail:e.message});}});
@@ -83,13 +94,12 @@ async function evaluateInvoice(req){
   let matchStatus='matched';
   if(receivedValue==null||receivedValue<=0)matchStatus='unmatched_receipt';
   if(variance>tolerance+0.01){
-    if(!mayOverride(req)){const e=new Error(`Supplier invoice merchandise exceeds matched PO/receipt value by ${variance.toFixed(2)}. Purchasing approval is required before posting this exception.`);e.status=409;throw e;}
+    if(!mayOverride(req)){const e=new Error(`Supplier invoice merchandise exceeds matched PO/receipt value by ${variance.toFixed(2)}. Purchasing/AP approval is required before posting this exception.`);e.status=409;throw e;}
     const reason=String(b.match_override_reason||'').trim();
     if(reason.length<5){const e=new Error('A meaningful supplier invoice match override reason is required.');e.status=400;throw e;}
     matchStatus='approved_exception';
     return {supplierId,poId,normalized,subtotal,matchStatus,poValue,receivedValue,priorBilled:prior,remainingReceived,variance,overrideReason:reason,overrideBy:actor(req)};
   }
-  if(matchStatus==='matched'&&subtotal>remainingPo+0.01)matchStatus='approved_exception';
   return {supplierId,poId,normalized,subtotal,matchStatus,poValue,receivedValue,priorBilled:prior,remainingReceived,variance,overrideReason:null,overrideBy:null};
 }
 async function persistMatch(invoiceId,ev){
@@ -128,6 +138,19 @@ router.post('/payments',async(req,res,next)=>{
 
 router.get('/invoice-matches',async(req,res)=>{
   try{const args=[];let sql=`SELECT c.*,si.invoice_number,si.invoice_date,si.total,si.status,s.name supplier_name,po.po_number FROM supplier_invoice_match_controls c JOIN supplier_invoices si ON si.id=c.supplier_invoice_id JOIN suppliers s ON s.id=c.supplier_id LEFT JOIN purchase_orders po ON po.id=c.purchase_order_id WHERE 1=1`;if(req.query.status){sql+=' AND c.match_status=?';args.push(req.query.status);}if(req.query.supplier_id){sql+=' AND c.supplier_id=?';args.push(req.query.supplier_id);}sql+=' ORDER BY c.created_at DESC,c.supplier_invoice_id DESC LIMIT 500';const {rows}=await db.execute({sql,args});res.json(rows);}catch(e){res.status(500).json({error:e.message});}
+});
+
+router.post('/invoice-matches/:invoiceId/review',async(req,res)=>{
+  try{
+    if(!mayOverride(req))return res.status(403).json({error:'Purchasing approval or financial-report authority is required to clear supplier invoice match exceptions.'});
+    const invoiceId=Number(req.params.invoiceId),reason=String(req.body?.reason||'').trim();if(!invoiceId)return res.status(400).json({error:'Invalid supplier invoice id'});if(reason.length<5)return res.status(400).json({error:'A meaningful review reason is required'});
+    const {rows:[c]}=await db.execute({sql:'SELECT * FROM supplier_invoice_match_controls WHERE supplier_invoice_id=?',args:[invoiceId]});if(!c)return res.status(404).json({error:'Supplier invoice match record not found'});
+    if(c.match_status==='matched')return res.json({...c,replayed:true});
+    const nextStatus=String(req.body?.status||'approved_exception');if(!['matched','approved_exception'].includes(nextStatus))return res.status(400).json({error:'Review status must be matched or approved_exception'});
+    await db.execute({sql:`UPDATE supplier_invoice_match_controls SET match_status=?,override_reason=?,override_by_employee_id=?,updated_at=CURRENT_TIMESTAMP WHERE supplier_invoice_id=?`,args:[nextStatus,reason,actor(req),invoiceId]});
+    await db.execute({sql:'INSERT INTO supplier_invoice_match_events(supplier_invoice_id,event_type,employee_id,details) VALUES(?,?,?,?)',args:[invoiceId,nextStatus==='matched'?'human_match_confirmed':'human_exception_approved',actor(req),reason]});
+    const {rows:[saved]}=await db.execute({sql:'SELECT * FROM supplier_invoice_match_controls WHERE supplier_invoice_id=?',args:[invoiceId]});res.json(saved);
+  }catch(e){res.status(500).json({error:e.message});}
 });
 
 module.exports=router;
