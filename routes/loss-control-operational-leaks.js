@@ -50,10 +50,11 @@ async function supplierPaymentSignals(p){
 async function rentalSignals(p){
   if(!(await table('rental_agreements')))return [];
   const out=[];const args=[p.start,p.end];let branch='';if(p.branchId){branch=' AND ra.branch_id=?';args.push(p.branchId);}
+  const balanceExpr=`MAX(0,COALESCE(ra.damage_fee_total,0)+COALESCE(ra.duration_adjustment_total,0)-COALESCE(ra.deposit_total,0)+COALESCE(ra.tax_adjustment_total,0))`;
   const {rows:unsettled}=await db.execute({sql:`SELECT ra.id,ra.agreement_number,ra.branch_id,ra.customer_id,ra.returned_at,ra.damage_fee_total,ra.duration_adjustment_total,ra.deposit_total,ra.tax_adjustment_total,c.first_name||' '||c.last_name customer_name,b.name branch_name,
-      MAX(0,COALESCE(ra.damage_fee_total,0)+COALESCE(ra.duration_adjustment_total,0)-COALESCE(ra.deposit_total,0)+COALESCE(ra.tax_adjustment_total,0)) balance_due
+      ${balanceExpr} balance_due
     FROM rental_agreements ra LEFT JOIN customers c ON c.id=ra.customer_id LEFT JOIN branches b ON b.id=ra.branch_id
-    WHERE ra.status='returned' AND ra.settlement_transaction_id IS NULL AND date(COALESCE(ra.returned_at,ra.created_at)) BETWEEN date(?) AND date(?)${branch} HAVING balance_due>0.01 ORDER BY balance_due DESC`,args});
+    WHERE ra.status='returned' AND ra.settlement_transaction_id IS NULL AND date(COALESCE(ra.returned_at,ra.created_at)) BETWEEN date(?) AND date(?)${branch} AND ${balanceExpr}>0.01 ORDER BY balance_due DESC`,args});
   for(const x of unsettled)out.push({signal_key:key(['rental_uncollected_balance',x.id]),signal_type:'rental_uncollected_balance',category:'rental_leakage',severity:Number(x.balance_due)>=50000?'high':'medium',branch_id:x.branch_id,customer_id:x.customer_id,source_type:'rental_agreement',source_id:x.id,estimated_loss:0,at_risk_value:r2(x.balance_due),title:`Returned rental still has uncollected balance: ${x.agreement_number}`,evidence:{customer_name:x.customer_name,branch_name:x.branch_name,balance_due:r2(x.balance_due),damage_fee:r2(x.damage_fee_total),duration_adjustment:r2(x.duration_adjustment_total),deposit_applied:r2(x.deposit_total),tax_adjustment:r2(x.tax_adjustment_total),returned_at:x.returned_at},recommended_action:'Confirm the settlement hold, collect or formally resolve the outstanding rental balance, and document any authorized waiver. Do not silently clear the balance.'});
   if(await table('rental_agreement_items')){
     const staleDays=Math.max(1,await settingNumber('loss_control_rental_overdue_days',1));const a=[];let w='';if(p.branchId){w=' AND ra.branch_id=?';a.push(p.branchId);}
