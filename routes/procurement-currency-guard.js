@@ -15,11 +15,11 @@ router.post('/recommendations',async(req,res,next)=>{
         o.product_id IN (${marks}) OR
         o.product_id IN (SELECT pc.parent_product_id FROM product_compositions pc WHERE pc.composition_type='procurement_kit' AND pc.active=1)
       )`,args:requirements});
-    const currencies=rows.map(r=>String(r.currency||'').toUpperCase()).filter(Boolean);
-    if(currencies.length>1){
-      return res.status(409).json({error:'Cross-currency supplier comparison is blocked until all candidate offers are normalized to the procurement base currency.',currencies,base_currency:await getBaseCurrency(db),requires_fx_normalization:true});
+    const currencies=rows.map(r=>String(r.currency||'').toUpperCase()).filter(Boolean),base=await getBaseCurrency(db),foreign=currencies.filter(c=>c!==base);
+    if(foreign.length){
+      return res.status(409).json({error:'Supplier recommendation is blocked because one or more candidate offers are not yet normalized to the procurement base currency.',currencies,foreign_currencies:foreign,base_currency:base,requires_fx_normalization:true});
     }
-    req.procurementCurrencyContext={currency:currencies[0]||await getBaseCurrency(db),base_currency:await getBaseCurrency(db)};
+    req.procurementCurrencyContext={currency:base,base_currency:base};
     next();
   }catch(e){res.status(500).json({error:e.message});}
 });
