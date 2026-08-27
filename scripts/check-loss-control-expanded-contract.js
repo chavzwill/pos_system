@@ -1,8 +1,8 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const expanded=read('routes/loss-control-expanded.js'),operational=read('routes/loss-control-operational-leaks.js'),trace=read('routes/inventory-traceability.js'),margin=read('routes/retail-margin-protection.js'),tax=read('routes/retail-tax-exemption-protection.js'),uom=read('routes/retail-uom-guard.js'),invoiceGuard=read('routes/supplier-invoice-loss-prevention.js'),paymentGuard=read('routes/supplier-payment-loss-prevention.js'),adjustments=read('routes/inventory-adjustment-hardening.js'),server=read('server.js');
-for(const [n,s] of [['expanded loss control',expanded],['operational leakage',operational],['supplier invoice loss prevention',invoiceGuard],['supplier payment loss prevention',paymentGuard],['tax exemption protection',tax],['inventory adjustment hardening',adjustments]])new vm.Script(s,{filename:n});
+const expanded=read('routes/loss-control-expanded.js'),operational=read('routes/loss-control-operational-leaks.js'),trace=read('routes/inventory-traceability.js'),margin=read('routes/retail-margin-protection.js'),promo=read('routes/retail-promotion-protection.js'),tax=read('routes/retail-tax-exemption-protection.js'),credit=read('routes/retail-credit-loss-prevention.js'),uom=read('routes/retail-uom-guard.js'),invoiceGuard=read('routes/supplier-invoice-loss-prevention.js'),paymentGuard=read('routes/supplier-payment-loss-prevention.js'),adjustments=read('routes/inventory-adjustment-hardening.js'),server=read('server.js');
+for(const [n,s] of [['expanded loss control',expanded],['operational leakage',operational],['supplier invoice loss prevention',invoiceGuard],['supplier payment loss prevention',paymentGuard],['promotion protection',promo],['tax exemption protection',tax],['credit loss prevention',credit],['inventory adjustment hardening',adjustments]])new vm.Script(s,{filename:n});
 const checks=[
  ['expanded loss control requires reports authority',expanded.includes("router.use(requirePermission('reports'))")],
  ['normalized supplier invoice numbers detect punctuation/case duplicates',expanded.includes("normalizeInvoice(v)")&&expanded.includes("supplier_duplicate_invoice")],
@@ -30,12 +30,21 @@ const checks=[
  ['overdue rental asset value is treated as exposure not loss',operational.includes("overdue_rental_asset_exposure")&&operational.includes('not an assumption that the asset is lost')],
  ['continued credit with aged debt is surfaced as risk',operational.includes("continued_credit_with_aged_debt")&&operational.includes('does not assume the new receivable will become bad debt')],
  ['operational scanner performs no autonomous remediation',operational.includes('No inventory, supplier payment, rental, customer-credit or disciplinary action was performed automatically')],
+ ['promotion code is recalculated from authoritative normalized cart values',promo.includes('authoritative_discount')&&promo.includes('uom_base_unit_price')&&promo.includes('promotion_items')],
+ ['promotion activity dates and usage limits are revalidated server-side',promo.includes('Promotion has expired')&&promo.includes('usage limit has been reached')],
+ ['promotion discount mismatch is rejected rather than trusted',promo.includes('Promotion discount does not match the authoritative promotion value')],
+ ['promotion usage evidence is durable and transaction linked',promo.includes('retail_promotion_control_events')&&promo.includes('transaction_id INTEGER NOT NULL UNIQUE')],
+ ['promotion runs before margin so margin sees authoritative discount',uom.indexOf('retail-promotion-protection')<uom.indexOf('retail-margin-protection')],
  ['POS margin protection is active after UOM normalization',uom.includes("router.use(require('./retail-margin-protection'))")&&uom.indexOf("guard('transaction')")<uom.indexOf("retail-margin-protection")],
  ['margin protection requires supervisor exception for below-floor sale',margin.includes('Supervisor authorization is required')&&margin.includes('margin_override_reason')],
  ['tax exemption protection is active after UOM normalization',uom.includes("router.use(require('./retail-tax-exemption-protection'))")&&uom.indexOf("guard('transaction')")<uom.indexOf("retail-tax-exemption-protection")],
  ['tax exemption requires customer certificate reason and supervisor',tax.includes('tax exemption/certificate number is required')&&tax.includes('must be attached to a customer record')&&tax.includes('Supervisor authorization is required for a tax-exempt POS sale')],
  ['tax exemption evidence persists transaction authorizer and avoided tax estimate',tax.includes('retail_tax_exemption_events')&&tax.includes('authorizer_employee_id')&&tax.includes('tax_avoided_estimate')],
  ['tax exemption raw PIN is stripped before transaction processing',tax.includes('delete req.body.tax_exemption_override_pin')],
+ ['credit control detects aged receivables and projected limit breach',credit.includes('agedBalance(customerId,age)')&&credit.includes('projected>limit+0.01')],
+ ['credit exceptions require independent management authorization',credit.includes('Management authorization is required before extending this customer additional credit')&&credit.includes('Independent management authorization is required')],
+ ['credit override evidence preserves aged debt limit and projected balance',credit.includes('retail_credit_override_events')&&credit.includes('projected_account_balance')&&credit.includes('aged_balance')],
+ ['credit control runs after promotion and tax',uom.indexOf('retail-credit-loss-prevention')>uom.indexOf('retail-promotion-protection')&&uom.indexOf('retail-credit-loss-prevention')>uom.indexOf('retail-tax-exemption-protection')],
  ['supplier invoice guard is mounted before the supplier ledger',server.indexOf("app.use('/api/supplier-ledger', require('./routes/supplier-invoice-loss-prevention'))")>=0&&server.indexOf("supplier-invoice-loss-prevention")<server.indexOf("app.use('/api/supplier-ledger', require('./routes/supplier-ledger'))")],
  ['supplier invoice guard normalizes duplicate identities',invoiceGuard.includes('normalizeInvoiceNumber')&&invoiceGuard.includes('Potential duplicate supplier invoice')],
  ['supplier invoice guard contains PO and receipt matching logic',invoiceGuard.includes('remainingReceived')&&invoiceGuard.includes('remainingPo')],
