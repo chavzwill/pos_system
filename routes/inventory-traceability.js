@@ -13,6 +13,7 @@ router.use('/composition-supplier-procurement',require('./procurement-offer-inte
 router.use('/composition-supplier-procurement',require('./procurement-currency-guard'));
 router.use('/composition-supplier-procurement',require('./product-composition-supplier-procurement'));
 router.use('/procurement-governance',require('./procurement-decision-governance'));
+router.use('/procurement-market',require('./procurement-market-alerts-hardening'));
 router.use('/procurement-market',require('./procurement-market-intelligence'));
 router.use('/procurement-outcomes',require('./procurement-outcome-intelligence'));
 router.use(async(req,res,next)=>{try{await ensureInventoryTraceability();next();}catch(e){res.status(500).json({error:'Inventory traceability initialization failed',detail:e.message});}});
