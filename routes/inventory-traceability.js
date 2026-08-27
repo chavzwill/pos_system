@@ -8,6 +8,8 @@ const {MODES,ensureInventoryTraceability,getTrackingProfile}=require('../lib/inv
 router.use('/uom',require('./unit-of-measure'));
 router.use('/compositions',require('./product-compositions'));
 router.use('/composition-procurement',require('./product-composition-procurement'));
+router.use('/procurement-fx',require('./procurement-fx'));
+router.use('/composition-supplier-procurement',require('./procurement-currency-guard'));
 router.use('/composition-supplier-procurement',require('./product-composition-supplier-procurement'));
 router.use('/procurement-governance',require('./procurement-decision-governance'));
 router.use('/procurement-market',require('./procurement-market-intelligence'));
