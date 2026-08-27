@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');const root=path.join(__dirname,'..');const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const supplier=read('routes/product-composition-supplier-procurement.js'),outcome=read('routes/procurement-outcome-intelligence.js'),governance=read('routes/procurement-decision-governance.js'),market=read('routes/procurement-market-intelligence.js'),trace=read('routes/inventory-traceability.js'),receiving=read('routes/purchase-receipt-traceability.js');
-new vm.Script(supplier,{filename:'product-composition-supplier-procurement.js'});new vm.Script(outcome,{filename:'procurement-outcome-intelligence.js'});
+const supplier=read('routes/product-composition-supplier-procurement.js'),outcome=read('routes/procurement-outcome-intelligence.js'),governance=read('routes/procurement-decision-governance.js'),market=read('routes/procurement-market-intelligence.js'),trace=read('routes/inventory-traceability.js'),receiving=read('routes/purchase-receipt-traceability.js'),fx=read('lib/procurement-fx.js'),fxRoute=read('routes/procurement-fx.js'),currencyGuard=read('routes/procurement-currency-guard.js');
+new vm.Script(supplier,{filename:'product-composition-supplier-procurement.js'});new vm.Script(outcome,{filename:'procurement-outcome-intelligence.js'});new vm.Script(fx,{filename:'procurement-fx.js'});new vm.Script(fxRoute,{filename:'procurement-fx-route.js'});new vm.Script(currencyGuard,{filename:'procurement-currency-guard.js'});
 const checks=[
  ['supplier offer history is guaranteed by supplier procurement schema',supplier.includes('CREATE TABLE IF NOT EXISTS supplier_offer_history')],
  ['new supplier offers automatically capture history',supplier.includes('await captureOfferHistory(tx,saved,req.employee?.id)')],
@@ -12,7 +12,12 @@ const checks=[
  ['offer input rejects non-positive UOM and order factors',supplier.includes('units_per_purchase_uom')&&supplier.includes('must be greater than zero')],
  ['offer input rejects negative commercial charges',supplier.includes('freight_per_order')&&supplier.includes('cannot be negative')],
  ['offer validity dates are ordered',supplier.includes('valid_until cannot be before valid_from')],
- ['offer currency is carried into effective sourcing economics',supplier.includes("currency:offer.currency||'JMD'")],
+ ['supplier offer currency remains explicit',supplier.includes("currency:offer.currency||'JMD'")],
+ ['procurement FX has a controlled base currency',fx.includes('procurement_currency_settings')&&fx.includes("base_currency TEXT NOT NULL DEFAULT 'JMD'")],
+ ['foreign FX requires positive evidence-backed rate',fxRoute.includes('Positive rate_to_base and source_reference are required')&&fx.includes('No valid FX rate from ${code} to ${base}')],
+ ['base currency conversion is exactly one',fx.includes("if(code===base)return")&&fx.includes('rate_to_base:1')],
+ ['mixed-currency sourcing fails closed before recommendation engine',trace.indexOf("require('./procurement-currency-guard')")<trace.indexOf("require('./product-composition-supplier-procurement')")&&currencyGuard.includes('Cross-currency supplier comparison is blocked')],
+ ['currency guard considers procurement-kit parent offers',currencyGuard.includes("composition_type='procurement_kit'")&&currencyGuard.includes('parent_product_id')],
  ['procurement outcome module never creates purchase orders',!outcome.includes('INSERT INTO purchase_orders')],
  ['decision-to-PO links are durable and many-PO capable',outcome.includes('procurement_decision_po_links')&&outcome.includes('UNIQUE(review_id,po_id)')],
  ['only approved sourcing decisions can link to POs',outcome.includes("review.status!=='approved'")],
@@ -30,6 +35,7 @@ const checks=[
  ['outcome snapshot requires purchasing approval',outcome.includes("requirePermission('purchasing_approve')")],
  ['outcome history endpoint exists',outcome.includes("router.get('/decision-reviews/:reviewId/outcome-history'")],
  ['procurement outcome intelligence is mounted',trace.includes("router.use('/procurement-outcomes',require('./procurement-outcome-intelligence'))")],
+ ['procurement FX controls are mounted',trace.includes("router.use('/procurement-fx',require('./procurement-fx'))")],
  ['governance still states approvals do not create POs',governance.includes('This approval does not create a purchase order')&&governance.includes('purchase_order_created:false')],
  ['market intelligence uses receiving evidence rather than vendor self-rating alone',market.includes('purchase_receipt_exceptions')&&market.includes('purchase_receipt_quality_holds')],
  ['receiving preserves receipt-level merchandise evidence used by outcomes',receiving.includes('purchase_receipts')&&receiving.includes('total_cost')]
