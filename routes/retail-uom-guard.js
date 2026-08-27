@@ -52,8 +52,11 @@ function guard(sourceType){return async(req,res,next)=>{
 };}
 router.post('/',requirePermission('pos'),guard('transaction'));
 router.post('/hold',requirePermission('pos_hold'),guard('held_transaction'));
-// Commercial controls must run after bundle/UOM normalization so package economics
-// and tax exposure are evaluated from server-authoritative quantities/prices.
+// Commercial controls run only after bundle/UOM normalization. Promotion is first so
+// margin and credit checks see the authoritative discount; tax authorization precedes
+// credit exposure so a legitimate exemption is reflected in the projected charge.
+router.use(require('./retail-promotion-protection'));
 router.use(require('./retail-margin-protection'));
 router.use(require('./retail-tax-exemption-protection'));
+router.use(require('./retail-credit-loss-prevention'));
 module.exports=router;
