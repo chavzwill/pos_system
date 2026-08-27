@@ -6,6 +6,10 @@ const { requirePermission } = require('../lib/permissions');
 const { getAvailableQty } = require('../lib/inventory-stock-status');
 const { getReservedQty } = require('../lib/inventory-reservations');
 
+// Commercial loss prevention must run after virtual-bundle/UOM normalization
+// (the parent traceability router already did that) but before general stock
+// reservation, so a blocked below-floor sale does not unnecessarily hold stock.
+router.use(require('./retail-margin-protection'));
 router.use(require('./retail-inventory-reservation'));
 
 const allowedPayments = new Set(['cash','card','credit','bank_transfer']);
