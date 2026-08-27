@@ -130,6 +130,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/operational-reports', require('./routes/operational-reports'));
 app.use('/api/accounting-intelligence', require('./routes/accounting-intelligence'));
 app.use('/api/financial-controls-intelligence', require('./routes/financial-controls-intelligence'));
+app.use('/api/supplier-ledger', require('./routes/supplier-invoice-loss-prevention'));
 app.use('/api/supplier-ledger', require('./routes/supplier-ledger'));
 app.use('/api/settlement-reconciliation', require('./routes/settlement-reconciliation'));
 app.use('/api/accounting-ledger', require('./routes/accounting-ledger'));
