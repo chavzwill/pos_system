@@ -18,6 +18,7 @@ router.use('/procurement-market',require('./procurement-market-alerts-hardening'
 router.use('/procurement-market',require('./procurement-what-changed-hardening'));
 router.use('/procurement-market',require('./procurement-market-intelligence'));
 router.use('/procurement-outcomes',require('./procurement-outcome-intelligence'));
+router.use('/loss-control',require('./loss-control-intelligence'));
 router.use(async(req,res,next)=>{try{await ensureInventoryTraceability();next();}catch(e){res.status(500).json({error:'Inventory traceability initialization failed',detail:e.message});}});
 
 router.get('/profiles/:productId',requirePermission('inventory'),async(req,res)=>{
