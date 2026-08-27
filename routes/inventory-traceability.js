@@ -8,6 +8,7 @@ const {MODES,ensureInventoryTraceability,getTrackingProfile}=require('../lib/inv
 router.use('/uom',require('./unit-of-measure'));
 router.use('/compositions',require('./product-compositions'));
 router.use('/composition-procurement',require('./product-composition-procurement'));
+router.use('/composition-supplier-procurement',require('./product-composition-supplier-procurement'));
 router.use(async(req,res,next)=>{try{await ensureInventoryTraceability();next();}catch(e){res.status(500).json({error:'Inventory traceability initialization failed',detail:e.message});}});
 
 router.get('/profiles/:productId',requirePermission('inventory'),async(req,res)=>{
