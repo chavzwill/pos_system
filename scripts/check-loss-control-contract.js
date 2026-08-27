@@ -1,8 +1,8 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..');const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const loss=read('routes/loss-control-intelligence.js'),trace=read('routes/inventory-traceability.js'),cycle=read('routes/cycle-count-hardening.js'),writeoffs=read('routes/inventory-writeoffs.js'),returns=read('routes/retail-return-hardening.js'),refunds=read('routes/retail-refund-settlement.js'),drawers=read('routes/drawers.js'),procurement=read('routes/procurement-outcome-intelligence.js'),costs=read('routes/retail-cost-integrity.js');
-for(const [name,src] of [['loss control',loss],['refund settlement',refunds]])new vm.Script(src,{filename:name});
+const loss=read('routes/loss-control-intelligence.js'),trace=read('routes/inventory-traceability.js'),cycle=read('routes/cycle-count-hardening.js'),writeoffs=read('routes/inventory-writeoffs.js'),returns=read('routes/retail-return-hardening.js'),refunds=read('routes/retail-refund-settlement.js'),drawers=read('routes/drawers.js'),procurement=read('routes/procurement-outcome-intelligence.js'),costs=read('routes/retail-cost-integrity.js'),margin=read('routes/retail-margin-protection.js'),checkout=read('routes/retail-checkout-hardening.js');
+for(const [name,src] of [['loss control',loss],['refund settlement',refunds],['retail margin protection',margin]])new vm.Script(src,{filename:name});
 const checks=[
  ['loss control is reports-permission gated',loss.includes("router.use(requirePermission('reports'))")],
  ['loss cases are durable and uniquely keyed',loss.includes('CREATE TABLE IF NOT EXISTS loss_control_cases')&&loss.includes('signal_key TEXT NOT NULL UNIQUE')],
@@ -39,7 +39,18 @@ const checks=[
  ['case evidence is persisted as JSON',loss.includes('evidence_json')&&loss.includes('JSON.stringify(s.evidence||{})')],
  ['loss control is mounted in inventory traceability',trace.includes("router.use('/loss-control',require('./loss-control-intelligence'))")],
  ['cash evidence source supports split tenders',drawers.includes('transaction_payments')&&drawers.includes('split-tender')],
- ['return evidence source preserves original transaction link',returns.includes('original_transaction_id')&&returns.includes('retail_return_allocations')]
+ ['return evidence source preserves original transaction link',returns.includes('original_transaction_id')&&returns.includes('retail_return_allocations')],
+ ['margin protection runs before general inventory reservation',checkout.indexOf("require('./retail-margin-protection')")<checkout.indexOf("require('./retail-inventory-reservation')")],
+ ['POS discounts require discount authority',margin.includes("can(req.employee.permissions,'pos_discounts')")&&margin.includes('not authorized to apply POS discounts')],
+ ['margin floor is configurable and defaults to below-cost prevention',margin.includes("loss_control_min_gross_margin_pct")&&margin.includes("fallback")],
+ ['preventive margin check uses UOM-normalized selling price',margin.includes('line.uom_base_unit_price')],
+ ['preventive margin check prefers auditable inventory cost pools',margin.includes('inventory_cost_pools')&&margin.includes("basis:'current_tracked_inventory_pool'")],
+ ['below-floor sale requires supervisor PIN and reason',margin.includes('margin_override_pin')&&margin.includes('margin_override_reason')&&margin.includes('meaningful margin override reason')],
+ ['margin override uses existing high-authority financial/security permissions',margin.includes("can(p,'reports_financial')||can(p,'security_manage')")],
+ ['margin override is independently authorized by default',margin.includes('loss_control_margin_override_allow_self')&&margin.includes('Independent supervisor authorization')],
+ ['margin override evidence is durably linked to posted transaction',margin.includes('retail_margin_override_events')&&margin.includes('transaction_id INTEGER REFERENCES transactions(id)')&&margin.includes('persistOverride')],
+ ['raw supervisor PIN is removed before downstream sale processing',margin.includes('delete req.body.margin_override_pin')],
+ ['margin protection never changes catalog prices or inventory',!margin.includes('UPDATE products SET price')&&!margin.includes('UPDATE branch_inventory SET stock_qty')]
 ];
 let failed=0;for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Loss control: ${name}`);if(!ok)failed++;}
 if(failed){console.error(`Loss control contract FAILED (${failed}/${checks.length} failed).`);process.exit(1);}console.log(`Loss control contract OK (${checks.length} checks).`);
