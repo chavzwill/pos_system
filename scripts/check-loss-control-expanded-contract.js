@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const expanded=read('routes/loss-control-expanded.js'),trace=read('routes/inventory-traceability.js'),margin=read('routes/retail-margin-protection.js'),uom=read('routes/retail-uom-guard.js'),invoiceGuard=read('routes/supplier-invoice-loss-prevention.js');
+const expanded=read('routes/loss-control-expanded.js'),trace=read('routes/inventory-traceability.js'),margin=read('routes/retail-margin-protection.js'),uom=read('routes/retail-uom-guard.js'),invoiceGuard=read('routes/supplier-invoice-loss-prevention.js'),server=read('server.js');
 for(const [n,s] of [['expanded loss control',expanded],['supplier invoice loss prevention',invoiceGuard]])new vm.Script(s,{filename:n});
 const checks=[
  ['expanded loss control requires reports authority',expanded.includes("router.use(requirePermission('reports'))")],
@@ -20,6 +20,7 @@ const checks=[
  ['expanded loss control is mounted under the existing loss-control namespace',trace.includes("router.use('/loss-control',require('./loss-control-expanded'))")],
  ['POS margin protection is active after UOM normalization',uom.includes("router.use(require('./retail-margin-protection'))")&&uom.indexOf("guard('transaction')")<uom.indexOf("retail-margin-protection")],
  ['margin protection requires supervisor exception for below-floor sale',margin.includes('Supervisor authorization is required')&&margin.includes('margin_override_reason')],
+ ['supplier invoice guard is mounted before the supplier ledger',server.indexOf("app.use('/api/supplier-ledger', require('./routes/supplier-invoice-loss-prevention'))")>=0&&server.indexOf("supplier-invoice-loss-prevention")<server.indexOf("app.use('/api/supplier-ledger', require('./routes/supplier-ledger'))")],
  ['supplier invoice guard normalizes duplicate identities',invoiceGuard.includes('normalizeInvoiceNumber')&&invoiceGuard.includes('Potential duplicate supplier invoice')],
  ['supplier invoice guard contains PO and receipt matching logic',invoiceGuard.includes('remainingReceived')&&invoiceGuard.includes('remainingPo')],
  ['supplier invoice guard prevents unmatched invoices from automatic payment allocation',invoiceGuard.includes("c.match_status IN ('matched','approved_exception')")],
