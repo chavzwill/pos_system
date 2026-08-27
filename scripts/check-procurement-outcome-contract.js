@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');const root=path.join(__dirname,'..');const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const supplier=read('routes/product-composition-supplier-procurement.js'),outcome=read('routes/procurement-outcome-intelligence.js'),governance=read('routes/procurement-decision-governance.js'),market=read('routes/procurement-market-intelligence.js'),trace=read('routes/inventory-traceability.js'),receiving=read('routes/purchase-receipt-traceability.js'),fx=read('lib/procurement-fx.js'),fxRoute=read('routes/procurement-fx.js'),currencyGuard=read('routes/procurement-currency-guard.js'),offerGuard=read('routes/procurement-offer-integrity-guard.js');
-for(const [name,src] of [['supplier procurement',supplier],['procurement outcomes',outcome],['procurement fx',fx],['procurement fx route',fxRoute],['procurement currency guard',currencyGuard],['procurement offer guard',offerGuard]])new vm.Script(src,{filename:name});
+const supplier=read('routes/product-composition-supplier-procurement.js'),outcome=read('routes/procurement-outcome-intelligence.js'),governance=read('routes/procurement-decision-governance.js'),market=read('routes/procurement-market-intelligence.js'),marketAlerts=read('routes/procurement-market-alerts-hardening.js'),trace=read('routes/inventory-traceability.js'),receiving=read('routes/purchase-receipt-traceability.js'),fx=read('lib/procurement-fx.js'),fxRoute=read('routes/procurement-fx.js'),currencyGuard=read('routes/procurement-currency-guard.js'),offerGuard=read('routes/procurement-offer-integrity-guard.js');
+for(const [name,src] of [['supplier procurement',supplier],['procurement outcomes',outcome],['procurement fx',fx],['procurement fx route',fxRoute],['procurement currency guard',currencyGuard],['procurement offer guard',offerGuard],['procurement market alerts',marketAlerts]])new vm.Script(src,{filename:name});
 const checks=[
  ['supplier offer history is guaranteed by supplier procurement schema',supplier.includes('CREATE TABLE IF NOT EXISTS supplier_offer_history')],
  ['new supplier offers automatically capture history',supplier.includes('await captureOfferHistory(tx,saved,req.employee?.id)')],
@@ -23,6 +23,9 @@ const checks=[
  ['base currency conversion is exactly one',fx.includes("if(code===base)return")&&fx.includes('rate_to_base:1')],
  ['non-base sourcing fails closed before recommendation engine',trace.indexOf("require('./procurement-currency-guard')")<trace.indexOf("require('./product-composition-supplier-procurement')")&&currencyGuard.includes('not yet normalized to the procurement base currency')],
  ['currency guard considers procurement-kit parent offers',currencyGuard.includes("composition_type='procurement_kit'")&&currencyGuard.includes('parent_product_id')],
+ ['hardened market alerts run before legacy market intelligence',trace.indexOf("require('./procurement-market-alerts-hardening')")<trace.indexOf("require('./procurement-market-intelligence')")],
+ ['market alerts prioritize inactive and expired before unavailable and expiring',marketAlerts.indexOf("THEN 'inactive'")<marketAlerts.indexOf("THEN 'expired'")&&marketAlerts.indexOf("THEN 'expired'")<marketAlerts.indexOf("THEN 'unavailable'")&&marketAlerts.indexOf("THEN 'unavailable'")<marketAlerts.indexOf("THEN 'expiring_soon'")],
+ ['market alerts include inactive supplier status',marketAlerts.includes('s.active=0')],
  ['procurement outcome module never creates purchase orders',!outcome.includes('INSERT INTO purchase_orders')],
  ['decision-to-PO links are durable and many-PO capable',outcome.includes('procurement_decision_po_links')&&outcome.includes('UNIQUE(review_id,po_id)')],
  ['only approved sourcing decisions can link to POs',outcome.includes("review.status!=='approved'")],
