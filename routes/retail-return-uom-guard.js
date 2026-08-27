@@ -4,6 +4,10 @@ const router=express.Router();
 const {db}=require('../database');
 const {ensureUomSchema,resolveProductUom,toBaseQuantity,snapshot}=require('../lib/unit-of-measure');
 
+// Expand a customer-facing bundle return into the exact component transaction lines
+// before UOM and serial/lot return controls run.
+router.use(require('./retail-virtual-bundle-lifecycle'));
+
 async function normalize(req){
   await ensureUomSchema();
   const transactionId=Number(req.params.id),items=Array.isArray(req.body?.items)?req.body.items:[];if(!transactionId||!items.length)return;
