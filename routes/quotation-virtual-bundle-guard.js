@@ -2,6 +2,7 @@
 const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
+const {requirePermission}=require('../lib/permissions');
 const {ensureProductComposition,getComposition,buildVirtualSalePlan}=require('../lib/product-composition');
 
 let readyPromise=null;
@@ -107,9 +108,9 @@ function guard(){return async(req,res,next)=>{
   res.json=function(payload){if(handled)return originalJson(payload);handled=true;if(res.statusCode>=200&&res.statusCode<300&&payload?.id)return persist(req,payload).then(()=>originalJson(payload)).catch(e=>{if(!res.headersSent){res.status(500);return originalJson({error:'Quotation saved but bundle evidence finalization failed; reconciliation required',quote_id:payload.id,detail:e.message});}});return originalJson(payload);};next();
 };}
 router.use(async(req,res,next)=>{try{await ensureQuoteBundleSchema();next();}catch(e){res.status(500).json({error:'Quotation bundle initialization failed',detail:e.message});}});
-router.post('/',guard());
-router.put('/:id',guard());
-router.get('/:id/bundles',async(req,res,next)=>{
+router.post('/',requirePermission('quotations'),guard());
+router.put('/:id',requirePermission('quotations'),guard());
+router.get('/:id/bundles',requirePermission('quotations'),async(req,res,next)=>{
   try{const {rows:lines}=await db.execute({sql:'SELECT * FROM quotation_virtual_bundle_lines WHERE quote_id=? ORDER BY id',args:[req.params.id]});if(!lines.length)return next();for(const line of lines){const {rows:components}=await db.execute({sql:`SELECT c.*,qi.product_name,qi.sku FROM quotation_virtual_bundle_components c LEFT JOIN quotation_items qi ON qi.id=c.quotation_item_id WHERE c.bundle_line_id=? ORDER BY c.id`,args:[line.id]});for(const component of components){const {rows:sources}=await db.execute({sql:'SELECT * FROM quotation_item_sources WHERE quotation_item_id=? ORDER BY id',args:[component.quotation_item_id]});component.sources=sources;}line.components=components;}res.json(lines);}catch(e){res.status(500).json({error:e.message});}
 });
 module.exports=router;
