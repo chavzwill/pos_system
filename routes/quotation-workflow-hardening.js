@@ -4,6 +4,7 @@ const router=express.Router();
 const {db}=require('../database');
 const {requirePermission}=require('../lib/permissions');
 
+router.use(require('./quotation-virtual-bundle-guard'));
 router.use(require('./quotation-uom-guard'));
 router.use(requirePermission('quotations'));
 
