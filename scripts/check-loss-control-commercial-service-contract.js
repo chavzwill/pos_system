@@ -1,8 +1,8 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const service=read('routes/loss-control-commercial-service-leaks.js'),trace=read('routes/inventory-traceability.js'),promo=read('routes/retail-promotion-protection.js'),credit=read('routes/retail-credit-loss-prevention.js'),uom=read('routes/retail-uom-guard.js');
-for(const [name,src] of [['commercial/service leakage',service],['promotion protection',promo],['credit protection',credit]])new vm.Script(src,{filename:name});
+const service=read('routes/loss-control-commercial-service-leaks.js'),trace=read('routes/inventory-traceability.js'),promo=read('routes/retail-promotion-protection.js'),credit=read('routes/retail-credit-loss-prevention.js'),uom=read('routes/retail-uom-guard.js'),sales=read('public/sales-workspace.js');
+for(const [name,src] of [['commercial/service leakage',service],['promotion protection',promo],['credit protection',credit],['fast POS',sales]])new vm.Script(src,{filename:name});
 const checks=[
  ['commercial/service intelligence requires reports permission',service.includes("router.use(requirePermission('reports'))")],
  ['commercial/service intelligence is mounted under loss control',trace.includes("router.use('/loss-control',require('./loss-control-commercial-service-leaks'))")],
@@ -23,6 +23,14 @@ const checks=[
  ['promotion checkout recalculates scope using product/category assignments',promo.includes('promotion_items')&&promo.includes('category_id')],
  ['promotion client discount mismatch is blocked',promo.includes('Promotion discount does not match the authoritative promotion value')],
  ['promotion runs before margin protection',uom.indexOf('retail-promotion-protection')<uom.indexOf('retail-margin-protection')],
+ ['fast POS exposes a promotion-code workflow',sales.includes('tt-sales-promo-code')&&sales.includes('tt-sales-apply-promo')&&sales.includes('/api/promotions/validate-code')],
+ ['fast POS retains category identity for promotion scope validation',sales.includes('category_id:product.category_id||null')&&sales.includes('category_id:i.category_id||null')],
+ ['fast POS total visibly and financially applies authoritative promotion discount',sales.includes('discount:Number(discount.toFixed(2))')&&sales.includes('raw.subtotal+raw.tax-discount')&&sales.includes('Promotion</span><strong>−')],
+ ['cart mutations invalidate previously validated promotions',sales.includes('function invalidatePromotion()')&&sales.includes('invalidatePromotion();render()')],
+ ['fast POS refreshes promotion immediately before checkout',sales.includes('if(state.promotion)await refreshPromotion()')],
+ ['fast POS sends promotion identity and discount into protected transaction engine',sales.includes('base.promotion_code=state.promotion.code')&&sales.includes('discount_amount:t.discount')],
+ ['promotion-priced holds fail closed rather than preserving stale discount evidence',sales.includes('Promotion-priced sales must be completed through checkout')],
+ ['receipt presentation exposes posted promotion/discount evidence',sales.includes('tx.promotion_name')&&sales.includes('tx.promotion_code')&&sales.includes('tx.discount_amount')],
  ['credit control enforces aged debt threshold',credit.includes('loss_control_credit_override_age_days')&&credit.includes('loss_control_credit_override_aged_balance')],
  ['credit control enforces projected credit limit',credit.includes('projected>limit+0.01')],
  ['credit exception requires independent management approval',credit.includes('Independent management authorization is required')],
