@@ -36,35 +36,38 @@ async function estimate(writeoff){
   }catch(e){}
   return {unit_cost:r2(unitCost),estimated_value:r2(unitCost*Number(writeoff.quantity||0)),basis};
 }
-async function authorize(req,writeoff,valuation,threshold){
+function meaningfulEvidence(v){const s=String(v||'').trim();if(s.length<3)return false;return !new Set(['NA','N/A','NONE','UNKNOWN','NO','NIL','TBD','NOT AVAILABLE']).has(s.toUpperCase());}
+async function authorize(req,writeoff,valuation,threshold,evidenceThreshold){
   const pin=String(req.body?.writeoff_financial_pin||'').trim();
   const reason=String(req.body?.writeoff_financial_reason||'').trim();
   const evidence=String(req.body?.writeoff_evidence_reference||writeoff.reference||'').trim();
+  const reasonCode=String(writeoff.reason_code||'').toLowerCase();
+  const evidenceRequired=['theft','destruction','shrinkage'].includes(reasonCode)||valuation.estimated_value+0.009>=evidenceThreshold;
   if(!pin)return {error:`This write-off represents approximately ${valuation.estimated_value.toFixed(2)} of inventory value and requires independent financial authorization.`};
   if(reason.length<5)return {error:'A meaningful financial-approval reason is required for this write-off.'};
-  if(['theft','destruction'].includes(String(writeoff.reason_code||'').toLowerCase())&&evidence.length<3)return {error:'Theft/destruction write-offs require an evidence or incident/disposal reference before approval.'};
+  if(evidenceRequired&&!meaningfulEvidence(evidence))return {error:`This ${reasonCode||'material'} write-off requires a meaningful incident, disposal, count, photo, document or investigation evidence reference before approval.`};
   const {rows:employees}=await db.execute({sql:'SELECT e.id,e.first_name,e.last_name,e.pin,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.active=1',args:[]});
   const auth=employees.find(e=>String(e.pin)===pin&&(()=>{let p={};try{p=JSON.parse(e.permissions||'{}')}catch{}return can(p,'reports_financial')||can(p,'security_manage');})());
   if(!auth)return {error:'Invalid financial-authorizer PIN or insufficient authority.'};
   if(req.employee&&String(auth.id)===String(req.employee.id))return {error:'High-value inventory write-offs require a second, independent financial authorizer.'};
   if(writeoff.created_by_employee_id&&String(auth.id)===String(writeoff.created_by_employee_id))return {error:'The employee who created the write-off cannot provide its high-value financial authorization.'};
-  return {auth,reason,evidence,threshold};
+  return {auth,reason,evidence,threshold,evidenceThreshold,evidenceRequired};
 }
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Write-off financial controls failed to initialize',detail:e.message});}});
 router.post('/:id/approve',async(req,res,next)=>{
   try{
     const {rows:[w]}=await db.execute({sql:'SELECT * FROM inventory_writeoffs WHERE id=?',args:[req.params.id]});
     if(!w||w.status!=='pending_approval')return next();
-    const valuation=await estimate(w),threshold=Math.max(0,await settingNumber('loss_control_high_value_writeoff_threshold',100000));
-    const highRiskReason=['theft','destruction'].includes(String(w.reason_code||'').toLowerCase());
+    const valuation=await estimate(w),threshold=Math.max(0,await settingNumber('loss_control_high_value_writeoff_threshold',100000)),evidenceThreshold=Math.max(threshold,await settingNumber('loss_control_writeoff_evidence_threshold',250000));
+    const highRiskReason=['theft','destruction','shrinkage'].includes(String(w.reason_code||'').toLowerCase());
     if(valuation.estimated_value+0.009<threshold&&!highRiskReason)return next();
-    const approval=await authorize(req,w,valuation,threshold);
-    if(approval.error)return res.status(409).json({error:approval.error,control:'high_value_writeoff',estimated_value:valuation.estimated_value,threshold_value:threshold,valuation_basis:valuation.basis});
+    const approval=await authorize(req,w,valuation,threshold,evidenceThreshold);
+    if(approval.error)return res.status(409).json({error:approval.error,control:'high_value_writeoff',estimated_value:valuation.estimated_value,threshold_value:threshold,evidence_threshold:evidenceThreshold,valuation_basis:valuation.basis});
     delete req.body.writeoff_financial_pin;delete req.body.writeoff_financial_reason;delete req.body.writeoff_evidence_reference;
     const originalJson=res.json.bind(res);let handled=false;
     res.json=function(payload){
       if(handled)return originalJson(payload);handled=true;
-      if(res.statusCode>=200&&res.statusCode<300&&payload)return db.execute({sql:`INSERT INTO inventory_writeoff_financial_approvals(writeoff_id,estimated_value,valuation_basis,threshold_value,approving_employee_id,financial_authorizer_employee_id,reason,evidence_reference,reason_code) VALUES(?,?,?,?,?,?,?,?,?)`,args:[w.id,valuation.estimated_value,valuation.basis,threshold,req.employee?.id||null,approval.auth.id,approval.reason,approval.evidence||null,w.reason_code||null]}).then(()=>originalJson({...payload,financial_approval_recorded:true,estimated_writeoff_value:valuation.estimated_value})).catch(err=>{if(!res.headersSent){res.status(500);return originalJson({error:'Write-off approved but financial-control evidence failed to persist; reconciliation required',writeoff_id:w.id,detail:err.message});}});
+      if(res.statusCode>=200&&res.statusCode<300&&payload)return db.execute({sql:`INSERT INTO inventory_writeoff_financial_approvals(writeoff_id,estimated_value,valuation_basis,threshold_value,approving_employee_id,financial_authorizer_employee_id,reason,evidence_reference,reason_code) VALUES(?,?,?,?,?,?,?,?,?)`,args:[w.id,valuation.estimated_value,valuation.basis,threshold,req.employee?.id||null,approval.auth.id,approval.reason,approval.evidence||null,w.reason_code||null]}).then(()=>originalJson({...payload,financial_approval_recorded:true,estimated_writeoff_value:valuation.estimated_value,writeoff_evidence_required:approval.evidenceRequired})).catch(err=>{if(!res.headersSent){res.status(500);return originalJson({error:'Write-off approved but financial-control evidence failed to persist; reconciliation required',writeoff_id:w.id,detail:err.message});}});
       return originalJson(payload);
     };
     next();
