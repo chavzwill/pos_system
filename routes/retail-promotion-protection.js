@@ -1,5 +1,6 @@
 'use strict';
 const express=require('express');
+const crypto=require('crypto');
 const router=express.Router();
 const {db}=require('../database');
 const {requirePermission}=require('../lib/permissions');
@@ -24,8 +25,20 @@ async function ensureSchema(){
       client_discount REAL NOT NULL DEFAULT 0,
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`},
+    {sql:`CREATE TABLE IF NOT EXISTS retail_promotion_checkout_claims(
+      claim_token TEXT PRIMARY KEY,
+      promotion_code_id INTEGER NOT NULL REFERENCES promotion_codes(id),
+      employee_id INTEGER REFERENCES employees(id),
+      branch_id INTEGER REFERENCES branches(id),
+      status TEXT NOT NULL DEFAULT 'pending',
+      transaction_id INTEGER REFERENCES transactions(id),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      expires_at DATETIME NOT NULL,
+      finalized_at DATETIME
+    )`},
     {sql:'CREATE INDEX IF NOT EXISTS idx_retail_promotion_control_promo ON retail_promotion_control_events(promotion_id,created_at)'},
-    {sql:'CREATE INDEX IF NOT EXISTS idx_retail_promotion_control_employee ON retail_promotion_control_events(employee_id,created_at)'}
+    {sql:'CREATE INDEX IF NOT EXISTS idx_retail_promotion_control_employee ON retail_promotion_control_events(employee_id,created_at)'},
+    {sql:'CREATE INDEX IF NOT EXISTS idx_promo_claim_code_status ON retail_promotion_checkout_claims(promotion_code_id,status,expires_at)'}
   ],'write').catch(e=>{readyPromise=null;throw e;});
   return readyPromise;
 }
@@ -59,25 +72,47 @@ async function evaluateCode(req){
   b.discount_amount=authoritative;b.promotion_code=String(pc.code);b.promotion_name=pc.promo_name;
   return {promotionId:Number(pc.promotion_id),codeId:Number(pc.id),code:String(pc.code),name:pc.promo_name,eligible,authoritative,client};
 }
-async function persist(req,payload,ev){
-  if(!ev||!payload?.id)return;
+async function claimUsage(req,ev){
+  if(!ev)return null;
   const tx=await db.transaction('write');let committed=false;
   try{
     const {rows:[pc]}=await tx.execute({sql:'SELECT times_used,usage_limit,active FROM promotion_codes WHERE id=?',args:[ev.codeId]});
-    if(!pc||!pc.active||pc.usage_limit!=null&&Number(pc.times_used||0)>=Number(pc.usage_limit))throw new Error('Promotion usage changed during checkout; reconciliation required.');
+    if(!pc||!pc.active)throw Object.assign(new Error('Promotion code became unavailable during checkout.'),{status:409});
+    const {rows:[pending]}=await tx.execute({sql:`SELECT COUNT(*) n FROM retail_promotion_checkout_claims WHERE promotion_code_id=? AND status='pending' AND datetime(expires_at)>CURRENT_TIMESTAMP`,args:[ev.codeId]});
+    if(pc.usage_limit!=null&&Number(pc.times_used||0)+Number(pending?.n||0)>=Number(pc.usage_limit))throw Object.assign(new Error('Promotion code usage limit is currently reserved by another checkout. Retry or use another promotion.'),{status:409});
+    const token=crypto.randomUUID(),expires=new Date(Date.now()+5*60*1000).toISOString();
+    await tx.execute({sql:`INSERT INTO retail_promotion_checkout_claims(claim_token,promotion_code_id,employee_id,branch_id,status,expires_at) VALUES(?,?,?,?,?,?)`,args:[token,ev.codeId,req.employee?.id||null,req.body?.branch_id||null,'pending',expires]});
+    await tx.commit();committed=true;return token;
+  }catch(e){if(!committed)await tx.rollback();throw e;}
+}
+async function releaseClaim(token){if(!token)return;await db.execute({sql:`UPDATE retail_promotion_checkout_claims SET status='released',finalized_at=CURRENT_TIMESTAMP WHERE claim_token=? AND status='pending'`,args:[token]});}
+async function persist(req,payload,ev,claimToken){
+  if(!ev||!payload?.id)return;
+  const tx=await db.transaction('write');let committed=false;
+  try{
+    const {rows:[claim]}=await tx.execute({sql:`SELECT * FROM retail_promotion_checkout_claims WHERE claim_token=? AND promotion_code_id=? AND status='pending'`,args:[claimToken,ev.codeId]});
+    if(!claim)throw new Error('Promotion checkout reservation is missing or already finalized; reconciliation required.');
+    const {rows:[pc]}=await tx.execute({sql:'SELECT times_used,usage_limit,active FROM promotion_codes WHERE id=?',args:[ev.codeId]});
+    if(!pc||!pc.active)throw new Error('Promotion became inactive during checkout; reconciliation required.');
+    if(pc.usage_limit!=null&&Number(pc.times_used||0)>=Number(pc.usage_limit))throw new Error('Promotion usage changed during checkout; reconciliation required.');
     await tx.execute({sql:'UPDATE promotion_codes SET times_used=times_used+1 WHERE id=?',args:[ev.codeId]});
     await tx.execute({sql:`INSERT INTO retail_promotion_control_events(transaction_id,transaction_number,promotion_id,promotion_code_id,promotion_code,promotion_name,branch_id,employee_id,eligible_amount,authoritative_discount,client_discount)
       VALUES(?,?,?,?,?,?,?,?,?,?,?)`,args:[payload.id,payload.transaction_number||null,ev.promotionId,ev.codeId,ev.code,ev.name,req.body?.branch_id||null,req.employee?.id||payload.employee_id||null,ev.eligible,ev.authoritative,ev.client]});
+    await tx.execute({sql:`UPDATE retail_promotion_checkout_claims SET status='posted',transaction_id=?,finalized_at=CURRENT_TIMESTAMP WHERE claim_token=?`,args:[payload.id,claimToken]});
     await tx.commit();committed=true;
   }catch(e){if(!committed)await tx.rollback();throw e;}
 }
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Promotion-control initialization failed',detail:e.message});}});
 router.post('/',requirePermission('pos'),async(req,res,next)=>{
-  let ev;try{ev=await evaluateCode(req);}catch(e){return res.status(e.status||500).json({error:e.message});}
+  let ev,claimToken;try{ev=await evaluateCode(req);if(ev)claimToken=await claimUsage(req,ev);}catch(e){return res.status(e.status||500).json({error:e.message});}
   if(!ev)return next();
-  req.retailPromotionEvidence=ev;
+  req.retailPromotionEvidence=ev;req.retailPromotionClaimToken=claimToken;
   const originalJson=res.json.bind(res);let handled=false;
-  res.json=function(payload){if(handled)return originalJson(payload);handled=true;if(res.statusCode>=200&&res.statusCode<300&&payload?.id)return persist(req,payload,ev).then(()=>originalJson({...payload,promotion_control_recorded:true})).catch(err=>{if(!res.headersSent){res.status(500);return originalJson({error:'Sale posted but promotion usage evidence failed to persist; reconciliation required',transaction_id:payload.id,detail:err.message});}});return originalJson(payload);};
+  res.json=function(payload){
+    if(handled)return originalJson(payload);handled=true;
+    if(res.statusCode>=200&&res.statusCode<300&&payload?.id)return persist(req,payload,ev,claimToken).then(()=>originalJson({...payload,promotion_control_recorded:true})).catch(err=>{if(!res.headersSent){res.status(500);return originalJson({error:'Sale posted but promotion usage evidence failed to persist; reconciliation required',transaction_id:payload.id,detail:err.message});}});
+    return releaseClaim(claimToken).catch(()=>{}).then(()=>originalJson(payload));
+  };
   next();
 });
 module.exports=router;
