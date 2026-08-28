@@ -40,7 +40,8 @@ async function authorize(req,reason){
 async function persist(req,agreement,events){
   for(const ev of events){await db.execute({sql:`INSERT INTO rental_financial_override_events(agreement_id,agreement_number,branch_id,employee_id,authorizer_employee_id,override_type,reason,requested_value,evidence_json) VALUES(?,?,?,?,?,?,?,?,?)`,args:[agreement.id,agreement.agreement_number||null,agreement.branch_id||null,req.employee?.id||req.body?.employee_id||null,ev.authorizer.id,ev.type,ev.reason,ev.value==null?null:String(ev.value),JSON.stringify(ev.evidence||{})]});}
 }
-function damageLike(v){const s=String(v||'').trim().toLowerCase();return ['damage','broken','poor','missing','unusable','repair'].some(x=>s.includes(x));}
+function damageLike(v){const s=String(v||'').trim().toLowerCase();return ['damage','broken','poor','unusable','repair'].some(x=>s.includes(x));}
+function missingLike(v){const s=String(v||'').trim().toLowerCase();return s.includes('missing')||s.includes('lost')||s.includes('not returned')||s.includes('not-returned');}
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Rental loss-prevention initialization failed',detail:e.message});}});
 
 router.patch('/agreements/:id/return',requireAnyPermission('rentals_returns','rentals'),async(req,res,next)=>{
@@ -68,6 +69,7 @@ router.patch('/agreements/:id/return',requireAnyPermission('rentals_returns','re
       for(const input of returnItems){
         const stored=storedItems.find(x=>String(x.id)===String(input.item_id));if(!stored)continue;
         const incomingCondition=String(input.condition_in||stored.condition_in||'').trim(),outgoingCondition=String(stored.condition_out||'').trim();
+        if(missingLike(incomingCondition))return res.status(409).json({error:`${stored.product_name} is marked missing/lost and cannot be processed as a normal return. Recording it as returned would incorrectly release unavailable stock back into rental availability. Use the controlled missing-asset disposition workflow.`,control:'rental_missing_asset_disposition_required',agreement_item_id:stored.id,product_id:stored.product_id,replacement_value:Number(stored.replacement_value||0)});
         const fee=Number(input.damage_fee||0);
         if(damageLike(incomingCondition)&&incomingCondition.toLowerCase()!==outgoingCondition.toLowerCase()&&fee<=0.01){
           const auth=await requireAuth('damage_fee_waiver');if(!auth)return;
