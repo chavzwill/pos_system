@@ -104,6 +104,7 @@ app.use('/api/employee-workspace-intelligence', require('./routes/employee-works
 app.use('/api/technician-management-intelligence', require('./routes/technician-management-intelligence'));
 app.use('/api/inventory-stock-status', require('./routes/inventory-stock-status'));
 app.use('/api/inventory-traceability', require('./routes/inventory-traceability'));
+app.use('/api/inventory-writeoffs', require('./routes/inventory-writeoff-financial-guard'));
 app.use('/api/inventory-writeoffs', require('./routes/inventory-writeoff-traceability-guard'));
 app.use('/api/inventory-writeoffs', require('./routes/inventory-writeoffs'));
 app.use('/api/products', require('./routes/inventory-adjustment-hardening'));
@@ -192,7 +193,7 @@ app.get('*', (req,res)=> req.path.startsWith('/legacy') ? sendEnhancedIndex(req,
 if (!process.env.VERCEL) {
   app.listen(PORT, () => { console.log(`\n  POS System running at http://localhost:${PORT}\n`); });
   setInterval(async()=>{try{await ensureReady();const{rows:[iRow]}=await db.execute({sql:"SELECT value FROM settings WHERE key='woo_sync_interval'",args:[]});const mins=parseInt(iRow?.value||'0');if(!mins)return;const{rows:[lRow]}=await db.execute({sql:"SELECT value FROM settings WHERE key='woo_last_auto_sync'",args:[]});const last=lRow?.value?new Date(lRow.value):new Date(0);if((Date.now()-last.getTime())/60000>=mins)wooSyncAll().catch(()=>{});}catch(e){}},60000);
-  setInterval(async()=>{try{await ensureReady();const{rows:overdue}=await db.execute({sql:"SELECT * FROM rental_agreements WHERE status='active' AND due_date < date('now') AND overdue_notified_at IS NULL",args:[]});for(const agreement of overdue){try{await db.execute({sql:'UPDATE rental_agreements SET overdue_notified_at = CURRENT_TIMESTAMP WHERE id = ?',args:[agreement.id]});await logActivity({customerId:agreement.customer_id,employeeId:agreement.employee_id,type:'rental',subject:`Rental ${agreement.agreement_number} is overdue (due ${agreement.due_date})`,dueDate:agreement.due_date,completed:false});}catch(e){}}}catch(e){}},30*60000);
+  setInterval(async()=>{try{await ensureReady();const{rows:overdue}=await db.execute({sql:"SELECT * FROM rental_agreements WHERE status='active' AND due_date < date('now') AND overdue_notified_at IS NULL",args:[]});for(const agreement of overdue){try{await db.execute({sql:'UPDATE rental_agreements SET overdue_notified_at = CURRENT_TIMESTAMP WHERE id = ?',args:[agreement.id]});await logActivity({customerId:agreement.customer_id,employeeId:agreement.employee_id,type:'rental',subject:`Rental ${agreement.agreement_number} is overdue (due ${agreement.due_date})`,dueDate:agreement.due_date,completed:false});}catch(e){} } }catch(e){}},30*60000);
   setInterval(()=>{ processRepairNotificationQueue(20).catch(e=>console.error('Repair notification worker failed:',e&&e.message||e)); },60000);
 }
 module.exports = app;
