@@ -32,7 +32,7 @@ router.put('/profiles/:productId',requirePermission('inventory_edit'),async(req,
   try{
     const productId=Number(req.params.productId),mode=String(req.body?.tracking_mode||'none').toLowerCase();
     if(!Number.isInteger(productId)||productId<=0)return res.status(400).json({error:'Valid product id required'});
-    if(!MODES.has(mode))return res.status(409).json({error:'tracking_mode must be none, lot, or serial'});
+    if(!MODES.has(mode))return res.status(400).json({error:'tracking_mode must be none, lot, or serial'});
     const {rows:[product]}=await db.execute({sql:'SELECT id,is_service,is_non_inventory FROM products WHERE id=?',args:[productId]});
     if(!product)return res.status(404).json({error:'Product not found'});
     if(product.is_service||product.is_non_inventory)return res.status(409).json({error:'Only physical inventory products can use serial/lot tracking'});
