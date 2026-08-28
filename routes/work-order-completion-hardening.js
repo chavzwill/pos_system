@@ -5,7 +5,9 @@ const { requirePermission } = require('../lib/permissions');
 
 // Service concessions, goodwill waivers and final-payment netting must run
 // before the legacy work-order routes so approved concessions cannot be
-// bypassed by the normal settlement path.
+// bypassed by the normal settlement path. The balance guard runs first so a
+// pre-settlement waiver can never silently become a refund of money already paid.
+router.use(require('./service-concession-balance-guard'));
 router.use(require('./service-concessions'));
 
 async function tableExists(name, executor = db) {
