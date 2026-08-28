@@ -4,6 +4,12 @@ const router=express.Router();
 const {db}=require('../database');
 const {can,requireAnyPermission}=require('../lib/permissions');
 
+// Runs first for every /api/rentals request. Besides exposing the controlled
+// missing/lost-asset workflow, its schema guard adds quantity_missing and the
+// agreement-level missing-asset financial totals before the legacy rental
+// routes or availability helper can query those fields.
+router.use(require('./rental-missing-asset-disposition'));
+
 let readyPromise=null;
 async function ensureSchema(){
   if(readyPromise)return readyPromise;
@@ -89,7 +95,7 @@ router.patch('/agreements/:id/collect-balance',requireAnyPermission('pos','renta
   try{
     const {rows:[agreement]}=await db.execute({sql:'SELECT * FROM rental_agreements WHERE id=?',args:[req.params.id]});
     if(!agreement)return next();
-    const balance=Number((Number(agreement.damage_fee_total||0)+Number(agreement.duration_adjustment_total||0)-Number(agreement.deposit_total||0)+Number(agreement.tax_adjustment_total||0)).toFixed(2));
+    const balance=Number((Number(agreement.damage_fee_total||0)+Number(agreement.duration_adjustment_total||0)+Number(agreement.missing_asset_charge_total||0)-Number(agreement.deposit_total||0)+Number(agreement.tax_adjustment_total||0)).toFixed(2));
     const method=String(req.body?.payment_method||'cash');
     const tendered=Number(req.body?.amount_tendered??balance);
     if(balance>0&&method==='cash'){
