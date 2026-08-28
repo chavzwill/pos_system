@@ -171,6 +171,7 @@ app.use('/api/cash-back-cards', require('./routes/cash-back-cards'));
 app.use('/api/denominations', require('./routes/denominations'));
 app.use('/api/woocommerce', woocommerceRouter);
 app.use('/api/api-keys', require('./routes/api-keys'));
+app.use('/api/rentals', require('./routes/rental-loss-prevention'));
 app.use('/api/rentals', require('./routes/rentals'));
 app.use('/api/layaway', require('./routes/layaway'));
 app.use('/api/work-orders', require('./routes/work-order-completion-hardening'));
