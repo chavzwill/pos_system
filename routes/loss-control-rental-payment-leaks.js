@@ -34,7 +34,7 @@ async function rentalPauseSignals(p){
 async function rentalConditionSignals(p){
   if(!(await table('rental_agreement_items'))||!(await table('rental_agreements')))return [];
   const c=await columns('rental_agreement_items');
-  if(!c.has('condition_in')||!c.has('condition_out')||!c.has('damage_fee')||!c.has('quantity_returned'))return [];
+  if(!c.has('condition_in')||!c.has('condition_out')||!c.has('damage_fee')||!c.has('quantity_returned')||!c.has('returned_at'))return [];
   const args=[p.start,p.end];let branch='';if(p.branchId){branch=' AND ra.branch_id=?';args.push(p.branchId);}
   const bad=`(lower(COALESCE(rai.condition_in,'')) LIKE '%damage%' OR lower(COALESCE(rai.condition_in,'')) LIKE '%broken%' OR lower(COALESCE(rai.condition_in,'')) LIKE '%poor%' OR lower(COALESCE(rai.condition_in,'')) LIKE '%missing%' OR lower(COALESCE(rai.condition_in,'')) LIKE '%unusable%' OR lower(COALESCE(rai.condition_in,'')) LIKE '%repair%')`;
   const {rows}=await db.execute({sql:`SELECT ra.id agreement_id,ra.agreement_number,ra.branch_id,b.name branch_name,ra.customer_id,rai.id agreement_item_id,rai.product_id,rai.product_name,rai.sku,rai.condition_out,rai.condition_in,rai.damage_fee,rai.damage_notes,rai.quantity_returned,COALESCE(pr.cost,0) unit_cost
@@ -49,14 +49,15 @@ async function rentalConditionSignals(p){
 async function supplierPaymentSimilaritySignals(p){
   if(!(await table('supplier_payments')))return [];
   const args=[p.start,p.end];let branch='';if(p.branchId){branch=' AND sp.branch_id=?';args.push(p.branchId);}
-  const {rows}=await db.execute({sql:`SELECT sp.supplier_id,s.name supplier_name,sp.branch_id,b.name branch_name,sp.payment_date,ROUND(sp.amount,2) amount,
-      COUNT(*) payment_count,GROUP_CONCAT(sp.id) payment_ids,GROUP_CONCAT(COALESCE(sp.reference,''),' | ') payment_references
+  const {rows}=await db.execute({sql:`SELECT sp.supplier_id,s.name supplier_name,sp.payment_date,ROUND(sp.amount,2) amount,
+      COUNT(*) payment_count,GROUP_CONCAT(sp.id) payment_ids,GROUP_CONCAT(COALESCE(sp.reference,''),' | ') payment_references,
+      GROUP_CONCAT(DISTINCT COALESCE(b.name,'Unassigned')) branch_names
     FROM supplier_payments sp LEFT JOIN suppliers s ON s.id=sp.supplier_id LEFT JOIN branches b ON b.id=sp.branch_id
     WHERE date(sp.payment_date) BETWEEN date(?) AND date(?)${branch}
-    GROUP BY sp.supplier_id,sp.branch_id,sp.payment_date,ROUND(sp.amount,2)
+    GROUP BY sp.supplier_id,sp.payment_date,ROUND(sp.amount,2)
     HAVING payment_count>1
     ORDER BY (amount*(payment_count-1)) DESC`,args});
-  return rows.map(x=>{const exposure=r2(Number(x.amount||0)*Math.max(1,Number(x.payment_count||0)-1));return {signal_key:key(['supplier_same_day_same_amount',x.supplier_id,x.branch_id,x.payment_date,x.amount]),signal_type:'supplier_payment_same_day_same_amount',category:'supplier_payment_risk',severity:exposure>=100000?'high':'medium',branch_id:x.branch_id,supplier_id:x.supplier_id,estimated_loss:0,at_risk_value:exposure,title:`Repeated same-day supplier payment amount requires review: ${x.supplier_name||'supplier'}`,evidence:{supplier_name:x.supplier_name,branch_name:x.branch_name,payment_date:x.payment_date,amount:r2(x.amount),payment_count:Number(x.payment_count||0),payment_ids:x.payment_ids,payment_references:x.payment_references,duplicate_value_exposure:exposure},recommended_action:'Compare bank/cheque/remittance evidence and invoice allocations for these payments. Multiple legitimate payments can share an amount; this signal identifies duplicate-payment risk and does not classify any payment as improper.'};});
+  return rows.map(x=>{const exposure=r2(Number(x.amount||0)*Math.max(1,Number(x.payment_count||0)-1));return {signal_key:key(['supplier_same_day_same_amount',x.supplier_id,x.payment_date,x.amount]),signal_type:'supplier_payment_same_day_same_amount',category:'supplier_payment_risk',severity:exposure>=100000?'high':'medium',supplier_id:x.supplier_id,estimated_loss:0,at_risk_value:exposure,title:`Repeated same-day supplier payment amount requires review: ${x.supplier_name||'supplier'}`,evidence:{supplier_name:x.supplier_name,branch_names:x.branch_names,payment_date:x.payment_date,amount:r2(x.amount),payment_count:Number(x.payment_count||0),payment_ids:x.payment_ids,payment_references:x.payment_references,duplicate_value_exposure:exposure},recommended_action:'Compare bank/cheque/remittance evidence and invoice allocations for these payments. Multiple legitimate payments can share an amount; this signal identifies duplicate-payment risk and does not classify any payment as improper.'};});
 }
 
 async function collect(p){const groups=await Promise.all([rentalPauseSignals(p),rentalConditionSignals(p),supplierPaymentSimilaritySignals(p)]);return groups.flat().sort((a,b)=>Number(b.at_risk_value||0)-Number(a.at_risk_value||0));}
