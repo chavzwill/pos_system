@@ -1,8 +1,8 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const service=read('routes/loss-control-commercial-service-leaks.js'),trace=read('routes/inventory-traceability.js'),promo=read('routes/retail-promotion-protection.js'),credit=read('routes/retail-credit-loss-prevention.js'),uom=read('routes/retail-uom-guard.js'),sales=read('public/sales-workspace.js');
-for(const [name,src] of [['commercial/service leakage',service],['promotion protection',promo],['credit protection',credit],['fast POS',sales]])new vm.Script(src,{filename:name});
+const service=read('routes/loss-control-commercial-service-leaks.js'),trace=read('routes/inventory-traceability.js'),promo=read('routes/retail-promotion-protection.js'),credit=read('routes/retail-credit-loss-prevention.js'),uom=read('routes/retail-uom-guard.js'),sales=read('public/sales-workspace.js'),concessions=read('routes/service-concessions.js'),completion=read('routes/work-order-completion-hardening.js'),concessionUi=read('public/service-concessions-ui.js'),deferred=read('public/shell-deferred.js');
+for(const [name,src] of [['commercial/service leakage',service],['promotion protection',promo],['credit protection',credit],['fast POS',sales],['service concessions',concessions],['service concession UI',concessionUi]])new vm.Script(src,{filename:name});
 const checks=[
  ['commercial/service intelligence requires reports permission',service.includes("router.use(requirePermission('reports'))")],
  ['commercial/service intelligence is mounted under loss control',trace.includes("router.use('/loss-control',require('./loss-control-commercial-service-leaks'))")],
@@ -40,6 +40,18 @@ const checks=[
  ['credit exception requires independent management approval',credit.includes('Independent management authorization is required')],
  ['credit exception evidence is durable',credit.includes('retail_credit_override_events')&&credit.includes('override_type TEXT NOT NULL')],
  ['credit runs after promotion and tax controls',uom.indexOf('retail-credit-loss-prevention')>uom.indexOf('retail-promotion-protection')&&uom.indexOf('retail-credit-loss-prevention')>uom.indexOf('retail-tax-exemption-protection')],
- ['commercial/service intelligence performs no stock mutation',!service.includes('UPDATE products SET stock_qty')&&!service.includes('UPDATE branch_inventory SET stock_qty')]
+ ['commercial/service intelligence performs no stock mutation',!service.includes('UPDATE products SET stock_qty')&&!service.includes('UPDATE branch_inventory SET stock_qty')],
+ ['service concessions are mounted before normal work-order settlement',completion.includes("router.use(require('./service-concessions'))")],
+ ['service concession types explicitly cover labor parts goodwill and recovery',concessions.includes("'labor_waiver'")&&concessions.includes("'parts_waiver'")&&concessions.includes("'goodwill_credit'")&&concessions.includes("'service_recovery'")],
+ ['service concession proposals require amount and documented commercial reason',concessions.includes('positive proposed concession amount')&&concessions.includes('commercially justified')],
+ ['service concession approval requires independent financial authorization',concessions.includes('Independent management authorization is required for a service concession')&&concessions.includes('cannot financially authorize it')],
+ ['service concession total cannot exceed current gross service value',concessions.includes('Approved concessions would exceed the current gross service value')],
+ ['approved concessions reduce authoritative final balance',concessions.includes('gross-approved-Number(wo.deposit_amount||0)')&&concessions.includes("router.patch('/:id/final-payment'")],
+ ['final settlement records gross value and negative concession evidence',concessions.includes('WO-FINAL-GROSS')&&concessions.includes('WO-CONCESSION')&&concessions.includes('-concession')],
+ ['settled concessions link to their transaction evidence',concessions.includes('applied_transaction_id')&&concessions.includes("status='approved' AND applied_transaction_id IS NULL")],
+ ['final payment rechecks work-order state inside write transaction',concessions.includes('Work order status changed; reload before collecting payment')],
+ ['service concession UI exposes proposal review approval and rejection',concessionUi.includes('Propose concession')&&concessionUi.includes('Review & approve')&&concessionUi.includes('Reject service concession')],
+ ['service concession UI explains independent authorization and net balance',concessionUi.includes('independent financial authorization')&&concessionUi.includes('balance_after_concessions')],
+ ['service concession UI is loaded by the fast shell',deferred.includes('/service-concessions-ui.js')]
 ];
 let failed=0;for(const [name,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Commercial/service loss control: ${name}`);if(!ok)failed++;}if(failed){console.error(`Commercial/service loss-control contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`Commercial/service loss-control contract OK (${checks.length} checks).`);
