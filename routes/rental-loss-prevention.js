@@ -40,6 +40,7 @@ async function authorize(req,reason){
 async function persist(req,agreement,events){
   for(const ev of events){await db.execute({sql:`INSERT INTO rental_financial_override_events(agreement_id,agreement_number,branch_id,employee_id,authorizer_employee_id,override_type,reason,requested_value,evidence_json) VALUES(?,?,?,?,?,?,?,?,?)`,args:[agreement.id,agreement.agreement_number||null,agreement.branch_id||null,req.employee?.id||req.body?.employee_id||null,ev.authorizer.id,ev.type,ev.reason,ev.value==null?null:String(ev.value),JSON.stringify(ev.evidence||{})]});}
 }
+function damageLike(v){const s=String(v||'').trim().toLowerCase();return ['damage','broken','poor','missing','unusable','repair'].some(x=>s.includes(x));}
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Rental loss-prevention initialization failed',detail:e.message});}});
 
 router.patch('/agreements/:id/return',requireAnyPermission('rentals_returns','rentals'),async(req,res,next)=>{
@@ -47,25 +48,37 @@ router.patch('/agreements/:id/return',requireAnyPermission('rentals_returns','re
     const {rows:[agreement]}=await db.execute({sql:'SELECT * FROM rental_agreements WHERE id=?',args:[req.params.id]});
     if(!agreement)return next();
     const events=[];
+    let sharedAuth=null;
+    const requireAuth=async(control)=>{if(sharedAuth)return sharedAuth;const auth=await authorize(req,req.body?.rental_override_reason);if(auth.error){res.status(409).json({error:auth.error,control});return null;}sharedAuth=auth;return auth;};
     if(req.body?.duration_adjustment_override!=null){
-      const reason=req.body?.rental_override_reason;
-      const auth=await authorize(req,reason);if(auth.error)return res.status(409).json({error:auth.error,control:'duration_adjustment_override'});
+      const auth=await requireAuth('duration_adjustment_override');if(!auth)return;
       events.push({type:'duration_adjustment_override',reason:auth.reason,authorizer:auth.authorizer,value:req.body.duration_adjustment_override,evidence:{original_due_date:agreement.due_date,checkout_datetime:agreement.checkout_datetime||agreement.checkout_date}});
     }
     if(req.body?.returned_at){
       const backdateMinutes=(Date.now()-new Date(req.body.returned_at).getTime())/60000;
       const threshold=15;
       if(Number.isFinite(backdateMinutes)&&backdateMinutes>threshold){
-        const reason=req.body?.rental_override_reason;
-        let auth=events[0]?.authorizer?{authorizer:events[0].authorizer,reason:events[0].reason}:await authorize(req,reason);
-        if(auth.error)return res.status(409).json({error:auth.error,control:'backdated_return'});
+        const auth=await requireAuth('backdated_return');if(!auth)return;
         events.push({type:'backdated_return',reason:auth.reason,authorizer:auth.authorizer,value:req.body.returned_at,evidence:{minutes_backdated:Number(backdateMinutes.toFixed(1)),threshold_minutes:threshold,server_time:new Date().toISOString()}});
+      }
+    }
+    const returnItems=Array.isArray(req.body?.items)?req.body.items:[];
+    if(returnItems.length){
+      const {rows:storedItems}=await db.execute({sql:'SELECT * FROM rental_agreement_items WHERE agreement_id=?',args:[agreement.id]});
+      for(const input of returnItems){
+        const stored=storedItems.find(x=>String(x.id)===String(input.item_id));if(!stored)continue;
+        const incomingCondition=String(input.condition_in||stored.condition_in||'').trim(),outgoingCondition=String(stored.condition_out||'').trim();
+        const fee=Number(input.damage_fee||0);
+        if(damageLike(incomingCondition)&&incomingCondition.toLowerCase()!==outgoingCondition.toLowerCase()&&fee<=0.01){
+          const auth=await requireAuth('damage_fee_waiver');if(!auth)return;
+          events.push({type:'damage_fee_waiver',reason:auth.reason,authorizer:auth.authorizer,value:0,evidence:{agreement_item_id:stored.id,product_id:stored.product_id,product_name:stored.product_name,sku:stored.sku,condition_out:outgoingCondition||null,condition_in:incomingCondition,damage_fee:fee,damage_notes:input.damage_notes||null,quantity_returned:Number(input.quantity_returned||0)}});
+        }
       }
     }
     delete req.body.rental_override_pin;delete req.body.rental_override_reason;
     if(!events.length)return next();
     const originalJson=res.json.bind(res);let handled=false;
-    res.json=function(payload){if(handled)return originalJson(payload);handled=true;if(res.statusCode>=200&&res.statusCode<300)return persist(req,agreement,events).then(()=>originalJson({...payload,rental_financial_override_recorded:true})).catch(err=>{if(!res.headersSent){res.status(500);return originalJson({error:'Rental return posted but override evidence failed to persist; reconciliation required',agreement_id:agreement.id,detail:err.message});}});return originalJson(payload);};
+    res.json=function(payload){if(handled)return originalJson(payload);handled=true;if(res.statusCode>=200&&res.statusCode<300)return persist(req,agreement,events).then(()=>originalJson({...payload,rental_financial_override_recorded:true,rental_financial_override_types:events.map(x=>x.type)})).catch(err=>{if(!res.headersSent){res.status(500);return originalJson({error:'Rental return posted but override evidence failed to persist; reconciliation required',agreement_id:agreement.id,detail:err.message});}});return originalJson(payload);};
     next();
   }catch(e){res.status(500).json({error:e.message});}
 });
