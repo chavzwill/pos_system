@@ -23,6 +23,7 @@ router.use('/loss-control',require('./loss-control-expanded'));
 router.use('/loss-control',require('./loss-control-operational-leaks'));
 router.use('/loss-control',require('./loss-control-commercial-service-leaks'));
 router.use('/loss-control',require('./loss-control-rental-leaks'));
+router.use('/loss-control',require('./loss-control-rental-payment-leaks'));
 router.use(async(req,res,next)=>{try{await ensureInventoryTraceability();next();}catch(e){res.status(500).json({error:'Inventory traceability initialization failed',detail:e.message});}});
 
 router.get('/profiles/:productId',requirePermission('inventory'),async(req,res)=>{
