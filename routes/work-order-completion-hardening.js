@@ -3,6 +3,11 @@ const router = express.Router();
 const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
 
+// Service concessions, goodwill waivers and final-payment netting must run
+// before the legacy work-order routes so approved concessions cannot be
+// bypassed by the normal settlement path.
+router.use(require('./service-concessions'));
+
 async function tableExists(name, executor = db) {
   const { rows: [row] } = await executor.execute({
     sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
