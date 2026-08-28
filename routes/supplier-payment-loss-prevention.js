@@ -34,6 +34,8 @@ async function ensureSchema(){if(readyPromise)return readyPromise;readyPromise=d
   {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_payment_similarity ON supplier_payment_similarity_override_events(supplier_id,payment_date,amount,created_at)'}
 ],'write').catch(e=>{readyPromise=null;throw e;});return readyPromise;}
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Supplier-payment loss-prevention initialization failed',detail:e.message});}});
+async function settingNumber(key,fallback){const {rows:[r]}=await db.execute({sql:'SELECT value FROM settings WHERE key=?',args:[key]});const n=Number(r?.value);return Number.isFinite(n)?n:fallback;}
+function dayDiff(a,b){const x=Date.parse(`${a}T00:00:00Z`),y=Date.parse(`${b}T00:00:00Z`);return Number.isFinite(x)&&Number.isFinite(y)?Math.abs(x-y)/86400000:Infinity;}
 async function authorize(req,message){
   const reason=String(req.body?.duplicate_payment_override_reason||req.body?.payment_similarity_override_reason||'').trim();
   const pin=String(req.body?.duplicate_payment_override_pin||req.body?.payment_similarity_override_pin||'').trim();
@@ -49,15 +51,31 @@ router.post('/payments',async(req,res,next)=>{
   try{
     const supplierId=Number(req.body?.supplier_id),normalized=normalize(req.body?.reference),amount=money(req.body?.amount),paymentDate=String(req.body?.payment_date||'').trim();
     if(!supplierId||!(amount>0)||!paymentDate)return next();
+    const [windowDays,pctTolerance,absoluteTolerance]=await Promise.all([
+      settingNumber('loss_control_supplier_payment_similarity_days',2),
+      settingNumber('loss_control_supplier_payment_similarity_amount_pct',0.25),
+      settingNumber('loss_control_supplier_payment_similarity_amount_abs',100)
+    ]);
+    const allowedDays=Math.max(0,Math.min(14,windowDays));
+    const amountTolerance=Math.max(0,Number(absoluteTolerance||0),amount*Math.max(0,Number(pctTolerance||0))/100);
     const {rows:all}=await db.execute({sql:`SELECT id,payment_number,reference,amount,payment_date,payment_method,recorded_by,created_at FROM supplier_payments WHERE supplier_id=? ORDER BY id`,args:[supplierId]});
     const exactReference=normalized?all.filter(x=>normalize(x.reference)===normalized):[];
     const sameDayAmount=all.filter(x=>String(x.payment_date)===paymentDate&&Math.abs(money(x.amount)-amount)<=0.009);
-    const priorMap=new Map();for(const p of [...exactReference,...sameDayAmount])priorMap.set(Number(p.id),p);const prior=[...priorMap.values()];
+    const nearDateAmount=all.filter(x=>{
+      const d=dayDiff(String(x.payment_date),paymentDate),delta=Math.abs(money(x.amount)-amount);
+      return d<=allowedDays&&delta<=amountTolerance+0.009;
+    });
+    const priorMap=new Map();for(const p of [...exactReference,...sameDayAmount,...nearDateAmount])priorMap.set(Number(p.id),p);const prior=[...priorMap.values()];
     if(!prior.length)return next();
-    const triggers=[];if(exactReference.length)triggers.push('duplicate_reference');if(sameDayAmount.length)triggers.push('same_supplier_amount_date');
+    const triggers=[];
+    if(exactReference.length)triggers.push('duplicate_reference');
+    if(sameDayAmount.length)triggers.push('same_supplier_amount_date');
+    if(nearDateAmount.some(x=>String(x.payment_date)!==paymentDate||Math.abs(money(x.amount)-amount)>0.009))triggers.push('near_supplier_amount_date');
     const message=exactReference.length
       ?`Payment reference ${req.body?.reference} has already been recorded for this supplier. Independent approval is required before another payment can use it.`
-      :`A payment of ${amount.toFixed(2)} is already recorded for this supplier on ${paymentDate}. Independent approval is required before posting another same-day payment for the same amount.`;
+      :sameDayAmount.length
+        ?`A payment of ${amount.toFixed(2)} is already recorded for this supplier on ${paymentDate}. Independent approval is required before posting another same-day payment for the same amount.`
+        :`A materially similar payment was recorded for this supplier within ${allowedDays} day(s). Independent approval is required before posting another payment of ${amount.toFixed(2)}.`;
     const ev=await authorize(req,message);
     delete req.body.duplicate_payment_override_pin;delete req.body.duplicate_payment_override_reason;delete req.body.payment_similarity_override_pin;delete req.body.payment_similarity_override_reason;
     const originalJson=res.json.bind(res);let handled=false;
@@ -65,7 +83,7 @@ router.post('/payments',async(req,res,next)=>{
       if(handled)return originalJson(payload);handled=true;
       if(res.statusCode>=200&&res.statusCode<300&&payload?.id)return (async()=>{
         if(exactReference.length)await db.execute({sql:`INSERT INTO supplier_payment_override_events(payment_id,supplier_id,normalized_reference,prior_payment_ids,authorizer_employee_id,reason) VALUES(?,?,?,?,?,?)`,args:[payload.id,supplierId,normalized,JSON.stringify(exactReference.map(x=>x.id)),ev.authorizer.id,ev.reason]});
-        await db.execute({sql:`INSERT INTO supplier_payment_similarity_override_events(payment_id,supplier_id,payment_date,amount,trigger_type,prior_payment_ids,authorizer_employee_id,reason,evidence_json) VALUES(?,?,?,?,?,?,?,?,?)`,args:[payload.id,supplierId,paymentDate,amount,triggers.join('+'),JSON.stringify(prior.map(x=>x.id)),ev.authorizer.id,ev.reason,JSON.stringify({reference:req.body?.reference||null,normalized_reference:normalized||null,prior:prior.map(x=>({id:x.id,payment_number:x.payment_number,reference:x.reference,amount:money(x.amount),payment_date:x.payment_date,payment_method:x.payment_method}))})]});
+        await db.execute({sql:`INSERT INTO supplier_payment_similarity_override_events(payment_id,supplier_id,payment_date,amount,trigger_type,prior_payment_ids,authorizer_employee_id,reason,evidence_json) VALUES(?,?,?,?,?,?,?,?,?)`,args:[payload.id,supplierId,paymentDate,amount,triggers.join('+'),JSON.stringify(prior.map(x=>x.id)),ev.authorizer.id,ev.reason,JSON.stringify({reference:req.body?.reference||null,normalized_reference:normalized||null,window_days:allowedDays,amount_tolerance:money(amountTolerance),amount_tolerance_pct:Number(pctTolerance||0),amount_tolerance_abs:Number(absoluteTolerance||0),prior:prior.map(x=>({id:x.id,payment_number:x.payment_number,reference:x.reference,amount:money(x.amount),payment_date:x.payment_date,payment_method:x.payment_method,day_difference:dayDiff(String(x.payment_date),paymentDate),amount_difference:money(Math.abs(money(x.amount)-amount))}))})]});
         return originalJson({...payload,supplier_payment_similarity_override_recorded:true,override_triggers:triggers});
       })().catch(err=>{if(!res.headersSent){res.status(500);return originalJson({error:'Supplier payment posted but duplicate/similarity override evidence failed to persist; reconciliation required',payment_id:payload.id,detail:err.message});}});
       return originalJson(payload);
