@@ -77,7 +77,15 @@ router.patch('/agreements/:id/collect-balance',requireAnyPermission('pos','renta
     const balance=Number((Number(agreement.damage_fee_total||0)+Number(agreement.duration_adjustment_total||0)-Number(agreement.deposit_total||0)+Number(agreement.tax_adjustment_total||0)).toFixed(2));
     const method=String(req.body?.payment_method||'cash');
     const tendered=Number(req.body?.amount_tendered??balance);
-    if(balance>0&&method==='cash'&&(!Number.isFinite(tendered)||tendered+0.009<balance))return res.status(409).json({error:`Cash tendered cannot be less than the rental balance due (${balance.toFixed(2)}).`,balance_due:balance});
+    if(balance>0&&method==='cash'){
+      if(!Number.isFinite(tendered)||tendered+0.009<balance)return res.status(409).json({error:`Cash tendered cannot be less than the rental balance due (${balance.toFixed(2)}).`,balance_due:balance});
+      const employeeId=Number(req.body?.employee_id||req.employee?.id)||null,drawerSessionId=Number(req.body?.drawer_session_id)||null,branchId=Number(req.body?.branch_id||agreement.branch_id)||null;
+      if(!employeeId||!drawerSessionId)return res.status(409).json({error:'Cash rental settlement requires the cashier and an open drawer session.',control:'rental_cash_drawer'});
+      const {rows:[drawer]}=await db.execute({sql:`SELECT ds.id,ds.employee_id,ds.branch_id,ds.status FROM drawer_sessions ds WHERE ds.id=?`,args:[drawerSessionId]});
+      if(!drawer||drawer.status!=='open')return res.status(409).json({error:'The selected cash drawer session is not open.',control:'rental_cash_drawer'});
+      if(Number(drawer.employee_id)!==employeeId)return res.status(409).json({error:'The cash drawer session belongs to a different employee.',control:'rental_cash_drawer'});
+      if(branchId&&Number(drawer.branch_id)!==branchId)return res.status(409).json({error:'The cash drawer session belongs to a different branch.',control:'rental_cash_drawer'});
+    }
     next();
   }catch(e){res.status(500).json({error:e.message});}
 });
