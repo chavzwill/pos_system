@@ -62,6 +62,16 @@ async function workOrderFinancials(id,executor=db){
 }
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Service concession controls failed to initialize',detail:e.message});}});
 
+router.get('/concessions/intelligence',requireAnyPermission('reports','reports_financial','work_orders_manage'),async(req,res)=>{
+  try{
+    const days=Math.max(1,Math.min(365,Number(req.query.days)||90));
+    const {rows:summary}=await db.execute({sql:`SELECT concession_type,status,COUNT(*) cases,COALESCE(SUM(CASE WHEN status='approved' THEN approved_amount ELSE proposed_amount END),0) amount FROM service_concessions WHERE created_at>=datetime('now',?) GROUP BY concession_type,status ORDER BY amount DESC`,args:[`-${days} days`]});
+    const {rows:creators}=await db.execute({sql:`SELECT sc.created_by_employee_id,e.first_name||' '||e.last_name employee_name,COUNT(*) cases,COALESCE(SUM(CASE WHEN sc.status='approved' THEN sc.approved_amount ELSE 0 END),0) approved_amount FROM service_concessions sc LEFT JOIN employees e ON e.id=sc.created_by_employee_id WHERE sc.created_at>=datetime('now',?) GROUP BY sc.created_by_employee_id,e.first_name,e.last_name HAVING COUNT(*)>0 ORDER BY approved_amount DESC,cases DESC LIMIT 25`,args:[`-${days} days`]});
+    const {rows:recent}=await db.execute({sql:`SELECT sc.*,wo.wo_number,c.first_name||' '||c.last_name customer_name,e.first_name||' '||e.last_name created_by_name FROM service_concessions sc JOIN work_orders wo ON wo.id=sc.work_order_id LEFT JOIN customers c ON c.id=wo.customer_id LEFT JOIN employees e ON e.id=sc.created_by_employee_id WHERE sc.created_at>=datetime('now',?) ORDER BY sc.created_at DESC LIMIT 100`,args:[`-${days} days`]});
+    res.json({window_days:days,summary,employee_patterns:creators,recent,note:'Concession concentration is an investigation signal, not a finding of misconduct. Review customer outcomes, warranty context and approval evidence before drawing conclusions.'});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 router.get('/:id/concessions',requireAnyPermission('work_orders','wo_assess','reports_financial'),async(req,res)=>{
   try{
     const f=await workOrderFinancials(req.params.id);if(!f)return res.status(404).json({error:'Work order not found'});
@@ -115,10 +125,13 @@ router.patch('/:id/final-payment',requireAnyPermission('wo_assess','pos'),async(
       const {rows:[fresh]}=await tx.execute({sql:'SELECT status FROM work_orders WHERE id=?',args:[wo.id]});if(!fresh||fresh.status!=='awaiting_pickup')throw Object.assign(new Error('Work order status changed; reload before collecting payment.'),{status:409});
       let txId=null,transactionNumber=null;
       if(balance>0){
-        const method=payment_method||'cash',tendered=Number(amount_tendered??balance);if(!Number.isFinite(tendered)||tendered+0.009<balance)throw Object.assign(new Error(`Amount tendered cannot be less than the final balance (${balance.toFixed(2)}).`),{status:409});
-        if(method==='cash'&&drawer_session_id){const {rows:[drawer]}=await tx.execute({sql:`SELECT * FROM drawer_sessions WHERE id=? AND status='open'`,args:[drawer_session_id]});if(!drawer||Number(drawer.employee_id)!==Number(employee_id||req.employee?.id)||Number(drawer.branch_id)!==Number(branch_id||wo.branch_id))throw Object.assign(new Error('Cash payment requires the signed-in cashier’s open drawer at this work-order branch.'),{status:409});}
+        const method=payment_method||'cash',cashier=Number(employee_id||req.employee?.id)||null,tendered=Number(amount_tendered??balance);if(!Number.isFinite(tendered)||tendered+0.009<balance)throw Object.assign(new Error(`Amount tendered cannot be less than the final balance (${balance.toFixed(2)}).`),{status:409});
+        if(method==='cash'){
+          if(!cashier||!drawer_session_id)throw Object.assign(new Error('Cash payment requires the cashier and an open drawer session.'),{status:409});
+          const {rows:[drawer]}=await tx.execute({sql:`SELECT * FROM drawer_sessions WHERE id=? AND status='open'`,args:[drawer_session_id]});if(!drawer||Number(drawer.employee_id)!==cashier||Number(drawer.branch_id)!==Number(branch_id||wo.branch_id))throw Object.assign(new Error('Cash payment requires the signed-in cashier’s open drawer at this work-order branch.'),{status:409});
+        }
         transactionNumber=await nextNumber(tx,'transactions','transaction_number','TXN-',6);const change=r2(Math.max(0,tendered-balance));
-        const tr=await tx.execute({sql:`INSERT INTO transactions(transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,total,payment_method,amount_tendered,change_amount,notes,source) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[transactionNumber,wo.customer_id,employee_id||req.employee?.id||null,branch_id||wo.branch_id||null,method==='cash'?(drawer_session_id||null):null,balance,0,balance,method,tendered,change,`Work order final payment ${wo.wo_number}; approved concessions ${concession.toFixed(2)}`,'pos']});txId=Number(tr.lastInsertRowid);
+        const tr=await tx.execute({sql:`INSERT INTO transactions(transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,total,payment_method,amount_tendered,change_amount,notes,source) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[transactionNumber,wo.customer_id,cashier,branch_id||wo.branch_id||null,method==='cash'?drawer_session_id:null,balance,0,balance,method,tendered,change,`Work order final payment ${wo.wo_number}; approved concessions ${concession.toFixed(2)}`,'pos']});txId=Number(tr.lastInsertRowid);
         await tx.execute({sql:`INSERT INTO transaction_items(transaction_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES(?,?,?,?,?,?,?)`,args:[txId,'Work Order Balance Before Concessions','WO-FINAL-GROSS',1,grossRemaining,0,grossRemaining]});
         if(concession>0)await tx.execute({sql:`INSERT INTO transaction_items(transaction_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES(?,?,?,?,?,?,?)`,args:[txId,'Approved Service Concession','WO-CONCESSION',1,-concession,0,-concession]});
         await tx.execute({sql:`UPDATE service_concessions SET applied_transaction_id=? WHERE work_order_id=? AND status='approved' AND applied_transaction_id IS NULL`,args:[txId,wo.id]});
