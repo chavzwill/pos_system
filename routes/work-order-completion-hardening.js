@@ -3,10 +3,10 @@ const router = express.Router();
 const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
 
-// Service concessions, goodwill waivers and final-payment netting must run
-// before the legacy work-order routes so approved concessions cannot be
-// bypassed by the normal settlement path. The balance guard runs first so a
-// pre-settlement waiver can never silently become a refund of money already paid.
+// Post-payment refunds plus pre-settlement concessions/goodwill must run
+// before the legacy work-order routes so no money-moving path can bypass
+// authorization, refund ceilings, evidence, drawer or accounting controls.
+router.use(require('./service-refunds'));
 router.use(require('./service-concession-balance-guard'));
 router.use(require('./service-concessions'));
 
