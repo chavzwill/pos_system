@@ -53,10 +53,11 @@ function guard(sourceType){return async(req,res,next)=>{
 router.post('/',requirePermission('pos'),guard('transaction'));
 router.post('/hold',requirePermission('pos_hold'),guard('held_transaction'));
 // Commercial controls run only after bundle/UOM normalization. Promotion is first so
-// margin and credit checks see the authoritative discount; tax authorization precedes
-// credit exposure so a legitimate exemption is reflected in the projected charge.
+// margin and credit checks see the authoritative discount; sale-time cost capture then
+// freezes the historical inventory-cost evidence used by accounting and profitability.
 router.use(require('./retail-promotion-protection'));
 router.use(require('./retail-margin-protection'));
+router.use(require('./retail-cost-snapshot'));
 router.use(require('./retail-tax-exemption-protection'));
 router.use(require('./retail-credit-loss-prevention'));
 module.exports=router;
