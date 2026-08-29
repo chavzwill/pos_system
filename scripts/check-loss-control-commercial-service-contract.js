@@ -1,8 +1,8 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const service=read('routes/loss-control-commercial-service-leaks.js'),trace=read('routes/inventory-traceability.js'),promo=read('routes/retail-promotion-protection.js'),credit=read('routes/retail-credit-loss-prevention.js'),uom=read('routes/retail-uom-guard.js'),sales=read('public/sales-workspace.js'),concessions=read('routes/service-concessions.js'),completion=read('routes/work-order-completion-hardening.js'),concessionUi=read('public/service-concessions-ui.js'),deferred=read('public/shell-deferred.js');
-for(const [name,src] of [['commercial/service leakage',service],['promotion protection',promo],['credit protection',credit],['fast POS',sales],['service concessions',concessions],['service concession UI',concessionUi]])new vm.Script(src,{filename:name});
+const service=read('routes/loss-control-commercial-service-leaks.js'),trace=read('routes/inventory-traceability.js'),promo=read('routes/retail-promotion-protection.js'),credit=read('routes/retail-credit-loss-prevention.js'),uom=read('routes/retail-uom-guard.js'),sales=read('public/sales-workspace.js'),concessions=read('routes/service-concessions.js'),completion=read('routes/work-order-completion-hardening.js'),concessionUi=read('public/service-concessions-ui.js'),refunds=read('routes/service-refunds.js'),refundIntel=read('routes/service-refund-intelligence.js'),refundUi=read('public/service-refunds-ui.js'),deferred=read('public/shell-deferred.js');
+for(const [name,src] of [['commercial/service leakage',service],['promotion protection',promo],['credit protection',credit],['fast POS',sales],['service concessions',concessions],['service concession UI',concessionUi],['service refunds',refunds],['service refund intelligence',refundIntel],['service refund UI',refundUi]])new vm.Script(src,{filename:name});
 const checks=[
  ['commercial/service intelligence requires reports permission',service.includes("router.use(requirePermission('reports'))")],
  ['commercial/service intelligence is mounted under loss control',trace.includes("router.use('/loss-control',require('./loss-control-commercial-service-leaks'))")],
@@ -52,6 +52,26 @@ const checks=[
  ['final payment rechecks work-order state inside write transaction',concessions.includes('Work order status changed; reload before collecting payment')],
  ['service concession UI exposes proposal review approval and rejection',concessionUi.includes('Propose concession')&&concessionUi.includes('Review & approve')&&concessionUi.includes('Reject service concession')],
  ['service concession UI explains independent authorization and net balance',concessionUi.includes('independent financial authorization')&&concessionUi.includes('balance_after_concessions')],
- ['service concession UI is loaded by the fast shell',deferred.includes('/service-concessions-ui.js')]
+ ['service concession UI is loaded by the fast shell',deferred.includes('/service-concessions-ui.js')],
+ ['service refund controls are mounted before work-order settlement',completion.includes("router.use(require('./service-refunds'))")],
+ ['service refunds can only reference actual work-order payment transactions',refunds.includes('assessment_transaction_id')&&refunds.includes('deposit_transaction_id')&&refunds.includes('final_transaction_id')&&refunds.includes('Refund must be linked to an actual payment from this work order')],
+ ['service refund proposals require amount reason and evidence',refunds.includes('positive refund amount')&&refunds.includes('supporting evidence/reference')],
+ ['service refund cumulative ceiling includes approved and settled refunds',refunds.includes("status IN ('approved','settled')")&&refunds.includes('remaining refundable amount')],
+ ['service refund approval requires independent financial authorization',refunds.includes('Independent financial authorization is required before approving a service refund')&&refunds.includes('cannot financially authorize it')],
+ ['service refund approval rechecks remaining refundable value',refunds.includes('Another refund changed the available amount')],
+ ['service refund settlement is idempotence guarded',refunds.includes("fresh.status!=='approved'||fresh.refund_transaction_id")&&refunds.includes('Refund status changed; reload before settlement')],
+ ['cash service refunds require matching open cashier drawer',refunds.includes('Cash refund requires the cashier and an open drawer session')&&refunds.includes("drawer_sessions WHERE id=? AND status='open'")],
+ ['external noncash refunds require remittance proof',refunds.includes('external refund/remittance reference proving the money was returned')],
+ ['account credit refunds reduce customer receivable balance',refunds.includes("if(method==='account_credit')")&&refunds.includes('account_balance=account_balance-?')],
+ ['service refund settlement creates negative transaction evidence',refunds.includes("source)'service_refund'")||refunds.includes("'service_refund']")||refunds.includes("'service_refund'" )],
+ ['service refund accounting distinguishes deposit liability from service revenue',refunds.includes("debitCode='2200'")&&refunds.includes("debitCode='4100'")&&refunds.includes("sourceType:'service_refund'")],
+ ['service refund accounting distinguishes cash account credit and external clearing',refunds.includes("method==='cash'")&&refunds.includes("method==='account_credit'")&&refunds.includes("return '1050'")],
+ ['service refund intelligence is mounted and remains non-accusatory',completion.includes("router.use(require('./service-refund-intelligence'))")&&refundIntel.includes('investigation signal, not proof of misconduct')&&refundIntel.includes('No customer, employee, payment or accounting record is changed')],
+ ['service refund intelligence analyzes proposal and approval concentration',refundIntel.includes('employee_proposal_patterns')&&refundIntel.includes('approval_patterns')],
+ ['native service refund UI exposes proposal approval rejection and settlement',refundUi.includes('Propose post-payment refund')&&refundUi.includes('Approve service refund')&&refundUi.includes('Reject service refund')&&refundUi.includes('Settle approved service refund')],
+ ['native service refund UI exposes original payment and remaining refundable balance',refundUi.includes('Original payment')&&refundUi.includes('refundable_amount')],
+ ['native service refund UI discovers open drawers for cash settlement',refundUi.includes('/api/drawers/sessions?')&&refundUi.includes('drawer_session_id')],
+ ['native service refund UI requires external settlement reference when appropriate',refundUi.includes('External refund / remittance reference')&&refundUi.includes('external_refund_reference')],
+ ['service refund UI is loaded by fast shell',deferred.includes('/service-refunds-ui.js')]
 ];
 let failed=0;for(const [name,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Commercial/service loss control: ${name}`);if(!ok)failed++;}if(failed){console.error(`Commercial/service loss-control contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`Commercial/service loss-control contract OK (${checks.length} checks).`);
