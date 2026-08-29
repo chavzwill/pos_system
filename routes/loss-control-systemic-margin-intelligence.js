@@ -35,7 +35,7 @@ async function collect(days){
   }
   if(await table('inventory_writeoffs')){
     const {rows}=await db.execute({sql:`SELECT 'inventory_writeoff' event_type,w.id source_id,w.branch_id,w.created_by_employee_id employee_id,NULL customer_id,
-      COALESCE(w.total_value,0) realized_loss,0 margin_gap_pct,0 exposure,w.created_at
+      COALESCE(w.tracked_value,0) realized_loss,0 margin_gap_pct,0 exposure,w.created_at
       FROM inventory_writeoffs w WHERE w.status='approved' AND w.created_at>=datetime('now',?)`,args:[`-${days} days`]});events.push(...rows);
   }
   return events.map(e=>({...e,realized_loss:r2(e.realized_loss),exposure:r2(e.exposure),margin_gap_pct:r2(e.margin_gap_pct)}));
@@ -50,7 +50,7 @@ router.get('/systemic-margin-erosion',async(req,res)=>{
     const byBranch=aggregate(events,'branch_id',bn),byEmployee=aggregate(events,'employee_id',en),byCustomer=aggregate(events,'customer_id',cn);
     const realized=r2(events.reduce((s,e)=>s+Number(e.realized_loss||0),0)),risk=r2(events.reduce((s,e)=>s+Number(e.exposure||0),0));
     const types={};for(const e of events){const x=types[e.event_type]||(types[e.event_type]={event_type:e.event_type,events:0,realized_loss:0,at_risk_value:0});x.events++;x.realized_loss+=Number(e.realized_loss||0);x.at_risk_value+=Number(e.exposure||0);}for(const x of Object.values(types)){x.realized_loss=r2(x.realized_loss);x.at_risk_value=r2(x.at_risk_value);x.combined_erosion=r2(x.realized_loss+x.at_risk_value);}
-    res.json({window_days:days,headline:{evidence_backed_realized_loss:realized,at_risk_value:risk,combined_erosion:r2(realized+risk),events:events.length},by_type:Object.values(types).sort((a,b)=>b.combined_erosion-a.combined_erosion),by_branch:byBranch.slice(0,50),by_employee_workflow:byEmployee.slice(0,50),by_customer:byCustomer.slice(0,50),methodology:{realized_loss:'Only evidence-backed completed loss/erosion events are included here.',at_risk_value:'Discount, promotion, pending concession/refund and similar exposure is kept separate from realized loss.',employee_warning:'Employee workflow concentration is an operational review signal, not a misconduct finding.',scope_warning:'This view does not yet claim full accounting net contribution; it combines controlled leakage evidence across subsystems without inventing missing COGS or overhead.'},automatic_actions:false});
+    res.json({window_days:days,headline:{evidence_backed_realized_loss:realized,at_risk_value:risk,combined_erosion:r2(realized+risk),events:events.length},by_type:Object.values(types).sort((a,b)=>b.combined_erosion-a.combined_erosion),by_branch:byBranch.slice(0,50),by_employee_workflow:byEmployee.slice(0,50),by_customer:byCustomer.slice(0,50),methodology:{realized_loss:'Only evidence-backed completed loss/erosion events are included here.',at_risk_value:'Discount, promotion, pending concession/refund and similar exposure is kept separate from realized loss.',employee_warning:'Employee workflow concentration is an operational review signal, not a misconduct finding.',scope_warning:'This view does not yet claim full accounting net contribution; it combines controlled leakage evidence across subsystems without inventing missing COGS or overhead.',writeoff_valuation:'Approved inventory write-offs use tracked inventory value only; untracked value is not invented.'},automatic_actions:false});
   }catch(e){res.status(500).json({error:e.message});}
 });
 module.exports=router;
