@@ -11,13 +11,14 @@ const checks=[
  ['direct cost classification includes COGS labour logistics fees tax and inventory loss',value.includes("['5000','5100','5200','5300','5450','5500']")],
  ['contribution is explicitly before unallocated overhead',value.includes('accounted_contribution_before_unallocated_overhead')],
  ['known leakage is an explanatory overlay rather than a second subtraction',value.includes('NOT subtracted again from ledger contribution')&&value.includes('double-count')],
- ['settled refunds and approved writeoffs are included in leakage explanation',value.includes("'service_refund'")&&value.includes("'inventory_writeoff'")],
- ['pending concessions refunds and promotions remain at-risk exposure',value.includes("status IN ('pending_approval','approved')")&&value.includes("'promotion_discount'")],
+ ['settled refunds and approved writeoffs are included in leakage explanation',value.includes("sr.status='settled'")&&value.includes("'inventory_writeoff'")],
+ ['approved concessions become realized only after settlement application',value.includes("sc.status='approved' AND sc.applied_transaction_id IS NOT NULL")&&value.includes("sc.status='approved' AND sc.applied_transaction_id IS NULL")],
+ ['pending refunds and promotions remain at-risk exposure',value.includes("status IN ('pending_approval','approved')")&&value.includes("'promotion_discount'")],
  ['writeoff overlay uses tracked inventory valuation',value.includes('COALESCE(tracked_value,0)')],
  ['branch view preserves account-level revenue and direct-cost evidence',value.includes('revenue_accounts')&&value.includes('direct_cost_accounts')],
  ['posted journal source coverage is exposed',value.includes('posted_source_coverage')&&value.includes('source_type')],
  ['historical retail COGS evidence gap is detected instead of invented',value.includes('retail_historical_cogs')&&value.includes('full retail gross profit and product profitability are not claimed')],
- ['accounting source sync itself documents missing historical retail cost evidence',accounting.includes('journal_entries')&&accounting.includes('journal_lines')],
+ ['accounting ledger foundation preserves posted journal and line evidence',accounting.includes('journal_entries')&&accounting.includes('journal_lines')&&accounting.includes("status TEXT NOT NULL DEFAULT 'draft'")],
  ['audited net profit is explicitly not claimed',value.includes('does not claim audited net profit')],
  ['value preservation intelligence is read only',value.includes('automatic_actions:false')&&!value.includes('UPDATE products SET')&&!value.includes('UPDATE customers SET')&&!value.includes('INSERT INTO purchase_orders')&&!value.includes('INSERT INTO journal_entries')]
 ];
