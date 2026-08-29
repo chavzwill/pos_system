@@ -17,7 +17,9 @@ const checks=[
  ['writeoff overlay uses tracked inventory valuation',value.includes('COALESCE(tracked_value,0)')],
  ['branch view preserves account-level revenue and direct-cost evidence',value.includes('revenue_accounts')&&value.includes('direct_cost_accounts')],
  ['posted journal source coverage is exposed',value.includes('posted_source_coverage')&&value.includes('source_type')],
- ['historical retail COGS evidence gap is detected instead of invented',value.includes('retail_historical_cogs')&&value.includes('full retail gross profit and product profitability are not claimed')],
+ ['prospective retail cost snapshot coverage is measured',value.includes('retail_transaction_cost_snapshots')&&value.includes('retail_sale_time_cost_snapshots')&&value.includes('complete_cost_transactions')],
+ ['incomplete tracked cost evidence remains disclosed',value.includes('weaker catalog snapshots remain partial evidence')&&value.includes('not auto-posted as authoritative COGS')],
+ ['historical retail cost is never retroactively guessed from current catalog cost',value.includes('Older transactions are never retroactively assigned today')&&value.includes('current catalog cost is not used retroactively')],
  ['accounting ledger foundation preserves posted journal and line evidence',accounting.includes('journal_entries')&&accounting.includes('journal_lines')&&accounting.includes("status TEXT NOT NULL DEFAULT 'draft'")],
  ['audited net profit is explicitly not claimed',value.includes('does not claim audited net profit')],
  ['value preservation intelligence is read only',value.includes('automatic_actions:false')&&!value.includes('UPDATE products SET')&&!value.includes('UPDATE customers SET')&&!value.includes('INSERT INTO purchase_orders')&&!value.includes('INSERT INTO journal_entries')]
