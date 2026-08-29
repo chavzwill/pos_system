@@ -6,8 +6,9 @@ const { requirePermission } = require('../lib/permissions');
 // Post-payment refunds plus pre-settlement concessions/goodwill must run
 // before the legacy work-order routes so no money-moving path can bypass
 // authorization, refund ceilings, evidence, drawer or accounting controls.
-router.use(require('./service-refund-intelligence'));
+// The refund control router initializes its schema before intelligence reads it.
 router.use(require('./service-refunds'));
+router.use(require('./service-refund-intelligence'));
 router.use(require('./service-concession-balance-guard'));
 router.use(require('./service-concessions'));
 
