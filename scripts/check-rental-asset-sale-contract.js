@@ -31,3 +31,4 @@ const checks=[
 let failed=0;for(const [name,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Rental fleet sale: ${name}`);if(!ok)failed++;}
 if(failed){console.error(`Rental fleet sale contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}
 console.log(`Rental fleet sale contract OK (${checks.length} checks).`);
+require('./check-rental-active-buyout-contract');
