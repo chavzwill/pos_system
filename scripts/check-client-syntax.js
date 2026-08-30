@@ -36,3 +36,4 @@ require('./check-logistics-completion-mode-contract');
 require('./check-repair-lifecycle-certification');
 require('./check-accounting-financial-integrity-certification');
 require('./check-rbac-security-certification');
+require('./check-multi-branch-integrity-certification');
