@@ -95,7 +95,9 @@ router.post('/from-rental/:id',requireAnyPermission('rentals','rentals_manage','
   }catch(e){res.status(400).json({error:e.message});}
 });
 
-router.get('/jobs/:id/source-document',requireAnyPermission('transfers','purchasing','transactions','rentals'),async(req,res)=>{try{const {rows:[row]}=await db.execute({sql:'SELECT * FROM dispatch_source_documents WHERE dispatch_job_id=?',args:[req.params.id]});if(!row)return res.status(404).json({error:'Dispatch source document not found'});row.snapshot=JSON.parse(row.snapshot_json||'{}');delete row.snapshot_json;res.json(row);}catch(e){res.status(500).json({error:e.message});}});
+router.get('/jobs/:id/source-document',requireAnyPermission('transfers','purchasing','transactions','rentals','work_orders'),async(req,res)=>{try{const {rows:[row]}=await db.execute({sql:'SELECT * FROM dispatch_source_documents WHERE dispatch_job_id=?',args:[req.params.id]});if(!row)return res.status(404).json({error:'Dispatch source document not found'});row.snapshot=JSON.parse(row.snapshot_json||'{}');delete row.snapshot_json;res.json(row);}catch(e){res.status(500).json({error:e.message});}});
+
+router.use(require('./logistics-repair-handoff'));
 
 module.exports=router;
 module.exports.ensureSchema=ensureSchema;
