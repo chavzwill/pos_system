@@ -31,3 +31,4 @@ const checks=[
  ['fleet UI is actually deferred-loaded by shell',deferred.includes('/rental-fleet-management.js')]
 ];
 let failed=0;for(const [name,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Active rental buyout/fleet UI: ${name}`);if(!ok)failed++;}if(failed){console.error(`Active rental buyout/fleet UI contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`Active rental buyout/fleet UI contract OK (${checks.length} checks).`);
+require('./check-rental-asset-disposal-contract');
