@@ -24,13 +24,15 @@ const checks=[
  ['Dispatch administration has dedicated authority',permissions.includes("{ key: 'dispatch_admin' }")),
  ['legacy transfer roles are compatibility-mapped only when no explicit Dispatch authority exists',permissions.includes('hasExplicitDispatch')&&permissions.includes('legacyDispatch')],
  ['Dispatch endpoint classifier uses the logistics API boundary',permissions.includes("startsWith('/api/logistics-intelligence')")],
- ['commercial department handoffs remain source-authority workflows',permissions.includes("return 'source_handoff'")],
+ ['commercial department handoffs remain source-authority workflows',permissions.includes("return 'source_handoff'")&&permissions.includes("return 'continue'")),
  ['source document viewing remains available to Dispatch or owning business department',permissions.includes("'source_document'")&&permissions.includes("'purchasing','transactions','rentals','work_orders'")),
  ['vehicle/service-zone/location administration requires Dispatch Admin',permissions.includes("return 'dispatch_admin'")),
  ['field stages/proof/route-stop execution require Dispatch Execute',permissions.includes("return 'dispatch_execute'")),
  ['route/job planning and assignment require Dispatch Plan',permissions.includes("return 'dispatch_plan'")),
  ['unknown Dispatch mutations fail closed',permissions.includes('dispatch_rbac_unclassified')],
  ['API keys cannot operate internal Dispatch workflows',permissions.includes('API keys cannot operate internal Dispatch workflows')],
+ ['authorized Dispatch requests short-circuit legacy transfer permission checks',permissions.includes("if(dispatch==='allow')return next()")],
+ ['department handoffs still continue into their original business permission checks',permissions.includes("if(required==='source_handoff')return 'continue'")),
  ['API keys fail closed outside explicit integration endpoints',apiAuth.includes("if (!needed) return res.status(403)")&&apiAuth.includes('API keys are not permitted on this employee endpoint')],
  ['legacy API wildcard cannot unlock unmapped employee APIs',apiAuth.includes("scopes.includes('*')")&&apiAuth.indexOf('if (!needed) return res.status(403)')<apiAuth.indexOf("scopes.includes('*')")],
  ['API key scopes include repair portal scopes explicitly',apiKeys.includes("'repairs:read'")&&apiKeys.includes("'repairs:write'")),
@@ -54,4 +56,4 @@ const checks=[
 ];
 let failed=0;for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} RBAC/security certification: ${name}`);if(!ok)failed++;}
 if(failed){console.error(`RBAC/security certification FAILED (${failed}/${checks.length} failed).`);process.exit(1);}
-console.log(`RBAC/security certification OK (${checks.length} checks). Dispatch view/plan/execute/admin authority is now explicit and unknown logistics mutations fail closed.`);
+console.log(`RBAC/security certification OK (${checks.length} checks). Dispatch view/plan/execute/admin authority is explicit, supersedes legacy transfer gates, and unknown logistics mutations fail closed.`);
