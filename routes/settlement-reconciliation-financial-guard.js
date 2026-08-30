@@ -4,7 +4,10 @@ const router=express.Router();
 const {db}=require('../database');
 const {requireAnyPermission}=require('../lib/permissions');
 
-router.use(requireAnyPermission('reports_financial','drawers_manage','reports'));
+// Settlement mutation is a finance/cash-control function. Ordinary report
+// readers may inspect reporting surfaces, but cannot match or reconcile bank
+// settlement evidence.
+router.use(requireAnyPermission('reports_financial','drawers_manage'));
 let ready=false;
 async function ensureSchema(){
  if(ready)return;
@@ -19,11 +22,6 @@ router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.s
 function num(v){const n=Number(v);return Number.isFinite(n)?n:0;}
 function actor(req){return req.employee?.id||req.user?.employee_id||null;}
 
-// Electronic POS evidence represents gross customer tender. Processor fees are
-// a separate expense and therefore must not reduce the amount matched back to
-// the source transactions. A 100 gross / 3 fee / 97 net batch matches 100 of
-// transaction clearing, then Accounting posts Dr Bank 97, Dr Fees 3, Cr
-// Electronic Settlement Clearing 100.
 router.post('/batches/:id/matches',async(req,res)=>{
  try{
   const b=req.body||{};
