@@ -134,6 +134,7 @@ app.use('/api/financial-controls-intelligence', require('./routes/financial-cont
 app.use('/api/supplier-ledger', require('./routes/supplier-invoice-loss-prevention'));
 app.use('/api/supplier-ledger', require('./routes/supplier-payment-loss-prevention'));
 app.use('/api/supplier-ledger', require('./routes/supplier-ledger'));
+app.use('/api/settlement-reconciliation', require('./routes/settlement-reconciliation-financial-guard'));
 app.use('/api/settlement-reconciliation', require('./routes/settlement-reconciliation'));
 app.use('/api/accounting-ledger', require('./routes/accounting-ledger'));
 app.use('/api/accounting-source-sync', require('./routes/accounting-source-sync'));
