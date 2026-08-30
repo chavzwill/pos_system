@@ -2,7 +2,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
-const { requirePermission } = require('../lib/permissions');
+const { requirePermission, can } = require('../lib/permissions');
 const { getAvailableQty } = require('../lib/inventory-stock-status');
 const { getReservedQty } = require('../lib/inventory-reservations');
 
@@ -15,6 +15,11 @@ router.use(require('./retail-inventory-reservation'));
 const allowedPayments = new Set(['cash','card','credit','bank_transfer']);
 const asMoney = v => Number.parseFloat(v || 0);
 
+function canOperateCrossBranch(employee) {
+  if (!employee) return false;
+  return can(employee.permissions, 'branches') || can(employee.permissions, 'security_manage');
+}
+
 router.post('/', requirePermission('pos'), async (req,res,next) => {
   try {
     const body = req.body || {};
@@ -24,6 +29,9 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
 
     if (!req.apiKey && req.employee) {
       body.employee_id = req.employee.id;
+      if (req.employee.default_branch_id && String(body.branch_id) !== String(req.employee.default_branch_id) && !canOperateCrossBranch(req.employee)) {
+        return res.status(403).json({error:'You cannot complete a sale for another branch. Switch to your assigned branch or ask an authorized cross-branch administrator.'});
+      }
       const {rows: drawers} = await db.execute({sql:'SELECT id FROM cash_drawers WHERE branch_id=? AND active=1',args:[body.branch_id]});
       if (drawers.length) {
         let activeSession = null;
