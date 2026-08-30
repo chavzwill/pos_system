@@ -1,10 +1,11 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const route=read('routes/rental-asset-lifetime-economics.js'),guard=read('routes/rental-asset-economics-financial-guard.js'),integration=read('routes/rental-asset-workflow-integration.js'),loss=read('routes/rental-loss-prevention.js'),trace=read('routes/inventory-traceability.js'),workspace=read('public/rentals-workspace.js');
-new vm.Script(route,{filename:'rental asset lifetime economics'});new vm.Script(guard,{filename:'rental asset financial guard'});new vm.Script(integration,{filename:'rental asset workflow integration'});new vm.Script(workspace,{filename:'rental workspace'});
+const route=read('routes/rental-asset-lifetime-economics.js'),guard=read('routes/rental-asset-economics-financial-guard.js'),integration=read('routes/rental-asset-workflow-integration.js'),lifecycle=read('routes/rental-asset-lifecycle.js'),loss=read('routes/rental-loss-prevention.js'),trace=read('routes/inventory-traceability.js'),workspace=read('public/rentals-workspace.js');
+new vm.Script(route,{filename:'rental asset lifetime economics'});new vm.Script(guard,{filename:'rental asset financial guard'});new vm.Script(integration,{filename:'rental asset workflow integration'});new vm.Script(lifecycle,{filename:'rental asset lifecycle'});new vm.Script(workspace,{filename:'rental workspace'});
 const checks=[
  ['rental asset financial guard is mounted before economics route',trace.includes("router.use('/rental-economics',require('./rental-asset-economics-financial-guard'))")&&trace.indexOf('rental-asset-economics-financial-guard')<trace.indexOf('rental-asset-lifetime-economics')],
+ ['rental asset lifecycle controls are mounted before economics route',trace.includes("router.use('/rental-economics',require('./rental-asset-lifecycle'))")&&trace.indexOf('rental-asset-lifecycle')<trace.indexOf('rental-asset-lifetime-economics')],
  ['rental asset economics is mounted',trace.includes("router.use('/rental-economics',require('./rental-asset-lifetime-economics').router)")],
  ['asset registry preserves acquisition cost and evidence',route.includes('rental_assets')&&route.includes('acquisition_cost')&&route.includes('acquisition_evidence_ref')],
  ['asset registration financial evidence is permission guarded',guard.includes("requireAnyPermission('inventory_edit','reports_financial')")&&guard.includes('acquisition_evidence_ref')],
@@ -40,6 +41,14 @@ const checks=[
  ['return inspection can automatically send damaged assets to maintenance',integration.includes('asset_conditions')&&integration.includes("status='maintenance'")&&integration.includes('return_inspection')],
  ['native rental workspace loads asset assignment evidence',workspace.includes('/asset-candidates')&&workspace.includes('assetAssignments')&&workspace.includes('Physical asset assignment')],
  ['native rental workspace assigns exact physical assets before issue',workspace.includes('/asset-assignments')&&workspace.includes('Assign physical rental assets')&&workspace.includes('Select physical asset')],
- ['native missing workflow captures exact allocated asset identity',workspace.includes('rental_asset_id')&&workspace.includes('Missing physical asset')&&workspace.includes('Select exact asset')]
+ ['native missing workflow captures exact allocated asset identity',workspace.includes('rental_asset_id')&&workspace.includes('Missing physical asset')&&workspace.includes('Select exact asset')],
+ ['retirement is a distinct controlled lifecycle action',lifecycle.includes("/assets/:id/retire")&&lifecycle.includes('retired_from_rental')&&lifecycle.includes('retirement_reason')],
+ ['retirement preserves ownership and does not create a financial writeoff',!lifecycle.includes('stock_movements')&&!lifecycle.includes('journal_entries')&&!lifecycle.includes('UPDATE products SET stock_qty')],
+ ['retirement is blocked during unresolved rental allocation',lifecycle.includes('cannot be retired while allocated to an unresolved rental')],
+ ['retirement is blocked during open maintenance',lifecycle.includes('Complete or formally close maintenance before retiring this asset')],
+ ['retired assets can be held for sale without being sold',lifecycle.includes('/hold-for-sale')&&lifecycle.includes("status='awaiting_sale'")],
+ ['retired owned assets can be deliberately reactivated',lifecycle.includes('/reactivate')&&lifecycle.includes("status='active'")&&lifecycle.includes('reactivated_for_rental')],
+ ['sold lost and disposed assets cannot be reactivated through retirement flow',lifecycle.includes("['lost','sold','disposed']")&&lifecycle.includes('reactivatable')],
+ ['lifecycle events preserve status transitions and reasons',lifecycle.includes('rental_asset_lifecycle_events')&&lifecycle.includes('from_status')&&lifecycle.includes('to_status')&&lifecycle.includes('reason')]
 ];
 let failed=0;for(const [name,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Rental asset lifetime economics: ${name}`);if(!ok)failed++;}if(failed){console.error(`Rental asset lifetime economics contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`Rental asset lifetime economics contract OK (${checks.length} checks).`);
