@@ -22,6 +22,7 @@ router.use('/accounting-retail-cogs',require('./accounting-retail-cogs-sync'));
 router.use('/rental-economics',require('./rental-asset-economics-bootstrap'));
 router.use('/rental-economics',require('./rental-asset-economics-financial-guard'));
 router.use('/rental-economics',require('./rental-asset-lifecycle'));
+router.use('/rental-economics',require('./rental-asset-sale-guard'));
 router.use('/rental-economics',require('./rental-asset-sales'));
 router.use('/rental-economics',require('./rental-asset-lifetime-economics').router);
 router.use('/loss-control',require('./loss-control-intelligence'));
