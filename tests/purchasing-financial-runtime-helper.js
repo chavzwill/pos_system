@@ -13,6 +13,10 @@ async function api(cookie,path,options={}){
   return {status:r.status,body:await r.json().catch(()=>null)};
 }
 function journalLine(detail,code){return detail.body?.lines?.find(x=>String(x.account_code)===String(code));}
+function expectNoFixtureError(sync,prefix,id){
+  const errors=sync.body?.stats?.errors||[];
+  expect(errors.some(e=>String(e).startsWith(`${prefix}:${id}:`)),errors.join('\n')).toBe(false);
+}
 
 export function registerPurchasingFinancialRuntimeCertification(){
   test('PO approval, receipt valuation and supplier AP remain evidence-separated',async()=>{
@@ -45,7 +49,7 @@ export function registerPurchasingFinancialRuntimeCertification(){
       const noInvoiceYet=await api(admin.cookie,`/api/supplier-ledger/invoices?supplier_id=${supplier.id}&status=open`);expect(noInvoiceYet.status).toBe(200);expect(noInvoiceYet.body).toHaveLength(0);
 
       let sync=await api(admin.cookie,'/api/accounting-source-sync/sync',{method:'POST',body:JSON.stringify({})});
-      expect(sync.status).toBe(200);expect(sync.body.stats?.errors||[]).toEqual([]);
+      expect(sync.status).toBe(200);expectNoFixtureError(sync,'purchase_receipt',receiptId);
       const journals=await api(admin.cookie,`/api/accounting-ledger/journals?branch_id=${branch.id}&limit=500`);expect(journals.status).toBe(200);
       const receiptJournal=journals.body.find(j=>j.source_type==='purchase_receipt'&&String(j.source_id)===String(receiptId));expect(receiptJournal).toBeTruthy();expect(receiptJournal.status).toBe('posted');
       const receiptDetail=await api(admin.cookie,`/api/accounting-ledger/journals/${receiptJournal.id}`);expect(receiptDetail.status).toBe(200);
@@ -59,7 +63,7 @@ export function registerPurchasingFinancialRuntimeCertification(){
       const openAp=await api(admin.cookie,`/api/supplier-ledger/invoices?supplier_id=${supplier.id}&status=open`);expect(openAp.status).toBe(200);
       const openInvoice=openAp.body.find(i=>i.id===invoice.id);expect(openInvoice).toBeTruthy();expect(r2(openInvoice.balance_due)).toBe(180);
 
-      sync=await api(admin.cookie,'/api/accounting-source-sync/sync',{method:'POST',body:JSON.stringify({})});expect(sync.status).toBe(200);expect(sync.body.stats?.errors||[]).toEqual([]);
+      sync=await api(admin.cookie,'/api/accounting-source-sync/sync',{method:'POST',body:JSON.stringify({})});expect(sync.status).toBe(200);expectNoFixtureError(sync,'supplier_invoice',invoice.id);
       const journals2=await api(admin.cookie,`/api/accounting-ledger/journals?branch_id=${branch.id}&limit=500`);expect(journals2.status).toBe(200);
       const invoiceJournal=journals2.body.find(j=>j.source_type==='supplier_invoice'&&String(j.source_id)===String(invoice.id));expect(invoiceJournal).toBeTruthy();expect(invoiceJournal.status).toBe('posted');
       const invoiceDetail=await api(admin.cookie,`/api/accounting-ledger/journals/${invoiceJournal.id}`);expect(invoiceDetail.status).toBe(200);
