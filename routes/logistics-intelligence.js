@@ -51,6 +51,8 @@ router.use(async (req, res, next) => {
   catch (e) { res.status(500).json({ error: 'Logistics intelligence schema initialization failed', detail: e.message }); }
 });
 
+router.use(require('./logistics-commercial-handoff'));
+
 function jobNumber() { return `DSP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`; }
 function nowMs() { return Date.now(); }
 function scoreJob(row) {
