@@ -30,3 +30,4 @@ if (process.exitCode) process.exit(process.exitCode);
 require('./check-logistics-commercial-handoff-contract');
 require('./check-logistics-field-execution-contract');
 require('./check-logistics-route-planning-contract');
+require('./check-logistics-route-execution-contract');
