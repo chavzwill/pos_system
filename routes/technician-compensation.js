@@ -99,7 +99,7 @@ router.get('/period', requireAnyPermission('work_orders','reports','employees_sa
   catch(e) { res.status(400).json({ error:e.message }); }
 });
 
-router.get('/summary', requireAnyPermission('work_orders','reports','employees_salaries'), async (req,res) => {
+router.get('/summary', requirePermission('employees_salaries'), async (req,res) => {
   try {
     const startedAt=Date.now();
     await ensureCompensationSchema();
@@ -124,7 +124,7 @@ router.get('/summary', requireAnyPermission('work_orders','reports','employees_s
   } catch(e) { res.status(500).json({ error:e.message }); }
 });
 
-router.get('/rates', requireAnyPermission('work_orders','reports','employees_salaries'), async (req,res) => {
+router.get('/rates', requirePermission('employees_salaries'), async (req,res) => {
   try { await ensureCompensationSchema(); const { rows }=await db.execute({ sql:`SELECT r.*,e.employee_number,e.first_name,e.last_name,cb.first_name||' '||cb.last_name changed_by_name FROM technician_pay_rates r JOIN employees e ON e.id=r.employee_id LEFT JOIN employees cb ON cb.id=r.changed_by ORDER BY r.employee_id,r.effective_from DESC`, args:[] }); res.json(rows); }
   catch(e){res.status(500).json({error:e.message});}
 });
@@ -167,13 +167,11 @@ router.post('/finalize/:employeeId', requirePermission('employees_salaries'), as
   } catch(e){res.status(400).json({error:e.message});}
 });
 
-router.get('/snapshots', requireAnyPermission('reports','employees_salaries'), async (req,res) => {
+router.get('/snapshots', requirePermission('employees_salaries'), async (req,res) => {
   try { await ensureCompensationSchema(); const {rows}=await db.execute({sql:`SELECT s.*,e.employee_number,e.first_name,e.last_name,f.first_name||' '||f.last_name finalized_by_name FROM technician_pay_snapshots s JOIN employees e ON e.id=s.employee_id LEFT JOIN employees f ON f.id=s.finalized_by ORDER BY s.period_end DESC,e.last_name,e.first_name`,args:[]}); res.json(rows.map(r=>({...r,evidence:JSON.parse(r.evidence_json||'{}')}))); }
   catch(e){res.status(500).json({error:e.message});}
 });
 
-// Performance intelligence is intentionally downstream-safe: it may recommend an incentive review,
-// but it never mutates base pay or payroll automatically.
 router.use('/performance', require('./technician-performance'));
 
 module.exports = router;
