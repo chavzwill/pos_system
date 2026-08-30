@@ -20,6 +20,34 @@ async function tableExists(name, executor = db) {
   return !!row;
 }
 
+// Compatibility guard for the older deposit-payment endpoint. Legacy repairs
+// that never entered the formal estimate-revision workflow still operate as
+// before. Once a repair has formal revisions, however, the latest active
+// revision must be approved before a deposit can start work.
+router.patch('/:id/deposit-paid', async (req, res, next) => {
+  try {
+    if (!(await tableExists('repair_estimate_revisions'))) return next();
+    const { rows: revisions } = await db.execute({
+      sql: `SELECT id,revision_number,status,total_amount FROM repair_estimate_revisions
+            WHERE work_order_id=? ORDER BY revision_number DESC,id DESC`,
+      args: [req.params.id],
+    });
+    if (!revisions.length) return next();
+    const active = revisions.find(r => r.status !== 'superseded') || revisions[0];
+    if (active.status !== 'approved') {
+      return res.status(409).json({
+        error: 'Repair work cannot start until the latest estimate revision is approved.',
+        estimate_revision_id: active.id,
+        revision_number: active.revision_number,
+        authorization_status: active.status,
+      });
+    }
+    next();
+  } catch (e) {
+    res.status(500).json({ error: 'Unable to verify repair authorization before deposit', detail: e.message });
+  }
+});
+
 router.patch('/:id/signoff', requirePermission('wo_signoff'), async (req, res) => {
   try {
     const actor = req.employee?.id || req.body?.employee_id || null;
