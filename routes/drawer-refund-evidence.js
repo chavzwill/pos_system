@@ -13,7 +13,14 @@ router.get('/sessions/:id',requireAuth,async(req,res,next)=>{
       UNION ALL
       SELECT t.id,t.payment_method,t.total FROM transactions t WHERE t.drawer_session_id=? AND t.status!='voided' AND NOT EXISTS(SELECT 1 FROM transaction_payments tp2 WHERE tp2.transaction_id=t.id)
     ) GROUP BY payment_method ORDER BY payment_method`,args:[req.params.id,req.params.id]});
-    const {rows:refunds}=await db.execute({sql:`SELECT l.payment_method,COUNT(DISTINCT s.id) refund_count,ROUND(COALESCE(SUM(l.amount),0),2) total FROM retail_refund_settlements s JOIN retail_refund_settlement_legs l ON l.settlement_id=s.id WHERE s.drawer_session_id=? GROUP BY l.payment_method ORDER BY l.payment_method`,args:[req.params.id]}).catch(()=>({rows:[]}));
+    const retail=await db.execute({sql:`SELECT l.payment_method,COUNT(DISTINCT s.id) refund_count,ROUND(COALESCE(SUM(l.amount),0),2) total FROM retail_refund_settlements s JOIN retail_refund_settlement_legs l ON l.settlement_id=s.id WHERE s.drawer_session_id=? GROUP BY l.payment_method`,args:[req.params.id]}).catch(()=>({rows:[]}));
+    const rental=await db.execute({sql:`SELECT payment_method,COUNT(DISTINCT id) refund_count,ROUND(COALESCE(SUM(amount),0),2) total FROM rental_refund_settlements WHERE drawer_session_id=? GROUP BY payment_method`,args:[req.params.id]}).catch(()=>({rows:[]}));
+    const merged=new Map();
+    for(const row of [...(retail.rows||[]),...(rental.rows||[])]){
+      const key=String(row.payment_method),current=merged.get(key)||{payment_method:key,refund_count:0,total:0};
+      current.refund_count+=Number(row.refund_count||0);current.total=Number((current.total+Number(row.total||0)).toFixed(2));merged.set(key,current);
+    }
+    const refunds=[...merged.values()].sort((a,b)=>a.payment_method.localeCompare(b.payment_method));
     const refundBy=new Map(refunds.map(x=>[String(x.payment_method),Number(x.total||0)]));
     const tenderBy=new Map(tenders.map(x=>[String(x.payment_method),Number(x.total||0)]));
     const methods=[...new Set([...tenderBy.keys(),...refundBy.keys()])];
