@@ -26,6 +26,15 @@ router.use(async(req,res,next)=>{
     if(req.apiKey||!req.employee||req.method==='GET'||req.method==='HEAD'||req.method==='OPTIONS')return next();
     const p=req.path;
 
+    // Direct inventory adjustments are branch-local physical corrections. The
+    // inventory hardening layer still handles quantity, bin, valuation and
+    // independent high-value approval; this guard only prevents an ordinary
+    // branch employee from pointing that destructive action at another branch.
+    if(/^\/products\/\d+\/stock$/.test(p)&&req.method==='PATCH'){
+      if(!assertBranch(req,res,req.body?.branch_id))return;
+      return next();
+    }
+
     // Repair intake is branch-local. Existing work-order mutations must remain
     // at the work order's owning branch. Money-moving repair endpoints are also
     // forced back to the authoritative work-order branch/employee rather than
