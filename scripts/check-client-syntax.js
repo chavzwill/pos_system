@@ -33,3 +33,4 @@ require('./check-logistics-route-planning-contract');
 require('./check-logistics-route-execution-contract');
 require('./check-logistics-location-intelligence-contract');
 require('./check-logistics-completion-mode-contract');
+require('./check-repair-lifecycle-certification');
