@@ -8,23 +8,29 @@ function actor(req){return req.employee?.id||req.user?.employee_id||null;}
 function fullAddress(x,prefix=''){const g=k=>String(x[`${prefix}${k}`]||'').trim();return [g('address'),g('city'),g('state'),g('zip')].filter(Boolean).join(', ');}
 function jobNumber(){return `DSP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;}
 async function prior(workOrderId,jobType){const {rows:[r]}=await db.execute({sql:`SELECT dj.* FROM dispatch_jobs dj WHERE dj.source_type='repair' AND dj.source_id=? AND dj.job_type=? AND dj.status NOT IN ('completed','cancelled') ORDER BY dj.id DESC LIMIT 1`,args:[workOrderId,jobType]});return r||null;}
+function repairBalance(wo){const estimate=(Number(wo.estimate_labor)||0)+(Number(wo.estimate_consumables)||0);const parts=Number(wo.parts_total||0);const deposit=Number(wo.deposit_amount||0);return Math.max(0,Number((estimate+parts-deposit).toFixed(2)));}
 
 router.post('/from-repair/:id',requireAnyPermission('work_orders','transfers'),async(req,res)=>{
  try{
   const direction=String(req.body?.direction||'pickup').toLowerCase();
   if(!['pickup','return'].includes(direction))return res.status(400).json({error:'direction must be pickup or return'});
-  const {rows:[wo]}=await db.execute({sql:`SELECT wo.*,c.first_name||' '||c.last_name customer_name,c.phone customer_phone,c.email customer_email,c.address,c.city,c.state,c.zip,b.name branch_name,b.address branch_address,b.city branch_city,b.state branch_state,b.zip branch_zip,rel.equipment_id,ce.equipment_type,ce.brand equipment_brand,ce.model equipment_model,ce.serial_number equipment_serial,ce.asset_tag equipment_asset_tag FROM work_orders wo JOIN customers c ON c.id=wo.customer_id JOIN branches b ON b.id=wo.branch_id LEFT JOIN repair_equipment_links rel ON rel.work_order_id=wo.id LEFT JOIN customer_equipment ce ON ce.id=rel.equipment_id WHERE wo.id=?`,args:[req.params.id]});
+  const {rows:[wo]}=await db.execute({sql:`SELECT wo.*,c.first_name||' '||c.last_name customer_name,c.phone customer_phone,c.email customer_email,c.address,c.city,c.state,c.zip,b.name branch_name,b.address branch_address,b.city branch_city,b.state branch_state,b.zip branch_zip,rel.equipment_id,ce.equipment_type,ce.brand equipment_brand,ce.model equipment_model,ce.serial_number equipment_serial,ce.asset_tag equipment_asset_tag,(SELECT COALESCE(SUM(total),0) FROM work_order_items WHERE work_order_id=wo.id) parts_total FROM work_orders wo JOIN customers c ON c.id=wo.customer_id JOIN branches b ON b.id=wo.branch_id LEFT JOIN repair_equipment_links rel ON rel.work_order_id=wo.id LEFT JOIN customer_equipment ce ON ce.id=rel.equipment_id WHERE wo.id=?`,args:[req.params.id]});
   if(!wo)return res.status(404).json({error:'Repair work order not found'});
   if(String(wo.status)==='cancelled')return res.status(409).json({error:'Cancelled repairs cannot be forwarded to Dispatch'});
-  if(direction==='return'&&!['awaiting_pickup','complete'].includes(String(wo.status)))return res.status(409).json({error:'Repair return delivery is only available after repair completion/signoff'});
-  if(direction==='pickup'&&['awaiting_pickup','picked_up'].includes(String(wo.status)))return res.status(409).json({error:'This repair is already at the customer-return stage and cannot create a new intake pickup'});
+  if(direction==='pickup'&&!['intake','pending_deposit'].includes(String(wo.status)))return res.status(409).json({error:'Customer equipment pickup is only available while the repair is at intake or awaiting deposit.'});
+  if(direction==='return'){
+   if(!['awaiting_pickup','picked_up'].includes(String(wo.status)))return res.status(409).json({error:'Repair return delivery is only available after customer notification and release-stage processing.'});
+   const balance=repairBalance(wo);
+   const financiallyCleared=balance<=0||!!wo.final_transaction_id;
+   if(!financiallyCleared)return res.status(409).json({error:'Repair return delivery is blocked until the final repair balance is settled.',balance_due:balance});
+  }
   const customerAddress=fullAddress(wo),branchAddress=fullAddress(wo,'branch_');
   if(!customerAddress)return res.status(409).json({error:'Repair logistics requires a usable customer address'});
   if(!branchAddress)return res.status(409).json({error:'Repair branch requires a usable address before dispatch'});
   const jobType=direction==='pickup'?'repair_pickup':'repair_return';
   const existing=await prior(Number(wo.id),jobType);if(existing)return res.status(200).json(existing);
   const origin=direction==='pickup'?customerAddress:branchAddress,destination=direction==='pickup'?branchAddress:customerAddress;
-  const snapshot={work_order:{id:wo.id,wo_number:wo.wo_number,status:wo.status,pickup_due_date:wo.pickup_due_date,description:wo.description,customer_complaint:wo.customer_complaint},customer:{id:wo.customer_id,name:wo.customer_name,phone:wo.customer_phone,email:wo.customer_email,address:customerAddress},branch:{id:wo.branch_id,name:wo.branch_name,address:branchAddress},equipment:wo.equipment_id?{id:wo.equipment_id,type:wo.equipment_type,brand:wo.equipment_brand,model:wo.equipment_model,serial_number:wo.equipment_serial,asset_tag:wo.equipment_asset_tag}:null};
+  const snapshot={work_order:{id:wo.id,wo_number:wo.wo_number,status:wo.status,pickup_due_date:wo.pickup_due_date,description:wo.description,customer_complaint:wo.customer_complaint,final_transaction_id:wo.final_transaction_id||null,balance_due_at_handoff:direction==='return'?repairBalance(wo):null},customer:{id:wo.customer_id,name:wo.customer_name,phone:wo.customer_phone,email:wo.customer_email,address:customerAddress},branch:{id:wo.branch_id,name:wo.branch_name,address:branchAddress},equipment:wo.equipment_id?{id:wo.equipment_id,type:wo.equipment_type,brand:wo.equipment_brand,model:wo.equipment_model,serial_number:wo.equipment_serial,asset_tag:wo.equipment_asset_tag}:null};
   const tx=await db.transaction('write');let committed=false;
   try{
    const number=jobNumber();
