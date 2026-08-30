@@ -99,6 +99,7 @@ app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.
 
 app.use('/api', apiKeyAuth);
 app.use('/api', sessionAuth);
+app.use('/api', require('./routes/multi-branch-integrity-guard'));
 app.use('/api/workspace-profile', require('./routes/workspace-profile'));
 app.use('/api/employee-workspace-intelligence', require('./routes/employee-workspace-intelligence'));
 app.use('/api/technician-management-intelligence', require('./routes/technician-management-intelligence'));
