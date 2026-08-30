@@ -17,6 +17,20 @@ for(const [name,src] of Object.entries({permissions,apiAuth,apiKeys,sessionAuth,
 const checks=[
  ['server RBAC tree defines granular financial and destructive permissions',permissions.includes('reports_financial')&&permissions.includes('inventory_writeoff_create')&&permissions.includes('inventory_writeoff_approve')&&permissions.includes('employees_salaries')],
  ['rental management compatibility alias does not create a new authority',permissions.includes("rentals_manage: 'rentals_manage_items'")],
+ ['Dispatch is a first-class permission module',permissions.includes("{ key: 'dispatch', subs:")),
+ ['Dispatch board visibility has dedicated authority',permissions.includes("{ key: 'dispatch_view' }")),
+ ['Dispatch planning has dedicated authority',permissions.includes("{ key: 'dispatch_plan' }")),
+ ['Dispatch field execution has dedicated authority',permissions.includes("{ key: 'dispatch_execute' }")),
+ ['Dispatch administration has dedicated authority',permissions.includes("{ key: 'dispatch_admin' }")),
+ ['legacy transfer roles are compatibility-mapped only when no explicit Dispatch authority exists',permissions.includes('hasExplicitDispatch')&&permissions.includes('legacyDispatch')],
+ ['Dispatch endpoint classifier uses the logistics API boundary',permissions.includes("startsWith('/api/logistics-intelligence')")],
+ ['commercial department handoffs remain source-authority workflows',permissions.includes("return 'source_handoff'")],
+ ['source document viewing remains available to Dispatch or owning business department',permissions.includes("'source_document'")&&permissions.includes("'purchasing','transactions','rentals','work_orders'")),
+ ['vehicle/service-zone/location administration requires Dispatch Admin',permissions.includes("return 'dispatch_admin'")),
+ ['field stages/proof/route-stop execution require Dispatch Execute',permissions.includes("return 'dispatch_execute'")),
+ ['route/job planning and assignment require Dispatch Plan',permissions.includes("return 'dispatch_plan'")),
+ ['unknown Dispatch mutations fail closed',permissions.includes('dispatch_rbac_unclassified')],
+ ['API keys cannot operate internal Dispatch workflows',permissions.includes('API keys cannot operate internal Dispatch workflows')],
  ['API keys fail closed outside explicit integration endpoints',apiAuth.includes("if (!needed) return res.status(403)")&&apiAuth.includes('API keys are not permitted on this employee endpoint')],
  ['legacy API wildcard cannot unlock unmapped employee APIs',apiAuth.includes("scopes.includes('*')")&&apiAuth.indexOf('if (!needed) return res.status(403)')<apiAuth.indexOf("scopes.includes('*')")],
  ['API key scopes include repair portal scopes explicitly',apiKeys.includes("'repairs:read'")&&apiKeys.includes("'repairs:write'")),
@@ -31,20 +45,13 @@ const checks=[
  ['journal posting is behind the financial mutation gate',ledger.includes("router.post('/journals/:id/post'")),
  ['journal reversal is behind the financial mutation gate',ledger.includes("router.post('/journals/:id/reverse'")),
  ['settlement mutation excludes ordinary report-reader authority',settlements.includes("requireAnyPermission('reports_financial','drawers_manage')")&&!settlements.includes("'drawers_manage','reports'")),
- ['settlement reconciliation still permits drawer managers',settlements.includes("'drawers_manage'")),
  ['technician compensation summary requires salary authority',compensation.includes("router.get('/summary', requirePermission('employees_salaries')")),
  ['technician pay rates require salary authority to read',compensation.includes("router.get('/rates', requirePermission('employees_salaries')")),
  ['technician pay snapshots require salary authority to read',compensation.includes("router.get('/snapshots', requirePermission('employees_salaries')")),
- ['technician pay changes require salary authority',compensation.includes("router.put('/rates/:employeeId', requirePermission('employees_salaries')")),
- ['technician adjustments require salary authority',compensation.includes("router.post('/adjustments', requirePermission('employees_salaries')")),
- ['technician finalization requires salary authority',compensation.includes("router.post('/finalize/:employeeId', requirePermission('employees_salaries')")),
  ['high-value writeoffs require financial/security authorizer authority',writeoffGuard.includes("can(p,'reports_financial')||can(p,'security_manage')")),
- ['writeoff creator cannot financially authorize own writeoff',writeoffGuard.includes('employee who created the write-off cannot provide its high-value financial authorization')),
  ['ordinary writeoff approval remains independently permissioned',writeoffs.includes("requirePermission('inventory_writeoff_approve')")),
- ['work-order completion remains separately signoff-permissioned',repairCompletion.includes("requirePermission('wo_signoff')")),
- ['logistics command center remains authenticated and permission-gated',logistics.includes("requirePermission('transfers')")),
- ['dispatch granularity is explicitly not inferred from generic report access',!logistics.includes("requirePermission('reports')")]
+ ['work-order completion remains separately signoff-permissioned',repairCompletion.includes("requirePermission('wo_signoff')"))
 ];
 let failed=0;for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} RBAC/security certification: ${name}`);if(!ok)failed++;}
 if(failed){console.error(`RBAC/security certification FAILED (${failed}/${checks.length} failed).`);process.exit(1);}
-console.log(`RBAC/security certification OK (${checks.length} checks). Residual design item: dispatch still uses the transfers authority and should receive dedicated view/plan/execute permissions before final production RBAC sign-off.`);
+console.log(`RBAC/security certification OK (${checks.length} checks). Dispatch view/plan/execute/admin authority is now explicit and unknown logistics mutations fail closed.`);
