@@ -52,3 +52,4 @@ const checks=[
  ['lifecycle events preserve status transitions and reasons',lifecycle.includes('rental_asset_lifecycle_events')&&lifecycle.includes('from_status')&&lifecycle.includes('to_status')&&lifecycle.includes('reason')]
 ];
 let failed=0;for(const [name,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Rental asset lifetime economics: ${name}`);if(!ok)failed++;}if(failed){console.error(`Rental asset lifetime economics contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`Rental asset lifetime economics contract OK (${checks.length} checks).`);
+require('./check-rental-asset-sale-contract');
