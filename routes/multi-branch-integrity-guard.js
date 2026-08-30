@@ -26,19 +26,11 @@ router.use(async(req,res,next)=>{
     if(req.apiKey||!req.employee||req.method==='GET'||req.method==='HEAD'||req.method==='OPTIONS')return next();
     const p=req.path;
 
-    // Direct inventory adjustments are branch-local physical corrections. The
-    // inventory hardening layer still handles quantity, bin, valuation and
-    // independent high-value approval; this guard only prevents an ordinary
-    // branch employee from pointing that destructive action at another branch.
     if(/^\/products\/\d+\/stock$/.test(p)&&req.method==='PATCH'){
       if(!assertBranch(req,res,req.body?.branch_id))return;
       return next();
     }
 
-    // Repair intake is branch-local. Existing work-order mutations must remain
-    // at the work order's owning branch. Money-moving repair endpoints are also
-    // forced back to the authoritative work-order branch/employee rather than
-    // trusting request-body identity or branch values.
     if(p==='/work-orders'&&req.method==='POST'){
       if(!assertBranch(req,res,req.body?.branch_id))return;
       req.body.employee_id=req.employee.id;
@@ -55,9 +47,6 @@ router.use(async(req,res,next)=>{
       return next();
     }
 
-    // New rentals and every physical/financial agreement mutation are local to
-    // the agreement branch. Cross-branch fleet movement uses its dedicated
-    // transfer lifecycle and is intentionally not handled here.
     if(p==='/rentals/agreements'&&req.method==='POST'){
       if(!assertBranch(req,res,req.body?.branch_id))return;
       req.body.employee_id=req.employee.id;
@@ -74,7 +63,6 @@ router.use(async(req,res,next)=>{
       return next();
     }
 
-    // Physical PO receipt changes inventory at the PO's receiving branch.
     id=numericId(p,/^\/purchase-orders\/(\d+)\/receive$/);
     if(id){
       const branchId=await sourceBranch('purchase_orders',id);
@@ -83,9 +71,6 @@ router.use(async(req,res,next)=>{
       return next();
     }
 
-    // Inventory write-offs are destructive branch-local actions. Creation is
-    // bound to the requested branch; approval/rejection is bound to the stored
-    // write-off branch. The independent financial authorizer remains separate.
     if(p==='/inventory-writeoffs'&&req.method==='POST'){
       if(!assertBranch(req,res,req.body?.branch_id))return;
       return next();
@@ -95,6 +80,22 @@ router.use(async(req,res,next)=>{
       const branchId=await sourceBranch('inventory_writeoffs',id);
       if(branchId==null)return next();
       if(!assertBranch(req,res,branchId))return;
+      return next();
+    }
+
+    // A transfer is cross-branch by definition, but an ordinary branch user may
+    // only originate stock from their own branch and may only receive into their
+    // own branch. Branch/Security administrators retain deliberate network-wide
+    // authority. This protects stock custody without disabling real transfers.
+    if(p==='/transfers'&&req.method==='POST'){
+      if(!assertBranch(req,res,req.body?.from_branch_id))return;
+      return next();
+    }
+    id=numericId(p,/^\/transfers\/(\d+)\/receive$/);
+    if(id){
+      const {rows:[tr]}=await db.execute({sql:'SELECT to_branch_id FROM branch_transfers WHERE id=?',args:[id]});
+      if(!tr)return next();
+      if(!assertBranch(req,res,tr.to_branch_id))return;
       return next();
     }
 
