@@ -11,6 +11,9 @@ const { getReservedQty } = require('../lib/inventory-reservations');
 // reservation, so a blocked below-floor sale does not unnecessarily hold stock.
 router.use(require('./retail-margin-protection'));
 router.use(require('./retail-inventory-reservation'));
+// Preserve historical cost evidence around the authoritative checkout response.
+// Accounting must never derive historical retail COGS from a later catalog cost.
+router.use(require('./retail-cost-snapshot'));
 
 const allowedPayments = new Set(['cash','card','credit','bank_transfer']);
 const asMoney = v => Number.parseFloat(v || 0);
