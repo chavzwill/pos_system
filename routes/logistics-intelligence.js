@@ -53,6 +53,7 @@ router.use(async (req, res, next) => {
 
 router.use(require('./logistics-commercial-handoff'));
 router.use(require('./logistics-field-execution'));
+router.use(require('./logistics-route-planning'));
 
 function jobNumber() { return `DSP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`; }
 function nowMs() { return Date.now(); }
@@ -79,12 +80,15 @@ router.get('/command-center', requirePermission('transfers'), async (req, res) =
     const { branch_id } = req.query;
     const args = [];
     let sql = `SELECT dj.*, e.first_name || ' ' || e.last_name AS assignee_name, b.name AS branch_name,
-      de.stage AS execution_stage, de.driver_employee_id, de.vehicle_id, dv.vehicle_number, dv.registration_number
+      de.stage AS execution_stage, de.driver_employee_id, de.vehicle_id, dv.vehicle_number, dv.registration_number,
+      drs.route_id, dr.route_number, dr.status AS route_status
       FROM dispatch_jobs dj
       LEFT JOIN employees e ON e.id = dj.assignee_employee_id
       LEFT JOIN branches b ON b.id = dj.branch_id
       LEFT JOIN dispatch_executions de ON de.dispatch_job_id = dj.id
       LEFT JOIN dispatch_vehicles dv ON dv.id = de.vehicle_id
+      LEFT JOIN dispatch_route_stops drs ON drs.dispatch_job_id=dj.id
+      LEFT JOIN dispatch_routes dr ON dr.id=drs.route_id
       WHERE dj.status NOT IN ('completed','cancelled')`;
     if (branch_id) { sql += ' AND dj.branch_id = ?'; args.push(branch_id); }
     sql += ' ORDER BY COALESCE(dj.promised_at, dj.scheduled_for, dj.created_at), dj.created_at';
@@ -105,6 +109,7 @@ router.get('/command-center', requirePermission('transfers'), async (req, res) =
       unscheduled: enriched.filter(j => !j.scheduled_for).length,
       in_transit: enriched.filter(j => j.status === 'in_transit').length,
       at_risk: enriched.filter(j => j.intelligence.score >= 35).length,
+      routed: enriched.filter(j => j.route_id).length,
     };
 
     const transferArgs = [];
@@ -123,7 +128,7 @@ router.get('/command-center', requirePermission('transfers'), async (req, res) =
       summary,
       jobs: enriched,
       uncovered_transfers,
-      routing_note: 'Priority sequencing uses verified deadlines, assignment state and operational status. Road-distance optimization requires geocoded addresses and is intentionally not fabricated.',
+      routing_note: 'Priority and route sequencing use verified deadlines, assignment state, dispatcher order, driver shifts and vehicle capacity. Road-distance/ETA optimization is intentionally not fabricated until geocoded travel-time evidence exists.',
     });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
