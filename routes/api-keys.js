@@ -5,16 +5,20 @@ const { db } = require('../database');
 const { hashKey } = require('../lib/apiKeyAuth');
 const { requirePermission } = require('../lib/permissions');
 
-// The API Keys card lives on the Settings page alongside company/tax/
-// integrations config — same module-level gate as the rest of that screen.
-router.use(requirePermission('settings'));
+// API keys are an integration credential, not a general Settings feature.
+// Only integration-settings authority may create, rotate or revoke them.
+router.use(requirePermission('settings_integrations'));
 
 const VALID_SCOPES = [
   'products:read', 'products:write',
   'customers:read', 'customers:write',
   'orders:read', 'orders:write',
-  '*',
+  'repairs:read', 'repairs:write',
 ];
+
+function validScopes(scopes){
+  return Array.isArray(scopes) && scopes.length > 0 && scopes.every(s => VALID_SCOPES.includes(s));
+}
 
 router.get('/', async (req, res) => {
   try {
@@ -28,13 +32,11 @@ router.get('/', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { name, scopes = ['*'] } = req.body;
+    const { name, scopes = ['products:read'] } = req.body;
     if (!name || !name.trim()) return res.status(400).json({ error: 'Name is required' });
+    if (!validScopes(scopes)) return res.status(400).json({ error: 'At least one valid explicit API scope is required' });
 
-    const invalid = scopes.filter(s => !VALID_SCOPES.includes(s));
-    if (invalid.length) return res.status(400).json({ error: `Invalid scopes: ${invalid.join(', ')}` });
-
-    const raw = 'pos_' + crypto.randomBytes(20).toString('hex'); // pos_ + 40 hex = 44 chars
+    const raw = 'pos_' + crypto.randomBytes(20).toString('hex');
     const prefix = raw.slice(0, 12);
     const hash = hashKey(raw);
 
@@ -43,7 +45,6 @@ router.post('/', async (req, res) => {
       args: [name.trim(), prefix, hash, JSON.stringify(scopes)],
     });
 
-    // Return the raw key only once — it is never stored
     res.status(201).json({ key: raw, prefix, name: name.trim(), scopes });
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
@@ -54,10 +55,13 @@ router.patch('/:id', async (req, res) => {
     const updates = [];
     const args = [];
 
-    if (name !== undefined) { updates.push('name = ?'); args.push(name.trim()); }
+    if (name !== undefined) {
+      const trimmed=String(name||'').trim();
+      if(!trimmed) return res.status(400).json({error:'Name cannot be empty'});
+      updates.push('name = ?'); args.push(trimmed);
+    }
     if (scopes !== undefined) {
-      const invalid = scopes.filter(s => !VALID_SCOPES.includes(s));
-      if (invalid.length) return res.status(400).json({ error: `Invalid scopes: ${invalid.join(', ')}` });
+      if (!validScopes(scopes)) return res.status(400).json({ error: 'At least one valid explicit API scope is required' });
       updates.push('scopes = ?'); args.push(JSON.stringify(scopes));
     }
     if (is_active !== undefined) { updates.push('is_active = ?'); args.push(is_active ? 1 : 0); }
