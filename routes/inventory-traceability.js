@@ -19,6 +19,7 @@ router.use('/procurement-market',require('./procurement-what-changed-hardening')
 router.use('/procurement-market',require('./procurement-market-intelligence'));
 router.use('/procurement-outcomes',require('./procurement-outcome-intelligence'));
 router.use('/accounting-retail-cogs',require('./accounting-retail-cogs-sync'));
+router.use('/rental-economics',require('./rental-asset-lifetime-economics').router);
 router.use('/loss-control',require('./loss-control-intelligence'));
 router.use('/loss-control',require('./loss-control-expanded'));
 router.use('/loss-control',require('./loss-control-operational-leaks'));
