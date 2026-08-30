@@ -19,6 +19,10 @@ async function accessFor(drawerId,employeeId){
 }
 async function session(id){const {rows:[row]}=await db.execute({sql:'SELECT * FROM drawer_sessions WHERE id=?',args:[id]});return row;}
 
+// Enhanced read-only drawer evidence is mounted first so refund settlements are
+// reflected in custody/reconciliation views before the older drawer detail route.
+router.use(require('./drawer-refund-evidence'));
+
 router.post('/sessions',async(req,res,next)=>{
   try{
     const emp=requireEmployeeSession(req,res);if(!emp)return;
