@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import { registerPurchasingFinancialRuntimeCertification } from './purchasing-financial-runtime-helper.js';
+import { registerRentalFinancialRuntimeCertification } from './rental-financial-runtime-helper.js';
 
 const BASE = 'http://localhost:3001';
 
@@ -127,8 +128,6 @@ test.describe('Cross-module business integrity', () => {
     expect(after.status).toBe(200);
     expect(Array.isArray(after.body.alerts)).toBe(true);
 
-    // Intelligence reads may change naturally if time-based evidence crosses a threshold,
-    // but the endpoint contract itself must never claim that it executed a business action.
     for (const alert of after.body.alerts) {
       expect(alert.automatic_action_taken).not.toBe(true);
       expect(alert.automatic_pay_change).not.toBe(true);
@@ -137,3 +136,4 @@ test.describe('Cross-module business integrity', () => {
 });
 
 registerPurchasingFinancialRuntimeCertification();
+registerRentalFinancialRuntimeCertification();
