@@ -1,4 +1,5 @@
 import { test, expect } from '@playwright/test';
+import './pos-financial-runtime.js';
 
 const BASE = 'http://localhost:3001';
 
@@ -185,8 +186,6 @@ test.describe('Operational security boundaries', () => {
       expect(planAttempt.body?.control).toBe('dispatch_rbac');
       expect(planAttempt.body?.error).toMatch(/dispatch_plan/i);
 
-      // Branch authority is evaluated before product lookup, so the fake product
-      // proves the cross-branch guard without creating a sale or changing stock.
       const crossBranchSale = await api(limited.cookie, '/api/transactions', {
         method: 'POST',
         body: JSON.stringify({
