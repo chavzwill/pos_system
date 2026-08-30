@@ -4,10 +4,13 @@ const router=express.Router();
 const {db}=require('../database');
 const {can,requireAnyPermission}=require('../lib/permissions');
 
-// Runs first for every /api/rentals request. Besides exposing the controlled
-// missing/lost-asset workflow, its schema guard adds quantity_missing and the
-// agreement-level missing-asset financial totals before the legacy rental
-// routes or availability helper can query those fields.
+// Runs first for every /api/rentals request. Physical asset identity/economics
+// integration must run before the missing-asset and ordinary rental handlers so
+// issue/return/disposition events can update the same asset lifecycle naturally.
+router.use(require('./rental-asset-workflow-integration'));
+// Besides exposing the controlled missing/lost-asset workflow, this schema guard
+// adds quantity_missing and the agreement-level missing-asset financial totals
+// before the legacy rental routes or availability helper can query those fields.
 router.use(require('./rental-missing-asset-disposition'));
 
 let readyPromise=null;
