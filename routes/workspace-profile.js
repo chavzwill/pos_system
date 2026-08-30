@@ -7,7 +7,7 @@ const DOMAIN_RULES={
   sales:['pos','transactions','drawers','quotations','layaway'],
   service:['work_orders','services'],
   rentals:['rentals'],
-  dispatch:['transfers'],
+  dispatch:['dispatch','dispatch_view','dispatch_plan','dispatch_execute','dispatch_admin','transfers'],
   inventory:['inventory','warehouse','cycle-counts','transfers'],
   purchasing:['purchase_requests','purchasing','suppliers'],
   crm:['customers','crm'],
