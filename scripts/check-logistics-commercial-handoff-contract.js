@@ -26,6 +26,10 @@ const checks=[
  ['sales UI exposes invoice dispatch handoff',ui.includes('Send invoice to Dispatch')&&ui.includes('/from-sales-invoice/')],
  ['rental UI exposes separate delivery and pickup handoffs',ui.includes('Send rental delivery')&&ui.includes('Send rental pickup')],
  ['dispatch UI surfaces document party contact and address packet',ui.includes('data-dispatch-packet')&&ui.includes('contact_phone')&&ui.includes('address_line')],
+ ['dispatch packet exposes view and print document control',ui.includes('View / print document')&&ui.includes('window.print()')&&ui.includes('openDocument(d)')],
+ ['printed document is rendered from immutable snapshot line items',ui.includes('d.snapshot?.items')&&ui.includes('Frozen handoff copy captured for logistics execution')],
+ ['printed document explains snapshot immutability',ui.includes('does not silently rewrite itself')&&ui.includes('originating PO, invoice or rental record later changes')],
+ ['document renderer HTML-escapes commercial source values',ui.includes('const esc=')&&ui.includes('esc(d.party_name)')&&ui.includes('esc(d.document_number)')],
  ['commercial handoff UI is deferred through the application shell',deferred.includes('/logistics-commercial-handoff.js')]
 ];
 let failed=0;for(const [name,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Commercial logistics handoff: ${name}`);if(!ok)failed++;}
