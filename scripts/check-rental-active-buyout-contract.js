@@ -1,11 +1,12 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const route=read('routes/rental-active-buyout.js'),bootstrap=read('routes/rental-active-buyout-account-bootstrap.js'),trace=read('routes/inventory-traceability.js'),ui=read('public/rental-fleet-management.js'),deferred=read('public/shell-deferred.js'),economics=read('routes/rental-asset-lifetime-economics.js');
+const route=read('routes/rental-active-buyout.js'),bootstrap=read('routes/rental-active-buyout-account-bootstrap.js'),trace=read('routes/inventory-traceability.js'),ui=read('public/rental-fleet-management.js'),deferred=read('public/shell-deferred.js'),economics=read('routes/rental-asset-lifetime-economics.js'),permissions=read('lib/permissions.js');
 new vm.Script(route,{filename:'rental active buyout'});new vm.Script(bootstrap,{filename:'rental active buyout accounting bootstrap'});new vm.Script(ui,{filename:'rental fleet management'});
 const checks=[
  ['active buyout accounting bootstrap is mounted first',trace.includes("require('./rental-active-buyout-account-bootstrap')")&&trace.indexOf('rental-active-buyout-account-bootstrap')<trace.indexOf("require('./rental-active-buyout')")],
  ['buyout accounting bootstrap ensures ledger and customer deposit account',bootstrap.includes('ensureLedger()')&&bootstrap.includes("'2200','Customer Deposits'")&&bootstrap.includes('INSERT OR IGNORE INTO ledger_accounts')],
+ ['legacy fleet-management permission maps to established rental management RBAC',permissions.includes("rentals_manage: 'rentals_manage_items'")&&permissions.includes('PERMISSION_ALIASES[key] || key')],
  ['active buyout is mounted before ordinary fleet sale',trace.includes("require('./rental-active-buyout')")&&trace.indexOf("require('./rental-active-buyout')")<trace.indexOf('rental-asset-sales')],
  ['buyout requires an active issued rental allocation',route.includes("agreement_status)!=='active'")&&route.includes('aa.released_at IS NULL')],
  ['buyout is restricted to a clean single unresolved unit',route.includes('active_buyout_clean_single_unit_required')&&route.includes('already_resolved')&&route.includes('outstanding')],
