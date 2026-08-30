@@ -37,3 +37,4 @@ require('./check-repair-lifecycle-certification');
 require('./check-accounting-financial-integrity-certification');
 require('./check-rbac-security-certification');
 require('./check-multi-branch-integrity-certification');
+require('./check-pos-financial-runtime-contract');
