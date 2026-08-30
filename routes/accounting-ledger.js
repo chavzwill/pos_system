@@ -1,9 +1,14 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
-const { requireAnyPermission } = require('../lib/permissions');
+const { requireAnyPermission, requirePermission } = require('../lib/permissions');
 
-router.use(requireAnyPermission('reports_financial','reports'));
+// General report users may inspect the ledger, but only financial-report
+// authority may create accounts, draft journals, post journals or reverse them.
+router.use((req,res,next)=>{
+  if(req.method==='GET') return requireAnyPermission('reports_financial','reports')(req,res,next);
+  return requirePermission('reports_financial')(req,res,next);
+});
 
 let ready=false;
 async function ensureSchema(){
