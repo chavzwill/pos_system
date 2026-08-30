@@ -5,6 +5,7 @@ const route=read('routes/logistics-route-planning.js'),parent=read('routes/logis
 new vm.Script(route,{filename:'logistics route planning'});new vm.Script(parent,{filename:'logistics parent'});new vm.Script(ui,{filename:'logistics route planning ui'});
 const checks=[
  ['route planning mounted inside logistics',parent.includes("router.use(require('./logistics-route-planning'))")],
+ ['route guard executes before standalone field assignment',parent.indexOf("router.use(require('./logistics-route-planning'))")<parent.indexOf("router.use(require('./logistics-field-execution'))")],
  ['routes are durable first-class records',route.includes('dispatch_routes')&&route.includes('route_number')&&route.includes('route_date')],
  ['route stops map exact dispatch jobs',route.includes('dispatch_route_stops')&&route.includes('dispatch_job_id INTEGER NOT NULL UNIQUE')],
  ['driver shifts are durable',route.includes('dispatch_driver_shifts')&&route.includes('start_time')&&route.includes('end_time')],
@@ -13,7 +14,10 @@ const checks=[
  ['vehicle weight capacity enforced',route.includes('exceeds vehicle capacity')&&route.includes('total_planned_weight_kg')&&route.includes('capacity_kg')],
  ['vehicle volume capacity enforced',route.includes('total_planned_volume_m3')&&route.includes('capacity_volume_m3')],
  ['driver shift window is checked',route.includes('Planned route falls outside the driver available shift')],
- ['released route conflict checks driver and vehicle',route.includes('Driver or vehicle is already committed to')],
+ ['released route conflict checks other routes',route.includes('Driver or vehicle is already committed to')],
+ ['route release also checks standalone field execution',route.includes('standalone dispatch')&&route.includes('dispatch_executions')],
+ ['standalone assignment cannot steal released route resources',route.includes('Driver or vehicle is reserved by route')],
+ ['released routed job cannot be individually assigned',route.includes('assign and execute it through the route plan')],
  ['in transit or closed job cannot be newly routed',route.includes('Closed or already in-transit jobs cannot be newly routed')],
  ['active field execution blocks route replanning',route.includes('Job already has active field execution and cannot be replanned into a route')],
  ['draft routes support explicit stop sequencing',route.includes('/routes/:id/resequence')&&route.includes('stop_sequence')],
