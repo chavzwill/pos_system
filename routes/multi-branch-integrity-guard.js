@@ -21,6 +21,11 @@ async function sourceBranch(table,id){
 }
 function numericId(path,re){const m=path.match(re);return m?Number(m[1]):null;}
 
+// Mounted here because this guard already runs immediately after authentication
+// for every /api request. This keeps the dispatch runtime boundary ahead of the
+// legacy logistics router without duplicating application-shell registration.
+router.use('/logistics-intelligence',require('./logistics-runtime-integrity-guard'));
+
 router.use(async(req,res,next)=>{
   try{
     if(req.apiKey||!req.employee||req.method==='GET'||req.method==='HEAD'||req.method==='OPTIONS')return next();
