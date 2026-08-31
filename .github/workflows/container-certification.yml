@@ -183,6 +183,8 @@ jobs:
         run: docker compose -f docker-compose.yml -f docker-compose.host.yml up -d --build
 
       - name: Verify POS through reverse proxy
+        env:
+          POS_DOMAIN: http://localhost
         run: |
           for attempt in $(seq 1 60); do
             if curl --fail --silent --show-error http://localhost/ >/tmp/pos-proxy-root.html; then
@@ -195,6 +197,8 @@ jobs:
           exit 1
 
       - name: Verify app remains private behind proxy
+        env:
+          POS_DOMAIN: http://localhost
         run: |
           app_id="$(docker compose -f docker-compose.yml -f docker-compose.host.yml ps -q app)"
           docker inspect "$app_id" | jq -e '.[0].HostConfig.PortBindings["3001/tcp"] == null'
@@ -214,6 +218,8 @@ jobs:
 
       - name: Show runtime logs on failure
         if: failure()
+        env:
+          POS_DOMAIN: http://localhost
         run: |
           docker logs total-tools-pos-cert || true
           docker compose -f docker-compose.yml -f docker-compose.host.yml logs app caddy || true
