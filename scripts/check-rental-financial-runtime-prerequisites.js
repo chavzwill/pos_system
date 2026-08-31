@@ -10,7 +10,7 @@ const checks=[
  ['checkout drawer branch must match rental branch',checkout.includes('belongs to a different branch')],
  ['rental accounting treats deposit as liability',acct.includes("code: '2200'")&&acct.includes('Refundable rental deposit liability')],
  ['returned rental releases deposit liability',acct.includes('Release refundable rental deposit liability')],
- ['negative non-credit settlement creates refund payable',acct.includes("code: '2400'")&&acct.includes('Customer rental refund payable')],
+ ['negative non-credit settlement creates refund payable',acct.includes("=== 'credit' ? '1100' : '2400'")&&acct.includes("creditCode === '1100' ? 'Reduce customer rental receivable' : 'Customer rental refund payable'")],
  ['refund settlement requires refund permission',refund.includes("requirePermission('transactions_refund')")],
  ['refund settlement refuses non-returned rentals',refund.includes('fully returned before its refund can be settled')],
  ['refund settlement enforces original tender method',refund.includes('must use the original tender method')],
