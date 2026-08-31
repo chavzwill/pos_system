@@ -2,58 +2,62 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
 const { requirePermission, requireAnyPermission } = require('../lib/permissions');
+const { ensureWorkOrderServiceEvidenceSchema } = require('../lib/work-order-service-evidence-schema');
 
 let schemaPromise = null;
 async function ensureSchema() {
-  if (!schemaPromise) schemaPromise = db.batch([
-    { sql: `CREATE TABLE IF NOT EXISTS technician_performance_events (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      technician_id INTEGER NOT NULL REFERENCES employees(id),
-      work_order_id INTEGER REFERENCES work_orders(id),
-      task_id INTEGER REFERENCES work_order_tasks(id),
-      event_type TEXT NOT NULL,
-      note TEXT,
-      recorded_by INTEGER REFERENCES employees(id),
-      occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )` },
-    { sql: `CREATE TABLE IF NOT EXISTS repair_quality_reviews (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
-      technician_id INTEGER NOT NULL REFERENCES employees(id),
-      result TEXT NOT NULL CHECK(result IN ('pass','fail')),
-      checklist_json TEXT NOT NULL DEFAULT '{}',
-      note TEXT,
-      reviewed_by INTEGER REFERENCES employees(id),
-      reviewed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
-    )` },
-    { sql: `CREATE TABLE IF NOT EXISTS repair_comeback_links (
-      id INTEGER PRIMARY KEY AUTOINCREMENT,
-      original_work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
-      comeback_work_order_id INTEGER REFERENCES work_orders(id),
-      technician_id INTEGER NOT NULL REFERENCES employees(id),
-      confirmed INTEGER NOT NULL DEFAULT 1,
-      reason TEXT NOT NULL,
-      recorded_by INTEGER REFERENCES employees(id),
-      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
-      UNIQUE(original_work_order_id, comeback_work_order_id)
-    )` },
-    { sql: 'CREATE INDEX IF NOT EXISTS idx_repair_quality_work_order ON repair_quality_reviews(work_order_id, reviewed_at)' },
-    { sql: 'CREATE INDEX IF NOT EXISTS idx_repair_comeback_original ON repair_comeback_links(original_work_order_id)' },
-    { sql: `CREATE TRIGGER IF NOT EXISTS trg_work_order_completion_requires_quality
-      BEFORE UPDATE OF status ON work_orders
-      WHEN NEW.status = 'complete' AND OLD.status <> 'complete'
-      BEGIN
-        SELECT CASE WHEN TRIM(COALESCE(NEW.diagnosis,'')) = '' OR TRIM(COALESCE(NEW.repair_notes,'')) = ''
-          THEN RAISE(ABORT,'Work order cannot be completed without diagnosis and repair notes') END;
-        SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM work_order_tasks WHERE work_order_id = NEW.id)
-          THEN RAISE(ABORT,'Work order cannot be completed without repair tasks') END;
-        SELECT CASE WHEN EXISTS (SELECT 1 FROM work_order_tasks WHERE work_order_id = NEW.id AND (status <> 'complete' OR technician_id IS NULL))
-          THEN RAISE(ABORT,'Work order cannot be completed with unfinished or unattributed tasks') END;
-        SELECT CASE WHEN COALESCE((SELECT result FROM repair_quality_reviews WHERE work_order_id = NEW.id ORDER BY reviewed_at DESC,id DESC LIMIT 1),'') <> 'pass'
-          THEN RAISE(ABORT,'Work order cannot be completed before passing QC') END;
-      END` },
-  ], 'write').catch(err => { schemaPromise = null; throw err; });
+  if (!schemaPromise) schemaPromise = (async()=>{
+    await ensureWorkOrderServiceEvidenceSchema();
+    await db.batch([
+      { sql: `CREATE TABLE IF NOT EXISTS technician_performance_events (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        technician_id INTEGER NOT NULL REFERENCES employees(id),
+        work_order_id INTEGER REFERENCES work_orders(id),
+        task_id INTEGER REFERENCES work_order_tasks(id),
+        event_type TEXT NOT NULL,
+        note TEXT,
+        recorded_by INTEGER REFERENCES employees(id),
+        occurred_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )` },
+      { sql: `CREATE TABLE IF NOT EXISTS repair_quality_reviews (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+        technician_id INTEGER NOT NULL REFERENCES employees(id),
+        result TEXT NOT NULL CHECK(result IN ('pass','fail')),
+        checklist_json TEXT NOT NULL DEFAULT '{}',
+        note TEXT,
+        reviewed_by INTEGER REFERENCES employees(id),
+        reviewed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )` },
+      { sql: `CREATE TABLE IF NOT EXISTS repair_comeback_links (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        original_work_order_id INTEGER NOT NULL REFERENCES work_orders(id),
+        comeback_work_order_id INTEGER REFERENCES work_orders(id),
+        technician_id INTEGER NOT NULL REFERENCES employees(id),
+        confirmed INTEGER NOT NULL DEFAULT 1,
+        reason TEXT NOT NULL,
+        recorded_by INTEGER REFERENCES employees(id),
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(original_work_order_id, comeback_work_order_id)
+      )` },
+      { sql: 'CREATE INDEX IF NOT EXISTS idx_repair_quality_work_order ON repair_quality_reviews(work_order_id, reviewed_at)' },
+      { sql: 'CREATE INDEX IF NOT EXISTS idx_repair_comeback_original ON repair_comeback_links(original_work_order_id)' },
+      { sql: `CREATE TRIGGER IF NOT EXISTS trg_work_order_completion_requires_quality
+        BEFORE UPDATE OF status ON work_orders
+        WHEN NEW.status = 'complete' AND OLD.status <> 'complete'
+        BEGIN
+          SELECT CASE WHEN TRIM(COALESCE(NEW.diagnosis,'')) = '' OR TRIM(COALESCE(NEW.repair_notes,'')) = ''
+            THEN RAISE(ABORT,'Work order cannot be completed without diagnosis and repair notes') END;
+          SELECT CASE WHEN NOT EXISTS (SELECT 1 FROM work_order_tasks WHERE work_order_id = NEW.id)
+            THEN RAISE(ABORT,'Work order cannot be completed without repair tasks') END;
+          SELECT CASE WHEN EXISTS (SELECT 1 FROM work_order_tasks WHERE work_order_id = NEW.id AND (status <> 'complete' OR technician_id IS NULL))
+            THEN RAISE(ABORT,'Work order cannot be completed with unfinished or unattributed tasks') END;
+          SELECT CASE WHEN COALESCE((SELECT result FROM repair_quality_reviews WHERE work_order_id = NEW.id ORDER BY reviewed_at DESC,id DESC LIMIT 1),'') <> 'pass'
+            THEN RAISE(ABORT,'Work order cannot be completed before passing QC') END;
+        END` },
+    ], 'write');
+  })().catch(err => { schemaPromise = null; throw err; });
   return schemaPromise;
 }
 
