@@ -3,10 +3,12 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {requirePermission}=require('../lib/permissions');
+const {ensureSupplierProcurementBaseSchema}=require('../lib/supplier-procurement-base-schema');
 let readyPromise=null;
 async function ensurePriceBreakHistory(){
   if(readyPromise)return readyPromise;
   readyPromise=(async()=>{
+    await ensureSupplierProcurementBaseSchema();
     await db.batch([
       {sql:`CREATE TABLE IF NOT EXISTS supplier_price_break_history(
         id INTEGER PRIMARY KEY AUTOINCREMENT,
