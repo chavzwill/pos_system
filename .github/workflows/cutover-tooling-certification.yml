@@ -1,0 +1,96 @@
+name: Production Cutover Tooling Certification
+
+on:
+  push:
+    branches:
+      - ops/production-cutover-tooling
+    paths:
+      - scripts/production-preflight.sh
+      - scripts/production-backup.sh
+      - scripts/production-restore.sh
+      - scripts/production-smoke.sh
+      - docker-compose.yml
+      - .github/workflows/cutover-tooling-certification.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify-cutover-tooling:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+
+      - name: Validate shell syntax
+        run: |
+          bash -n scripts/production-preflight.sh
+          bash -n scripts/production-backup.sh
+          bash -n scripts/production-restore.sh
+          bash -n scripts/production-smoke.sh
+
+      - name: Validate Compose configuration
+        run: docker compose config >/dev/null
+
+      - name: Prepare representative persisted state
+        run: |
+          mkdir -p data uploads/products uploads/po-attachments
+          printf 'certification-db-state\n' > data/pos.db
+          printf 'product-evidence\n' > uploads/products/certification.txt
+          printf 'po-evidence\n' > uploads/po-attachments/certification.txt
+          printf 'never-back-this-up\n' > .env
+
+      - name: Exercise stopped-state backup
+        id: backup
+        run: |
+          output="$(BACKUP_ROOT="$PWD/.cutover-test/backups" bash scripts/production-backup.sh)"
+          echo "$output"
+          archive="$(printf '%s\n' "$output" | sed -n 's/^BACKUP_ARCHIVE=//p')"
+          test -n "$archive"
+          test -s "$archive"
+          test -s "$archive.sha256"
+          echo "archive=$archive" >> "$GITHUB_OUTPUT"
+
+      - name: Verify backup contains state but no secrets
+        run: |
+          archive="${{ steps.backup.outputs.archive }}"
+          tar -tzf "$archive" | grep -q '^data/pos.db$'
+          tar -tzf "$archive" | grep -q '^uploads/products/certification.txt$'
+          if tar -tzf "$archive" | grep -Eq '(^|/)\.env$'; then
+            echo '.env leaked into backup' >&2
+            exit 1
+          fi
+          (cd "$(dirname "$archive")" && sha256sum -c "$(basename "$archive").sha256")
+
+      - name: Mutate working state before restore
+        run: |
+          printf 'mutated-db-state\n' > data/pos.db
+          rm -f uploads/products/certification.txt
+          printf 'post-backup-only\n' > uploads/products/post-backup.txt
+
+      - name: Exercise checksum-gated restore
+        run: |
+          RESTORE_CONFIRM=RESTORE bash scripts/production-restore.sh "${{ steps.backup.outputs.archive }}"
+          grep -qx 'certification-db-state' data/pos.db
+          grep -qx 'product-evidence' uploads/products/certification.txt
+          test ! -e uploads/products/post-backup.txt
+
+      - name: Prove bad checksum fails closed
+        run: |
+          archive="${{ steps.backup.outputs.archive }}"
+          cp "$archive" "$archive.tampered"
+          cp "$archive.sha256" "$archive.tampered.sha256"
+          printf 'tamper' >> "$archive.tampered"
+          if RESTORE_CONFIRM=RESTORE bash scripts/production-restore.sh "$archive.tampered"; then
+            echo 'tampered backup unexpectedly restored' >&2
+            exit 1
+          fi
+
+      - name: Verify preflight is non-destructive
+        run: |
+          before="$(sha256sum data/pos.db | awk '{print $1}')"
+          bash scripts/production-preflight.sh
+          after="$(sha256sum data/pos.db | awk '{print $1}')"
+          test "$before" = "$after"
