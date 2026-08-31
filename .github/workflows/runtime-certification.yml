@@ -8,6 +8,7 @@ on:
     paths:
       - .github/workflows/runtime-certification.yml
       - scripts/ci-runtime-bootstrap.js
+      - scripts/runtime-certification-trigger.txt
 
 permissions:
   contents: read
