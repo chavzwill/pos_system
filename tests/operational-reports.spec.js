@@ -12,6 +12,17 @@ async function loginCookie() {
   return (r.headers.get('set-cookie') || '').split(';')[0];
 }
 
+async function loginShell(page){
+  await page.goto('/app-shell.html');
+  const form=page.locator('#shell-login');
+  if(await form.count()){
+    await form.locator('input[name="username"]').fill(process.env.POS_TEST_USER||'admin');
+    await form.locator('input[name="password"]').fill(process.env.POS_TEST_PASSWORD||'123456');
+    await form.locator('button').first().click();
+  }
+  await expect(page.locator('.shell-app')).toBeVisible({timeout:10_000});
+}
+
 test.describe('Operational reports', () => {
   test('requires authentication and reports permission', async () => {
     const r = await fetch(`${BASE}/api/operational-reports/catalog`);
@@ -29,14 +40,16 @@ test.describe('Operational reports', () => {
     ]));
   });
 
-  test('native Operational Reports workspace assets are injected', async ({ page }) => {
-    await page.goto('/');
-    await page.fill('#login-user', 'admin');
-    await page.fill('#login-pass', '123456');
-    await page.click('button.login-btn');
-    await expect(page.locator('#tt-op-reports-launcher')).toBeVisible({ timeout: 8_000 });
-    await expect(page.locator('link[href="/operational-reports.css"]')).toHaveCount(1);
-    await expect(page.locator('script[src="/operational-reports.js"]')).toHaveCount(1);
+  test('native Operational Reports workspace assets load through the fast shell', async ({ page }) => {
+    await loginShell(page);
+    const opened=await page.evaluate(async()=>{
+      if(typeof window.TotalToolsShellOpen!=='function')return false;
+      await window.TotalToolsShellOpen('operational-reports','Reports');
+      return typeof window.TotalToolsOperationalReports?.open==='function';
+    });
+    expect(opened).toBe(true);
+    await expect(page.locator('link[href^="/operational-reports.css"]')).toHaveCount(1);
+    await expect(page.locator('script[src^="/operational-reports.js"]')).toHaveCount(1);
   });
 
   test('inventory movement report returns a structured result', async () => {
