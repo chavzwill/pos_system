@@ -12,7 +12,7 @@ const checks=[
  ['repair handoff requires real customer and branch addresses',handoff.includes('Repair logistics requires a usable customer address')&&handoff.includes('Repair branch requires a usable address before dispatch')],
  ['duplicate open repair logistics jobs are reused',handoff.includes("status NOT IN ('completed','cancelled')")&&handoff.includes('prior(')],
  ['repair dispatch snapshot preserves work order customer branch and equipment',handoff.includes('snapshot={work_order:')&&handoff.includes('customer:')&&handoff.includes('equipment:')],
- ['repair timeline receives dispatch handoff evidence',handoff.includes('repair_timeline_events')&&handoff.includes("'logistics_handoff'"))],
+ ['repair timeline receives dispatch handoff evidence',handoff.includes('repair_timeline_events')&&handoff.includes("'logistics_handoff'")],
  ['repair UI only exposes pickup on early stages',repairUi.includes("['intake','pending_deposit']")&&repairUi.includes('Send pickup to Dispatch')],
  ['repair UI only exposes return at completion stages',repairUi.includes("['complete','awaiting_pickup']")&&repairUi.includes('Send return delivery')],
  ['print renderer recognizes repair work orders',commercialUi.includes("d.document_kind==='repair_work_order'")&&commercialUi.includes('Customer equipment')],
