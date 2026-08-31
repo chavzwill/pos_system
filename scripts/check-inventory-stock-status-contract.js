@@ -14,7 +14,7 @@ const checks=[
   ['status event audit ledger exists',lib.includes('inventory_stock_status_events')],
   ['inspection stock is restricted',lib.includes("'inspection','blocked','quarantine','damaged','expired'")],
   ['status moves require reason evidence',lib.includes('A stock-status movement reason is required')],
-  ['status moves cannot exceed available stock',lib.includes('units are available for disposition')],
+  ['status moves cannot exceed available stock',lib.includes('state.available+1e-9<qty')&&lib.includes('are available for disposition')&&lib.includes('getActiveReservedQty')],
   ['actor identity comes from authenticated employee',route.includes('employeeId:req.employee?.id')],
   ['granular disposition permission exists',perms.includes("{ key: 'inventory_disposition' }")],
   ['POS checkout reads disposition-aware availability',checkout.includes("require('../lib/inventory-stock-status')")],
