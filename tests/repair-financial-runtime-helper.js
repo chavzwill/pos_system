@@ -16,9 +16,11 @@ export function registerRepairFinancialRuntimeCertification(){
     const branch=branches.body.find(b=>b.active!==0);test.skip(!branch,'Repair runtime certification requires an active branch');
     const suffix=`${Date.now()}${Math.random().toString(36).slice(2,6)}`;
     const username=`wrt_${suffix.slice(-12)}`,password=`Wr!${suffix}Aa1`,pin=String(Date.now()).slice(-6);
-    let customer=null,equipment=null,drawer=null,group=null,employee=null,session=null,wo=null;
+    let customer=null,equipment=null,drawer=null,group=null,employee=null,session=null,wo=null,priorAssessmentFee='';
     try{
-      let x=await api(admin.cookie,'/api/customers',{method:'POST',body:JSON.stringify({first_name:'Runtime',last_name:`Repair ${suffix}`,phone:'8765550201',address:'2 Runtime Repair Road',city:'Kingston',state:'Kingston',customer_type:'cash'})});
+      const settings=await api(admin.cookie,'/api/settings');expect(settings.status).toBe(200);priorAssessmentFee=String(settings.body?.wo_assessment_fee||'');
+      let x=await api(admin.cookie,'/api/settings',{method:'PUT',body:JSON.stringify({wo_assessment_fee:'50'})});expect(x.status,JSON.stringify(x.body)).toBe(200);
+      x=await api(admin.cookie,'/api/customers',{method:'POST',body:JSON.stringify({first_name:'Runtime',last_name:`Repair ${suffix}`,phone:'8765550201',address:'2 Runtime Repair Road',city:'Kingston',state:'Kingston',customer_type:'cash'})});
       expect(x.status).toBe(201);customer=x.body;
       x=await api(admin.cookie,'/api/repair-operations/equipment',{method:'POST',body:JSON.stringify({customer_id:customer.id,branch_id:branch.id,equipment_type:'Runtime Test Tool',brand:'Runtime',model:'Certification',serial_number:`RTWO-${suffix}`,notes:'Repair runtime certification asset'})});
       expect(x.status).toBe(201);equipment=x.body;
@@ -33,13 +35,13 @@ export function registerRepairFinancialRuntimeCertification(){
       expect(x.status).toBe(201);wo=x.body;expect(wo.status).toBe('intake');
       x=await api(operator.cookie,`/api/repair-operations/work-orders/${wo.id}/equipment`,{method:'PUT',body:JSON.stringify({equipment_id:equipment.id,intake_condition:'good',reported_issue:'Runtime certification fault',warranty_claim:false})});expect(x.status).toBe(200);expect(Number(x.body.equipment_id)).toBe(Number(equipment.id));
 
-      const assessment=r2(wo.assessment_fee);
-      if(assessment>0){const blocked=await api(operator.cookie,`/api/work-orders/${wo.id}/assessment-paid`,{method:'PATCH',body:JSON.stringify({payment_method:'cash',amount_tendered:assessment,employee_id:employee.id})});expect(blocked.status).toBe(409);expect(blocked.body?.control).toBe('work_order_cash_drawer');}
-      x=await api(operator.cookie,`/api/work-orders/${wo.id}/assessment-paid`,{method:'PATCH',body:JSON.stringify({payment_method:'cash',amount_tendered:assessment,employee_id:employee.id,drawer_session_id:session.id})});expect(x.status).toBe(200);expect(x.body.status).toBe('assessed');
+      const assessment=r2(wo.assessment_fee);expect(assessment).toBe(50);
+      const assessmentBlocked=await api(operator.cookie,`/api/work-orders/${wo.id}/assessment-paid`,{method:'PATCH',body:JSON.stringify({payment_method:'cash',amount_tendered:assessment,employee_id:employee.id})});expect(assessmentBlocked.status).toBe(409);expect(assessmentBlocked.body?.control).toBe('work_order_cash_drawer');
+      x=await api(operator.cookie,`/api/work-orders/${wo.id}/assessment-paid`,{method:'PATCH',body:JSON.stringify({payment_method:'cash',amount_tendered:assessment,employee_id:employee.id,drawer_session_id:session.id})});expect(x.status,JSON.stringify(x.body)).toBe(200);expect(x.body.status).toBe('assessed');
 
       x=await api(operator.cookie,`/api/work-orders/${wo.id}/estimate`,{method:'PATCH',body:JSON.stringify({estimate_labor:200,estimate_consumables:0,estimate_notes:'Runtime verified service estimate',deposit_amount:100,employee_id:employee.id})});expect(x.status).toBe(200);expect(x.body.status).toBe('pending_deposit');
       let blocked=await api(operator.cookie,`/api/work-orders/${wo.id}/deposit-paid`,{method:'PATCH',body:JSON.stringify({payment_method:'cash',amount_tendered:100,employee_id:employee.id})});expect(blocked.status).toBe(409);expect(blocked.body?.control).toBe('work_order_cash_drawer');
-      x=await api(operator.cookie,`/api/work-orders/${wo.id}/deposit-paid`,{method:'PATCH',body:JSON.stringify({payment_method:'cash',amount_tendered:100,employee_id:employee.id,drawer_session_id:session.id})});expect(x.status).toBe(200);expect(x.body.status).toBe('in_progress');
+      x=await api(operator.cookie,`/api/work-orders/${wo.id}/deposit-paid`,{method:'PATCH',body:JSON.stringify({payment_method:'cash',amount_tendered:100,employee_id:employee.id,drawer_session_id:session.id})});expect(x.status,JSON.stringify(x.body)).toBe(200);expect(x.body.status).toBe('in_progress');
 
       x=await api(operator.cookie,`/api/work-orders/${wo.id}/service-evidence`,{method:'PATCH',body:JSON.stringify({diagnosis:'Runtime diagnostic evidence confirms a controlled test fault.',repair_notes:'Runtime repair evidence confirms corrective service and verification.'})});expect(x.status).toBe(200);expect(x.body.diagnosis).toContain('Runtime diagnostic evidence');
       x=await api(operator.cookie,`/api/work-orders/${wo.id}/tasks`,{method:'POST',body:JSON.stringify({description:'Perform runtime certified corrective service',allotted_minutes:15,technician_id:employee.id})});expect(x.status).toBe(201);const task=x.body;
@@ -50,15 +52,14 @@ export function registerRepairFinancialRuntimeCertification(){
       x=await api(operator.cookie,`/api/work-orders/${wo.id}/notify`,{method:'PATCH',body:JSON.stringify({notification_method:'phone',employee_id:employee.id})});expect(x.status).toBe(200);expect(x.body.status).toBe('awaiting_pickup');
 
       blocked=await api(operator.cookie,`/api/work-orders/${wo.id}/final-payment`,{method:'PATCH',body:JSON.stringify({payment_method:'cash',amount_tendered:100,employee_id:employee.id})});expect(blocked.status).toBe(409);expect(blocked.body?.control).toBe('work_order_cash_drawer');
-      x=await api(operator.cookie,`/api/work-orders/${wo.id}/final-payment`,{method:'PATCH',body:JSON.stringify({payment_method:'cash',amount_tendered:100,employee_id:employee.id,drawer_session_id:session.id})});expect(x.status).toBe(200);expect(x.body.status).toBe('picked_up');
+      x=await api(operator.cookie,`/api/work-orders/${wo.id}/final-payment`,{method:'PATCH',body:JSON.stringify({payment_method:'cash',amount_tendered:100,employee_id:employee.id,drawer_session_id:session.id})});expect(x.status,JSON.stringify(x.body)).toBe(200);expect(x.body.status).toBe('picked_up');
 
       const detail=await api(operator.cookie,`/api/work-orders/${wo.id}`);expect(detail.status).toBe(200);expect(detail.body.assessment_transaction_id).toBeTruthy();expect(detail.body.deposit_transaction_id).toBeTruthy();expect(detail.body.final_transaction_id).toBeTruthy();
       const assessmentTxId=detail.body.assessment_transaction_id,depositTxId=detail.body.deposit_transaction_id,finalTxId=detail.body.final_transaction_id;
 
       const sync=await api(admin.cookie,'/api/accounting-source-sync/sync',{method:'POST',body:JSON.stringify({})});expect(sync.status).toBe(200);
       const journals=await api(admin.cookie,`/api/accounting-ledger/journals?branch_id=${branch.id}&limit=500`);expect(journals.status).toBe(200);
-      const assessmentJournal=journals.body.find(j=>j.source_type==='repair_assessment'&&String(j.source_id)===String(assessmentTxId));
-      if(assessment>0){expect(assessmentJournal).toBeTruthy();const d=await api(admin.cookie,`/api/accounting-ledger/journals/${assessmentJournal.id}`);expect(r2(line(d,'4100')?.credit)).toBe(assessment);expect(r2(d.body.totals?.difference)).toBe(0);}
+      const assessmentJournal=journals.body.find(j=>j.source_type==='repair_assessment'&&String(j.source_id)===String(assessmentTxId));expect(assessmentJournal).toBeTruthy();const assessmentDetail=await api(admin.cookie,`/api/accounting-ledger/journals/${assessmentJournal.id}`);expect(r2(line(assessmentDetail,'4100')?.credit)).toBe(assessment);expect(r2(assessmentDetail.body.totals?.difference)).toBe(0);
       const depositJournal=journals.body.find(j=>j.source_type==='repair_deposit'&&String(j.source_id)===String(depositTxId));expect(depositJournal).toBeTruthy();
       let jd=await api(admin.cookie,`/api/accounting-ledger/journals/${depositJournal.id}`);expect(r2(line(jd,'2200')?.credit)).toBe(100);expect(r2(jd.body.totals?.difference)).toBe(0);
       const serviceJournal=journals.body.find(j=>j.source_type==='repair_service'&&String(j.source_id)===String(wo.id));expect(serviceJournal).toBeTruthy();
@@ -69,6 +70,7 @@ export function registerRepairFinancialRuntimeCertification(){
       const history=await api(operator.cookie,`/api/repair-operations/equipment/${equipment.id}/history`);expect(history.status).toBe(200);expect(history.body.repairs.some(r=>Number(r.id)===Number(wo.id)&&r.status==='picked_up')).toBe(true);
       const drawerEvidence=await api(operator.cookie,`/api/drawers/sessions/${session.id}`);expect(drawerEvidence.status).toBe(200);const cash=drawerEvidence.body.net_tenders?.find(t=>t.payment_method==='cash');expect(cash).toBeTruthy();expect(r2(cash.gross_tender)).toBeGreaterThanOrEqual(r2(assessment+200));
     }finally{
+      await api(admin.cookie,'/api/settings',{method:'PUT',body:JSON.stringify({wo_assessment_fee:priorAssessmentFee})}).catch(()=>{});
       if(session&&session.status==='open')await api(admin.cookie,`/api/drawers/sessions/${session.id}/close`,{method:'PATCH',body:JSON.stringify({})}).catch(()=>{});
       if(employee)await api(admin.cookie,`/api/employees/${employee.id}`,{method:'PUT',body:JSON.stringify({first_name:employee.first_name,last_name:employee.last_name,username,active:0,security_group_id:group?.id||null,default_branch_id:branch.id,must_change_password:false})}).catch(()=>{});
       if(group)await api(admin.cookie,`/api/security-groups/${group.id}?reason=Repair%20runtime%20cleanup`,{method:'DELETE'}).catch(()=>{});
