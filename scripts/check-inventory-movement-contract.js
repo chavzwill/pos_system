@@ -5,7 +5,7 @@ const checks=[];const check=(n,p)=>checks.push({n,p:!!p});
 check('adjustment hardening mounted before products',server.indexOf("require('./routes/inventory-adjustment-hardening')")>=0&&server.indexOf("require('./routes/inventory-adjustment-hardening')")<server.indexOf("require('./routes/products')"));
 check('transfer hardening mounted before legacy transfers',server.indexOf("require('./routes/transfer-valuation-hardening')")>=0&&server.indexOf("require('./routes/transfer-valuation-hardening')")<server.indexOf("require('./routes/transfers')"));
 check('adjustments reject negative physical stock',adj.includes('Adjustment would make branch stock negative')&&adj.includes('Adjustment would make global stock negative'));
-check('adjustments require reason evidence',adj.includes('A stock-adjustment reason is required'));
+check('adjustments require reason evidence',adj.includes("if(reason.length<5)")&&adj.includes('A meaningful stock-adjustment reason is required')&&adj.includes('inventory_adjustment_control_events')&&adj.includes('reason,approval.approvalReason'));
 check('positive adjustments remain unknown-cost legacy',val.includes('positive_adjustment_cost_unknown')&&val.includes('legacy-unlayered'));
 check('negative adjustments consume valuation pool',val.includes('removeFromPool')&&val.includes('inventory_adjustment_valuations'));
 check('transfer valuation preserves in-transit composition',val.includes('inventory_transfer_valuations')&&val.includes('tracked_value')&&val.includes('legacy_quantity'));
