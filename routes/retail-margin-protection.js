@@ -55,7 +55,7 @@ async function authorizeOverride(req){
   if(reason.length<5)return {error:'A meaningful margin override reason is required.'};
   const {rows:employees}=await db.execute({sql:`SELECT e.id,e.first_name,e.last_name,e.pin,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.active=1`,args:[]});
   const authorizer=employees.find(e=>String(e.pin)===pin&&(()=>{let p={};try{p=JSON.parse(e.permissions||'{}');}catch{}return can(p,'reports_financial')||can(p,'security_manage');})());
-  if(!authorizer)return {error:'Invalid supervisor PIN or insufficient supplier-payment approval authority.'.replace('supplier-payment','margin override')};
+  if(!authorizer)return {error:'Invalid supervisor PIN or insufficient margin-override authority.'};
   if(!await settingBool('loss_control_margin_override_allow_self',false)&&req.employee&&String(authorizer.id)===String(req.employee.id))return {error:'Independent supervisor authorization is required for a below-floor margin sale.'};
   return {authorizer,reason};
 }
@@ -79,6 +79,11 @@ async function persistOverride(req,payload,ev){
 }
 router.use(async(req,res,next)=>{try{await ensureMarginProtection();next();}catch(e){res.status(500).json({error:'Retail margin protection initialization failed',detail:e.message});}});
 router.post('/',requirePermission('pos'),async(req,res,next)=>{
+  // This router is reached through both the UOM commercial-control chain and
+  // checkout hardening. Evaluate exactly once per request: an approved override
+  // deliberately removes the raw PIN before downstream processing, so a second
+  // evaluation must reuse the first decision rather than demand the secret again.
+  if(req.retailMarginEvidence)return next();
   const accessError=branchAccessError(req);if(accessError)return res.status(403).json({error:accessError,control:'retail_branch_access'});
   let ev;try{ev=await evaluate(req);}catch(e){return res.status(e.status||500).json({error:e.message,...(e.details||{})});}
   if(!ev)return next();
