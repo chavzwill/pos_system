@@ -1,13 +1,14 @@
-name: Production Container Certification
+name: Final Production Runtime Certification
 
 on:
   push:
     branches:
-      - infra/node22-container-certification
+      - infra/sqlite-production-tuning
     paths:
       - Dockerfile
       - docker-entrypoint.sh
       - docker-compose.yml
+      - lib/local-sqlite-runtime.js
       - package.json
       - package-lock.json
       - .github/workflows/container-certification.yml
@@ -17,28 +18,60 @@ permissions:
   contents: read
 
 concurrency:
-  group: production-container-certification-${{ github.ref }}
+  group: final-production-runtime-certification-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
-  certify-container:
+  certify-production-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 20
+    timeout-minutes: 40
+    env:
+      POS_TEST_USER: admin
+      POS_TEST_PASSWORD: '123456'
+      CI: '1'
     steps:
       - name: Checkout candidate
         uses: actions/checkout@v4
 
+      - name: Use certified Node.js major
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Require zero production dependency vulnerabilities
+        run: npm audit --omit=dev
+
+      - name: Install Chromium runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Bootstrap isolated release-gate database
+        env:
+          TURSO_DATABASE_URL: ''
+          TURSO_AUTH_TOKEN: ''
+        run: |
+          rm -f pos.db pos.db-shm pos.db-wal
+          node scripts/ci-runtime-bootstrap.js
+
+      - name: Run full application release gate
+        env:
+          TURSO_DATABASE_URL: ''
+          TURSO_AUTH_TOKEN: ''
+        run: npm run test:release-gate -- --workers=1
+
       - name: Build production image
         run: docker build --pull -t total-tools-pos:certified .
 
-      - name: Verify certified Node major
+      - name: Verify production image Node major
         run: |
           major="$(docker run --rm --entrypoint node total-tools-pos:certified -p 'process.versions.node.split(".")[0]')"
           test "$major" = "22"
 
       - name: Prepare isolated persistent storage
-        run: |
-          mkdir -p .container-test/data .container-test/uploads
+        run: mkdir -p .container-test/data .container-test/uploads
 
       - name: Start production container
         run: |
@@ -90,11 +123,37 @@ jobs:
       - name: Verify persisted SQLite database exists
         run: test -s .container-test/data/pos.db
 
+      - name: Verify configured local SQLite WAL and busy timeout
+        run: |
+          docker exec total-tools-pos-cert node --require ./lib/local-sqlite-runtime.js -e '
+            (async () => {
+              const { ensureReady, db } = require("./database");
+              await ensureReady();
+              const journal = await db.execute({ sql: "PRAGMA journal_mode", args: [] });
+              const busy = await db.execute({ sql: "PRAGMA busy_timeout", args: [] });
+              const journalValue = String(Object.values(journal.rows[0] || {})[0] || "").toLowerCase();
+              const busyValue = Number(Object.values(busy.rows[0] || {})[0] || 0);
+              if (journalValue !== "wal") throw new Error(`Expected WAL journal mode, got ${journalValue}`);
+              if (busyValue !== 5000) throw new Error(`Expected busy_timeout=5000, got ${busyValue}`);
+            })().catch((error) => { console.error(error); process.exit(1); });
+          '
+
       - name: Verify non-root application process
         run: |
           pid1_uid="$(docker exec total-tools-pos-cert sh -lc "awk '/^Uid:/{print \$2}' /proc/1/status")"
           app_uid="$(docker exec total-tools-pos-cert id -u app)"
           test "$pid1_uid" = "$app_uid"
+
+      - name: Upload Playwright diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-production-runtime-diagnostics
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
 
       - name: Show container logs on failure
         if: failure()
