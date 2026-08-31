@@ -11,16 +11,16 @@ async function validateCashDrawer(req,res,next){
     const method=String(req.body?.payment_method||'cash').toLowerCase();
     if(method!=='cash')return next();
     if(req.apiKey)return res.status(403).json({error:'Repair cash payments require an authenticated employee drawer session',control:'work_order_cash_drawer'});
-    const {rows:[wo]}=await db.execute({sql:'SELECT id,branch_id,status FROM work_orders WHERE id=?',args:[Number(m[1])]});
+    const {rows:[wo]}=await db.execute({sql:'SELECT id,branch_id,status,assessment_fee,deposit_amount,estimate_labor,estimate_consumables FROM work_orders WHERE id=?',args:[Number(m[1])]});
     if(!wo)return next();
-    // final-payment can legitimately have zero balance; the downstream route
-    // decides that. Requiring a drawer when no cash will move would be wrong.
-    if(m[2]==='final-payment'){
+    let amount=0;
+    if(m[2]==='assessment-paid')amount=Number(wo.assessment_fee||0);
+    else if(m[2]==='deposit-paid')amount=Number(wo.deposit_amount||0);
+    else{
       const {rows:[parts]}=await db.execute({sql:'SELECT COALESCE(SUM(total),0) total FROM work_order_items WHERE work_order_id=?',args:[wo.id]});
-      const {rows:[full]}=await db.execute({sql:'SELECT estimate_labor,estimate_consumables,deposit_amount FROM work_orders WHERE id=?',args:[wo.id]});
-      const balance=Math.max(0,Number(((Number(full?.estimate_labor||0)+Number(full?.estimate_consumables||0)+Number(parts?.total||0)-Number(full?.deposit_amount||0))).toFixed(2)));
-      if(balance<=0)return next();
+      amount=Math.max(0,Number((Number(wo.estimate_labor||0)+Number(wo.estimate_consumables||0)+Number(parts?.total||0)-Number(wo.deposit_amount||0)).toFixed(2)));
     }
+    if(amount<=0)return next();
     const employeeId=Number(req.employee?.id||req.body?.employee_id)||null;
     const drawerId=Number(req.body?.drawer_session_id)||null;
     if(!employeeId||!drawerId)return res.status(409).json({error:'Cash repair payment requires the cashier and an open drawer session.',control:'work_order_cash_drawer'});
