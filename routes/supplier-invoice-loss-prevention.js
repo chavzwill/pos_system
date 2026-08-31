@@ -3,6 +3,7 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {can}=require('../lib/permissions');
+const {ensureSupplierLedgerBase}=require('../lib/supplier-ledger-base-schema');
 
 let readyPromise=null;
 const money=v=>Number(Number(v||0).toFixed(2));
@@ -12,6 +13,7 @@ function mayOverride(req){return !!req.apiKey||!!req.employee&&(can(req.employee
 async function ensureSchema(){
   if(readyPromise)return readyPromise;
   readyPromise=(async()=>{
+    await ensureSupplierLedgerBase();
     await db.batch([
       {sql:`CREATE TABLE IF NOT EXISTS supplier_invoice_match_controls(
         supplier_invoice_id INTEGER PRIMARY KEY REFERENCES supplier_invoices(id),
@@ -42,8 +44,6 @@ async function ensureSchema(){
       {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_invoice_match_po ON supplier_invoice_match_controls(purchase_order_id,match_status)'},
       {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_invoice_match_status ON supplier_invoice_match_controls(match_status,created_at)'}
     ],'write');
-    // Existing AP predates three-way match evidence. Do not silently grandfather it
-    // into payment eligibility: create explicit legacy-review records instead.
     const {rows:legacy}=await db.execute({sql:`SELECT si.id,si.supplier_id,si.purchase_order_id,si.invoice_number,si.subtotal FROM supplier_invoices si LEFT JOIN supplier_invoice_match_controls c ON c.supplier_invoice_id=si.id WHERE c.supplier_invoice_id IS NULL AND si.status!='void' ORDER BY si.id`,args:[]});
     for(const inv of legacy){
       const normalized=normalizeInvoiceNumber(inv.invoice_number)||`INVOICE${inv.id}`;
@@ -137,7 +137,7 @@ router.post('/payments',async(req,res,next)=>{
 });
 
 router.get('/invoice-matches',async(req,res)=>{
-  try{const args=[];let sql=`SELECT c.*,si.invoice_number,si.invoice_date,si.total,si.status,s.name supplier_name,po.po_number FROM supplier_invoice_match_controls c JOIN supplier_invoices si ON si.id=c.supplier_invoice_id JOIN suppliers s ON s.id=c.supplier_id LEFT JOIN purchase_orders po ON po.id=c.purchase_order_id WHERE 1=1`;if(req.query.status){sql+=' AND c.match_status=?';args.push(req.query.status);}if(req.query.supplier_id){sql+=' AND c.supplier_id=?';args.push(req.query.supplier_id);}sql+=' ORDER BY c.created_at DESC,c.supplier_invoice_id DESC LIMIT 500';const {rows}=await db.execute({sql,args});res.json(rows);}catch(e){res.status(500).json({error:e.message});}
+  try{const args=[];let sql=`SELECT c.*,si.invoice_number,si.invoice_date,si.total,si.status,s.name supplier_name,po.po_number FROM supplier_invoice_match_controls c JOIN supplier_invoices si ON si.id=c.supplier_invoice_id JOIN suppliers s ON s.id=c.supplier_id LEFT JOIN purchase_orders po ON po.id=c.purchase_order_id WHERE 1=1`;if(req.query.status){sql+=' AND c.match_status=?';args.push(req.query.status);}if(req.query.supplier_id){sql+=' AND c.supplier_id=?';args.push(req.query.supplier_id);}sql+=' ORDER BY c.created_at DESC,c.supplier_invoice_id DESC LIMIT 500';const{rows}=await db.execute({sql,args});res.json(rows);}catch(e){res.status(500).json({error:e.message});}
 });
 
 router.post('/invoice-matches/:invoiceId/review',async(req,res)=>{
