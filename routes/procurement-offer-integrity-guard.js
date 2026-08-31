@@ -2,8 +2,10 @@
 const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
+const {ensureSupplierProcurementBaseSchema}=require('../lib/supplier-procurement-base-schema');
 async function validate(req,res,next){
   try{
+    await ensureSupplierProcurementBaseSchema();
     const isUpdate=!!req.params.id,b=req.body||{};let existing=null;
     if(isUpdate){const {rows:[row]}=await db.execute({sql:'SELECT * FROM supplier_product_offers WHERE id=?',args:[Number(req.params.id)]});if(!row)return res.status(404).json({error:'Supplier offer not found'});existing=row;}
     const merged={...(existing||{}),...b},supplierId=Number(merged.supplier_id),productId=Number(merged.product_id),supplierSku=String(merged.supplier_sku||'').trim(),currency=String(merged.currency||'JMD').trim().toUpperCase();
