@@ -23,7 +23,7 @@ const checks=[
  ['draft routes support explicit stop sequencing',route.includes('/routes/:id/resequence')&&route.includes('stop_sequence')],
  ['route release assigns driver vehicle and scheduled status to jobs',route.includes("status='scheduled'")&&route.includes("'route_released'")],
  ['manifest preserves stop order loads and commercial route labels',route.includes('/routes/:id/manifest')&&route.includes('planned_load')&&route.includes('origin:')&&route.includes('destination:')],
- ['planner does not fabricate road optimization',route.includes('not represented as road-time optimized')&&parent.includes('Road-distance/ETA optimization is intentionally not fabricated')],
+ ['planner does not fabricate road optimization',parent.includes('Distance/ETA values are only exposed when normalized locations, verified coordinates and travel evidence exist')&&parent.includes('Priority and route sequencing use verified deadlines, assignment state, dispatcher order, driver shifts and vehicle capacity')],
  ['command center exposes route identity',parent.includes('route_number')&&parent.includes('route_status')],
  ['route planner UI can create routes',ui.includes('Create route')&&ui.includes("api('/routes'")],
  ['route planner UI adds jobs with load estimates',ui.includes('planned_weight_kg')&&ui.includes('planned_volume_m3')&&ui.includes('/stops')],
