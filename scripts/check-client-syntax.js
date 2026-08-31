@@ -41,3 +41,4 @@ require('./check-pos-financial-runtime-contract');
 require('./check-purchasing-financial-runtime-prerequisites');
 require('./check-rental-financial-runtime-prerequisites');
 require('./check-repair-financial-runtime-prerequisites');
+require('./check-dispatch-field-runtime-prerequisites');
