@@ -21,15 +21,22 @@ async function sourceBranch(table,id){
 }
 function numericId(path,re){const m=path.match(re);return m?Number(m[1]):null;}
 
-// Mounted here because this guard already runs immediately after authentication
-// for every /api request. This keeps the dispatch runtime boundary ahead of the
-// legacy logistics router without duplicating application-shell registration.
 router.use('/logistics-intelligence',require('./logistics-runtime-integrity-guard'));
 
 router.use(async(req,res,next)=>{
   try{
     if(req.apiKey||!req.employee||req.method==='GET'||req.method==='HEAD'||req.method==='OPTIONS')return next();
     const p=req.path;
+
+    // POS transaction creation is a branch-custody event. Enforce the branch
+    // boundary before traceability, reservation, margin, drawer, or product
+    // validation can expose business-state information from another branch.
+    if(p==='/transactions'&&req.method==='POST'){
+      if(!assertBranch(req,res,req.body?.branch_id))return;
+      req.body ||= {};
+      req.body.employee_id=req.employee.id;
+      return next();
+    }
 
     if(/^\/products\/\d+\/stock$/.test(p)&&req.method==='PATCH'){
       if(!assertBranch(req,res,req.body?.branch_id))return;
@@ -88,10 +95,6 @@ router.use(async(req,res,next)=>{
       return next();
     }
 
-    // A transfer is cross-branch by definition, but an ordinary branch user may
-    // only originate stock from their own branch and may only receive into their
-    // own branch. Branch/Security administrators retain deliberate network-wide
-    // authority. This protects stock custody without disabling real transfers.
     if(p==='/transfers'&&req.method==='POST'){
       if(!assertBranch(req,res,req.body?.from_branch_id))return;
       return next();
