@@ -2,6 +2,7 @@ import { test, expect } from '@playwright/test';
 import { registerPurchasingFinancialRuntimeCertification } from './purchasing-financial-runtime-helper.js';
 import { registerRentalFinancialRuntimeCertification } from './rental-financial-runtime-helper.js';
 import { registerRepairFinancialRuntimeCertification } from './repair-financial-runtime-helper.js';
+import { registerDispatchFieldRuntimeCertification } from './dispatch-field-runtime-helper.js';
 
 const BASE = 'http://localhost:3001';
 
@@ -139,3 +140,4 @@ test.describe('Cross-module business integrity', () => {
 registerPurchasingFinancialRuntimeCertification();
 registerRentalFinancialRuntimeCertification();
 registerRepairFinancialRuntimeCertification();
+registerDispatchFieldRuntimeCertification();
