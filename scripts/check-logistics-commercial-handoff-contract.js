@@ -9,7 +9,7 @@ const checks=[
  ['purchase orders can create supplier pickup jobs',route.includes('/from-purchase-order/:id')&&route.includes("jobType:'supplier_pickup'")],
  ['supplier pickup carries supplier identity contact and address',route.includes('supplier_contact')&&route.includes('supplier_phone')&&route.includes('supplier_email')&&route.includes('supplierAddress')],
  ['supplier pickup requires usable supplier address',route.includes('Supplier pickup cannot be dispatched until the supplier has a usable address')],
- ['supplier pickup destination is the receiving branch',route.includes('destination=branchAddr(po)')&&route.includes('receiving branch')],
+ ['supplier pickup destination is the receiving branch',route.includes('supplierAddress=addr(po),destination=branchAddr(po)')&&route.includes('Receiving branch requires a usable address')&&route.includes('branch_address:destination')],
  ['draft or cancelled PO cannot silently enter dispatch',route.includes("['sent','approved','partial']")],
  ['PO items are frozen into dispatch evidence',route.includes('purchase_order_items')&&route.includes('snapshot:{purchase_order:')],
  ['completed sales invoices can create customer delivery jobs',route.includes('/from-sales-invoice/:id')&&route.includes("jobType:'customer_delivery'")&&route.includes("String(tx.status)!=='completed'")],
@@ -28,7 +28,7 @@ const checks=[
  ['dispatch UI surfaces document party contact and address packet',ui.includes('data-dispatch-packet')&&ui.includes('contact_phone')&&ui.includes('address_line')],
  ['dispatch packet exposes view and print document control',ui.includes('View / print document')&&ui.includes('window.print()')&&ui.includes('openDocument(d)')],
  ['printed document is rendered from immutable snapshot line items',ui.includes('d.snapshot?.items')&&ui.includes('Frozen handoff copy captured for logistics execution')],
- ['printed document explains snapshot immutability',ui.includes('does not silently rewrite itself')&&ui.includes('originating PO, invoice or rental record later changes')],
+ ['printed document explains snapshot immutability',ui.includes('does not silently rewrite itself')&&ui.includes('originating PO, invoice, rental or repair record later changes')],
  ['document renderer HTML-escapes commercial source values',ui.includes('const esc=')&&ui.includes('esc(d.party_name)')&&ui.includes('esc(d.document_number)')],
  ['commercial handoff UI is deferred through the application shell',deferred.includes('/logistics-commercial-handoff.js')]
 ];
