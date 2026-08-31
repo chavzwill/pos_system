@@ -55,7 +55,7 @@ test.describe('Purchase order lifecycle hardening', () => {
 
     const over = await api(cookie, 'PATCH', `/api/purchase-orders/${po.id}/receive`, { items: [{ item_id: item.id, quantity_received: 3 }] });
     expect(over.status).toBe(400);
-    expect(over.body.error).toMatch(/only 2 remain open/i);
+    expect(over.body.error).toMatch(/over-receipt.*requires an exception reason/i);
 
     const received = await api(cookie, 'PATCH', `/api/purchase-orders/${po.id}/receive`, { items: [{ item_id: item.id, quantity_received: 2 }] });
     expect(received.status).toBe(200);
