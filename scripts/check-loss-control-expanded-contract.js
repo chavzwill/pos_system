@@ -52,7 +52,7 @@ const checks=[
  ['supplier invoice guard never creates purchase orders',!invoiceGuard.includes('INSERT INTO purchase_orders')],
  ['supplier payment guard is mounted before supplier ledger posting',server.indexOf("app.use('/api/supplier-ledger', require('./routes/supplier-payment-loss-prevention'))")>=0&&server.indexOf("supplier-payment-loss-prevention")<server.indexOf("app.use('/api/supplier-ledger', require('./routes/supplier-ledger'))")],
  ['supplier payment reference is normalized before comparison',paymentGuard.includes("replace(/[^A-Z0-9]/g,'')")&&paymentGuard.includes('supplier_payments WHERE supplier_id=?')],
- ['duplicate supplier payment reference requires independent supervisor approval',paymentGuard.includes('Independent supervisor authorization is required when reusing a supplier payment reference')],
+ ['duplicate supplier payment reference requires independent supervisor approval',paymentGuard.includes('Independent approval is required before another payment can use it')&&paymentGuard.includes('Independent supervisor authorization is required for a suspicious supplier payment.')&&paymentGuard.includes("can(p,'reports_financial')||can(p,'security_manage')"))],
  ['duplicate supplier payment override is durably recorded',paymentGuard.includes('supplier_payment_override_events')&&paymentGuard.includes('prior_payment_ids')],
  ['raw duplicate-payment PIN is stripped before ledger posting',paymentGuard.includes('delete req.body.duplicate_payment_override_pin')],
  ['operational loss module never mutates inventory',!operational.includes('UPDATE products SET stock_qty')&&!operational.includes('UPDATE branch_inventory SET stock_qty')],
