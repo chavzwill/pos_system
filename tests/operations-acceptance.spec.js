@@ -13,12 +13,22 @@ async function loginToOperationsShell(page) {
 
 function collectRuntimeFailures(page) {
   const failures = [];
-  page.on('pageerror', error => failures.push(`pageerror: ${error.message}`));
+  page.on('pageerror', error => failures.push(`pageerror: ${error.stack || error.message}`));
   page.on('console', message => {
-    if (message.type() === 'error') failures.push(`console: ${message.text()}`);
+    if (message.type() === 'error') {
+      const loc=message.location();
+      failures.push(`console: ${message.text()} @ ${loc.url || 'unknown'}:${loc.lineNumber ?? '?'}:${loc.columnNumber ?? '?'}`);
+    }
+  });
+  page.on('response', response => {
+    if (response.status() >= 400) failures.push(`http ${response.status()}: ${response.request().method()} ${response.url()}`);
   });
   page.on('requestfailed', request => failures.push(`requestfailed: ${request.method()} ${request.url()} ${request.failure()?.errorText || ''}`));
   return failures;
+}
+
+function failedHealthChecks(dialog){
+  return dialog.locator('.tt-mr__checks article.is-fail').evaluateAll(nodes=>nodes.map(node=>node.textContent?.replace(/\s+/g,' ').trim()||'unknown health check'));
 }
 
 test.describe('Total Tools Operations acceptance', () => {
@@ -57,7 +67,8 @@ test.describe('Total Tools Operations acceptance', () => {
 
     await expect(dialog.locator('.tt-mr__checks article').first()).toBeVisible({ timeout: 15_000 });
     await expect(dialog.getByText(/DEGRADED/)).toHaveCount(0);
-    await expect(dialog.locator('.is-fail')).toHaveCount(0);
+    const healthFailures=await failedHealthChecks(dialog);
+    expect(healthFailures, healthFailures.join('\n')).toEqual([]);
 
     const checkNames = await dialog.locator('.tt-mr__checks article strong').allTextContents();
     expect(checkNames).toEqual(expect.arrayContaining([
