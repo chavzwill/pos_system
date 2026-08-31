@@ -1,0 +1,96 @@
+name: Production Container Certification
+
+on:
+  push:
+    branches:
+      - infra/node22-container-certification
+    paths:
+      - Dockerfile
+      - docker-entrypoint.sh
+      - docker-compose.yml
+      - package.json
+      - package-lock.json
+      - .github/workflows/container-certification.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-container-certification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify-container:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+
+      - name: Build production image
+        run: docker build --pull -t total-tools-pos:certified .
+
+      - name: Verify certified Node major
+        run: |
+          major="$(docker run --rm --entrypoint node total-tools-pos:certified -p 'process.versions.node.split(".")[0]')"
+          test "$major" = "22"
+
+      - name: Prepare isolated persistent storage
+        run: |
+          mkdir -p .container-test/data .container-test/uploads
+
+      - name: Start production container
+        run: |
+          docker run -d \
+            --name total-tools-pos-cert \
+            -p 127.0.0.1:3001:3001 \
+            -e TURSO_DATABASE_URL=file:/app/data/pos.db \
+            -e TURSO_AUTH_TOKEN= \
+            -v "$PWD/.container-test/data:/app/data" \
+            -v "$PWD/.container-test/uploads:/app/uploads" \
+            total-tools-pos:certified
+
+      - name: Wait for application health
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:3001/ >/tmp/pos-root.html; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs total-tools-pos-cert
+          exit 1
+
+      - name: Verify Docker health status
+        run: |
+          for attempt in $(seq 1 45); do
+            status="$(docker inspect --format='{{.State.Health.Status}}' total-tools-pos-cert)"
+            if [ "$status" = "healthy" ]; then
+              exit 0
+            fi
+            if [ "$status" = "unhealthy" ]; then
+              docker logs total-tools-pos-cert
+              exit 1
+            fi
+            sleep 1
+          done
+          docker inspect total-tools-pos-cert
+          docker logs total-tools-pos-cert
+          exit 1
+
+      - name: Verify persisted SQLite database exists
+        run: test -s .container-test/data/pos.db
+
+      - name: Verify non-root application process
+        run: |
+          user="$(docker exec total-tools-pos-cert sh -lc 'id -un')"
+          test "$user" = "app"
+
+      - name: Show container logs on failure
+        if: failure()
+        run: docker logs total-tools-pos-cert || true
+
+      - name: Stop test container
+        if: always()
+        run: docker rm -f total-tools-pos-cert || true
