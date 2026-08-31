@@ -33,8 +33,8 @@ function failedHealthChecks(dialog){
 
 test.describe('Total Tools Operations acceptance', () => {
   test('role-aware shell, navigation and operational registry are healthy', async ({ page }) => {
-    const failures = collectRuntimeFailures(page);
     await loginToOperationsShell(page);
+    const failures = collectRuntimeFailures(page);
 
     const domains = page.locator('.shell-nav [data-domain]');
     const cards = page.locator('.shell-card');
@@ -54,8 +54,8 @@ test.describe('Total Tools Operations acceptance', () => {
   });
 
   test('system health validates real authenticated payloads', async ({ page }) => {
-    const failures = collectRuntimeFailures(page);
     await loginToOperationsShell(page);
+    const failures = collectRuntimeFailures(page);
 
     const healthButton = page.getByRole('button', { name: /system health/i });
     await expect(healthButton).toBeVisible({ timeout: 8_000 });
@@ -86,8 +86,8 @@ test.describe('Total Tools Operations acceptance', () => {
   });
 
   test('major workflow workspaces initialize through the hardened loader', async ({ page }) => {
-    const failures = collectRuntimeFailures(page);
     await loginToOperationsShell(page);
+    const failures = collectRuntimeFailures(page);
 
     const targets = [
       ['sales-workspace','TotalToolsSalesWorkspace'],
