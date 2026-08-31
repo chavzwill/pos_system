@@ -36,14 +36,19 @@ jobs:
           node-version: 22
           cache: npm
 
-      - name: Upgrade Multer and regenerate lockfile
-        run: npm install multer@2.2.0 --save-exact --package-lock-only --ignore-scripts
+      - name: Apply targeted security dependency updates
+        run: |
+          npm install multer@2.2.0 nodemailer@9.0.1 body-parser@1.20.6 --save-exact --package-lock-only --ignore-scripts
+          npm update qs --package-lock-only --ignore-scripts
 
       - name: Install locked dependencies
         run: npm ci
 
       - name: Fail on high or critical production vulnerabilities
         run: npm audit --omit=dev --audit-level=high
+
+      - name: Report remaining production audit findings
+        run: npm audit --omit=dev || true
 
       - name: Install Chromium runtime
         run: npx playwright install --with-deps chromium
@@ -64,7 +69,7 @@ jobs:
           if git diff --cached --quiet; then
             echo "Dependency files already current."
           else
-            git commit -m "Upgrade Multer to 2.2.0 after security certification"
+            git commit -m "Harden production dependencies after security certification"
             git push
           fi
 
