@@ -26,7 +26,7 @@ const checks=[
  ['rental logistics does not bypass rental controls',route.includes('rental issue/return controls remain authoritative')],
  ['sales fulfillment only becomes delivered at completion',route.includes("if(stage==='completed')")&&route.includes("fulfillment_status='delivered'")&&route.includes('sales_logistics_sync')],
  ['command center exposes execution and vehicle context',parent.includes('execution_stage')&&parent.includes('vehicle_number')&&parent.includes('registration_number')],
- ['dispatcher UI can register a vehicle',ui.includes('Add dispatch vehicle')&&ui.includes("api('/vehicles'"))],
+ ['dispatcher UI can register a vehicle',ui.includes('Add dispatch vehicle')&&ui.includes("api('/vehicles'")],
  ['dispatcher UI assigns driver and vehicle together',ui.includes('data-driver')&&ui.includes('data-vehicle')&&ui.includes('/assign')],
  ['dispatcher UI follows ordered field stages',ui.includes('Depart for origin')&&ui.includes('Arrived at origin')&&ui.includes('Confirm pickup / custody')&&ui.includes('Arrived destination')],
  ['dispatcher UI captures photo capable proof',ui.includes('type="file"')&&ui.includes('/proof')&&ui.includes('Add delivery proof')],
