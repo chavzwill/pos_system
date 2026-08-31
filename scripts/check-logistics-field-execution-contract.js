@@ -15,7 +15,7 @@ const checks=[
  ['destination arrival is distinct from completion',route.includes('arrive_destination')&&route.includes('at_destination')],
  ['dispatch proof supports pickup and delivery evidence',route.includes("proof_type must be pickup or delivery")&&route.includes('dispatch_proofs')],
  ['proof supports recipient signature photo evidence and coordinates',route.includes('recipient_name')&&route.includes('signature_name')&&route.includes('photo_url')&&route.includes('latitude')&&route.includes('longitude')],
- ['proof photos have size and type controls',route.includes('12*1024*1024')&&route.includes("'image/jpeg'")&&route.includes("'image/png'")&&route.includes("'image/webp'"))],
+ ['proof photos have size and type controls',route.includes('12*1024*1024')&&route.includes("'image/jpeg'")&&route.includes("'image/png'")&&route.includes("'image/webp'")],
  ['delivery completion requires proof',route.includes('Delivery/receipt proof is required before dispatch completion')],
  ['completion releases the dispatch vehicle',route.includes("SET status='available'")&&route.includes("stage='completed'"))],
  ['failed attempts require a reason',route.includes('Failure reason is required')&&route.includes("stage='failed'"))],
