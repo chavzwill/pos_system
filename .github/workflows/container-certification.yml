@@ -5,10 +5,13 @@ on:
     branches:
       - infra/sqlite-production-tuning
       - ops/production-cutover-tooling
+      - ops/host-ready-deployment
     paths:
       - Dockerfile
       - docker-entrypoint.sh
       - docker-compose.yml
+      - docker-compose.host.yml
+      - deploy/Caddyfile
       - lib/local-sqlite-runtime.js
       - package.json
       - package-lock.json
@@ -17,6 +20,8 @@ on:
       - scripts/production-restore.sh
       - scripts/production-smoke.sh
       - docs/PRODUCTION_CUTOVER_RUNBOOK.md
+      - docs/PRODUCTION_HOST_PROFILE.md
+      - .env.production.example
       - .github/workflows/container-certification.yml
   workflow_dispatch:
 
@@ -30,7 +35,7 @@ concurrency:
 jobs:
   certify-production-runtime:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 50
     env:
       POS_TEST_USER: admin
       POS_TEST_PASSWORD: '123456'
@@ -157,6 +162,45 @@ jobs:
           app_uid="$(docker exec total-tools-pos-cert id -u app)"
           test "$pid1_uid" = "$app_uid"
 
+      - name: Validate host Compose profile
+        env:
+          POS_DOMAIN: http://localhost
+        run: docker compose -f docker-compose.yml -f docker-compose.host.yml config >/tmp/host-compose.yml
+
+      - name: Validate Caddy reverse proxy configuration
+        env:
+          POS_DOMAIN: http://localhost
+        run: |
+          docker run --rm \
+            -e POS_DOMAIN="$POS_DOMAIN" \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine \
+            caddy validate --config /etc/caddy/Caddyfile
+
+      - name: Start host-ready proxy profile
+        env:
+          POS_DOMAIN: http://localhost
+        run: docker compose -f docker-compose.yml -f docker-compose.host.yml up -d --build
+
+      - name: Verify POS through reverse proxy
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error http://localhost/ >/tmp/pos-proxy-root.html; then
+              grep -qi '<html\|<!doctype' /tmp/pos-proxy-root.html
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose -f docker-compose.yml -f docker-compose.host.yml logs app caddy
+          exit 1
+
+      - name: Verify app remains private behind proxy
+        run: |
+          app_id="$(docker compose -f docker-compose.yml -f docker-compose.host.yml ps -q app)"
+          docker inspect "$app_id" | jq -e '.[0].HostConfig.PortBindings["3001/tcp"] == null'
+          caddy_id="$(docker compose -f docker-compose.yml -f docker-compose.host.yml ps -q caddy)"
+          docker port "$caddy_id" | grep -E '80/tcp|443/tcp'
+
       - name: Upload Playwright diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
@@ -168,10 +212,14 @@ jobs:
           if-no-files-found: ignore
           retention-days: 7
 
-      - name: Show container logs on failure
+      - name: Show runtime logs on failure
         if: failure()
-        run: docker logs total-tools-pos-cert || true
+        run: |
+          docker logs total-tools-pos-cert || true
+          docker compose -f docker-compose.yml -f docker-compose.host.yml logs app caddy || true
 
-      - name: Stop test container
+      - name: Stop certification containers
         if: always()
-        run: docker rm -f total-tools-pos-cert || true
+        run: |
+          docker rm -f total-tools-pos-cert || true
+          POS_DOMAIN=http://localhost docker compose -f docker-compose.yml -f docker-compose.host.yml down -v || true
