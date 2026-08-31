@@ -21,6 +21,6 @@ const checks=[
  ['successful pre-PO check explicitly leaves PO creation to buyer',governance.includes('A buyer must still explicitly create/convert the purchase order.')],
  ['decision events create immutable audit evidence',governance.includes('procurement_decision_events')&&governance.includes("event_type TEXT NOT NULL")],
  ['supplier procurement engine itself remains recommendation-only',supplierProc.includes("router.post('/recommendations'")&&!supplierProc.includes('INSERT INTO purchase_orders')],
- ['manual buyer control is preserved across recommendation and approval layers',supplierProc.includes('buyer review')&&governance.includes('Buyer approval recorded. This approval does not create a purchase order.'))
+ ['manual buyer control is preserved across recommendation and approval layers',supplierProc.includes('buyer review')&&governance.includes('Buyer approval recorded. This approval does not create a purchase order.')]
 ];
 let failed=0;for(const[n,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Procurement governance: ${n}`);if(!ok)failed++;}if(failed){console.error(`Procurement governance contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`Procurement governance contract OK (${checks.length} checks).`);
