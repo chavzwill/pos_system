@@ -33,6 +33,11 @@ test.describe('Purchase order lifecycle hardening', () => {
     const unitCost = Number(product.cost) || 1;
     const created = await api(cookie, 'POST', '/api/purchase-orders', {
       supplier_id: supplier.id, branch_id: branch.id,
+      ship_to_branch_id: branch.id,
+      ship_to_name: branch.name,
+      ship_to_address: branch.address || '1 Runtime Test Road',
+      ship_to_city: branch.city || 'Kingston',
+      ship_to_state: branch.state || 'Kingston',
       items: [{ product_id: product.id, quantity_ordered: 2, unit_cost: unitCost }],
       notes: 'Automated lifecycle integrity test',
     });
