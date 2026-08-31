@@ -35,6 +35,13 @@ async function ensureMarginProtection(){
 async function setting(key,fallback){const {rows:[r]}=await db.execute({sql:'SELECT value FROM settings WHERE key=?',args:[key]});return r?.value==null?fallback:r.value;}
 async function settingNumber(key,fallback){const n=Number(await setting(key,fallback));return Number.isFinite(n)?n:fallback;}
 async function settingBool(key,fallback=false){const v=String(await setting(key,fallback?'true':'false')).trim().toLowerCase();return ['1','true','yes','on'].includes(v);}
+function canOperateCrossBranch(employee){return !!employee&&(can(employee.permissions,'branches')||can(employee.permissions,'security_manage'));}
+function branchAccessError(req){
+  if(req.apiKey||!req.employee)return null;
+  const branchId=Number(req.body?.branch_id)||null,home=Number(req.employee.default_branch_id)||null;
+  if(branchId&&home&&branchId!==home&&!canOperateCrossBranch(req.employee))return 'You cannot complete a sale for another branch. Switch to your assigned branch or ask an authorized cross-branch administrator.';
+  return null;
+}
 async function unitCostEvidence(productId,branchId,product){
   if(branchId){
     try{const {rows:[pool]}=await db.execute({sql:'SELECT * FROM inventory_cost_pools WHERE product_id=? AND branch_key=?',args:[productId,branchId]});if(pool&&Number(pool.legacy_unlayered_qty||0)<=1e-9&&Number(pool.tracked_qty||0)>0&&Number(pool.tracked_value||0)>=0)return {unit_cost:Number(pool.tracked_value)/Number(pool.tracked_qty),basis:'current_tracked_inventory_pool'};}catch(e){}
@@ -48,7 +55,7 @@ async function authorizeOverride(req){
   if(reason.length<5)return {error:'A meaningful margin override reason is required.'};
   const {rows:employees}=await db.execute({sql:`SELECT e.id,e.first_name,e.last_name,e.pin,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.active=1`,args:[]});
   const authorizer=employees.find(e=>String(e.pin)===pin&&(()=>{let p={};try{p=JSON.parse(e.permissions||'{}');}catch{}return can(p,'reports_financial')||can(p,'security_manage');})());
-  if(!authorizer)return {error:'Invalid supervisor PIN or insufficient financial-control authority.'};
+  if(!authorizer)return {error:'Invalid supervisor PIN or insufficient supplier-payment approval authority.'.replace('supplier-payment','margin override')};
   if(!await settingBool('loss_control_margin_override_allow_self',false)&&req.employee&&String(authorizer.id)===String(req.employee.id))return {error:'Independent supervisor authorization is required for a below-floor margin sale.'};
   return {authorizer,reason};
 }
@@ -72,6 +79,7 @@ async function persistOverride(req,payload,ev){
 }
 router.use(async(req,res,next)=>{try{await ensureMarginProtection();next();}catch(e){res.status(500).json({error:'Retail margin protection initialization failed',detail:e.message});}});
 router.post('/',requirePermission('pos'),async(req,res,next)=>{
+  const accessError=branchAccessError(req);if(accessError)return res.status(403).json({error:accessError,control:'retail_branch_access'});
   let ev;try{ev=await evaluate(req);}catch(e){return res.status(e.status||500).json({error:e.message,...(e.details||{})});}
   if(!ev)return next();
   req.retailMarginEvidence=ev;
