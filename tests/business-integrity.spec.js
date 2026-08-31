@@ -105,13 +105,13 @@ test.describe('Cross-module business integrity', () => {
   test('rental lifecycle queue and detail agree on core identity and status', async () => {
     const cookie = await loginCookie();
     const list = await api(cookie, '/api/rentals/agreements');
-    expect(list.status).toBe(200);
+    expect(list.status, JSON.stringify(list.body)).toBe(200);
     expect(Array.isArray(list.body)).toBe(true);
     if (!list.body.length) return;
 
     const row = list.body[0];
     const detail = await api(cookie, `/api/rentals/agreements/${row.id}`);
-    expect(detail.status).toBe(200);
+    expect(detail.status, JSON.stringify(detail.body)).toBe(200);
     expect(detail.body.id).toBe(row.id);
     expect(detail.body.agreement_number).toBe(row.agreement_number);
     expect(detail.body.status).toBeTruthy();
