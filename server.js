@@ -179,6 +179,7 @@ app.use('/api/rentals', require('./routes/rental-refund-settlement'));
 app.use('/api/rentals', require('./routes/rental-loss-prevention'));
 app.use('/api/rentals', require('./routes/rentals'));
 app.use('/api/layaway', require('./routes/layaway'));
+app.use('/api/work-orders', require('./routes/work-order-financial-runtime-guard'));
 app.use('/api/work-orders', require('./routes/work-order-completion-hardening'));
 app.use('/api/work-orders', require('./routes/work-orders'));
 app.use('/api/repair-operations', require('./routes/repair-operations'));
