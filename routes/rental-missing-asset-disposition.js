@@ -6,6 +6,7 @@ const {can,requireAnyPermission}=require('../lib/permissions');
 const {nextNumber}=require('../lib/nextNumber');
 const {ensureInventoryMovementValuation,valueStockAdjustment}=require('../lib/inventory-movement-valuation');
 const {ensureLedger,postSourceJournal}=require('../lib/accounting-posting');
+const {ensureReceiptEvidence}=require('./purchase-receipt-traceability');
 
 let readyPromise=null;
 const r2=v=>Number(Number(v||0).toFixed(2));
@@ -13,6 +14,7 @@ async function ensureColumn(table,name,definition){const {rows}=await db.execute
 async function ensureSchema(){
   if(readyPromise)return readyPromise;
   readyPromise=(async()=>{
+    await ensureReceiptEvidence();
     await ensureInventoryMovementValuation();
     await ensureLedger();
     await ensureColumn('rental_agreement_items','quantity_missing','INTEGER NOT NULL DEFAULT 0');
@@ -137,38 +139,36 @@ router.post('/missing-assets/:id/approve',requireAnyPermission('rentals_manage',
       await tx.execute({sql:'UPDATE rental_agreements SET missing_asset_charge_total=missing_asset_charge_total+?,missing_asset_loss_value_total=missing_asset_loss_value_total+? WHERE id=?',args:[approvedCharge,inventoryLoss,cur.agreement_id]});
       const chargeStatus=approvedCharge>0?'pending_collection':'waived';
       await tx.execute({sql:`UPDATE rental_missing_asset_dispositions SET status='approved',approved_customer_charge=?,waived_amount=?,inventory_loss_value=?,valuation_basis=?,approved_by_employee_id=?,financial_authorizer_employee_id=?,customer_charge_reason=?,charge_status=?,stock_movement_id=?,journal_entry_id=?,approved_at=CURRENT_TIMESTAMP WHERE id=? AND status='pending_approval'`,args:[approvedCharge,waiver,inventoryLoss,val.basis,req.employee?.id||null,auth.auth.id,chargeReason||auth.reason,chargeStatus,movementId,journal?.id||null,cur.id]});
-      await tx.execute({sql:'INSERT INTO rental_missing_asset_events(disposition_id,event_type,employee_id,details) VALUES(?,?,?,?)',args:[cur.id,'approved',req.employee?.id||null,`Inventory loss=${inventoryLoss.toFixed(2)}; customer charge=${approvedCharge.toFixed(2)}; waiver=${waiver.toFixed(2)}; ${auth.reason}`]});
-      const {rows:items}=await tx.execute({sql:'SELECT quantity,quantity_returned FROM rental_agreement_items WHERE agreement_id=?',args:[cur.agreement_id]});
-      if(items.every(x=>Number(x.quantity_returned||0)>=Number(x.quantity||0)))await tx.execute({sql:`UPDATE rental_agreements SET status='returned',returned_at=COALESCE(returned_at,CURRENT_TIMESTAMP) WHERE id=? AND status IN ('active','awaiting_issue')`,args:[cur.agreement_id]});
+      await tx.execute({sql:'INSERT INTO rental_missing_asset_events(disposition_id,event_type,employee_id,details) VALUES(?,?,?,?)',args:[cur.id,'approved_disposed',req.employee?.id||null,`authorized_by=${auth.auth.id}; customer_charge=${approvedCharge}; inventory_loss=${inventoryLoss}; ${auth.reason}`]});
       await tx.commit();committed=true;
-      delete req.body.financial_authorizer_pin;
-      const {rows:[row]}=await db.execute({sql:'SELECT * FROM rental_missing_asset_dispositions WHERE id=?',args:[cur.id]});res.json({...row,customer_charge_pending_settlement:approvedCharge>0});
     }catch(e){if(!committed)await tx.rollback();throw e;}
+    const {rows:[row]}=await db.execute({sql:'SELECT * FROM rental_missing_asset_dispositions WHERE id=?',args:[d.id]});res.json(row);
   }catch(e){res.status(e.status||500).json({error:e.message});}
 });
 
-router.post('/missing-assets/:id/collect-charge',requireAnyPermission('pos','rentals_manage','reports_financial'),async(req,res)=>{
+router.post('/missing-assets/:id/collect',requireAnyPermission('rentals_checkout','rentals_manage'),async(req,res)=>{
   try{
-    const {rows:[d]}=await db.execute({sql:`SELECT d.*,ra.customer_id,ra.agreement_number,ra.branch_id,rai.product_name,rai.sku FROM rental_missing_asset_dispositions d JOIN rental_agreements ra ON ra.id=d.agreement_id JOIN rental_agreement_items rai ON rai.id=d.agreement_item_id WHERE d.id=?`,args:[req.params.id]});
-    if(!d)return res.status(404).json({error:'Missing-asset disposition not found'});if(d.status!=='approved')return res.status(409).json({error:'Missing-asset disposition is not approved'});if(d.charge_status!=='pending_collection')return res.status(409).json({error:`Missing-asset charge is ${d.charge_status}`});
-    const amount=r2(d.approved_customer_charge);if(!(amount>0))return res.status(409).json({error:'There is no approved customer charge to collect'});
-    const method=String(req.body?.payment_method||'cash').toLowerCase(),employeeId=Number(req.body?.employee_id||req.employee?.id)||null,drawerId=Number(req.body?.drawer_session_id)||null;
-    const tendered=Number(req.body?.amount_tendered??amount);if(method==='cash'){
-      if(!Number.isFinite(tendered)||tendered+0.009<amount)return res.status(409).json({error:`Cash tendered cannot be less than the missing-asset charge (${amount.toFixed(2)}).`});
-      if(!employeeId||!drawerId)return res.status(409).json({error:'Cash collection requires the cashier and an open drawer session.'});
-      const {rows:[drawer]}=await db.execute({sql:`SELECT * FROM drawer_sessions WHERE id=? AND status='open'`,args:[drawerId]});if(!drawer||Number(drawer.employee_id)!==employeeId||Number(drawer.branch_id)!==Number(d.branch_id))return res.status(409).json({error:'The selected drawer is not an open drawer for this cashier and rental branch.'});
+    const {rows:[d]}=await db.execute({sql:`SELECT d.*,ra.customer_id,ra.agreement_number FROM rental_missing_asset_dispositions d JOIN rental_agreements ra ON ra.id=d.agreement_id WHERE d.id=?`,args:[req.params.id]});if(!d)return res.status(404).json({error:'Missing-asset disposition not found'});if(d.status!=='approved'||d.charge_status!=='pending_collection')return res.status(409).json({error:'Missing-asset charge is not pending collection'});
+    const amount=r2(d.approved_customer_charge);if(amount<=0)return res.status(409).json({error:'There is no approved customer recovery to collect'});
+    const method=String(req.body?.payment_method||'cash').toLowerCase();if(!['cash','card','credit','bank_transfer'].includes(method))return res.status(400).json({error:'Unsupported payment method'});
+    let drawer=null;if(method==='cash'){
+      const drawerId=Number(req.body?.drawer_session_id),employeeId=Number(req.employee?.id||req.body?.employee_id);if(!drawerId||!employeeId)return res.status(409).json({error:'Cash missing-asset recovery requires an open cashier drawer'});
+      const {rows:[s]}=await db.execute({sql:"SELECT * FROM drawer_sessions WHERE id=? AND status='open'",args:[drawerId]});if(!s||Number(s.employee_id)!==employeeId||Number(s.branch_id)!==Number(d.branch_id))return res.status(409).json({error:'Cash drawer must be open and belong to the same employee and rental branch'});drawer=s;
+    }
+    if((method==='card'||method==='bank_transfer')&&!String(req.body?.approval_code||'').trim())return res.status(400).json({error:'Electronic missing-asset recovery requires approval/reference evidence'});
+    if(method==='credit'){
+      const {rows:[c]}=await db.execute({sql:'SELECT * FROM customers WHERE id=? AND active=1',args:[d.customer_id]});if(!c||c.customer_type!=='credit'||c.account_blocked)return res.status(409).json({error:'Customer is not eligible for charge-account recovery'});if(Number(c.credit_limit||0)>0&&Number(c.account_balance||0)+amount>Number(c.credit_limit)+0.01)return res.status(409).json({error:'Missing-asset recovery would exceed customer credit limit'});
     }
     const tx=await db.transaction('write');let committed=false;
     try{
-      const {rows:[fresh]}=await tx.execute({sql:'SELECT * FROM rental_missing_asset_dispositions WHERE id=?',args:[d.id]});if(!fresh||fresh.charge_status!=='pending_collection')throw Object.assign(new Error('Charge status changed; reload before collecting.'),{status:409});
-      const number=await nextNumber(tx,'transactions','transaction_number','TXN-',6);const change=method==='cash'?Math.max(0,r2(tendered-amount)):0;
-      const tr=await tx.execute({sql:`INSERT INTO transactions(transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,total,payment_method,amount_tendered,change_amount,notes,source) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[number,d.customer_id,employeeId,d.branch_id,method==='cash'?drawerId:null,amount,0,amount,method,method==='cash'?tendered:amount,change,`Missing rental asset charge ${d.agreement_number} / RMA-${d.id}`,'rental_missing_asset']});const transactionId=Number(tr.lastInsertRowid);
-      await tx.execute({sql:`INSERT INTO transaction_items(transaction_id,product_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES(?,?,?,?,?,?,0,?)`,args:[transactionId,d.product_id,`Missing Rental Asset — ${d.product_name}`,d.sku,d.quantity,r2(amount/Math.max(1,Number(d.quantity))),amount]});
-      if(method==='credit')await tx.execute({sql:'UPDATE customers SET account_balance=account_balance+? WHERE id=?',args:[amount,d.customer_id]});
-      await tx.execute({sql:`UPDATE rental_missing_asset_dispositions SET charge_status='collected',charge_transaction_id=?,charge_collected_at=CURRENT_TIMESTAMP WHERE id=? AND charge_status='pending_collection'`,args:[transactionId,d.id]});
-      await tx.execute({sql:'INSERT INTO rental_missing_asset_events(disposition_id,event_type,employee_id,details) VALUES(?,?,?,?)',args:[d.id,'charge_collected',employeeId,`Transaction ${number}; amount=${amount.toFixed(2)}; method=${method}`]});
-      await tx.commit();committed=true;res.json({success:true,disposition_id:d.id,transaction_id:transactionId,transaction_number:number,amount,change_amount:change,payment_method:method});
+      const {rows:[cur]}=await tx.execute({sql:`SELECT d.*,ra.customer_id,ra.agreement_number FROM rental_missing_asset_dispositions d JOIN rental_agreements ra ON ra.id=d.agreement_id WHERE d.id=?`,args:[d.id]});if(!cur||cur.charge_status!=='pending_collection')throw Object.assign(new Error('Charge state changed before collection; reload and review.'),{status:409});
+      const txNum=await nextNumber('transaction','TRX');const tr=await tx.execute({sql:`INSERT INTO transactions(transaction_number,type,customer_id,employee_id,branch_id,subtotal,tax_amount,discount_amount,total,payment_method,amount_tendered,change_due,status,notes,drawer_session_id) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[txNum,'rental_missing_recovery',cur.customer_id,req.employee?.id||null,cur.branch_id,amount,0,0,amount,method,method==='cash'?Number(req.body?.amount_tendered||amount):amount,method==='cash'?Math.max(0,r2(Number(req.body?.amount_tendered||amount)-amount)):0,'completed',`Missing rental asset recovery ${cur.agreement_number}; disposition ${cur.id}`,drawer?.id||null]});const transactionId=Number(tr.lastInsertRowid);
+      if(method==='credit')await tx.execute({sql:'UPDATE customers SET account_balance=account_balance+? WHERE id=?',args:[amount,cur.customer_id]});
+      await tx.execute({sql:`UPDATE rental_missing_asset_dispositions SET charge_status='collected',charge_transaction_id=?,charge_collected_at=CURRENT_TIMESTAMP WHERE id=? AND charge_status='pending_collection'`,args:[transactionId,cur.id]});
+      await tx.execute({sql:'INSERT INTO rental_missing_asset_events(disposition_id,event_type,employee_id,details) VALUES(?,?,?,?)',args:[cur.id,'customer_recovery_collected',req.employee?.id||null,`transaction=${transactionId}; method=${method}; amount=${amount}`]});
+      await tx.commit();committed=true;
     }catch(e){if(!committed)await tx.rollback();throw e;}
+    const {rows:[row]}=await db.execute({sql:'SELECT * FROM rental_missing_asset_dispositions WHERE id=?',args:[d.id]});res.status(201).json(row);
   }catch(e){res.status(e.status||500).json({error:e.message});}
 });
 
