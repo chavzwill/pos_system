@@ -2,6 +2,12 @@
 const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
+const {ensureTransactionCostEvidenceSchema}=require('../lib/transaction-cost-evidence-schema');
+
+router.use(async(req,res,next)=>{
+  try{await ensureTransactionCostEvidenceSchema();next();}
+  catch(e){res.status(500).json({error:'Rental transaction cost-evidence initialization failed',detail:e.message});}
+});
 
 router.patch('/agreements/:id/checkout',async(req,res,next)=>{
   try{
