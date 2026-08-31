@@ -24,7 +24,7 @@ const MANAGED_KEYS = new Set([
   'repair_notify_email_enabled','repair_notify_sms_enabled','repair_notify_whatsapp_enabled',
   'repair_notify_sms_webhook_url','repair_notify_sms_webhook_token',
   'repair_notify_whatsapp_webhook_url','repair_notify_whatsapp_webhook_token',
-  'woo_sync_interval',
+  'wo_assessment_fee','woo_sync_interval',
   'loss_control_min_gross_margin_pct','loss_control_margin_override_allow_self',
   'loss_control_cash_shortage_threshold','loss_control_return_rate_threshold_pct',
   'loss_control_return_value_threshold','loss_control_dead_stock_days'
@@ -32,8 +32,6 @@ const MANAGED_KEYS = new Set([
 function mayManage(req){ return !!req.apiKey || can(req.employee?.permissions,'settings'); }
 function redact(key,value){ return SECRET_KEYS.has(key) && value ? '••••••••' : value; }
 
-// Loaded on app init for every authenticated employee. Sensitive credentials
-// are never returned unless the caller has Settings permission.
 router.get('/', requireAuth, async (req, res) => {
   try {
     const { rows } = await db.execute({ sql: 'SELECT * FROM settings', args: [] });
@@ -54,8 +52,6 @@ router.get('/manage', requirePermission('settings'), async (req,res)=>{
   } catch(e){ res.status(500).json({error:e.message}); }
 });
 
-// No auth — the login screen needs the store name/logo before anyone is
-// signed in, and this is the only pair of settings values safe to expose.
 router.get('/public', async (req, res) => {
   try {
     const { rows } = await db.execute({ sql: "SELECT key, value FROM settings WHERE key IN ('store_name','company_logo_url')", args: [] });
