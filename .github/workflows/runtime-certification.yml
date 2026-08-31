@@ -1,0 +1,62 @@
+name: Runtime Certification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - feature/total-tools-pos-upgrades
+    paths:
+      - .github/workflows/runtime-certification.yml
+      - scripts/ci-runtime-bootstrap.js
+
+permissions:
+  contents: read
+
+concurrency:
+  group: runtime-certification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  release-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 30
+    env:
+      POS_TEST_USER: admin
+      POS_TEST_PASSWORD: '123456'
+      TURSO_DATABASE_URL: ''
+      TURSO_AUTH_TOKEN: ''
+      CI: '1'
+    steps:
+      - name: Checkout current head
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Install Chromium runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Bootstrap isolated local runtime database
+        run: |
+          rm -f pos.db pos.db-shm pos.db-wal
+          node scripts/ci-runtime-bootstrap.js
+
+      - name: Run full release gate
+        run: npm run test:release-gate -- --workers=1
+
+      - name: Upload Playwright diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: runtime-certification-diagnostics
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
