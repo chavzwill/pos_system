@@ -60,14 +60,15 @@ jobs:
 
       - name: Verify application is healthy behind proxy
         run: |
-          app_health="$(docker inspect --format='{{.State.Health.Status}}' "$(docker compose -f docker-compose.yml -f docker-compose.host.yml ps -q app)")"
+          app_id="$(docker compose -f docker-compose.yml -f docker-compose.host.yml ps -q app)"
+          app_health="$(docker inspect --format='{{.State.Health.Status}}' "$app_id")"
           test "$app_health" = "healthy"
           grep -qi '<html\|<!doctype' /tmp/pos-proxy-root.html
 
       - name: Verify application port is not publicly published
         run: |
-          published="$(docker compose -f docker-compose.yml -f docker-compose.host.yml port app 3001 2>/dev/null || true)"
-          test -z "$published"
+          app_id="$(docker compose -f docker-compose.yml -f docker-compose.host.yml ps -q app)"
+          docker inspect "$app_id" | jq -e '.[0].HostConfig.PortBindings["3001/tcp"] == null'
 
       - name: Verify proxy publishes only intended ingress
         run: |
