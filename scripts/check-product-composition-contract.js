@@ -13,7 +13,7 @@ const checks=[
  ['break-pack transfers valuation rather than inventing child cost',lib.includes('removeFromPool')&&lib.includes('addComposition')&&lib.includes('parentComp.value')],
  ['cost allocation supports percentage',lib.includes("cost_allocation_mode==='percentage'")&&lib.includes('total 100%')],
  ['cost allocation supports explicit component value',lib.includes("cost_allocation_mode==='explicit'")],
- ['cost allocation supports relative component cost',lib.includes('component_cost')&&lib.includes('relative-cost allocation')],
+ ['cost allocation supports relative component cost',lib.includes("cost_allocation_mode TEXT NOT NULL DEFAULT 'relative_cost'")&&lib.includes('component_cost')&&lib.includes('quantity_per_parent')&&lib.includes('Relative-cost allocation requires component cost evidence')],
  ['assembly availability uses all required components',lib.includes('Only ${availability.available_kits} complete kits can be assembled')],
  ['assembly consumes component stock and creates parent stock',lib.includes('Assembly into ${composition.parent_product_name}')&&lib.includes('Parent kit assembled from component inventory')],
  ['assembly preserves known acquisition value',lib.includes('tracked_value_moved')&&lib.includes('totalValue')],
