@@ -79,13 +79,22 @@ jobs:
           docker logs total-tools-pos-cert
           exit 1
 
+      - name: Initialize database through protected API boundary
+        run: |
+          code="$(curl --silent --show-error --output /tmp/db-probe.json --write-out '%{http_code}' http://127.0.0.1:3001/api/products)"
+          case "$code" in
+            401|403) ;;
+            *) cat /tmp/db-probe.json; echo "Unexpected protected API status: $code"; exit 1 ;;
+          esac
+
       - name: Verify persisted SQLite database exists
         run: test -s .container-test/data/pos.db
 
       - name: Verify non-root application process
         run: |
-          user="$(docker exec total-tools-pos-cert sh -lc 'id -un')"
-          test "$user" = "app"
+          pid1_uid="$(docker exec total-tools-pos-cert sh -lc "awk '/^Uid:/{print \$2}' /proc/1/status")"
+          app_uid="$(docker exec total-tools-pos-cert id -u app)"
+          test "$pid1_uid" = "$app_uid"
 
       - name: Show container logs on failure
         if: failure()
