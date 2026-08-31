@@ -4,6 +4,7 @@ on:
   push:
     branches:
       - infra/sqlite-production-tuning
+      - ops/production-cutover-tooling
     paths:
       - Dockerfile
       - docker-entrypoint.sh
@@ -11,6 +12,11 @@ on:
       - lib/local-sqlite-runtime.js
       - package.json
       - package-lock.json
+      - scripts/production-preflight.sh
+      - scripts/production-backup.sh
+      - scripts/production-restore.sh
+      - scripts/production-smoke.sh
+      - docs/PRODUCTION_CUTOVER_RUNBOOK.md
       - .github/workflows/container-certification.yml
   workflow_dispatch:
 
@@ -44,6 +50,13 @@ jobs:
 
       - name: Require zero production dependency vulnerabilities
         run: npm audit --omit=dev
+
+      - name: Validate cutover shell syntax
+        run: |
+          bash -n scripts/production-preflight.sh
+          bash -n scripts/production-backup.sh
+          bash -n scripts/production-restore.sh
+          bash -n scripts/production-smoke.sh
 
       - name: Install Chromium runtime
         run: npx playwright install --with-deps chromium
