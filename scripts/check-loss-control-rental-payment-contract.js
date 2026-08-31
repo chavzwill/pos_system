@@ -11,7 +11,7 @@ const checks=[
  ['missing or lost assets fail closed out of the normal return workflow',rentalGuard.includes('rental_missing_asset_disposition_required')&&rentalGuard.includes('incorrectly release unavailable stock back into rental availability')&&rentalGuard.includes('missingLike(incomingCondition)')],
  ['rental override PIN and reason are stripped before authoritative return processing',rentalGuard.includes('delete req.body.rental_override_pin')&&rentalGuard.includes('delete req.body.rental_override_reason')],
  ['rental balance collection blocks cash under-tender',rentalGuard.includes('Cash tendered cannot be less than the rental balance due')],
- ['cash rental balance collection requires drawer accountability',rentalGuard.includes('drawer_session_id')&&rentalGuard.includes("status='open'")],
+ ['cash rental balance collection requires drawer accountability',rentalGuard.includes('drawer_session_id')&&rentalGuard.includes("drawer.status!=='open'")&&rentalGuard.includes('drawer.employee_id')&&rentalGuard.includes('drawer.branch_id')&&rentalGuard.includes('Cash rental settlement requires the cashier and an open drawer session.')],
  ['deposit refund is capped by the recorded deposit math',rentals.includes('Math.max(0, agreement.deposit_total - (damageFeeTotal + durationAdjustmentTotal + taxAdjustmentTotal))')],
  ['rental credit note cannot exceed actual refund due',rentals.includes('if (amt > refundDue + 0.01)')],
  ['deep rental/payment intelligence is mounted under loss control',trace.includes("router.use('/loss-control',require('./loss-control-rental-payment-leaks'))")],
