@@ -32,7 +32,7 @@ export function registerPurchasingFinancialRuntimeCertification(){
       x=await api(admin.cookie,'/api/products',{method:'POST',body:JSON.stringify({sku:`RTP-${suffix}`,name:`Runtime Purchased SKU ${suffix}`,price:100,cost:0,tax_rate:0,stock_qty:0,min_stock:0,active:1,branch_id:branch.id,taxable:1})});
       expect(x.status).toBe(201);product=x.body;
 
-      x=await api(admin.cookie,'/api/purchase-orders',{method:'POST',body:JSON.stringify({supplier_id:supplier.id,branch_id:branch.id,employee_id:admin.body.id,notes:'Runtime purchasing financial certification',items:[{product_id:product.id,quantity_ordered:3,unit_cost:60}]})});
+      x=await api(admin.cookie,'/api/purchase-orders',{method:'POST',body:JSON.stringify({supplier_id:supplier.id,branch_id:branch.id,ship_to_branch_id:branch.id,ship_to_name:branch.name,ship_to_address:branch.address||'1 Runtime Test Road',ship_to_city:branch.city||'Kingston',ship_to_state:branch.state||'Kingston',employee_id:admin.body.id,notes:'Runtime purchasing financial certification',items:[{product_id:product.id,quantity_ordered:3,unit_cost:60}]})});
       expect(x.status).toBe(201);po=x.body;expect(po.items?.length).toBe(1);expect(r2(po.total)).toBe(180);
 
       x=await api(admin.cookie,`/api/purchase-orders/${po.id}/status`,{method:'PATCH',body:JSON.stringify({status:'approved'})});
@@ -70,8 +70,6 @@ export function registerPurchasingFinancialRuntimeCertification(){
       const clearingDebit=journalLine(invoiceDetail,'1250'),ap=journalLine(invoiceDetail,'2000');
       expect(r2(clearingDebit?.debit)).toBe(180);expect(r2(ap?.credit)).toBe(180);expect(r2(invoiceDetail.body.totals?.difference)).toBe(0);
     }finally{
-      // Keep PO/receipt/invoice evidence in the test database, but retire the
-      // temporary catalog and supplier master records used by certification.
       if(product)await api(admin.cookie,`/api/products/${product.id}`,{method:'DELETE'}).catch(()=>{});
       if(supplier)await api(admin.cookie,`/api/suppliers/${supplier.id}`,{method:'DELETE'}).catch(()=>{});
     }
