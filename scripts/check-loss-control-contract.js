@@ -20,7 +20,7 @@ const checks=[
  ['cash shortage reconciles opening float and cash sales',loss.includes('opening_float')&&loss.includes('cash_sales')&&loss.includes('cash_counted')],
  ['cash refunds reduce expected drawer cash where evidence exists',loss.includes('retail_refund_settlement_legs')&&loss.includes('cash_refunds')],
  ['cash refunds now persist explicit drawer-session evidence',refunds.includes('drawer_session_id INTEGER REFERENCES drawer_sessions(id)')&&refunds.includes('resolveRefundDrawer')],
- ['cash refund payout requires an open employee drawer',refunds.includes('Open the correct cash drawer before settling a cash refund')&&refunds.includes("status='open'"))],
+ ['cash refund payout requires an open employee drawer',refunds.includes('Open the correct cash drawer before settling a cash refund')&&refunds.includes("status='open'")],
  ['loss control prefers explicit refund drawer linkage and preserves legacy fallback',loss.includes('rs.drawer_session_id=ds.id')&&loss.includes('legacy unlinked refunds fall back')],
  ['cash shortage language explicitly avoids theft conclusion',loss.includes('does not by itself establish theft')],
  ['return concentration is treated as risk not detected loss',loss.includes("signal_type:'return_value_concentration'")&&loss.includes('estimated_loss:0')&&loss.includes('at_risk_value')],
