@@ -1,4 +1,4 @@
-' strict';
+'use strict';
 const fs=require('fs');
 const path=require('path');
 const root=path.join(__dirname,'..');
@@ -15,7 +15,7 @@ const checks=[
   ['serial identity ledger exists',lib.includes('inventory_serials')],
   ['identity event audit ledger exists',lib.includes('inventory_identity_events')],
   ['serial numbers are globally unique',lib.includes('serial_number TEXT NOT NULL UNIQUE')],
-  ['serial receipt count must match received quantity',lib.includes('requires exactly ${quantity} serial numbers')],
+  ['serial receipt count must match received quantity',lib.includes('serials.length!==receiptQty')&&lib.includes('Serial-tracked receipt requires exactly ${receiptQty} serial numbers')],
   ['duplicate serials in same receipt are rejected',lib.includes('Duplicate serial number supplied in the same receipt')],
   ['previously seen serials are rejected',lib.includes('already exists in inventory history')],
   ['lot quantities must reconcile to receipt quantity',lib.includes('Lot allocations must total the received quantity')],
