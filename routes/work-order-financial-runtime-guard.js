@@ -3,6 +3,12 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {requirePermission}=require('../lib/permissions');
+const {ensureWorkOrderServiceEvidenceSchema}=require('../lib/work-order-service-evidence-schema');
+
+router.use(async(req,res,next)=>{
+  try{await ensureWorkOrderServiceEvidenceSchema();next();}
+  catch(e){res.status(500).json({error:'Repair service-evidence schema initialization failed',detail:e.message});}
+});
 
 async function validateCashDrawer(req,res,next){
   try{
