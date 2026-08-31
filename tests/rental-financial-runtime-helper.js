@@ -33,15 +33,15 @@ export function registerRentalFinancialRuntimeCertification(){
       const cashier=await login(username,password);
       x=await api(cashier.cookie,'/api/drawers/sessions',{method:'POST',body:JSON.stringify({drawer_id:drawer.id,opening_float:100})});expect([200,201]).toContain(x.status);session=x.body;
 
-      const today=new Date().toISOString().slice(0,10);
-      x=await api(cashier.cookie,'/api/rentals/agreements',{method:'POST',body:JSON.stringify({customer_id:customer.id,employee_id:employee.id,branch_id:branch.id,due_date:today,items:[{product_id:product.id,quantity:1,condition_out:'good'}],customer_pickup:true,notes:'Runtime rental financial certification'})});
+      const dueDate=new Date(Date.now()+86400000).toISOString().slice(0,10);
+      x=await api(cashier.cookie,'/api/rentals/agreements',{method:'POST',body:JSON.stringify({customer_id:customer.id,employee_id:employee.id,branch_id:branch.id,due_date:dueDate,items:[{product_id:product.id,quantity:1,condition_out:'good'}],customer_pickup:true,notes:'Runtime rental financial certification'})});
       expect(x.status).toBe(201);agreement=x.body;expect(agreement.status).toBe('pending');
 
       const noDrawer=await api(cashier.cookie,`/api/rentals/agreements/${agreement.id}/checkout`,{method:'PATCH',body:JSON.stringify({payment_method:'cash',amount_tendered:100,employee_id:employee.id})});
       expect(noDrawer.status).toBe(409);expect(noDrawer.body?.control).toBe('rental_checkout_cash_drawer');
 
       x=await api(cashier.cookie,`/api/rentals/agreements/${agreement.id}/checkout`,{method:'PATCH',body:JSON.stringify({payment_method:'cash',amount_tendered:100,employee_id:employee.id,drawer_session_id:session.id})});
-      expect(x.status).toBe(200);expect(x.body.status).toBe('awaiting_issue');expect(x.body.checkout_transaction_id).toBeTruthy();expect(r2(x.body.deposit_total)).toBeGreaterThan(0);
+      expect(x.status,JSON.stringify(x.body)).toBe(200);expect(x.body.status).toBe('awaiting_issue');expect(x.body.checkout_transaction_id).toBeTruthy();expect(r2(x.body.deposit_total)).toBeGreaterThan(0);
       const checkoutTxId=x.body.checkout_transaction_id,deposit=r2(x.body.deposit_total);
 
       let sync=await api(admin.cookie,'/api/accounting-source-sync/sync',{method:'POST',body:JSON.stringify({})});expect(sync.status).toBe(200);
