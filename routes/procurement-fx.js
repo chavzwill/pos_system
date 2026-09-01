@@ -1,0 +1,12 @@
+'use strict';
+const express=require('express');
+const router=express.Router();
+const {db}=require('../database');
+const {requirePermission}=require('../lib/permissions');
+const {ensureProcurementFx,getBaseCurrency,getRate}=require('../lib/procurement-fx');
+router.use(async(req,res,next)=>{try{await ensureProcurementFx();next();}catch(e){res.status(500).json({error:'Procurement FX initialization failed',detail:e.message});}});
+router.get('/settings',requirePermission('purchase_requests'),async(req,res)=>{try{res.json({base_currency:await getBaseCurrency(db)});}catch(e){res.status(500).json({error:e.message});}});
+router.get('/rates',requirePermission('purchase_requests'),async(req,res)=>{try{const args=[];let sql='SELECT * FROM procurement_fx_rates WHERE 1=1';if(req.query.currency){sql+=' AND upper(currency_code)=upper(?)';args.push(String(req.query.currency));}sql+=' ORDER BY created_at DESC,id DESC LIMIT 500';const{rows}=await db.execute({sql,args});res.json(rows);}catch(e){res.status(500).json({error:e.message});}});
+router.post('/rates',requirePermission('purchasing_approve'),async(req,res)=>{try{const b=req.body||{},code=String(b.currency_code||'').trim().toUpperCase(),base=await getBaseCurrency(db),rate=Number(b.rate_to_base),ref=String(b.source_reference||'').trim();if(!/^[A-Z]{3}$/.test(code))return res.status(400).json({error:'currency_code must be a 3-letter currency code'});if(code===base)return res.status(400).json({error:`${base} is the base currency and always has rate 1`});if(!(rate>0)||!ref)return res.status(400).json({error:'Positive rate_to_base and source_reference are required'});if(b.valid_from&&b.valid_until&&String(b.valid_from)>String(b.valid_until))return res.status(400).json({error:'valid_until cannot be before valid_from'});const r=await db.execute({sql:`INSERT INTO procurement_fx_rates(currency_code,base_currency,rate_to_base,valid_from,valid_until,source_reference,recorded_by_employee_id) VALUES(?,?,?,?,?,?,?)`,args:[code,base,rate,b.valid_from||null,b.valid_until||null,ref,req.employee?.id||null]});res.status(201).json({id:Number(r.lastInsertRowid),currency_code:code,base_currency:base,rate_to_base:rate});}catch(e){res.status(500).json({error:e.message});}});
+router.get('/rate/:currency',requirePermission('purchase_requests'),async(req,res)=>{try{res.json(await getRate(db,req.params.currency,req.query.as_of||null));}catch(e){res.status(e.status||500).json({error:e.message});}});
+module.exports=router;

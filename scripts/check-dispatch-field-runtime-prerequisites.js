@@ -1,0 +1,32 @@
+'use strict';
+const fs=require('fs');
+const path=require('path');
+const root=path.join(__dirname,'..');
+function read(p){return fs.readFileSync(path.join(root,p),'utf8');}
+function ok(name,condition){if(!condition){console.error('Dispatch runtime prerequisite FAILED:',name);process.exitCode=1;}else console.log('Dispatch runtime prerequisite OK:',name);}
+const guard=read('routes/logistics-runtime-integrity-guard.js');
+const multi=read('routes/multi-branch-integrity-guard.js');
+const field=read('routes/logistics-field-execution.js');
+const planner=read('routes/logistics-route-planning.js');
+const runtime=read('tests/dispatch-field-runtime-helper.js');
+const suite=read('tests/business-integrity.spec.js');
+ok('runtime guard is mounted before logistics business router',multi.includes("router.use('/logistics-intelligence',require('./logistics-runtime-integrity-guard'))"));
+ok('generic physical status bypass is blocked',guard.includes("['ready','in_transit','completed']")&&guard.includes('dispatch_field_execution_required'));
+ok('standalone assignment requires active flagged driver',guard.includes('is_driver')&&guard.includes('dispatch_driver_eligibility'));
+ok('route planner uses same driver eligibility policy',planner.includes("SELECT id,active,is_driver FROM employees")&&planner.includes('active employee flagged as a driver'));
+ok('field lifecycle persists executions',field.includes('CREATE TABLE IF NOT EXISTS dispatch_executions'));
+ok('field lifecycle persists custody events',field.includes('CREATE TABLE IF NOT EXISTS dispatch_custody_events'));
+ok('field lifecycle persists delivery/pickup proofs',field.includes('CREATE TABLE IF NOT EXISTS dispatch_proofs'));
+ok('pickup creates chain-of-custody evidence',field.includes("'pickup_custody'"));
+ok('delivery proof requires destination arrival',field.includes("Delivery proof can only be captured after arrival at destination"));
+ok('completion requires delivery proof',field.includes("Delivery/receipt proof is required before dispatch completion"));
+ok('completion releases custody',field.includes("'custody_released'"));
+ok('completion returns standalone vehicle to available',field.includes("UPDATE dispatch_vehicles SET status='available'"));
+ok('runtime test rejects generic completion bypass',runtime.includes("status:'completed'")&&runtime.includes('dispatch_field_execution_required'));
+ok('runtime test rejects non-driver assignment',runtime.includes('dispatch_driver_eligibility'));
+ok('runtime test executes ordered field stages',runtime.includes('stage/depart_origin')&&runtime.includes('stage/arrive_origin')&&runtime.includes('stage/pickup')&&runtime.includes('stage/arrive_destination'));
+ok('runtime test proves completion blocked before proof',runtime.includes("toContain('proof')"));
+ok('runtime test captures delivery proof and custody release',runtime.includes("proof_type:'delivery'")&&runtime.includes("event_type==='custody_released'"));
+ok('runtime test is registered in business integrity release suite',suite.includes('registerDispatchFieldRuntimeCertification'));
+if(process.exitCode)process.exit(process.exitCode);
+console.log('Dispatch field runtime prerequisites certified: 18 controls.');

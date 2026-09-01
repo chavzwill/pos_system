@@ -1,0 +1,231 @@
+name: Final Production Runtime Certification
+
+on:
+  push:
+    branches:
+      - infra/sqlite-production-tuning
+      - ops/production-cutover-tooling
+      - ops/host-ready-deployment
+    paths:
+      - Dockerfile
+      - docker-entrypoint.sh
+      - docker-compose.yml
+      - docker-compose.host.yml
+      - deploy/Caddyfile
+      - lib/local-sqlite-runtime.js
+      - package.json
+      - package-lock.json
+      - scripts/production-preflight.sh
+      - scripts/production-backup.sh
+      - scripts/production-restore.sh
+      - scripts/production-smoke.sh
+      - docs/PRODUCTION_CUTOVER_RUNBOOK.md
+      - docs/PRODUCTION_HOST_PROFILE.md
+      - .env.production.example
+      - .github/workflows/container-certification.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: final-production-runtime-certification-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify-production-runtime:
+    runs-on: ubuntu-latest
+    timeout-minutes: 50
+    env:
+      POS_TEST_USER: admin
+      POS_TEST_PASSWORD: '123456'
+      CI: '1'
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+
+      - name: Use certified Node.js major
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Require zero production dependency vulnerabilities
+        run: npm audit --omit=dev
+
+      - name: Validate cutover shell syntax
+        run: |
+          bash -n scripts/production-preflight.sh
+          bash -n scripts/production-backup.sh
+          bash -n scripts/production-restore.sh
+          bash -n scripts/production-smoke.sh
+
+      - name: Install Chromium runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Bootstrap isolated release-gate database
+        env:
+          TURSO_DATABASE_URL: ''
+          TURSO_AUTH_TOKEN: ''
+        run: |
+          rm -f pos.db pos.db-shm pos.db-wal
+          node scripts/ci-runtime-bootstrap.js
+
+      - name: Run full application release gate
+        env:
+          TURSO_DATABASE_URL: ''
+          TURSO_AUTH_TOKEN: ''
+        run: npm run test:release-gate -- --workers=1
+
+      - name: Build production image
+        run: docker build --pull -t total-tools-pos:certified .
+
+      - name: Verify production image Node major
+        run: |
+          major="$(docker run --rm --entrypoint node total-tools-pos:certified -p 'process.versions.node.split(".")[0]')"
+          test "$major" = "22"
+
+      - name: Prepare isolated persistent storage
+        run: mkdir -p .container-test/data .container-test/uploads
+
+      - name: Start production container
+        run: |
+          docker run -d \
+            --name total-tools-pos-cert \
+            -p 127.0.0.1:3001:3001 \
+            -e TURSO_DATABASE_URL=file:/app/data/pos.db \
+            -e TURSO_AUTH_TOKEN= \
+            -v "$PWD/.container-test/data:/app/data" \
+            -v "$PWD/.container-test/uploads:/app/uploads" \
+            total-tools-pos:certified
+
+      - name: Wait for application health
+        run: |
+          for attempt in $(seq 1 30); do
+            if curl --fail --silent --show-error http://127.0.0.1:3001/ >/tmp/pos-root.html; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker logs total-tools-pos-cert
+          exit 1
+
+      - name: Verify Docker health status
+        run: |
+          for attempt in $(seq 1 45); do
+            status="$(docker inspect --format='{{.State.Health.Status}}' total-tools-pos-cert)"
+            if [ "$status" = "healthy" ]; then
+              exit 0
+            fi
+            if [ "$status" = "unhealthy" ]; then
+              docker logs total-tools-pos-cert
+              exit 1
+            fi
+            sleep 1
+          done
+          docker inspect total-tools-pos-cert
+          docker logs total-tools-pos-cert
+          exit 1
+
+      - name: Initialize database through protected API boundary
+        run: |
+          code="$(curl --silent --show-error --output /tmp/db-probe.json --write-out '%{http_code}' http://127.0.0.1:3001/api/products)"
+          case "$code" in
+            401|403) ;;
+            *) cat /tmp/db-probe.json; echo "Unexpected protected API status: $code"; exit 1 ;;
+          esac
+
+      - name: Verify persisted SQLite database exists
+        run: test -s .container-test/data/pos.db
+
+      - name: Verify configured local SQLite WAL and busy timeout
+        run: |
+          docker exec total-tools-pos-cert node --require ./lib/local-sqlite-runtime.js -e '
+            (async () => {
+              const { ensureReady, db } = require("./database");
+              await ensureReady();
+              const journal = await db.execute({ sql: "PRAGMA journal_mode", args: [] });
+              const busy = await db.execute({ sql: "PRAGMA busy_timeout", args: [] });
+              const journalValue = String(Object.values(journal.rows[0] || {})[0] || "").toLowerCase();
+              const busyValue = Number(Object.values(busy.rows[0] || {})[0] || 0);
+              if (journalValue !== "wal") throw new Error(`Expected WAL journal mode, got ${journalValue}`);
+              if (busyValue !== 5000) throw new Error(`Expected busy_timeout=5000, got ${busyValue}`);
+            })().catch((error) => { console.error(error); process.exit(1); });
+          '
+
+      - name: Verify non-root application process
+        run: |
+          pid1_uid="$(docker exec total-tools-pos-cert sh -lc "awk '/^Uid:/{print \$2}' /proc/1/status")"
+          app_uid="$(docker exec total-tools-pos-cert id -u app)"
+          test "$pid1_uid" = "$app_uid"
+
+      - name: Validate host Compose profile
+        env:
+          POS_DOMAIN: http://localhost
+        run: docker compose -f docker-compose.yml -f docker-compose.host.yml config >/tmp/host-compose.yml
+
+      - name: Validate Caddy reverse proxy configuration
+        env:
+          POS_DOMAIN: http://localhost
+        run: |
+          docker run --rm \
+            -e POS_DOMAIN="$POS_DOMAIN" \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine \
+            caddy validate --config /etc/caddy/Caddyfile
+
+      - name: Start host-ready proxy profile
+        env:
+          POS_DOMAIN: http://localhost
+        run: docker compose -f docker-compose.yml -f docker-compose.host.yml up -d --build
+
+      - name: Verify POS through reverse proxy
+        env:
+          POS_DOMAIN: http://localhost
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error http://localhost/ >/tmp/pos-proxy-root.html; then
+              grep -qi '<html\|<!doctype' /tmp/pos-proxy-root.html
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose -f docker-compose.yml -f docker-compose.host.yml logs app caddy
+          exit 1
+
+      - name: Verify app remains private behind proxy
+        env:
+          POS_DOMAIN: http://localhost
+        run: |
+          app_id="$(docker compose -f docker-compose.yml -f docker-compose.host.yml ps -q app)"
+          docker inspect "$app_id" | jq -e '.[0].HostConfig.PortBindings["3001/tcp"] == null'
+          caddy_id="$(docker compose -f docker-compose.yml -f docker-compose.host.yml ps -q caddy)"
+          docker port "$caddy_id" | grep -E '80/tcp|443/tcp'
+
+      - name: Upload Playwright diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: final-production-runtime-diagnostics
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
+
+      - name: Show runtime logs on failure
+        if: failure()
+        env:
+          POS_DOMAIN: http://localhost
+        run: |
+          docker logs total-tools-pos-cert || true
+          docker compose -f docker-compose.yml -f docker-compose.host.yml logs app caddy || true
+
+      - name: Stop certification containers
+        if: always()
+        run: |
+          docker rm -f total-tools-pos-cert || true
+          POS_DOMAIN=http://localhost docker compose -f docker-compose.yml -f docker-compose.host.yml down -v || true

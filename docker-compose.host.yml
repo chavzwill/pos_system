@@ -1,0 +1,31 @@
+services:
+  app:
+    networks:
+      - pos_internal
+
+  caddy:
+    image: caddy:2-alpine
+    restart: unless-stopped
+    depends_on:
+      app:
+        condition: service_healthy
+    environment:
+      POS_DOMAIN: ${POS_DOMAIN:?Set POS_DOMAIN to the production hostname}
+    ports:
+      - "80:80"
+      - "443:443"
+      - "443:443/udp"
+    volumes:
+      - ./deploy/Caddyfile:/etc/caddy/Caddyfile:ro
+      - caddy_data:/data
+      - caddy_config:/config
+    networks:
+      - pos_internal
+
+networks:
+  pos_internal:
+    driver: bridge
+
+volumes:
+  caddy_data:
+  caddy_config:

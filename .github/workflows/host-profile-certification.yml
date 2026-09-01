@@ -1,0 +1,84 @@
+name: Production Host Profile Certification
+
+on:
+  push:
+    branches:
+      - ops/host-ready-deployment
+    paths:
+      - deploy/Caddyfile
+      - docker-compose.yml
+      - docker-compose.host.yml
+      - Dockerfile
+      - docker-entrypoint.sh
+      - .env.production.example
+      - docs/PRODUCTION_HOST_PROFILE.md
+      - .github/workflows/host-profile-certification.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: production-host-profile-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify-host-profile:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      POS_DOMAIN: http://localhost
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+
+      - name: Validate composed production configuration
+        run: docker compose -f docker-compose.yml -f docker-compose.host.yml config >/tmp/pos-compose.yml
+
+      - name: Validate Caddy configuration
+        run: |
+          docker run --rm \
+            -e POS_DOMAIN="$POS_DOMAIN" \
+            -v "$PWD/deploy/Caddyfile:/etc/caddy/Caddyfile:ro" \
+            caddy:2-alpine \
+            caddy validate --config /etc/caddy/Caddyfile
+
+      - name: Start application and proxy
+        run: docker compose -f docker-compose.yml -f docker-compose.host.yml up -d --build
+
+      - name: Wait for reverse proxy
+        run: |
+          for attempt in $(seq 1 60); do
+            if curl --fail --silent --show-error http://localhost/ >/tmp/pos-proxy-root.html; then
+              exit 0
+            fi
+            sleep 1
+          done
+          docker compose -f docker-compose.yml -f docker-compose.host.yml ps
+          docker compose -f docker-compose.yml -f docker-compose.host.yml logs app caddy
+          exit 1
+
+      - name: Verify application is healthy behind proxy
+        run: |
+          app_id="$(docker compose -f docker-compose.yml -f docker-compose.host.yml ps -q app)"
+          app_health="$(docker inspect --format='{{.State.Health.Status}}' "$app_id")"
+          test "$app_health" = "healthy"
+          grep -qi '<html\|<!doctype' /tmp/pos-proxy-root.html
+
+      - name: Verify application port is not publicly published
+        run: |
+          app_id="$(docker compose -f docker-compose.yml -f docker-compose.host.yml ps -q app)"
+          docker inspect "$app_id" | jq -e '.[0].HostConfig.PortBindings["3001/tcp"] == null'
+
+      - name: Verify proxy publishes only intended ingress
+        run: |
+          caddy_id="$(docker compose -f docker-compose.yml -f docker-compose.host.yml ps -q caddy)"
+          docker port "$caddy_id" | grep -E '80/tcp|443/tcp'
+
+      - name: Show logs on failure
+        if: failure()
+        run: docker compose -f docker-compose.yml -f docker-compose.host.yml logs app caddy || true
+
+      - name: Stop host profile
+        if: always()
+        run: docker compose -f docker-compose.yml -f docker-compose.host.yml down -v || true

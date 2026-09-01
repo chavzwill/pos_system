@@ -1,0 +1,11 @@
+(()=>{'use strict';
+let profile=null,loading=false;
+function can(key){const p=profile?.permissions||{};if(p[key])return true;const prefix=key.replace(/-/g,'_')+'_';return Object.entries(p).some(([k,v])=>v&&(k===key||k.startsWith(prefix)));}
+async function ensure(){if(profile||loading)return;loading=true;try{const r=await fetch('/api/workspace-profile/me',{credentials:'same-origin'});if(r.ok)profile=await r.json();}catch(_){}finally{loading=false;apply();}}
+function relevant(){const t=document.getElementById('shell-title');return t&&/(finance|people|sales)/i.test(t.textContent||'');}
+function apply(){const grid=document.getElementById('shell-grid');if(!grid||!relevant()){ensure();return;}if(!profile){ensure();return;}if(!can('commissions'))return;if(grid.querySelector('[data-commissions-bridge]'))return;const card=document.createElement('article');card.className='shell-card';card.dataset.commissionsBridge='1';card.innerHTML='<div><strong>Commissions & Incentives</strong><p>Review commission plans, assignments, earned records, approvals and payment status.</p></div><button data-commissions-open>Open</button>';grid.appendChild(card);card.querySelector('[data-commissions-open]').addEventListener('click',open);}
+function css(){return new Promise(resolve=>{if([...document.styleSheets].some(x=>x.href&&x.href.includes('/commissions-workspace.css')))return resolve();const l=document.createElement('link');l.rel='stylesheet';l.href='/commissions-workspace.css?v=20260824-1014';l.onload=resolve;l.onerror=resolve;document.head.appendChild(l);});}
+function js(){return new Promise((resolve,reject)=>{if(window.TotalToolsCommissionsWorkspace)return resolve();const old=document.getElementById('commissions-workspace-js');if(old){old.addEventListener('load',resolve,{once:true});return;}const s=document.createElement('script');s.id='commissions-workspace-js';s.src='/commissions-workspace.js?v=20260824-1014';s.onload=resolve;s.onerror=()=>reject(new Error('Unable to load commissions workspace'));document.body.appendChild(s);});}
+async function open(){try{await Promise.all([css(),js()]);window.TotalToolsCommissionsWorkspace?.open();}catch(e){alert(e.message);}}
+new MutationObserver(apply).observe(document.documentElement,{subtree:true,childList:true,characterData:true});window.addEventListener('load',()=>{ensure();apply();});
+})();

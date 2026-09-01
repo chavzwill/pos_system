@@ -1,0 +1,25 @@
+(()=>{'use strict';
+const KEY='tt-guided-mode-qa-v1';
+const state={opens:0,stepsSeen:0,unavailable:0,pauses:0,recoveries:0,duplicateTargets:0,lastTask:'',lastStep:'',issues:[]};
+let timer=0,lastOpen=false,lastSignature='';
+const q=(s,r=document)=>r.querySelector(s);const qa=(s,r=document)=>[...r.querySelectorAll(s)];
+function guide(){return document.getElementById('tt-guided-mode');}
+function visible(el){if(!el||!el.isConnected)return false;const cs=getComputedStyle(el),b=el.getBoundingClientRect();return cs.display!=='none'&&cs.visibility!=='hidden'&&b.width>0&&b.height>0;}
+function load(){try{const v=JSON.parse(sessionStorage.getItem(KEY)||'null');if(v&&typeof v==='object')Object.assign(state,v);}catch{}}
+function save(){try{sessionStorage.setItem(KEY,JSON.stringify(state));}catch{}}
+function issue(code,detail=''){const sig=`${code}:${detail}`;if(state.issues.at(-1)?.sig===sig)return;state.issues.push({sig,code,detail,at:new Date().toISOString()});if(state.issues.length>40)state.issues.shift();save();}
+function ensureRecovery(g){const step=q('.tt-guide__step',g);if(!step)return;const unavailable=/control not currently available/i.test(q('h3',step)?.textContent||'');let box=q('.tt-guide__qa-recovery',step);if(!unavailable){box?.remove();return;}if(!box){box=document.createElement('div');box.className='tt-guide__qa-recovery';box.innerHTML='<strong>Can’t see the control?</strong><span>Guided Mode will re-check the current workspace and permissions. If the control is still unavailable, choose another task rather than guessing.</span><div><button type="button" data-guide-qa-recheck>Recheck now</button><button type="button" data-guide-qa-home>Choose another task</button></div>';step.appendChild(box);q('[data-guide-qa-recheck]',box)?.addEventListener('click',()=>{state.recoveries++;save();window.TotalToolsGuidedModeIntegrity?.revalidate?.();window.TotalToolsGuidedModeHardening?.validate?.();setTimeout(run,80);});q('[data-guide-qa-home]',box)?.addEventListener('click',()=>g.querySelector('[data-guide-home]')?.click());}}
+function run(){timer=0;const g=guide();const isOpen=!!g;if(isOpen&&!lastOpen){state.opens++;save();}lastOpen=isOpen;if(!g)return;
+ const task=q('.tt-guide__head p',g)?.textContent?.trim()||'';const step=q('.tt-guide__step-count',g)?.textContent?.trim()||'';const sig=`${task}|${step}`;if(sig&&sig!==lastSignature){lastSignature=sig;state.stepsSeen++;state.lastTask=task;state.lastStep=step;save();}
+ const guides=document.querySelectorAll('#tt-guided-mode').length;if(guides>1)issue('duplicate-guide-instance',String(guides));
+ const external=qa('.tt-guide-highlight,.tt-guide-exact-highlight,[data-guide-hardened-target="true"]').filter(x=>!g.contains(x)&&visible(x));if(external.length>1){state.duplicateTargets++;issue('multiple-highlight-targets',String(external.length));external.slice(0,-1).forEach(x=>x.classList.remove('tt-guide-highlight','tt-guide-exact-highlight'));save();}
+ const unavailable=/control not currently available/i.test(q('.tt-guide__step h3',g)?.textContent||'');if(unavailable){const marker=`${task}|${step}|unavailable`;if(state._lastUnavailable!==marker){state._lastUnavailable=marker;state.unavailable++;issue('unavailable-control',`${task} ${step}`);save();}}ensureRecovery(g);
+ const paused=!!q('.tt-guide__integrity',g);if(paused&&state._lastPause!==sig){state._lastPause=sig;state.pauses++;save();}
+ const count=q('.tt-guide__step-count',g)?.textContent||'';if(count&&!/^step\s+\d+\s+of\s+\d+$/i.test(count.trim()))issue('invalid-step-count',count.trim());
+ const next=q('[data-guide-next]',g);if(q('.tt-guide__step',g)&&!next)issue('missing-next-control',task);
+ const profile=window.__TT_WORKSPACE_PROFILE__;if(profile&&!Array.isArray(profile.domains||[]))issue('invalid-profile-domains',typeof profile.domains);
+}
+function schedule(){if(timer)return;timer=window.setTimeout(run,120);}
+load();document.addEventListener('click',e=>{if(e.target.closest?.('#tt-guide-launcher,#tt-guide-access,#tt-guide-quick,#tt-guided-mode'))schedule();},true);document.addEventListener('change',e=>{if(e.target.closest?.('#tt-guided-mode'))schedule();},true);window.addEventListener('online',schedule);window.addEventListener('offline',schedule);window.addEventListener('popstate',schedule);document.addEventListener('visibilitychange',()=>{if(!document.hidden)schedule();});setInterval(()=>{if(guide())run();},2200);
+window.TotalToolsGuidedModeQA={report:()=>({...state,integrity:window.TotalToolsGuidedModeIntegrity?.run?.()||null,hardening:window.TotalToolsGuidedModeHardening?.validate?.()||null}),reset:()=>{sessionStorage.removeItem(KEY);for(const k of Object.keys(state)){if(Array.isArray(state[k]))state[k]=[];else if(typeof state[k]==='number')state[k]=0;else state[k]='';}return true;},run:()=>{run();return window.TotalToolsGuidedModeQA.report();}};
+})();

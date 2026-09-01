@@ -1,0 +1,18 @@
+{$POS_DOMAIN} {
+  encode zstd gzip
+
+  reverse_proxy app:3001
+
+  header {
+    X-Content-Type-Options "nosniff"
+    X-Frame-Options "SAMEORIGIN"
+    Referrer-Policy "strict-origin-when-cross-origin"
+    Permissions-Policy "camera=(), microphone=(), geolocation=(self)"
+    -Server
+  }
+
+  log {
+    output stdout
+    format console
+  }
+}
