@@ -1,0 +1,46 @@
+name: Candidate Host Windows Assessment Certification
+
+on:
+  push:
+    branches:
+      - ops/host-selection-budget
+    paths:
+      - scripts/candidate-host-assessment.ps1
+      - .github/workflows/candidate-host-windows-certification.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify-windows-assessment:
+    runs-on: windows-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Parse assessment script
+        shell: pwsh
+        run: |
+          $errors = $null
+          $tokens = $null
+          [System.Management.Automation.Language.Parser]::ParseFile((Resolve-Path scripts/candidate-host-assessment.ps1), [ref]$tokens, [ref]$errors) | Out-Null
+          if ($errors.Count -gt 0) {
+            $errors | Format-List | Out-String | Write-Host
+            exit 1
+          }
+
+      - name: Execute Windows assessment
+        shell: pwsh
+        run: |
+          $output = & ./scripts/candidate-host-assessment.ps1 2>&1
+          $output | Tee-Object -FilePath "$env:RUNNER_TEMP\windows-host-assessment.txt"
+          if (-not ($output -match '^DECISION: (CONDITIONAL|FAIL)$')) {
+            Write-Error 'Windows assessor must produce a decision and must never claim production PASS.'
+            exit 1
+          }
+          if ($output -match '^DECISION: PASS$') {
+            Write-Error 'Windows assessor incorrectly claimed production PASS.'
+            exit 1
+          }
