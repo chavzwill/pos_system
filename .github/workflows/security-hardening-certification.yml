@@ -1,0 +1,69 @@
+name: POS Security Hardening Certification
+
+on:
+  push:
+    branches:
+      - security/pos-hardening-v1
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: security-hardening-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  certify-security:
+    runs-on: ubuntu-latest
+    timeout-minutes: 35
+    env:
+      POS_TEST_USER: admin
+      POS_TEST_PASSWORD: '123456'
+      TURSO_DATABASE_URL: ''
+      TURSO_AUTH_TOKEN: ''
+      CI: '1'
+    steps:
+      - name: Checkout hardened head
+        uses: actions/checkout@v4
+
+      - name: Use Node.js 22
+        uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install locked dependencies
+        run: npm ci
+
+      - name: Verify production dependency audit
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Validate hardened security module syntax
+        run: |
+          node --check lib/securityHardening.js
+          node --check lib/sessionAuth.js
+          node --check routes/employees.js
+          node --check server.js
+
+      - name: Install Chromium runtime
+        run: npx playwright install --with-deps chromium
+
+      - name: Bootstrap isolated local runtime database
+        run: |
+          rm -f pos.db pos.db-shm pos.db-wal
+          node scripts/ci-runtime-bootstrap.js
+
+      - name: Run full release gate with adversarial security tests
+        run: npm run test:release-gate -- --workers=1
+
+      - name: Upload Playwright diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: security-hardening-diagnostics
+          path: |
+            playwright-report/
+            test-results/
+          if-no-files-found: ignore
+          retention-days: 7
