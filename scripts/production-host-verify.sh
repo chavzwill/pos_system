@@ -37,16 +37,12 @@ caddy_state="$(docker inspect --format='{{.State.Status}}' "$caddy_id")"
 echo "PASS: app container is running and healthy"
 echo "PASS: caddy container is running"
 
-if docker inspect "$app_id" | grep -q '"3001/tcp": null'; then
-  echo "PASS: application port 3001 is not host-published"
-else
-  host_binding="$(docker inspect --format='{{json .HostConfig.PortBindings}}' "$app_id")"
-  if printf '%s' "$host_binding" | grep -q '3001/tcp'; then
-    echo "FAIL: application port 3001 has a host binding: $host_binding" >&2
-    exit 1
-  fi
-  echo "PASS: application port 3001 is not host-published"
+host_binding="$(docker inspect --format='{{json .HostConfig.PortBindings}}' "$app_id")"
+if printf '%s' "$host_binding" | grep -q '3001/tcp'; then
+  echo "FAIL: application port 3001 has a host binding: $host_binding" >&2
+  exit 1
 fi
+echo "PASS: application port 3001 is not host-published"
 
 published_ports="$(docker port "$caddy_id")"
 printf '%s\n' "$published_ports" | grep -q '80/tcp' || { echo "FAIL: Caddy is not publishing TCP 80" >&2; exit 1; }
@@ -87,10 +83,10 @@ else
   exit 1
 fi
 
-if [ -d uploads ] && [ -w uploads ]; then
-  echo "PASS: uploads persistence path exists and is writable"
+if docker exec "$app_id" sh -lc 'test -d /app/uploads && test -w /app/uploads'; then
+  echo "PASS: uploads persistence path is writable by the application identity"
 else
-  echo "FAIL: uploads persistence path is missing or not writable" >&2
+  echo "FAIL: /app/uploads is missing or not writable by the application identity" >&2
   exit 1
 fi
 
