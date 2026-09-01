@@ -19,15 +19,15 @@ async function api(cookie, path, options = {}) {
   return { status: r.status, body: await r.json().catch(() => null), headers: r.headers };
 }
 
-async function makeRestrictedEmployee(adminCookie) {
+async function makeEmployee(adminCookie, permissions = { pos: true }, label = 'Restricted') {
   const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
   const group = await api(adminCookie, '/api/security-groups', {
     method: 'POST',
     body: JSON.stringify({
-      name: `Security Runtime Restricted ${suffix}`,
+      name: `Security Runtime ${label} ${suffix}`,
       description: 'Temporary adversarial security fixture',
       reason: 'Security hardening runtime certification',
-      permissions: { pos: true },
+      permissions,
     }),
   });
   expect(group.status).toBe(201);
@@ -44,12 +44,16 @@ async function makeRestrictedEmployee(adminCookie) {
   const employee = await api(adminCookie, '/api/employees', {
     method: 'POST',
     body: JSON.stringify({
-      first_name: 'Security', last_name: 'Restricted', username, password, pin,
+      first_name: 'Security', last_name: label, username, password, pin,
       security_group_id: group.body.id, default_branch_id: branch.id, must_change_password: false,
     }),
   });
   expect(employee.status).toBe(201);
   return { group: group.body, employee: employee.body, username, password, replacement, pin };
+}
+
+async function makeRestrictedEmployee(adminCookie) {
+  return makeEmployee(adminCookie, { pos: true }, 'Restricted');
 }
 
 async function cleanup(adminCookie, fixture) {
@@ -131,6 +135,41 @@ test.describe('POS security hardening', () => {
     }
   });
 
+  test('staff manager cannot promote itself to a security group with stronger authority', async () => {
+    const admin = await login();
+    let fixture = null;
+    try {
+      fixture = await makeEmployee(admin.cookie, { pos: true, employees: true }, 'StaffManager');
+      const manager = await login(fixture.username, fixture.password);
+      const groups = await api(manager.cookie, '/api/security-groups');
+      expect(groups.status).toBe(200);
+      const adminGroup = groups.body.find(g => /administrator/i.test(g.name));
+      expect(adminGroup).toBeTruthy();
+
+      const promote = await api(manager.cookie, `/api/employees/${fixture.employee.id}`, {
+        method: 'PUT',
+        body: JSON.stringify({
+          first_name: fixture.employee.first_name,
+          last_name: fixture.employee.last_name,
+          username: fixture.username,
+          active: 1,
+          security_group_id: adminGroup.id,
+          default_branch_id: fixture.employee.default_branch_id,
+          must_change_password: false,
+        }),
+      });
+      expect(promote.status).toBe(403);
+      expect(promote.body?.error).toMatch(/authority|security group/i);
+
+      const changeAdminPassword = await api(manager.cookie, `/api/employees/${admin.body.id}/change-password`, {
+        method: 'PUT', body: JSON.stringify({ password: 'ShouldNotApply!123' }),
+      });
+      expect(changeAdminPassword.status).toBe(403);
+    } finally {
+      await cleanup(admin.cookie, fixture);
+    }
+  });
+
   test('repeated bad login attempts are throttled', async () => {
     const username = `__rate_limit_${Date.now()}__`;
     let last = null;
@@ -187,6 +226,50 @@ test.describe('POS security hardening', () => {
       expect(authorizedMissing.status).toBe(404);
       expect(authorizedMissing.headers.get('cache-control') || '').toMatch(/no-store/);
     } finally {
+      await cleanup(admin.cookie, fixture);
+    }
+  });
+
+  test('ordinary staff customer reads minimize rental identity and reference PII', async () => {
+    const admin = await login();
+    let fixture = null;
+    let customer = null;
+    try {
+      fixture = await makeEmployee(admin.cookie, { pos: true, customers: true }, 'CustomerLookup');
+      customer = await api(admin.cookie, '/api/customers', {
+        method: 'POST',
+        body: JSON.stringify({
+          first_name: 'Sensitive', last_name: `Customer${Date.now()}`,
+          phone: `876555${String(Date.now()).slice(-4)}`,
+          customer_type: 'cash',
+          is_rental_customer: true,
+          rental_id_type: 'drivers_license',
+          rental_id_number: 'SECURITY-ID-12345',
+          rental_id_scan_path: '/uploads/customer-ids/security-id.png',
+          rental_address_proof_type: 'utility_bill',
+          rental_address_proof_details: 'Private address proof reference',
+          rental_reference_name: 'Private Reference',
+          rental_reference_phone: '8765559999',
+          rental_reference_relationship: 'Employer',
+        }),
+      });
+      expect(customer.status).toBe(201);
+
+      const staff = await login(fixture.username, fixture.password);
+      const detail = await api(staff.cookie, `/api/customers/${customer.body.id}`);
+      expect(detail.status).toBe(200);
+      expect(detail.headers.get('x-customer-data-scope')).toBe('minimized');
+      expect(detail.body.rental_id_number).toBeUndefined();
+      expect(detail.body.rental_id_scan_path).toBeUndefined();
+      expect(detail.body.rental_address_proof_details).toBeUndefined();
+      expect(detail.body.rental_reference_name).toBeUndefined();
+      expect(detail.body.rental_reference_phone).toBeUndefined();
+
+      const adminDetail = await api(admin.cookie, `/api/customers/${customer.body.id}`);
+      expect(adminDetail.status).toBe(200);
+      expect(adminDetail.body.rental_id_number).toBe('SECURITY-ID-12345');
+    } finally {
+      if (customer?.body?.id) await api(admin.cookie, `/api/customers/${customer.body.id}`, { method: 'DELETE' });
       await cleanup(admin.cookie, fixture);
     }
   });
