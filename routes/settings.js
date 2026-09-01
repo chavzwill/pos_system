@@ -6,11 +6,20 @@ const multer = require('multer');
 const { db } = require('../database');
 const { requireAuth, requirePermission, can } = require('../lib/permissions');
 const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
+const { validateMemoryUpload, imageMulterFilter } = require('../lib/uploadSecurity');
 
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => cb(null, /^image\//.test(file.mimetype)),
+  limits: {
+    fileSize: 5 * 1024 * 1024,
+    files: 1,
+    fields: 2,
+    parts: 3,
+    fieldNameSize: 100,
+    fieldSize: 64 * 1024,
+    headerPairs: 50,
+  },
+  fileFilter: imageMulterFilter,
 });
 
 const SECRET_KEYS = new Set([
@@ -74,27 +83,28 @@ router.put('/', requirePermission('settings'), async (req, res) => {
 });
 
 router.post('/logo', requirePermission('settings'), upload.single('logo'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+  if (!req.file) return res.status(400).json({ error: 'A JPEG, PNG, or WebP logo is required' });
+  const validation = validateMemoryUpload(req.file, { kind: 'image' });
+  if (!validation.ok) return res.status(415).json({ error: validation.error });
   try {
     const { rows: [existing] } = await db.execute({ sql: "SELECT value FROM settings WHERE key = 'company_logo_url'", args: [] });
-    if (existing?.value) {
-      if (existing.value.startsWith('https://')) await cloudDestroy(existing.value);
-      else { const old = path.join(__dirname, '..', existing.value); if (fs.existsSync(old)) fs.unlinkSync(old); }
-    }
     const result = await cloudUpload(req.file.buffer, { folder: 'pos-system/branding', public_id: 'company-logo', overwrite: true, resource_type: 'image' });
     let logoUrl;
     if (result) logoUrl = result.secure_url;
     else {
       const dir = path.join(__dirname, '../uploads/branding');
       fs.mkdirSync(dir, { recursive: true });
-      const ext = path.extname(req.file.originalname).toLowerCase();
-      const filename = `company-logo-${Date.now()}${ext}`;
+      const filename = `company-logo-${Date.now()}${validation.extension}`;
       fs.writeFileSync(path.join(dir, filename), req.file.buffer);
       logoUrl = `/uploads/branding/${filename}`;
     }
     await db.execute({ sql: 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', args: ['company_logo_url', logoUrl] });
+    if (existing?.value && existing.value !== logoUrl) {
+      if (existing.value.startsWith('https://')) await cloudDestroy(existing.value);
+      else { const old = path.join(__dirname, '..', existing.value); if (fs.existsSync(old)) fs.unlinkSync(old); }
+    }
     res.json({ logo_url: logoUrl });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(500).json({ error: 'Unable to store company logo' }); }
 });
 
 router.delete('/logo', requirePermission('settings'), async (req, res) => {
