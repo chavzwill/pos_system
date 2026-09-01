@@ -7,8 +7,27 @@ const { requireAuth, requirePermission, can } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
 const { loginRateLimit, privilegedPinRateLimit, resetRequestRateLimit } = require('../lib/securityHardening');
 
+const PASSWORD_COST = 12;
+const PIN_COST = 12;
+
 function isBcryptHash(value) {
-  return typeof value === 'string' && value.startsWith('$2');
+  return typeof value === 'string' && /^\$2[aby]\$/.test(value);
+}
+function validPin(value) {
+  return /^\d{6,10}$/.test(String(value || ''));
+}
+async function hashPin(pin) {
+  return bcrypt.hash(String(pin), PIN_COST);
+}
+async function verifyPin(stored, supplied) {
+  if (!stored || !validPin(supplied)) return false;
+  if (isBcryptHash(stored)) return bcrypt.compare(String(supplied), stored);
+  return String(stored) === String(supplied);
+}
+async function upgradeLegacyPin(employeeId, stored, supplied) {
+  if (isBcryptHash(stored)) return;
+  const hashed = await hashPin(supplied);
+  await db.execute({ sql: 'UPDATE employees SET pin=? WHERE id=? AND pin=?', args: [hashed, employeeId, stored] });
 }
 function parsePermissions(value) {
   try { return value && typeof value === 'object' ? value : JSON.parse(value || '{}'); }
@@ -76,13 +95,17 @@ router.get('/', requireAuth, async (req, res) => {
 router.post('/', requirePermission('employees'), async (req, res) => {
   const { first_name, last_name, username, pin, password, must_change_password, security_group_id, default_branch_id, is_driver, is_operator, is_security, skill_ids } = req.body;
   if (!first_name || !last_name || !username || !pin) return res.status(400).json({ error: 'Required fields missing' });
+  if (!validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
   if (password && String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
   try {
     const assignment = await assertAssignableSecurityGroup(req, security_group_id);
     if (!assignment.ok) return res.status(assignment.status).json({ error: assignment.error });
     const employee_number = await nextNumber(db, 'employees', 'employee_number', 'EMP-', 4);
-    const passwordHash = password ? await bcrypt.hash(password, 10) : null;
-    const result = await db.execute({ sql: 'INSERT INTO employees (employee_number,first_name,last_name,username,pin,password,must_change_password,security_group_id,default_branch_id,is_driver,is_operator,is_security) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', args: [employee_number, first_name, last_name, username, pin, passwordHash, must_change_password ? 1 : 0, security_group_id || null, default_branch_id || null, is_driver ? 1 : 0, is_operator ? 1 : 0, is_security ? 1 : 0] });
+    const [passwordHash, pinHash] = await Promise.all([
+      password ? bcrypt.hash(password, PASSWORD_COST) : null,
+      hashPin(pin),
+    ]);
+    const result = await db.execute({ sql: 'INSERT INTO employees (employee_number,first_name,last_name,username,pin,password,must_change_password,security_group_id,default_branch_id,is_driver,is_operator,is_security) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', args: [employee_number, first_name, last_name, username, pinHash, passwordHash, must_change_password ? 1 : 0, security_group_id || null, default_branch_id || null, is_driver ? 1 : 0, is_operator ? 1 : 0, is_security ? 1 : 0] });
     const newId = Number(result.lastInsertRowid);
     if (default_branch_id) {
       await db.execute({ sql: 'INSERT OR IGNORE INTO employee_branches (employee_id, branch_id, is_default) VALUES (?,?,1)', args: [newId, default_branch_id] });
@@ -108,7 +131,7 @@ router.put('/:id/change-password', requireAuth, async (req, res) => {
   try {
     const { rows: [target] } = await db.execute({ sql: 'SELECT id FROM employees WHERE id = ?', args: [targetId] });
     if (!target) return res.status(404).json({ error: 'Employee not found' });
-    const hash = await bcrypt.hash(password, 10);
+    const hash = await bcrypt.hash(password, PASSWORD_COST);
     await db.execute({ sql: 'UPDATE employees SET password=?,must_change_password=0 WHERE id=?', args: [hash, targetId] });
     await destroyEmployeeSessions(targetId);
     if (self) clearSessionCookie(res);
@@ -128,9 +151,11 @@ router.put('/:id', requirePermission('employees'), async (req, res) => {
     const assignment = await assertAssignableSecurityGroup(req, security_group_id);
     if (!assignment.ok) return res.status(assignment.status).json({ error: assignment.error });
 
+    const pinProvided = pin !== undefined && pin !== null && String(pin) !== '';
+    if (pinProvided && !validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
     const groupChanged = Number(security_group_id || 0) !== Number(existing.security_group_id || 0);
     const passwordChanged = Boolean(password);
-    const pinChanged = Boolean(pin) && String(pin) !== String(existing.pin || '');
+    const pinChanged = pinProvided ? !(await verifyPin(existing.pin, pin)) : false;
     const crossUserCredentialChange = targetId !== Number(req.employee?.id) && (passwordChanged || pinChanged);
     if (crossUserCredentialChange && !can(req.employee?.permissions, 'security_manage')) {
       return res.status(403).json({ error: 'Changing another employee credentials requires Security Management authority' });
@@ -152,16 +177,16 @@ router.put('/:id', requirePermission('employees'), async (req, res) => {
     let credentialChanged = false;
     if (password) {
       if (String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
-      passwordToStore = await bcrypt.hash(password, 10);
+      passwordToStore = await bcrypt.hash(password, PASSWORD_COST);
       credentialChanged = true;
     }
-    if (pinChanged) credentialChanged = true;
-
-    if (pin) {
-      await db.execute({ sql: 'UPDATE employees SET first_name=?,last_name=?,username=?,pin=?,password=?,must_change_password=?,active=?,security_group_id=?,default_branch_id=?,is_driver=?,is_operator=?,is_security=? WHERE id=?', args: [first_name, last_name, username, pin, passwordToStore, must_change_password?1:0, active??1, security_group_id||null, default_branch_id||null, is_driver?1:0, is_operator?1:0, is_security?1:0, targetId] });
-    } else {
-      await db.execute({ sql: 'UPDATE employees SET first_name=?,last_name=?,username=?,password=?,must_change_password=?,active=?,security_group_id=?,default_branch_id=?,is_driver=?,is_operator=?,is_security=? WHERE id=?', args: [first_name, last_name, username, passwordToStore, must_change_password?1:0, active??1, security_group_id||null, default_branch_id||null, is_driver?1:0, is_operator?1:0, is_security?1:0, targetId] });
+    let pinToStore = existing.pin;
+    if (pinChanged) {
+      pinToStore = await hashPin(pin);
+      credentialChanged = true;
     }
+
+    await db.execute({ sql: 'UPDATE employees SET first_name=?,last_name=?,username=?,pin=?,password=?,must_change_password=?,active=?,security_group_id=?,default_branch_id=?,is_driver=?,is_operator=?,is_security=? WHERE id=?', args: [first_name, last_name, username, pinToStore, passwordToStore, must_change_password?1:0, active??1, security_group_id||null, default_branch_id||null, is_driver?1:0, is_operator?1:0, is_security?1:0, targetId] });
     if (credentialChanged || groupChanged || active === false || active === 0) await destroyEmployeeSessions(targetId);
     if (default_branch_id) {
       await db.execute({ sql: 'INSERT OR IGNORE INTO employee_branches (employee_id, branch_id, is_default) VALUES (?,?,1)', args: [targetId, default_branch_id] });
@@ -181,13 +206,17 @@ router.put('/:id', requirePermission('employees'), async (req, res) => {
 router.post('/validate-pin', requireAuth, privilegedPinRateLimit, async (req, res) => {
   try {
     const { pin, permission } = req.body;
-    if (!pin) return res.status(400).json({ error: 'PIN is required' });
+    if (!validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
     const { rows: employees } = await db.execute({ sql: 'SELECT e.id, e.first_name, e.last_name, e.pin, sg.permissions FROM employees e LEFT JOIN security_groups sg ON e.security_group_id = sg.id WHERE e.active = 1', args: [] });
-    const authorizer = employees.find(e => {
-      if (e.pin !== String(pin)) return false;
-      if (!permission) return true;
-      try { const p = JSON.parse(e.permissions || '{}'); return p[permission] === true; } catch { return false; }
-    });
+    let authorizer = null;
+    for (const employee of employees) {
+      if (!(await verifyPin(employee.pin, pin))) continue;
+      const permissions = parsePermissions(employee.permissions);
+      if (permission && !can(permissions, permission)) continue;
+      authorizer = employee;
+      await upgradeLegacyPin(employee.id, employee.pin, pin);
+      break;
+    }
     if (!authorizer) return res.status(403).json({ error: 'Invalid PIN or insufficient privilege' });
     resetRequestRateLimit(req);
     res.json({ authorized: true, name: `${authorizer.first_name} ${authorizer.last_name}` });
@@ -209,15 +238,20 @@ router.post('/login', loginRateLimit, async (req, res) => {
         } else {
           ok = stored != null && password === stored;
           if (ok) {
-            const newHash = await bcrypt.hash(password, 10);
+            const newHash = await bcrypt.hash(password, PASSWORD_COST);
             await db.execute({ sql: 'UPDATE employees SET password = ? WHERE id = ?', args: [newHash, row.id] });
           }
         }
         if (ok) { delete row.password; emp = row; }
       }
     } else if (pin) {
-      const { rows: [row] } = await db.execute({ sql: `SELECT e.id, e.first_name, e.last_name, e.username, e.role, e.must_change_password, e.security_group_id, e.default_branch_id, e.is_driver, e.is_operator, e.is_security, sg.name as security_group_name, sg.permissions, b.name as default_branch_name FROM employees e LEFT JOIN security_groups sg ON e.security_group_id = sg.id LEFT JOIN branches b ON e.default_branch_id = b.id WHERE e.username=? AND e.pin=? AND e.active=1`, args: [username, pin] });
-      emp = row || null;
+      if (!validPin(pin)) return res.status(401).json({ error: 'Invalid credentials' });
+      const { rows: [row] } = await db.execute({ sql: `SELECT e.id, e.first_name, e.last_name, e.username, e.pin, e.role, e.must_change_password, e.security_group_id, e.default_branch_id, e.is_driver, e.is_operator, e.is_security, sg.name as security_group_name, sg.permissions, b.name as default_branch_name FROM employees e LEFT JOIN security_groups sg ON e.security_group_id = sg.id LEFT JOIN branches b ON e.default_branch_id = b.id WHERE e.username=? AND e.active=1`, args: [username] });
+      if (row && await verifyPin(row.pin, pin)) {
+        await upgradeLegacyPin(row.id, row.pin, pin);
+        delete row.pin;
+        emp = row;
+      }
     }
     if (!emp) return res.status(401).json({ error: 'Invalid credentials' });
     resetRequestRateLimit(req);
