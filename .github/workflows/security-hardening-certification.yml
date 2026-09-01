@@ -20,6 +20,7 @@ jobs:
     env:
       POS_TEST_USER: admin
       POS_TEST_PASSWORD: '123456'
+      POS_TEST_PIN: '123456'
       TURSO_DATABASE_URL: ''
       TURSO_AUTH_TOKEN: ''
       CI: '1'
@@ -44,6 +45,7 @@ jobs:
           node --check lib/securityHardening.js
           node --check lib/sessionAuth.js
           node --check routes/employees.js
+          node --check scripts/production-credential-preflight.js
           node --check server.js
 
       - name: Install Chromium runtime
@@ -56,6 +58,9 @@ jobs:
 
       - name: Run full release gate with adversarial security tests
         run: npm run test:release-gate -- --workers=1
+
+      - name: Certify PIN hashing and legacy migration
+        run: npx playwright test tests/pin-security-runtime.spec.js --workers=1
 
       - name: Upload Playwright diagnostics on failure
         if: failure()
