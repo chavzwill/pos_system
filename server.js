@@ -13,6 +13,13 @@ const { router: repairNotificationWorkerRouter, processQueue: processRepairNotif
 const { apiKeyAuth } = require('./lib/apiKeyAuth');
 const { sessionAuth } = require('./lib/sessionAuth');
 const { logActivity } = require('./routes/crm');
+const {
+  securityHeaders,
+  sameOriginMutationGuard,
+  buildCorsOptions,
+  diagnosticsRateLimit,
+  requestId,
+} = require('./lib/securityHardening');
 
 process.on('unhandledRejection', (reason) => { console.error('Unhandled promise rejection:', reason); });
 process.on('uncaughtException', (err) => { console.error('Uncaught exception:', err); });
@@ -85,20 +92,39 @@ function sendFastShell(req,res) {
   res.sendFile(fastShellPath);
 }
 
-app.set('trust proxy', true);
-app.use(cors());
+app.disable('x-powered-by');
+// Production topology has exactly one trusted reverse-proxy hop (Caddy).
+// Avoid trusting arbitrary client-supplied X-Forwarded-* chains.
+app.set('trust proxy', 1);
+app.use(requestId);
+app.use(securityHeaders);
+if (String(process.env.POS_ALLOWED_ORIGINS || '').trim()) {
+  app.use(cors(buildCorsOptions()));
+}
 app.use(compression());
 app.use(bodyParser.json({ limit: '10mb' }));
-app.post('/client-diagnostics', (req, res) => { const body=req.body||{}; console.error('POS client diagnostic:', { kind:String(body.kind||'').slice(0,80), detail:String(body.detail||'').slice(0,4000), href:String(body.href||'').slice(0,500), ua:String(body.ua||'').slice(0,500), ts:String(body.ts||'').slice(0,80) }); res.status(204).end(); });
+app.post('/client-diagnostics', diagnosticsRateLimit, (req, res) => {
+  const body=req.body||{};
+  console.error('POS client diagnostic:', {
+    request_id:req.requestId,
+    kind:String(body.kind||'').slice(0,80),
+    detail:String(body.detail||'').slice(0,4000),
+    href:String(body.href||'').slice(0,500),
+    ua:String(body.ua||'').slice(0,500),
+    ts:String(body.ts||'').slice(0,80)
+  });
+  res.status(204).end();
+});
 app.get('/legacy-pos-app.js', (req,res)=>{ try{res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400');res.type('application/javascript').send(getLegacyAppScript());}catch(error){console.error('Unable to serve validated legacy POS application script:',error&&(error.stack||error.message||error));res.status(500).type('application/javascript').send('throw new Error("POS application script validation failed");');}});
 app.get('/', sendFastShell);
 app.get('/legacy', sendEnhancedIndex);
 app.use(express.static(publicDir, { index:false, etag:true, maxAge:'1h', setHeaders:(res,filePath)=>{ if (/\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico)$/i.test(filePath)) res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400'); else res.set('Cache-Control','no-cache, must-revalidate'); } }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { maxAge:'1h' }));
-app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.error('POS database initialization failed:',e&&(e.stack||e.message||e));res.status(500).json({error:'Database initialization failed'});}});
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { maxAge:'1h', dotfiles:'deny', index:false, fallthrough:false }));
+app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.error('POS database initialization failed:',e&&(e.stack||e.message||e));res.status(500).json({error:'Database initialization failed',request_id:req.requestId});}});
 
 app.use('/api', apiKeyAuth);
 app.use('/api', sessionAuth);
+app.use('/api', sameOriginMutationGuard);
 app.use('/api', require('./routes/multi-branch-integrity-guard'));
 app.use('/api/workspace-profile', require('./routes/workspace-profile'));
 app.use('/api/employee-workspace-intelligence', require('./routes/employee-workspace-intelligence'));
@@ -192,7 +218,11 @@ app.use('/api/repair-parts-integrity', require('./routes/repair-parts-hardening'
 app.use('/api/repair-parts-integrity', require('./routes/repair-parts-integrity'));
 app.use('/api/technician-compensation/performance', require('./routes/technician-performance'));
 app.use('/api/technician-compensation', require('./routes/technician-compensation'));
-app.use('/api', (err,req,res,next)=>{if(res.headersSent)return next(err);res.status(err.status||500).json({error:err.message||'Request failed'});});
+app.use('/api', (err,req,res,next)=>{
+  if(res.headersSent)return next(err);
+  console.error('POS API request failed:', { request_id:req.requestId, path:req.originalUrl, method:req.method, error:err && (err.stack || err.message || err) });
+  res.status(err.status||500).json({error:err.status && err.status < 500 ? (err.message||'Request failed') : 'Request failed',request_id:req.requestId});
+});
 app.get('*', (req,res)=> req.path.startsWith('/legacy') ? sendEnhancedIndex(req,res) : sendFastShell(req,res));
 
 if (!process.env.VERCEL) {
