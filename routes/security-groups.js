@@ -28,6 +28,14 @@ function normalizedPermissions(value) {
   for (const key of allowed) if (Object.prototype.hasOwnProperty.call(input, key)) out[key] = input[key] === true;
   return out;
 }
+function canManageGroupMembership(actorPermissions, groupPermissions) {
+  if (can(actorPermissions, 'security_manage')) return true;
+  const target = groupPermissions && typeof groupPermissions === 'object' && !Array.isArray(groupPermissions) ? groupPermissions : {};
+  for (const [permission, enabled] of Object.entries(target)) {
+    if (enabled === true && !can(actorPermissions, permission)) return false;
+  }
+  return true;
+}
 async function activeSecurityAdminCount(groupOverride) {
   const { rows } = await db.execute({ sql: `SELECT e.id,e.security_group_id,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.active=1`, args: [] });
   let count = 0;
@@ -137,15 +145,19 @@ router.post('/:id/assign', requirePermission('security_assign'), async (req, res
   try {
     const targetGroup = await getGroup(req.params.id);
     if (!targetGroup) return res.status(404).json({ error: 'Security group not found' });
+    if (!canManageGroupMembership(req.employee?.permissions, targetGroup.permissions)) {
+      return res.status(403).json({ error: 'You cannot assign a security group containing authority you do not hold' });
+    }
     const { rows: [employee] } = await db.execute({ sql: 'SELECT id,security_group_id,active FROM employees WHERE id=?', args:[employee_id] });
     if (!employee) return res.status(404).json({ error:'Employee not found' });
+    const oldGroup = employee.security_group_id ? await getGroup(employee.security_group_id) : null;
+    if (oldGroup && !canManageGroupMembership(req.employee?.permissions, oldGroup.permissions)) {
+      return res.status(403).json({ error: 'You cannot change membership for an employee whose current security authority exceeds your own' });
+    }
     if (Number(employee.id) === Number(req.employee?.id) && !can(targetGroup.permissions, 'security_manage')) return res.status(400).json({ error:'You cannot reassign yourself to a group that removes your Security Management permission.' });
-    if (employee.active && employee.security_group_id) {
-      const oldGroup = await getGroup(employee.security_group_id);
-      if (oldGroup && can(oldGroup.permissions,'security_manage') && !can(targetGroup.permissions,'security_manage')) {
-        const remaining = await activeSecurityAdminCount({ id:employee.security_group_id, permissions:{} });
-        if (remaining < 1) return res.status(400).json({ error:'This reassignment would leave the system with no active security administrator.' });
-      }
+    if (employee.active && oldGroup && can(oldGroup.permissions,'security_manage') && !can(targetGroup.permissions,'security_manage')) {
+      const remaining = await activeSecurityAdminCount({ id:employee.security_group_id, permissions:{} });
+      if (remaining < 1) return res.status(400).json({ error:'This reassignment would leave the system with no active security administrator.' });
     }
     await db.execute({ sql: 'UPDATE employees SET security_group_id = ? WHERE id = ?', args: [req.params.id, employee_id] });
     await audit(req, 'employee_security_group_assigned', 'employee', employee_id, {security_group_id:employee.security_group_id}, {security_group_id:Number(req.params.id)}, reason);
@@ -160,6 +172,9 @@ router.delete('/:id/assign/:empId', requirePermission('security_assign'), async 
     if (Number(req.params.empId) === Number(req.employee?.id)) return res.status(400).json({ error:'You cannot remove yourself from your own security group.' });
     const group = await getGroup(req.params.id);
     if (!group) return res.status(404).json({error:'Security group not found'});
+    if (!canManageGroupMembership(req.employee?.permissions, group.permissions)) {
+      return res.status(403).json({ error: 'You cannot remove membership from a security group containing authority you do not hold' });
+    }
     if (can(group.permissions,'security_manage')) {
       const { rows:[employee] } = await db.execute({sql:'SELECT active FROM employees WHERE id=? AND security_group_id=?',args:[req.params.empId,req.params.id]});
       if (employee?.active) {
@@ -174,3 +189,4 @@ router.delete('/:id/assign/:empId', requirePermission('security_assign'), async 
 });
 
 module.exports = router;
+module.exports.canManageGroupMembership = canManageGroupMembership;
