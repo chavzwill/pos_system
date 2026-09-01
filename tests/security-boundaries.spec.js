@@ -187,6 +187,20 @@ test.describe('Operational security boundaries', () => {
       expect(planAttempt.body?.control).toBe('dispatch_rbac');
       expect(planAttempt.body?.error).toMatch(/dispatch_plan/i);
 
+      let denial = null;
+      for (let attempt = 0; attempt < 10 && !denial; attempt += 1) {
+        const audit = await api(admin.cookie, '/api/security-groups/audit/recent');
+        expect(audit.status).toBe(200);
+        denial = audit.body.find(row => row.action === 'permission_denied'
+          && Number(row.actor_employee_id) === Number(fixture.employee.id)
+          && row.path === '/api/logistics-intelligence/jobs');
+        if (!denial) await new Promise(resolve => setTimeout(resolve, 25));
+      }
+      expect(denial).toBeTruthy();
+      expect(denial.method).toBe('POST');
+      expect(denial.control).toBe('dispatch_rbac');
+      expect(JSON.parse(denial.new_value || '{}').required_permissions).toContain('dispatch_plan');
+
       const crossBranchSale = await api(limited.cookie, '/api/transactions', {
         method: 'POST',
         body: JSON.stringify({
