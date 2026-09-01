@@ -1,5 +1,6 @@
 import { test, expect } from '@playwright/test';
 import './pos-financial-runtime.js';
+import './security-hardening-runtime.js';
 
 const BASE = 'http://localhost:3001';
 
