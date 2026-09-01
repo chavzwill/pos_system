@@ -1,0 +1,64 @@
+name: Production Host Operations Certification
+
+on:
+  push:
+    branches:
+      - ops/host-bootstrap-hardening
+    paths:
+      - scripts/production-host-readiness.sh
+      - scripts/production-host-verify.sh
+      - docker-compose.yml
+      - docker-compose.host.yml
+      - deploy/Caddyfile
+      - .env.production.example
+      - .github/workflows/host-operations-certification.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify-host-operations:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    steps:
+      - name: Checkout candidate
+        uses: actions/checkout@v4
+
+      - name: Validate host script syntax
+        run: |
+          bash -n scripts/production-host-readiness.sh
+          bash -n scripts/production-host-verify.sh
+
+      - name: Prepare local certification environment
+        run: |
+          cp .env.production.example .env
+          sed -i 's|^POS_DOMAIN=.*|POS_DOMAIN=http://localhost|' .env
+          mkdir -p data uploads
+
+      - name: Certify host readiness gate
+        env:
+          EXPECTED_RELEASE_SHA: ${{ github.sha }}
+        run: bash scripts/production-host-readiness.sh
+
+      - name: Start host profile
+        run: docker compose -f docker-compose.yml -f docker-compose.host.yml up -d --build
+
+      - name: Initialize persisted database through protected API boundary
+        run: |
+          for attempt in $(seq 1 45); do
+            code="$(curl --silent --show-error --output /tmp/db-init.json --write-out '%{http_code}' http://localhost/api/products || true)"
+            case "$code" in
+              401|403) exit 0 ;;
+            esac
+            sleep 1
+          done
+          docker compose -f docker-compose.yml -f docker-compose.host.yml logs app caddy
+          exit 1
+
+      - name: Certify running host topology
+        run: bash scripts/production-host-verify.sh
+
+      - name: Stop certification stack
+        if: always()
+        run: POS_DOMAIN=http://localhost docker compose -f docker-compose.yml -f docker-compose.host.yml down -v || true
