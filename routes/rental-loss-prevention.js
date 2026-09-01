@@ -4,6 +4,7 @@ const router=express.Router();
 const {db}=require('../database');
 const {can,requireAnyPermission}=require('../lib/permissions');
 const {findEmployeeByPin}=require('../lib/pinAuth');
+const {validateMemoryUpload}=require('../lib/uploadSecurity');
 
 router.use(require('./rental-asset-workflow-integration'));
 router.use(require('./rental-missing-asset-disposition'));
@@ -38,7 +39,7 @@ async function authorize(req,reason){
   const {rows:employees}=await db.execute({sql:'SELECT e.id,e.first_name,e.last_name,e.pin,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.active=1',args:[]});
   const authorizer=await findEmployeeByPin(employees,pin,e=>{let p={};try{p=JSON.parse(e.permissions||'{}')}catch{}return can(p,'reports_financial')||can(p,'security_manage')||can(p,'rentals_manage');});
   if(!authorizer)return {error:'Invalid supervisor PIN or insufficient financial-control authority.'};
-  if(!await settingBool('loss_control_rental_override_allow_self',false)&&req.employee&&String(authorizer.id)===String(req.employee.id))return {error:'Independent supervisor authorization is required for rental financial overrides.'};
+  if(!await settingBool('loss_control_rental_override_allow_self',false)&&req.employee&&String(req.employee.id)===String(authorizer.id))return {error:'Independent supervisor authorization is required for rental financial overrides.'};
   return {authorizer,reason:String(reason).trim()};
 }
 async function persist(req,agreement,events){
@@ -47,6 +48,27 @@ async function persist(req,agreement,events){
 function damageLike(v){const s=String(v||'').trim().toLowerCase();return ['damage','broken','poor','unusable','repair'].some(x=>s.includes(x));}
 function missingLike(v){const s=String(v||'').trim().toLowerCase();return s.includes('missing')||s.includes('lost')||s.includes('not returned')||s.includes('not-returned');}
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Rental loss-prevention initialization failed',detail:e.message});}});
+
+// The legacy rental engine persists data-URL signatures to same-origin local
+// storage when Cloudinary is unavailable. Validate those bytes before the
+// engine ever sees them so a claimed image subtype cannot create executable
+// HTML/script content under /uploads. The signature pad emits PNG, so fail
+// closed to that one canonical format and a modest decoded size.
+router.use((req,res,next)=>{
+  if(!req.body||typeof req.body!=='object')return next();
+  for(const key of ['customer_signature','security_signature']){
+    if(req.body[key]==null)continue;
+    const value=String(req.body[key]);
+    const match=/^data:image\/png;base64,([A-Za-z0-9+/]+={0,2})$/.exec(value);
+    if(!match)return res.status(415).json({error:`${key.replace('_',' ')} must be a PNG signature image`,control:'rental_signature_upload'});
+    let buffer;
+    try{buffer=Buffer.from(match[1],'base64');}catch(_){return res.status(415).json({error:'Invalid rental signature encoding',control:'rental_signature_upload'});}
+    if(!buffer.length||buffer.length>512*1024)return res.status(413).json({error:'Rental signature image exceeds the 512 KB limit',control:'rental_signature_upload'});
+    const validation=validateMemoryUpload({originalname:'signature.png',mimetype:'image/png',buffer},{kind:'image'});
+    if(!validation.ok||validation.type!=='png')return res.status(415).json({error:'Rental signature content is not a valid PNG image',control:'rental_signature_upload'});
+  }
+  next();
+});
 
 router.patch('/agreements/:id/return',requireAnyPermission('rentals_returns','rentals'),async(req,res,next)=>{
   try{
