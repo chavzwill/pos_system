@@ -21,12 +21,20 @@ function strongPin(value) {
   if ('01234567890'.includes(v) || '09876543210'.includes(v)) return false;
   return true;
 }
-function isBcrypt(value) { return typeof value === 'string' && value.startsWith('$2'); }
+function isBcrypt(value) { return typeof value === 'string' && /^\$2[aby]\$/.test(value); }
 
 async function passwordIsKnownWeak(stored) {
   if (!stored) return true;
   if (!isBcrypt(stored)) return COMMON_PASSWORDS.includes(String(stored).toLowerCase()) || String(stored).length < 12;
   for (const weak of COMMON_PASSWORDS) {
+    if (await bcrypt.compare(weak, stored)) return true;
+  }
+  return false;
+}
+async function pinIsKnownWeak(stored) {
+  if (!stored) return true;
+  if (!isBcrypt(stored)) return !strongPin(stored);
+  for (const weak of COMMON_PINS) {
     if (await bcrypt.compare(weak, stored)) return true;
   }
   return false;
@@ -48,8 +56,9 @@ async function main() {
   }
 
   const weakPassword = await passwordIsKnownWeak(admin.password);
-  const weakPin = !strongPin(admin.pin);
-  if (!weakPassword && !weakPin) {
+  const weakPin = await pinIsKnownWeak(admin.pin);
+  const plaintextStrongPin = Boolean(admin.pin) && !isBcrypt(admin.pin) && !weakPin;
+  if (!weakPassword && !weakPin && !plaintextStrongPin) {
     console.log(`Production credential preflight passed for ${USERNAME}.`);
     return;
   }
@@ -69,7 +78,10 @@ async function main() {
   }
   if (weakPin) {
     assignments.push('pin = ?');
-    args.push(BOOTSTRAP_PIN);
+    args.push(await bcrypt.hash(BOOTSTRAP_PIN, 12));
+  } else if (plaintextStrongPin) {
+    assignments.push('pin = ?');
+    args.push(await bcrypt.hash(admin.pin, 12));
   }
   args.push(admin.id);
   await db.execute({ sql: `UPDATE employees SET ${assignments.join(', ')} WHERE id = ?`, args });
