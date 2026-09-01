@@ -20,9 +20,6 @@ function segment(src,startNeedle,endNeedle){
   return src.slice(start,end<0?undefined:end);
 }
 const noEndpointBlock=segment(apiAuth,'if (!needed) {','if (!scopes.includes');
-const wildcardIndex=apiAuth.indexOf("scopes.includes('*')");
-const endpointBlockIndex=apiAuth.indexOf('if (!needed) {');
-const endpoint403Index=noEndpointBlock.indexOf("return res.status(403).json({ error: 'API keys are not permitted on this employee endpoint' })");
 const checks=[
  ['server RBAC tree defines granular financial and destructive permissions',permissions.includes('reports_financial')&&permissions.includes('inventory_writeoff_create')&&permissions.includes('inventory_writeoff_approve')&&permissions.includes('employees_salaries')],
  ['rental management compatibility alias does not create a new authority',permissions.includes("rentals_manage: 'rentals_manage_items'")],
@@ -42,8 +39,8 @@ const checks=[
  ['API keys cannot operate internal Dispatch workflows',permissions.includes('API keys cannot operate internal Dispatch workflows')],
  ['authorized Dispatch requests short-circuit legacy transfer permission checks',permissions.includes("if(dispatch==='allow')return next()")],
  ['department handoffs still continue into their original business permission checks',permissions.includes("if(required==='source_handoff')return 'continue'")],
- ['API keys fail closed outside explicit integration endpoints',endpointBlockIndex>=0&&noEndpointBlock.includes('await auditApiKeyDenied(req')&&noEndpointBlock.includes("control: 'api_key_endpoint_policy'")&&endpoint403Index>=0],
- ['legacy API wildcard cannot unlock unmapped employee APIs',endpointBlockIndex>=0&&wildcardIndex>=0&&endpointBlockIndex<wildcardIndex],
+ ['API keys fail closed outside explicit integration endpoints',noEndpointBlock.includes('await auditApiKeyDenied(req')&&noEndpointBlock.includes("control: 'api_key_endpoint_policy'")&&noEndpointBlock.includes("return res.status(403).json({ error: 'API keys are not permitted on this employee endpoint' })")],
+ ['legacy API wildcard cannot unlock unmapped employee APIs',noEndpointBlock.length>0&&apiAuth.indexOf('if (!needed) {')<apiAuth.indexOf("if (!scopes.includes('*')")],
  ['API key scopes include repair portal scopes explicitly',apiKeys.includes("'repairs:read'")&&apiKeys.includes("'repairs:write'")],
  ['new API keys do not default to wildcard',apiKeys.includes("scopes = ['products:read']")&&!apiKeys.includes("scopes = ['*']")],
  ['API key administration requires integration-settings authority',apiKeys.includes("requirePermission('settings_integrations')")],
