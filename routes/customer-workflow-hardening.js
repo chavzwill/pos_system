@@ -2,10 +2,43 @@
 const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
-const {requirePermission}=require('../lib/permissions');
+const {requirePermission,can}=require('../lib/permissions');
 
 const clean=v=>String(v??'').trim();
 const finiteNonNegative=v=>{const n=Number(v??0);return Number.isFinite(n)&&n>=0?n:null;};
+const SENSITIVE_CUSTOMER_FIELDS=[
+  'rental_id_number',
+  'rental_id_scan_path',
+  'rental_address_proof_type',
+  'rental_address_proof_details',
+  'rental_reference_name',
+  'rental_reference_phone',
+  'rental_reference_relationship',
+  'tax_exemption_number',
+];
+function mayViewSensitive(req){
+  return !!req.apiKey || can(req.employee?.permissions,'customers_sensitive') || can(req.employee?.permissions,'security_manage');
+}
+function redactCustomer(customer){
+  if(!customer||typeof customer!=='object'||Array.isArray(customer))return customer;
+  const out={...customer};
+  for(const key of SENSITIVE_CUSTOMER_FIELDS)delete out[key];
+  if(out.rental_id_type)out.rental_identity_on_file=true;
+  if(out.tax_exempt)out.tax_exemption_on_file=true;
+  return out;
+}
+function redactPayload(payload){
+  if(Array.isArray(payload))return payload.map(redactCustomer);
+  if(payload&&typeof payload==='object'&&('customer_number'in payload||'rental_id_number'in payload||'rental_id_scan_path'in payload))return redactCustomer(payload);
+  return payload;
+}
+function redactSensitiveCustomerReads(req,res,next){
+  if(req.method!=='GET'||mayViewSensitive(req))return next();
+  const original=res.json.bind(res);
+  res.json=payload=>original(redactPayload(payload));
+  res.setHeader('X-Customer-Data-Scope','minimized');
+  next();
+}
 function normalize(req,res,next){
   const b=req.body||{};
   b.first_name=clean(b.first_name);b.last_name=clean(b.last_name);
@@ -38,8 +71,11 @@ async function duplicate(req,res,next){
     const {rows:[hit]}=await db.execute({sql,args});
     if(hit)return res.status(409).json({error:`A customer with this ${email&&hit.email&&String(hit.email).toLowerCase()===email?'email':'phone number'} already exists`,existing_customer:{id:hit.id,customer_number:hit.customer_number,name:`${hit.first_name||''} ${hit.last_name||''}`.trim()}});
     next();
-  }catch(e){res.status(500).json({error:e.message});}
+  }catch(e){res.status(500).json({error:'Unable to validate customer uniqueness'});}
 }
+router.use(redactSensitiveCustomerReads);
 router.post('/',requirePermission('customers_add'),normalize,duplicate);
 router.put('/:id',requirePermission('customers_edit'),normalize,duplicate);
 module.exports=router;
+module.exports.SENSITIVE_CUSTOMER_FIELDS=SENSITIVE_CUSTOMER_FIELDS;
+module.exports.redactCustomer=redactCustomer;
