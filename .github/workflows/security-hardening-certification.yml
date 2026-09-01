@@ -62,6 +62,9 @@ jobs:
       - name: Certify PIN hashing and legacy migration
         run: npx playwright test tests/pin-security-runtime.spec.js --workers=1
 
+      - name: Certify request abuse controls
+        run: npx playwright test tests/request-abuse-security.spec.js --workers=1
+
       - name: Upload Playwright diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
