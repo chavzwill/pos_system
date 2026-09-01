@@ -42,10 +42,16 @@ Caddy stores its own certificate/state data in named Docker volumes `caddy_data`
 
 Copy `.env.production.example` to `.env` on the host and set:
 
-- `POS_DOMAIN` — production DNS hostname
+- `POS_DOMAIN` — production DNS hostname including scheme, normally `https://...`
 - `TURSO_AUTH_TOKEN` only if the architecture is deliberately changed to remote Turso
 
 Do not commit `.env`.
+
+For an exact cutover candidate, also export the certified release SHA before running readiness validation:
+
+```bash
+export EXPECTED_RELEASE_SHA=<certified-sha>
+```
 
 ## DNS and firewall
 
@@ -55,6 +61,28 @@ Before public TLS can succeed:
 2. Allow inbound TCP 80 and 443.
 3. Allow UDP 443 if HTTP/3 is desired.
 4. Do not expose port 3001 to the internet.
+
+## Pre-deploy host readiness
+
+Before starting or replacing the production stack, run:
+
+```bash
+bash scripts/production-host-readiness.sh
+```
+
+The readiness gate is deliberately non-destructive. It checks:
+
+- Linux host
+- Docker daemon access
+- Docker Compose plugin
+- CPU, memory and free-disk capacity
+- writable `data/` and `uploads/` persistence paths
+- presence of `.env`
+- non-localhost production `POS_DOMAIN`
+- optional exact SHA match through `EXPECTED_RELEASE_SHA`
+- validity of the combined base + host Compose configuration
+
+The script fails closed on missing required production inputs. `localhost` is rejected in normal use. The `HOST_READINESS_ALLOW_LOCALHOST=1` escape hatch exists only for repository certification and must not be set on the production host.
 
 ## Starting the host profile
 
@@ -72,14 +100,37 @@ docker compose -f docker-compose.yml -f docker-compose.host.yml ps
 
 The application container should become healthy before Caddy begins serving it.
 
+## Post-start host verification
+
+After the stack is running and DNS/TLS are live, run:
+
+```bash
+bash scripts/production-host-verify.sh
+```
+
+The verifier proves the actual running topology rather than only configuration intent. It requires:
+
+- app container running and healthy
+- Caddy container running
+- application port 3001 not bound to the host
+- Caddy publishing TCP 80 and 443
+- POS shell reachable through `POS_DOMAIN`
+- persisted `data/pos.db` present and non-empty
+- `/app/uploads` writable by the actual application container identity
+- HTTPS response when `POS_DOMAIN` uses `https://`
+
+A failure in this script is a cutover blocker until the failed condition is understood and corrected.
+
 ## Cutover
 
 Use `docs/PRODUCTION_CUTOVER_RUNBOOK.md` and the certified scripts:
 
+- `scripts/production-host-readiness.sh`
 - `scripts/production-preflight.sh`
 - `scripts/production-backup.sh`
 - `scripts/production-restore.sh`
 - `scripts/production-smoke.sh`
+- `scripts/production-host-verify.sh`
 
 The release backup must be taken while the application is stopped and must contain `data/` + `uploads/` together.
 
