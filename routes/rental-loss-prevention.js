@@ -3,14 +3,9 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {can,requireAnyPermission}=require('../lib/permissions');
+const {findEmployeeByPin}=require('../lib/pinAuth');
 
-// Runs first for every /api/rentals request. Physical asset identity/economics
-// integration must run before the missing-asset and ordinary rental handlers so
-// issue/return/disposition events can update the same asset lifecycle naturally.
 router.use(require('./rental-asset-workflow-integration'));
-// Besides exposing the controlled missing/lost-asset workflow, this schema guard
-// adds quantity_missing and the agreement-level missing-asset financial totals
-// before the legacy rental routes or availability helper can query those fields.
 router.use(require('./rental-missing-asset-disposition'));
 
 let readyPromise=null;
@@ -41,7 +36,7 @@ async function authorize(req,reason){
   if(!pin)return {error:'Supervisor authorization is required for this rental financial override.'};
   if(String(reason||'').trim().length<5)return {error:'A meaningful rental override reason is required.'};
   const {rows:employees}=await db.execute({sql:'SELECT e.id,e.first_name,e.last_name,e.pin,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.active=1',args:[]});
-  const authorizer=employees.find(e=>String(e.pin)===pin&&(()=>{let p={};try{p=JSON.parse(e.permissions||'{}')}catch{}return can(p,'reports_financial')||can(p,'security_manage')||can(p,'rentals_manage');})());
+  const authorizer=await findEmployeeByPin(employees,pin,e=>{let p={};try{p=JSON.parse(e.permissions||'{}')}catch{}return can(p,'reports_financial')||can(p,'security_manage')||can(p,'rentals_manage');});
   if(!authorizer)return {error:'Invalid supervisor PIN or insufficient financial-control authority.'};
   if(!await settingBool('loss_control_rental_override_allow_self',false)&&req.employee&&String(authorizer.id)===String(req.employee.id))return {error:'Independent supervisor authorization is required for rental financial overrides.'};
   return {authorizer,reason:String(reason).trim()};
