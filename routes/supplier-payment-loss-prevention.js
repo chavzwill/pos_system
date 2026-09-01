@@ -3,6 +3,7 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {can}=require('../lib/permissions');
+const {findEmployeeByPin}=require('../lib/pinAuth');
 const normalize=v=>String(v||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
 const money=v=>Number(Number(v||0).toFixed(2));
 let readyPromise=null;
@@ -42,7 +43,7 @@ async function authorize(req,message){
   if(!pin)throw Object.assign(new Error(message),{status:409});
   if(reason.length<5)throw Object.assign(new Error('A meaningful supplier-payment override reason is required.'),{status:400});
   const {rows:employees}=await db.execute({sql:`SELECT e.id,e.first_name,e.last_name,e.pin,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.active=1`,args:[]});
-  const authorizer=employees.find(e=>String(e.pin)===pin&&(()=>{let p={};try{p=JSON.parse(e.permissions||'{}');}catch{}return can(p,'reports_financial')||can(p,'security_manage');})());
+  const authorizer=await findEmployeeByPin(employees,pin,e=>{let p={};try{p=JSON.parse(e.permissions||'{}');}catch{}return can(p,'reports_financial')||can(p,'security_manage');});
   if(!authorizer)throw Object.assign(new Error('Invalid supervisor PIN or insufficient supplier-payment approval authority.'),{status:403});
   if(req.employee&&String(req.employee.id)===String(authorizer.id))throw Object.assign(new Error('Independent supervisor authorization is required for a suspicious supplier payment.'),{status:403});
   return {authorizer,reason};
