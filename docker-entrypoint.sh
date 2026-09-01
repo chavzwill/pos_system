@@ -7,4 +7,11 @@ set -e
 # ownership here, while still root, then drop to `app` for the real process.
 chown -R app:app /app/data /app/uploads
 
+# Production must never come online with the legacy/demo admin credential.
+# Run the credential preflight as the same non-root application identity,
+# against the same configured database, before starting the HTTP server.
+if [ "${NODE_ENV:-}" = "production" ]; then
+  su-exec app node --require ./lib/local-sqlite-runtime.js scripts/production-credential-preflight.js
+fi
+
 exec su-exec app "$@"
