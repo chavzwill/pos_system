@@ -7,6 +7,54 @@ const {findEmployeeByPin}=require('../lib/pinAuth');
 const {ensureInventoryMovementValuation,valueStockAdjustment}=require('../lib/inventory-movement-valuation');
 const {getAvailableQty}=require('../lib/inventory-stock-status');
 const {normalizeSignedInventoryQuantity}=require('../lib/inventory-quantity-precision');
+const multer=require('multer');
+const path=require('path');
+const fs=require('fs');
+const {cloudUpload,cloudDestroy}=require('../lib/cloudinary');
+const {validateMemoryUpload,imageMulterFilter}=require('../lib/uploadSecurity');
+
+const productImageUpload=multer({
+  storage:multer.memoryStorage(),
+  limits:{fileSize:5*1024*1024,files:1,fields:2,parts:3,fieldNameSize:100,fieldSize:64*1024,headerPairs:50},
+  fileFilter:imageMulterFilter,
+});
+
+async function removeProductImage(existingPath){
+  if(!existingPath)return;
+  if(String(existingPath).startsWith('https://'))return cloudDestroy(existingPath);
+  const root=path.resolve(__dirname,'../uploads/products');
+  const filePath=path.resolve(__dirname,'..',String(existingPath).replace(/^\/+/,''));
+  if(!filePath.startsWith(root+path.sep))return;
+  if(fs.existsSync(filePath))fs.unlinkSync(filePath);
+}
+
+// Mounted ahead of routes/products.js. This intercepts the legacy image route
+// so client MIME headers/original extensions can never create active content
+// inside the publicly served products directory.
+router.post('/:id/image',requirePermission('inventory'),productImageUpload.single('image'),async(req,res)=>{
+  if(!req.file)return res.status(400).json({error:'A JPEG, PNG, or WebP product image is required'});
+  const validation=validateMemoryUpload(req.file,{kind:'image'});
+  if(!validation.ok)return res.status(415).json({error:validation.error});
+  try{
+    const productId=Number(req.params.id);
+    const {rows:[product]}=await db.execute({sql:'SELECT id,image_path FROM products WHERE id=?',args:[productId]});
+    if(!product)return res.status(404).json({error:'Product not found'});
+    const unique=`product-${productId}-${Date.now()}`;
+    const cloudResult=await cloudUpload(req.file.buffer,{folder:'pos-system/products',public_id:`product-${productId}`,overwrite:true,resource_type:'image'});
+    let imagePath=null,localPath=null;
+    if(cloudResult)imagePath=cloudResult.secure_url;
+    else{
+      const dir=path.resolve(__dirname,'../uploads/products');fs.mkdirSync(dir,{recursive:true});
+      localPath=path.join(dir,`${unique}${validation.extension}`);
+      fs.writeFileSync(localPath,req.file.buffer,{mode:0o644});
+      imagePath=`/uploads/products/${path.basename(localPath)}`;
+    }
+    try{await db.execute({sql:'UPDATE products SET image_path=? WHERE id=?',args:[imagePath,productId]});}
+    catch(error){if(localPath){try{fs.unlinkSync(localPath);}catch(_){}}else if(cloudResult){try{await cloudDestroy(imagePath);}catch(_){}}throw error;}
+    if(product.image_path&&product.image_path!==imagePath){try{await removeProductImage(product.image_path);}catch(_){} }
+    res.json({image_path:imagePath});
+  }catch(e){res.status(500).json({error:'Unable to store product image'});}
+});
 
 let controlReady=null;
 async function ensureAdjustmentControl(){
