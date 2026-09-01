@@ -39,6 +39,7 @@ jobs:
       - name: Certify host readiness gate
         env:
           EXPECTED_RELEASE_SHA: ${{ github.sha }}
+          HOST_READINESS_ALLOW_LOCALHOST: '1'
         run: bash scripts/production-host-readiness.sh
 
       - name: Start host profile
