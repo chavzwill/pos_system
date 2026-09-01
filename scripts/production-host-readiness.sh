@@ -106,7 +106,11 @@ else
   if [ -z "${POS_DOMAIN:-}" ]; then
     fail "POS_DOMAIN is missing from .env"
   elif [[ "$POS_DOMAIN" == http://localhost* ]] || [[ "$POS_DOMAIN" == https://localhost* ]]; then
-    fail "POS_DOMAIN still points at localhost; a real production hostname is required"
+    if [ "${HOST_READINESS_ALLOW_LOCALHOST:-0}" = "1" ]; then
+      pass "localhost accepted only because HOST_READINESS_ALLOW_LOCALHOST=1"
+    else
+      fail "POS_DOMAIN still points at localhost; a real production hostname is required"
+    fi
   elif [[ "$POS_DOMAIN" != https://* ]] && [[ "$POS_DOMAIN" != http://* ]]; then
     fail "POS_DOMAIN must include an http:// or https:// scheme for the certified Caddy profile"
   else
