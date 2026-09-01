@@ -5,7 +5,9 @@ RC7 software and host tooling are certified. This checklist tracks the external 
 ## Host
 
 - [ ] Confirm whether Total Tools has an existing Linux-capable server or always-on dedicated machine available for POS hosting.
-- [ ] If existing hardware is available, run `scripts/production-host-readiness.sh` and retain the result.
+- [ ] On every candidate machine, run `bash scripts/candidate-host-assessment.sh` first and retain the PASS / CONDITIONAL / FAIL result.
+- [ ] Reject any candidate that returns `FAIL` unless the failing resource/configuration is corrected and the assessment is rerun.
+- [ ] If a candidate returns `PASS` or `CONDITIONAL`, run `scripts/production-host-readiness.sh` and retain that result too before deployment approval.
 - [ ] Confirm reliable always-on power; document UPS coverage if on-premises.
 - [ ] Confirm reliable wired internet/network path.
 - [ ] If no suitable existing host exists, perform a short-lived latency/readiness trial of the approved budget VPS candidates before purchasing a monthly plan.
