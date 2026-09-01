@@ -197,6 +197,15 @@ test.describe('POS security hardening', () => {
     expect(last.headers.get('retry-after')).toBeTruthy();
   });
 
+  test('invalid integration API-key probing is throttled', async () => {
+    let last = null;
+    for (let i = 0; i < 21; i += 1) {
+      last = await fetch(`${BASE}/api/products`, { headers: { 'X-API-Key': `pos_invalid_security_probe_${String(i).padStart(3, '0')}` } });
+    }
+    expect(last.status).toBe(429);
+    expect(last.headers.get('retry-after')).toBeTruthy();
+  });
+
   test('identity, signature and procurement evidence are not bearer-accessible static files', async () => {
     const protectedPaths = [
       '/uploads/customer-ids/security-probe.png',
@@ -230,10 +239,48 @@ test.describe('POS security hardening', () => {
     }
   });
 
-  test('ordinary staff customer reads minimize rental identity and reference PII', async () => {
+  test('sensitive customer writes and identity uploads require explicit authority and real image bytes', async () => {
     const admin = await login();
     let fixture = null;
     let customer = null;
+    try {
+      fixture = await makeEmployee(admin.cookie, { pos: true, customers: true, customers_edit: true }, 'CustomerEditor');
+      customer = await api(admin.cookie, '/api/customers', {
+        method: 'POST',
+        body: JSON.stringify({ first_name:'Upload', last_name:`Security${Date.now()}`, customer_type:'cash' }),
+      });
+      expect(customer.status).toBe(201);
+      const staff = await login(fixture.username, fixture.password);
+      const sensitiveEdit = await api(staff.cookie, `/api/customers/${customer.body.id}`, {
+        method:'PUT',
+        body:JSON.stringify({
+          first_name:'Upload',last_name:'Security',customer_type:'cash',
+          rental_id_number:'SHOULD-NOT-WRITE',rental_reference_name:'Should Not Write',
+        }),
+      });
+      expect(sensitiveEdit.status).toBe(403);
+      expect(sensitiveEdit.body?.error).toMatch(/customers_sensitive/i);
+
+      const deniedForm=new FormData();
+      deniedForm.append('id_scan',new Blob([Buffer.from([0x89,0x50,0x4e,0x47,0x0d,0x0a,0x1a,0x0a])],{type:'image/png'}),'id.png');
+      const deniedUpload=await fetch(`${BASE}/api/customers/${customer.body.id}/id-scan`,{method:'POST',headers:{Cookie:staff.cookie},body:deniedForm});
+      expect(deniedUpload.status).toBe(403);
+
+      const spoofed=new FormData();
+      spoofed.append('id_scan',new Blob([Buffer.from('<script>alert(1)</script>')],{type:'image/png'}),'fake.png');
+      const spoofedUpload=await fetch(`${BASE}/api/customers/${customer.body.id}/id-scan`,{method:'POST',headers:{Cookie:admin.cookie},body:spoofed});
+      expect(spoofedUpload.status).toBe(415);
+    } finally {
+      if(customer?.body?.id)await api(admin.cookie,`/api/customers/${customer.body.id}`,{method:'DELETE'});
+      await cleanup(admin.cookie,fixture);
+    }
+  });
+
+  test('ordinary staff and integration keys receive minimized customer identity data', async () => {
+    const admin = await login();
+    let fixture = null;
+    let customer = null;
+    let apiKeyId = null;
     try {
       fixture = await makeEmployee(admin.cookie, { pos: true, customers: true }, 'CustomerLookup');
       customer = await api(admin.cookie, '/api/customers', {
@@ -245,7 +292,6 @@ test.describe('POS security hardening', () => {
           is_rental_customer: true,
           rental_id_type: 'drivers_license',
           rental_id_number: 'SECURITY-ID-12345',
-          rental_id_scan_path: '/uploads/customer-ids/security-id.png',
           rental_address_proof_type: 'utility_bill',
           rental_address_proof_details: 'Private address proof reference',
           rental_reference_name: 'Private Reference',
@@ -268,7 +314,23 @@ test.describe('POS security hardening', () => {
       const adminDetail = await api(admin.cookie, `/api/customers/${customer.body.id}`);
       expect(adminDetail.status).toBe(200);
       expect(adminDetail.body.rental_id_number).toBe('SECURITY-ID-12345');
+
+      const createdKey=await api(admin.cookie,'/api/api-keys',{
+        method:'POST',body:JSON.stringify({name:`Security customer read ${Date.now()}`,scopes:['customers:read']})
+      });
+      expect(createdKey.status).toBe(201);
+      const keyList=await api(admin.cookie,'/api/api-keys');
+      const keyRow=keyList.body.find(row=>row.key_prefix===createdKey.body.prefix);
+      expect(keyRow).toBeTruthy();
+      apiKeyId=keyRow.id;
+      const integration=await fetch(`${BASE}/api/customers/${customer.body.id}`,{headers:{'X-API-Key':createdKey.body.key}});
+      expect(integration.status).toBe(200);
+      expect(integration.headers.get('x-customer-data-scope')).toBe('minimized');
+      const integrationBody=await integration.json();
+      expect(integrationBody.rental_id_number).toBeUndefined();
+      expect(integrationBody.rental_reference_phone).toBeUndefined();
     } finally {
+      if(apiKeyId)await api(admin.cookie,`/api/api-keys/${apiKeyId}`,{method:'DELETE'});
       if (customer?.body?.id) await api(admin.cookie, `/api/customers/${customer.body.id}`, { method: 'DELETE' });
       await cleanup(admin.cookie, fixture);
     }
