@@ -26,13 +26,14 @@ async function main(){
 
   const username=process.env.POS_TEST_USER||'admin';
   const password=process.env.POS_TEST_PASSWORD||'123456';
-  const hash=await bcrypt.hash(password,10);
+  const pin=process.env.POS_TEST_PIN||'123456';
+  const [hash,pinHash]=await Promise.all([bcrypt.hash(password,12),bcrypt.hash(pin,12)]);
   let {rows:[employee]}=await db.execute({sql:'SELECT * FROM employees WHERE username=?',args:[username]});
   if(employee){
-    await db.execute({sql:`UPDATE employees SET first_name='CI',last_name='Administrator',pin='123456',password=?,must_change_password=0,active=1,security_group_id=?,default_branch_id=?,is_driver=1,is_operator=1,is_security=1 WHERE id=?`,args:[hash,group.id,branch.id,employee.id]});
+    await db.execute({sql:`UPDATE employees SET first_name='CI',last_name='Administrator',pin=?,password=?,must_change_password=0,active=1,security_group_id=?,default_branch_id=?,is_driver=1,is_operator=1,is_security=1 WHERE id=?`,args:[pinHash,hash,group.id,branch.id,employee.id]});
   }else{
     const n=Date.now().toString().slice(-8);
-    const r=await db.execute({sql:`INSERT INTO employees(employee_number,first_name,last_name,username,pin,password,must_change_password,role,active,security_group_id,default_branch_id,is_driver,is_operator,is_security) VALUES(?,?,?,?,?,?,0,'admin',1,?,?,1,1,1)`,args:[`CI-${n}`,'CI','Administrator',username,'123456',hash,group.id,branch.id]});
+    const r=await db.execute({sql:`INSERT INTO employees(employee_number,first_name,last_name,username,pin,password,must_change_password,role,active,security_group_id,default_branch_id,is_driver,is_operator,is_security) VALUES(?,?,?,?,?,?,0,'admin',1,?,?,1,1,1)`,args:[`CI-${n}`,'CI','Administrator',username,pinHash,hash,group.id,branch.id]});
     ({rows:[employee]}=await db.execute({sql:'SELECT * FROM employees WHERE id=?',args:[Number(r.lastInsertRowid)]}));
   }
   await db.execute({sql:'INSERT OR IGNORE INTO employee_branches(employee_id,branch_id,is_default) VALUES(?,?,1)',args:[employee.id,branch.id]});
