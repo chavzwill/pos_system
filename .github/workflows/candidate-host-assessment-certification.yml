@@ -6,6 +6,7 @@ on:
       - ops/host-selection-budget
     paths:
       - scripts/candidate-host-assessment.sh
+      - scripts/candidate-host-report.sh
       - .github/workflows/candidate-host-assessment-certification.yml
   workflow_dispatch:
 
@@ -21,12 +22,26 @@ jobs:
         uses: actions/checkout@v4
 
       - name: Validate shell syntax
-        run: bash -n scripts/candidate-host-assessment.sh
+        run: |
+          bash -n scripts/candidate-host-assessment.sh
+          bash -n scripts/candidate-host-report.sh
 
       - name: Verify assessment on supported host class
         run: |
           bash scripts/candidate-host-assessment.sh | tee /tmp/assessment.txt
           grep -Eq '^DECISION: (PASS|CONDITIONAL)' /tmp/assessment.txt
+
+      - name: Verify report wrapper produces handoff file
+        run: |
+          chmod +x scripts/candidate-host-assessment.sh scripts/candidate-host-report.sh
+          set +e
+          scripts/candidate-host-report.sh /tmp/candidate-host-assessment-report.txt
+          code=$?
+          set -e
+          test "$code" -eq 0 -o "$code" -eq 1
+          test -s /tmp/candidate-host-assessment-report.txt
+          grep -q '^Total Tools POS — Candidate Host Assessment Report' /tmp/candidate-host-assessment-report.txt
+          grep -q '^Assessment exit code:' /tmp/candidate-host-assessment-report.txt
 
       - name: Verify tool can fail closed
         run: |
