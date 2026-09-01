@@ -63,7 +63,9 @@ test.describe('Total Tools Operations acceptance', () => {
 
     const dialog = page.getByRole('dialog', { name: /system health & operational readiness/i });
     await expect(dialog).toBeVisible();
-    await expect(dialog.getByText(/business records remain untouched|never create, update, delete or simulate/i)).toBeVisible();
+    const safetyStatement = dialog.getByText(/business records remain untouched|never create, update, delete or simulate/i);
+    expect(await safetyStatement.count()).toBeGreaterThan(0);
+    await expect(safetyStatement.first()).toBeVisible();
 
     await expect(dialog.locator('.tt-mr__checks article').first()).toBeVisible({ timeout: 15_000 });
     await expect(dialog.getByText(/DEGRADED/)).toHaveCount(0);
