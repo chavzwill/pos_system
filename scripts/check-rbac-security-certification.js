@@ -14,6 +14,10 @@ const writeoffs=read('routes/inventory-writeoffs.js');
 const repairCompletion=read('routes/work-order-completion-hardening.js');
 const logistics=read('routes/logistics-intelligence.js');
 for(const [name,src] of Object.entries({permissions,apiAuth,apiKeys,sessionAuth,ledger,settlements,compensation,writeoffGuard,writeoffs,repairCompletion,logistics}))new vm.Script(src,{filename:name});
+const endpointDenialStart=apiAuth.indexOf('if (!needed) {');
+const endpointAudit=apiAuth.indexOf("control: 'api_key_endpoint_policy'",endpointDenialStart);
+const endpointReject=apiAuth.indexOf("return res.status(403).json({ error: 'API keys are not permitted on this employee endpoint' })",endpointDenialStart);
+const wildcardScopeCheck=apiAuth.indexOf("scopes.includes('*')",endpointDenialStart);
 const checks=[
  ['server RBAC tree defines granular financial and destructive permissions',permissions.includes('reports_financial')&&permissions.includes('inventory_writeoff_create')&&permissions.includes('inventory_writeoff_approve')&&permissions.includes('employees_salaries')],
  ['rental management compatibility alias does not create a new authority',permissions.includes("rentals_manage: 'rentals_manage_items'")],
@@ -33,9 +37,9 @@ const checks=[
  ['API keys cannot operate internal Dispatch workflows',permissions.includes('API keys cannot operate internal Dispatch workflows')],
  ['authorized Dispatch requests short-circuit legacy transfer permission checks',permissions.includes("if(dispatch==='allow')return next()")],
  ['department handoffs still continue into their original business permission checks',permissions.includes("if(required==='source_handoff')return 'continue'")],
- ['API keys fail closed outside explicit integration endpoints',apiAuth.includes('if (!needed) {')&&apiAuth.includes("control: 'api_key_endpoint_policy'")&&apiAuth.includes("return res.status(403).json({ error: 'API keys are not permitted on this employee endpoint' })")],
- ['known API key endpoint-policy denials are audited before rejection',apiAuth.indexOf("control: 'api_key_endpoint_policy'")>apiAuth.indexOf('if (!needed) {')&&apiAuth.indexOf("control: 'api_key_endpoint_policy'")<apiAuth.indexOf("API keys are not permitted on this employee endpoint")],
- ['legacy API wildcard cannot unlock unmapped employee APIs',apiAuth.includes("scopes.includes('*')")&&apiAuth.indexOf('if (!needed) {')<apiAuth.indexOf("scopes.includes('*')")],
+ ['API keys fail closed outside explicit integration endpoints',endpointDenialStart>=0&&endpointReject>endpointDenialStart],
+ ['known API key endpoint-policy denials are audited before rejection',endpointAudit>endpointDenialStart&&endpointAudit<endpointReject],
+ ['legacy API wildcard cannot unlock unmapped employee APIs',wildcardScopeCheck>endpointReject],
  ['API key scopes include repair portal scopes explicitly',apiKeys.includes("'repairs:read'")&&apiKeys.includes("'repairs:write'")],
  ['new API keys do not default to wildcard',apiKeys.includes("scopes = ['products:read']")&&!apiKeys.includes("scopes = ['*']")],
  ['API key administration requires integration-settings authority',apiKeys.includes("requirePermission('settings_integrations')")],
