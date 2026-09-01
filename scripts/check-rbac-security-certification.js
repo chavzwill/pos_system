@@ -33,8 +33,9 @@ const checks=[
  ['API keys cannot operate internal Dispatch workflows',permissions.includes('API keys cannot operate internal Dispatch workflows')],
  ['authorized Dispatch requests short-circuit legacy transfer permission checks',permissions.includes("if(dispatch==='allow')return next()")],
  ['department handoffs still continue into their original business permission checks',permissions.includes("if(required==='source_handoff')return 'continue'")],
- ['API keys fail closed outside explicit integration endpoints',apiAuth.includes("if (!needed) return res.status(403)")&&apiAuth.includes('API keys are not permitted on this employee endpoint')],
- ['legacy API wildcard cannot unlock unmapped employee APIs',apiAuth.includes("scopes.includes('*')")&&apiAuth.indexOf('if (!needed) return res.status(403)')<apiAuth.indexOf("scopes.includes('*')")],
+ ['API keys fail closed outside explicit integration endpoints',apiAuth.includes('if (!needed) {')&&apiAuth.includes("control: 'api_key_endpoint_policy'")&&apiAuth.includes("return res.status(403).json({ error: 'API keys are not permitted on this employee endpoint' })")],
+ ['known API key endpoint-policy denials are audited before rejection',apiAuth.indexOf("control: 'api_key_endpoint_policy'")>apiAuth.indexOf('if (!needed) {')&&apiAuth.indexOf("control: 'api_key_endpoint_policy'")<apiAuth.indexOf("API keys are not permitted on this employee endpoint")],
+ ['legacy API wildcard cannot unlock unmapped employee APIs',apiAuth.includes("scopes.includes('*')")&&apiAuth.indexOf('if (!needed) {')<apiAuth.indexOf("scopes.includes('*')")],
  ['API key scopes include repair portal scopes explicitly',apiKeys.includes("'repairs:read'")&&apiKeys.includes("'repairs:write'")],
  ['new API keys do not default to wildcard',apiKeys.includes("scopes = ['products:read']")&&!apiKeys.includes("scopes = ['*']")],
  ['API key administration requires integration-settings authority',apiKeys.includes("requirePermission('settings_integrations')")],
@@ -56,4 +57,4 @@ const checks=[
 ];
 let failed=0;for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} RBAC/security certification: ${name}`);if(!ok)failed++;}
 if(failed){console.error(`RBAC/security certification FAILED (${failed}/${checks.length} failed).`);process.exit(1);}
-console.log(`RBAC/security certification OK (${checks.length} checks). Dispatch view/plan/execute/admin authority is explicit, supersedes legacy transfer gates, and unknown logistics mutations fail closed.`);
+console.log(`RBAC/security certification OK (${checks.length} checks). Dispatch view/plan/execute/admin authority is explicit, API-key employee-endpoint denials are audited before rejection, legacy wildcard scopes cannot bypass endpoint policy, and unknown logistics mutations fail closed.`);
