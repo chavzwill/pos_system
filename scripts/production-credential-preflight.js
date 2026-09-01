@@ -39,6 +39,19 @@ async function pinIsKnownWeak(stored) {
   }
   return false;
 }
+async function migratePlaintextPins() {
+  const { rows } = await db.execute({ sql: 'SELECT id,pin FROM employees WHERE pin IS NOT NULL', args: [] });
+  let migrated = 0;
+  for (const employee of rows) {
+    if (isBcrypt(employee.pin)) continue;
+    const raw = String(employee.pin || '');
+    if (!raw) continue;
+    const hash = await bcrypt.hash(raw, 12);
+    const result = await db.execute({ sql: 'UPDATE employees SET pin=? WHERE id=? AND pin=?', args: [hash, employee.id, employee.pin] });
+    if (Number(result.rowsAffected || 0) > 0) migrated += 1;
+  }
+  return migrated;
+}
 
 async function main() {
   if (process.env.NODE_ENV !== 'production') {
@@ -47,6 +60,7 @@ async function main() {
   }
 
   await ensureReady();
+  const migratedPins = await migratePlaintextPins();
   const { rows: [admin] } = await db.execute({
     sql: 'SELECT id, username, password, pin, active FROM employees WHERE username = ?',
     args: [USERNAME],
@@ -57,9 +71,8 @@ async function main() {
 
   const weakPassword = await passwordIsKnownWeak(admin.password);
   const weakPin = await pinIsKnownWeak(admin.pin);
-  const plaintextStrongPin = Boolean(admin.pin) && !isBcrypt(admin.pin) && !weakPin;
-  if (!weakPassword && !weakPin && !plaintextStrongPin) {
-    console.log(`Production credential preflight passed for ${USERNAME}.`);
+  if (!weakPassword && !weakPin) {
+    console.log(`Production credential preflight passed for ${USERNAME}; migrated ${migratedPins} legacy plaintext PIN(s).`);
     return;
   }
 
@@ -79,15 +92,12 @@ async function main() {
   if (weakPin) {
     assignments.push('pin = ?');
     args.push(await bcrypt.hash(BOOTSTRAP_PIN, 12));
-  } else if (plaintextStrongPin) {
-    assignments.push('pin = ?');
-    args.push(await bcrypt.hash(admin.pin, 12));
   }
   args.push(admin.id);
   await db.execute({ sql: `UPDATE employees SET ${assignments.join(', ')} WHERE id = ?`, args });
   await db.execute({ sql: "UPDATE sessions SET revoked_at = datetime('now') WHERE employee_id = ? AND revoked_at IS NULL", args: [admin.id] }).catch(() => {});
 
-  console.log(`Production bootstrap credentials hardened for ${USERNAME}. Remove POS_BOOTSTRAP_ADMIN_PASSWORD and POS_BOOTSTRAP_ADMIN_PIN from the environment after successful first startup, then change the password through the POS.`);
+  console.log(`Production bootstrap credentials hardened for ${USERNAME}; migrated ${migratedPins} legacy plaintext PIN(s). Remove POS_BOOTSTRAP_ADMIN_PASSWORD and POS_BOOTSTRAP_ADMIN_PIN from the environment after successful first startup, then change the password through the POS.`);
 }
 
 main().then(() => process.exit(0)).catch(err => {
