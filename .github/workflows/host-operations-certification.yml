@@ -11,6 +11,7 @@ on:
       - docker-compose.host.yml
       - deploy/Caddyfile
       - .env.production.example
+      - docs/PRODUCTION_HOST_PROFILE.md
       - .github/workflows/host-operations-certification.yml
   workflow_dispatch:
 
