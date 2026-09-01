@@ -3,9 +3,15 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {requirePermission,can}=require('../lib/permissions');
+const multer=require('multer');
+const path=require('path');
+const fs=require('fs');
+const {cloudDestroy}=require('../lib/cloudinary');
+const {validateMemoryUpload,imageMulterFilter}=require('../lib/uploadSecurity');
 
 const clean=v=>String(v??'').trim();
 const finiteNonNegative=v=>{const n=Number(v??0);return Number.isFinite(n)&&n>=0?n:null;};
+const secureIdUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:5*1024*1024,files:1,fields:4},fileFilter:imageMulterFilter});
 const SENSITIVE_CUSTOMER_FIELDS=[
   'rental_id_number',
   'rental_id_scan_path',
@@ -60,6 +66,20 @@ function requireSensitiveCustomerWrite(req,res,next){
   if(can(req.employee?.permissions,'customers_sensitive')||can(req.employee?.permissions,'security_manage'))return next();
   return res.status(403).json({error:'Missing permission: customers_sensitive'});
 }
+function employeeSensitiveOnly(req,res,next){
+  if(req.apiKey)return res.status(403).json({error:'Integration API keys cannot access customer identity documents'});
+  return requirePermission('customers_sensitive')(req,res,next);
+}
+async function removeExistingIdentityScan(existingPath){
+  if(!existingPath)return;
+  if(String(existingPath).startsWith('https://'))return cloudDestroy(existingPath);
+  const relative=String(existingPath).replace(/^\/+/, '');
+  const root=path.resolve(__dirname,'..');
+  const resolved=path.resolve(root,relative);
+  const allowedRoot=path.resolve(root,'uploads','customer-ids')+path.sep;
+  if(!resolved.startsWith(allowedRoot))throw new Error('Stored identity document path is outside the protected evidence directory');
+  if(fs.existsSync(resolved))fs.unlinkSync(resolved);
+}
 function normalize(req,res,next){
   const b=req.body||{};
   b.first_name=clean(b.first_name);b.last_name=clean(b.last_name);
@@ -95,6 +115,35 @@ async function duplicate(req,res,next){
   }catch(e){res.status(500).json({error:'Unable to validate customer uniqueness'});}
 }
 router.use(redactSensitiveCustomerReads);
+router.post('/:id/id-scan',employeeSensitiveOnly,secureIdUpload.single('id_scan'),async(req,res)=>{
+  if(!req.file)return res.status(400).json({error:'A JPEG, PNG, or WebP identity image is required'});
+  const validation=validateMemoryUpload(req.file,{kind:'image'});
+  if(!validation.ok)return res.status(415).json({error:validation.error});
+  try{
+    const {rows:[customer]}=await db.execute({sql:'SELECT id,rental_id_scan_path FROM customers WHERE id=?',args:[req.params.id]});
+    if(!customer)return res.status(404).json({error:'Customer not found'});
+    const dir=path.join(__dirname,'../uploads/customer-ids');
+    fs.mkdirSync(dir,{recursive:true,mode:0o700});
+    const filename=`customer-${Number(req.params.id)}-${Date.now()}${validation.extension}`;
+    const fullPath=path.join(dir,filename);
+    fs.writeFileSync(fullPath,req.file.buffer,{mode:0o600});
+    try{
+      await db.execute({sql:'UPDATE customers SET rental_id_scan_path=? WHERE id=?',args:[`/uploads/customer-ids/${filename}`,req.params.id]});
+      await removeExistingIdentityScan(customer.rental_id_scan_path);
+    }catch(error){try{fs.unlinkSync(fullPath);}catch(_){}throw error;}
+    res.setHeader('Cache-Control','private, no-store');
+    res.json({rental_id_scan_path:`/uploads/customer-ids/${filename}`});
+  }catch(e){res.status(500).json({error:'Unable to store customer identity document'});}
+});
+router.delete('/:id/id-scan',employeeSensitiveOnly,async(req,res)=>{
+  try{
+    const {rows:[customer]}=await db.execute({sql:'SELECT id,rental_id_scan_path FROM customers WHERE id=?',args:[req.params.id]});
+    if(!customer)return res.status(404).json({error:'Customer not found'});
+    await removeExistingIdentityScan(customer.rental_id_scan_path);
+    await db.execute({sql:'UPDATE customers SET rental_id_scan_path=NULL WHERE id=?',args:[req.params.id]});
+    res.json({success:true});
+  }catch(e){res.status(500).json({error:'Unable to remove customer identity document'});}
+});
 router.post('/',requirePermission('customers_add'),requireSensitiveCustomerWrite,normalize,duplicate);
 router.put('/:id',requirePermission('customers_edit'),requireSensitiveCustomerWrite,normalize,duplicate);
 module.exports=router;
