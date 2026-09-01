@@ -268,13 +268,12 @@ test.describe('Operational security boundaries', () => {
       expect(demoteAdmin.status).toBe(403);
       expect(demoteAdmin.body?.error).toMatch(/authority you do not hold/i);
 
-      const profile = await api(limited.cookie, '/api/workspace-profile/me');
-      expect(profile.status).toBe(200);
-      expect(Number(profile.body.employee?.security_group_id)).toBe(Number(group.body.id));
-
-      const adminProfile = await api(admin.cookie, '/api/workspace-profile/me');
-      expect(adminProfile.status).toBe(200);
-      expect(Number(adminProfile.body.employee?.security_group_id)).toBe(Number(admin.body.security_group_id));
+      const employees = await api(admin.cookie, '/api/employees');
+      expect(employees.status).toBe(200);
+      const boundedRow = employees.body.find(row => Number(row.id) === Number(employee.id));
+      const adminRow = employees.body.find(row => Number(row.id) === Number(admin.body.id));
+      expect(Number(boundedRow?.security_group_id)).toBe(Number(group.body.id));
+      expect(Number(adminRow?.security_group_id)).toBe(Number(admin.body.security_group_id));
     } finally {
       if (employee?.id) {
         await api(admin.cookie, `/api/employees/${employee.id}`, {
