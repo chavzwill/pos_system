@@ -3,6 +3,8 @@ const router = express.Router();
 const { db } = require('../database');
 const { PERMISSION_TREE, can, requireAuth, requirePermission } = require('../lib/permissions');
 
+const KNOWN_PERMISSION_KEYS = [...new Set(PERMISSION_TREE.flatMap(mod => [mod.key, ...mod.subs.map(sub => sub.key)]))];
+
 async function ensureAuditTable() {
   await db.execute({ sql: `CREATE TABLE IF NOT EXISTS security_audit_events (
     id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -22,8 +24,7 @@ async function audit(req, action, targetType, targetId, oldValue, newValue, reas
 }
 function normalizedPermissions(value) {
   const input = value && typeof value === 'object' && !Array.isArray(value) ? value : {};
-  const allowed = new Set();
-  for (const mod of PERMISSION_TREE) { allowed.add(mod.key); for (const sub of mod.subs) allowed.add(sub.key); }
+  const allowed = new Set(KNOWN_PERMISSION_KEYS);
   const out = {};
   for (const key of allowed) if (Object.prototype.hasOwnProperty.call(input, key)) out[key] = input[key] === true;
   return out;
@@ -31,8 +32,20 @@ function normalizedPermissions(value) {
 function canManageGroupMembership(actorPermissions, groupPermissions) {
   if (can(actorPermissions, 'security_manage')) return true;
   const target = groupPermissions && typeof groupPermissions === 'object' && !Array.isArray(groupPermissions) ? groupPermissions : {};
+
+  // Compare effective authority, not only stored keys. A broad parent such as
+  // { security:true } implicitly grants security_manage and security_assign;
+  // a bounded assigner who only has security_assign must therefore fail this
+  // comparison even though can(actor,'security') is also true.
+  for (const permission of KNOWN_PERMISSION_KEYS) {
+    if (can(target, permission) && !can(actorPermissions, permission)) return false;
+  }
+
+  // Fail closed for any legacy/unknown enabled authority that is not covered
+  // by the current catalog. Recognized aliases may still be satisfied by can().
+  const known = new Set(KNOWN_PERMISSION_KEYS);
   for (const [permission, enabled] of Object.entries(target)) {
-    if (enabled === true && !can(actorPermissions, permission)) return false;
+    if (enabled === true && !known.has(permission) && !can(actorPermissions, permission)) return false;
   }
   return true;
 }
