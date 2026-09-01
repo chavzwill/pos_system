@@ -10,6 +10,39 @@ const { loginRateLimit, privilegedPinRateLimit, resetRequestRateLimit } = requir
 function isBcryptHash(value) {
   return typeof value === 'string' && value.startsWith('$2');
 }
+function parsePermissions(value) {
+  try { return value && typeof value === 'object' ? value : JSON.parse(value || '{}'); }
+  catch (_) { return {}; }
+}
+async function loadSecurityGroup(id) {
+  if (!id) return null;
+  const { rows: [group] } = await db.execute({ sql: 'SELECT id,name,permissions FROM security_groups WHERE id=?', args: [id] });
+  if (!group) return null;
+  group.permissions = parsePermissions(group.permissions);
+  return group;
+}
+async function assertAssignableSecurityGroup(req, groupId) {
+  if (!groupId) return { ok: true, group: null };
+  const group = await loadSecurityGroup(groupId);
+  if (!group) return { ok: false, status: 400, error: 'Selected security group does not exist' };
+  if (can(req.employee?.permissions, 'security_manage')) return { ok: true, group };
+  for (const [permission, enabled] of Object.entries(group.permissions)) {
+    if (enabled === true && !can(req.employee?.permissions, permission)) {
+      return { ok: false, status: 403, error: 'You cannot assign a security group with authority you do not hold' };
+    }
+  }
+  return { ok: true, group };
+}
+async function employeeSecurityContext(id) {
+  const { rows: [row] } = await db.execute({ sql: `SELECT e.id,e.password,e.pin,e.active,e.security_group_id,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.id=?`, args: [id] });
+  if (!row) return null;
+  row.permissions = parsePermissions(row.permissions);
+  return row;
+}
+async function activeSecurityAdminCount(excludeEmployeeId) {
+  const { rows } = await db.execute({ sql: `SELECT e.id,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.active=1 AND e.id != ?`, args: [excludeEmployeeId || -1] });
+  return rows.reduce((count, row) => count + (can(parsePermissions(row.permissions), 'security_manage') ? 1 : 0), 0);
+}
 
 router.get('/', requireAuth, async (req, res) => {
   try {
@@ -43,7 +76,10 @@ router.get('/', requireAuth, async (req, res) => {
 router.post('/', requirePermission('employees'), async (req, res) => {
   const { first_name, last_name, username, pin, password, must_change_password, security_group_id, default_branch_id, is_driver, is_operator, is_security, skill_ids } = req.body;
   if (!first_name || !last_name || !username || !pin) return res.status(400).json({ error: 'Required fields missing' });
+  if (password && String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
   try {
+    const assignment = await assertAssignableSecurityGroup(req, security_group_id);
+    if (!assignment.ok) return res.status(assignment.status).json({ error: assignment.error });
     const employee_number = await nextNumber(db, 'employees', 'employee_number', 'EMP-', 4);
     const passwordHash = password ? await bcrypt.hash(password, 10) : null;
     const result = await db.execute({ sql: 'INSERT INTO employees (employee_number,first_name,last_name,username,pin,password,must_change_password,security_group_id,default_branch_id,is_driver,is_operator,is_security) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)', args: [employee_number, first_name, last_name, username, pin, passwordHash, must_change_password ? 1 : 0, security_group_id || null, default_branch_id || null, is_driver ? 1 : 0, is_operator ? 1 : 0, is_security ? 1 : 0] });
@@ -52,9 +88,7 @@ router.post('/', requirePermission('employees'), async (req, res) => {
       await db.execute({ sql: 'INSERT OR IGNORE INTO employee_branches (employee_id, branch_id, is_default) VALUES (?,?,1)', args: [newId, default_branch_id] });
     }
     if (Array.isArray(skill_ids)) {
-      for (const skillId of skill_ids) {
-        await db.execute({ sql: 'INSERT OR IGNORE INTO employee_skills (employee_id, skill_id) VALUES (?,?)', args: [newId, skillId] });
-      }
+      for (const skillId of skill_ids) await db.execute({ sql: 'INSERT OR IGNORE INTO employee_skills (employee_id, skill_id) VALUES (?,?)', args: [newId, skillId] });
     }
     const { rows: [emp] } = await db.execute({ sql: `SELECT e.id,e.employee_number,e.first_name,e.last_name,e.username,e.role,e.active,e.security_group_id,e.default_branch_id,e.is_driver,e.is_operator,e.is_security,sg.name as security_group_name,b.name as default_branch_name FROM employees e LEFT JOIN security_groups sg ON e.security_group_id=sg.id LEFT JOIN branches b ON e.default_branch_id=b.id WHERE e.id=?`, args: [newId] });
     res.status(201).json(emp);
@@ -68,8 +102,8 @@ router.put('/:id/change-password', requireAuth, async (req, res) => {
   if (!password || String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
   const targetId = Number(req.params.id);
   const self = Number(req.employee?.id) === targetId;
-  if (!self && !can(req.employee?.permissions, 'employees')) {
-    return res.status(403).json({ error: 'You may only change your own password' });
+  if (!self && !can(req.employee?.permissions, 'security_manage')) {
+    return res.status(403).json({ error: 'Changing another employee password requires Security Management authority' });
   }
   try {
     const { rows: [target] } = await db.execute({ sql: 'SELECT id FROM employees WHERE id = ?', args: [targetId] });
@@ -86,36 +120,58 @@ router.put('/:id/change-password', requireAuth, async (req, res) => {
 
 router.put('/:id', requirePermission('employees'), async (req, res) => {
   const { first_name, last_name, username, pin, password, must_change_password, active, security_group_id, default_branch_id, is_driver, is_operator, is_security, skill_ids } = req.body;
+  const targetId = Number(req.params.id);
   try {
-    let passwordToStore;
+    const existing = await employeeSecurityContext(targetId);
+    if (!existing) return res.status(404).json({ error: 'Employee not found' });
+
+    const assignment = await assertAssignableSecurityGroup(req, security_group_id);
+    if (!assignment.ok) return res.status(assignment.status).json({ error: assignment.error });
+
+    const groupChanged = Number(security_group_id || 0) !== Number(existing.security_group_id || 0);
+    const passwordChanged = Boolean(password);
+    const pinChanged = Boolean(pin) && String(pin) !== String(existing.pin || '');
+    const crossUserCredentialChange = targetId !== Number(req.employee?.id) && (passwordChanged || pinChanged);
+    if (crossUserCredentialChange && !can(req.employee?.permissions, 'security_manage')) {
+      return res.status(403).json({ error: 'Changing another employee credentials requires Security Management authority' });
+    }
+
+    if (can(existing.permissions, 'security_manage')) {
+      if ((active === 0 || active === false) && !can(req.employee?.permissions, 'security_manage')) {
+        return res.status(403).json({ error: 'Deactivating a security administrator requires Security Management authority' });
+      }
+      const newGroupPermissions = assignment.group?.permissions || {};
+      const wouldLoseSecurity = groupChanged && !can(newGroupPermissions, 'security_manage');
+      const wouldDeactivate = active === 0 || active === false;
+      if ((wouldLoseSecurity || wouldDeactivate) && await activeSecurityAdminCount(targetId) < 1) {
+        return res.status(400).json({ error: 'This change would leave the system with no active security administrator' });
+      }
+    }
+
+    let passwordToStore = existing.password;
     let credentialChanged = false;
     if (password) {
       if (String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
       passwordToStore = await bcrypt.hash(password, 10);
       credentialChanged = true;
-    } else {
-      const { rows: [existing] } = await db.execute({ sql: 'SELECT password, pin FROM employees WHERE id = ?', args: [req.params.id] });
-      if (!existing) return res.status(404).json({ error: 'Employee not found' });
-      passwordToStore = existing.password;
-      if (pin && String(pin) !== String(existing.pin || '')) credentialChanged = true;
     }
+    if (pinChanged) credentialChanged = true;
+
     if (pin) {
-      await db.execute({ sql: 'UPDATE employees SET first_name=?,last_name=?,username=?,pin=?,password=?,must_change_password=?,active=?,security_group_id=?,default_branch_id=?,is_driver=?,is_operator=?,is_security=? WHERE id=?', args: [first_name, last_name, username, pin, passwordToStore, must_change_password?1:0, active??1, security_group_id||null, default_branch_id||null, is_driver?1:0, is_operator?1:0, is_security?1:0, req.params.id] });
+      await db.execute({ sql: 'UPDATE employees SET first_name=?,last_name=?,username=?,pin=?,password=?,must_change_password=?,active=?,security_group_id=?,default_branch_id=?,is_driver=?,is_operator=?,is_security=? WHERE id=?', args: [first_name, last_name, username, pin, passwordToStore, must_change_password?1:0, active??1, security_group_id||null, default_branch_id||null, is_driver?1:0, is_operator?1:0, is_security?1:0, targetId] });
     } else {
-      await db.execute({ sql: 'UPDATE employees SET first_name=?,last_name=?,username=?,password=?,must_change_password=?,active=?,security_group_id=?,default_branch_id=?,is_driver=?,is_operator=?,is_security=? WHERE id=?', args: [first_name, last_name, username, passwordToStore, must_change_password?1:0, active??1, security_group_id||null, default_branch_id||null, is_driver?1:0, is_operator?1:0, is_security?1:0, req.params.id] });
+      await db.execute({ sql: 'UPDATE employees SET first_name=?,last_name=?,username=?,password=?,must_change_password=?,active=?,security_group_id=?,default_branch_id=?,is_driver=?,is_operator=?,is_security=? WHERE id=?', args: [first_name, last_name, username, passwordToStore, must_change_password?1:0, active??1, security_group_id||null, default_branch_id||null, is_driver?1:0, is_operator?1:0, is_security?1:0, targetId] });
     }
-    if (credentialChanged || active === false || active === 0) await destroyEmployeeSessions(req.params.id);
+    if (credentialChanged || groupChanged || active === false || active === 0) await destroyEmployeeSessions(targetId);
     if (default_branch_id) {
-      await db.execute({ sql: 'INSERT OR IGNORE INTO employee_branches (employee_id, branch_id, is_default) VALUES (?,?,1)', args: [req.params.id, default_branch_id] });
-      await db.execute({ sql: 'UPDATE employee_branches SET is_default = CASE WHEN branch_id = ? THEN 1 ELSE 0 END WHERE employee_id = ?', args: [default_branch_id, req.params.id] });
+      await db.execute({ sql: 'INSERT OR IGNORE INTO employee_branches (employee_id, branch_id, is_default) VALUES (?,?,1)', args: [targetId, default_branch_id] });
+      await db.execute({ sql: 'UPDATE employee_branches SET is_default = CASE WHEN branch_id = ? THEN 1 ELSE 0 END WHERE employee_id = ?', args: [default_branch_id, targetId] });
     }
     if (Array.isArray(skill_ids)) {
-      await db.execute({ sql: 'DELETE FROM employee_skills WHERE employee_id = ?', args: [req.params.id] });
-      for (const skillId of skill_ids) {
-        await db.execute({ sql: 'INSERT OR IGNORE INTO employee_skills (employee_id, skill_id) VALUES (?,?)', args: [req.params.id, skillId] });
-      }
+      await db.execute({ sql: 'DELETE FROM employee_skills WHERE employee_id = ?', args: [targetId] });
+      for (const skillId of skill_ids) await db.execute({ sql: 'INSERT OR IGNORE INTO employee_skills (employee_id, skill_id) VALUES (?,?)', args: [targetId, skillId] });
     }
-    const { rows: [emp] } = await db.execute({ sql: `SELECT e.id,e.employee_number,e.first_name,e.last_name,e.username,e.role,e.active,e.security_group_id,e.default_branch_id,e.is_driver,e.is_operator,e.is_security,sg.name as security_group_name,b.name as default_branch_name FROM employees e LEFT JOIN security_groups sg ON e.security_group_id=sg.id LEFT JOIN branches b ON e.default_branch_id=b.id WHERE e.id=?`, args: [req.params.id] });
+    const { rows: [emp] } = await db.execute({ sql: `SELECT e.id,e.employee_number,e.first_name,e.last_name,e.username,e.role,e.active,e.security_group_id,e.default_branch_id,e.is_driver,e.is_operator,e.is_security,sg.name as security_group_name,b.name as default_branch_name FROM employees e LEFT JOIN security_groups sg ON e.security_group_id=sg.id LEFT JOIN branches b ON e.default_branch_id=b.id WHERE e.id=?`, args: [targetId] });
     res.json(emp);
   } catch (e) {
     res.status(400).json({ error: 'Unable to update employee' });
