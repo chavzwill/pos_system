@@ -70,8 +70,6 @@ test('security_assign cannot cross effective inherited authority boundaries', as
 
     const limited = await login(username, password);
 
-    // Broad parent `security:true` effectively grants security_manage. A
-    // security_assign-only actor must not be able to exploit parent inheritance.
     const inheritedEscalation = await api(limited.cookie, `/api/security-groups/${broadSecurity.body.id}/assign`, {
       method: 'POST',
       body: JSON.stringify({ employee_id: employee.id, reason: 'Attempt inherited privilege escalation' }),
@@ -79,7 +77,6 @@ test('security_assign cannot cross effective inherited authority boundaries', as
     expect(inheritedEscalation.status).toBe(403);
     expect(inheritedEscalation.body?.error).toMatch(/authority you do not hold/i);
 
-    // Direct administrator-group promotion is equally forbidden.
     const directEscalation = await api(limited.cookie, `/api/security-groups/${admin.body.security_group_id}/assign`, {
       method: 'POST',
       body: JSON.stringify({ employee_id: employee.id, reason: 'Attempt direct privilege escalation' }),
@@ -87,20 +84,18 @@ test('security_assign cannot cross effective inherited authority boundaries', as
     expect(directEscalation.status).toBe(403);
     expect(directEscalation.body?.error).toMatch(/authority you do not hold/i);
 
-    // Nor may the bounded actor demote/remove an identity from a stronger group.
     const privilegedRemoval = await api(limited.cookie, `/api/security-groups/${admin.body.security_group_id}/assign/${admin.body.id}?reason=Attempt%20privileged%20membership%20removal`, {
       method: 'DELETE',
     });
     expect(privilegedRemoval.status).toBe(403);
     expect(privilegedRemoval.body?.error).toMatch(/authority you do not hold/i);
 
-    const limitedProfile = await api(limited.cookie, '/api/workspace-profile/me');
-    expect(limitedProfile.status).toBe(200);
-    expect(Number(limitedProfile.body.employee?.security_group_id)).toBe(Number(bounded.body.id));
-
-    const adminProfile = await api(admin.cookie, '/api/workspace-profile/me');
-    expect(adminProfile.status).toBe(200);
-    expect(Number(adminProfile.body.employee?.security_group_id)).toBe(Number(admin.body.security_group_id));
+    const employees = await api(admin.cookie, '/api/employees');
+    expect(employees.status).toBe(200);
+    const boundedRow = employees.body.find(row => Number(row.id) === Number(employee.id));
+    const adminRow = employees.body.find(row => Number(row.id) === Number(admin.body.id));
+    expect(Number(boundedRow?.security_group_id)).toBe(Number(bounded.body.id));
+    expect(Number(adminRow?.security_group_id)).toBe(Number(admin.body.security_group_id));
   } finally {
     if (employee?.id) {
       await api(admin.cookie, `/api/employees/${employee.id}`, {
