@@ -22,16 +22,20 @@ async function api(cookie, path, options = {}) {
   return { status: r.status, body: await r.json().catch(() => null) };
 }
 
+function sqlLiteral(value) {
+  return `'${String(value).replace(/'/g, "''")}'`;
+}
+
 async function installAuditFault(action, reason) {
   await db.execute({ sql: `DROP TRIGGER IF EXISTS ${FAULT_TRIGGER}`, args: [] });
   await db.execute({
     sql: `CREATE TRIGGER ${FAULT_TRIGGER}
           BEFORE INSERT ON security_audit_events
-          WHEN NEW.action = ? AND NEW.reason = ?
+          WHEN NEW.action = ${sqlLiteral(action)} AND NEW.reason = ${sqlLiteral(reason)}
           BEGIN
             SELECT RAISE(ABORT, 'forced security audit failure');
           END`,
-    args: [action, reason],
+    args: [],
   });
 }
 
@@ -48,7 +52,6 @@ test.describe('Security governance atomicity', () => {
     const name = `Atomic Rollback ${suffix}`;
     const reason = `Atomic audit fault ${suffix}`;
 
-    // Initialize the canonical audit schema before fault injection.
     const audit = await api(admin.cookie, '/api/security-groups/audit/recent');
     expect(audit.status).toBe(200);
     await installAuditFault('security_group_created', reason);
