@@ -3,6 +3,7 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {can}=require('../lib/permissions');
+const {findEmployeeByPin}=require('../lib/pinAuth');
 
 let readyPromise=null;
 const r2=v=>Number(Number(v||0).toFixed(2));
@@ -47,7 +48,7 @@ async function authorize(req,writeoff,valuation,threshold,evidenceThreshold){
   if(reason.length<5)return {error:'A meaningful financial-approval reason is required for this write-off.'};
   if(evidenceRequired&&!meaningfulEvidence(evidence))return {error:`This ${reasonCode||'material'} write-off requires a meaningful incident, disposal, count, photo, document or investigation evidence reference before approval.`};
   const {rows:employees}=await db.execute({sql:'SELECT e.id,e.first_name,e.last_name,e.pin,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.active=1',args:[]});
-  const auth=employees.find(e=>String(e.pin)===pin&&(()=>{let p={};try{p=JSON.parse(e.permissions||'{}')}catch{}return can(p,'reports_financial')||can(p,'security_manage');})());
+  const auth=await findEmployeeByPin(employees,pin,e=>{let p={};try{p=JSON.parse(e.permissions||'{}')}catch{}return can(p,'reports_financial')||can(p,'security_manage');});
   if(!auth)return {error:'Invalid financial-authorizer PIN or insufficient authority.'};
   if(req.employee&&String(auth.id)===String(req.employee.id))return {error:'High-value inventory write-offs require a second, independent financial authorizer.'};
   if(writeoff.created_by_employee_id&&String(auth.id)===String(writeoff.created_by_employee_id))return {error:'The employee who created the write-off cannot provide its high-value financial authorization.'};
