@@ -3,6 +3,18 @@ const router=express.Router();
 const {db}=require('../database');
 const {requirePermission}=require('../lib/permissions');
 const {nextNumber}=require('../lib/nextNumber');
+const multer=require('multer');
+const path=require('path');
+const fs=require('fs');
+const {cloudUpload}=require('../lib/cloudinary');
+const {validateMemoryUpload,evidenceMulterFilter}=require('../lib/uploadSecurity');
+
+const localUploadDir=path.join(__dirname,'../uploads/po-attachments');
+const evidenceUpload=multer({
+  storage:multer.memoryStorage(),
+  limits:{fileSize:10*1024*1024,files:1,fields:4,parts:5,fieldNameSize:100,fieldSize:64*1024,headerPairs:50},
+  fileFilter:evidenceMulterFilter,
+});
 
 let ready=false;
 async function ensureSchema(){
@@ -94,6 +106,38 @@ router.post('/supplier-locations/:supplierId',requirePermission('purchasing_crea
     const r=await db.execute({sql:`INSERT INTO supplier_locations(supplier_id,label,contact_name,address,city,state,zip,country,phone,email,is_default) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,args:[sid,String(b.label).trim(),b.contact_name||null,b.address||null,b.city||null,b.state||null,b.zip||null,b.country||null,b.phone||null,b.email||null,b.is_default?1:0]});
     const {rows:[row]}=await db.execute({sql:'SELECT * FROM supplier_locations WHERE id=?',args:[Number(r.lastInsertRowid)]});res.status(201).json(row);
   }catch(e){res.status(400).json({error:e.message});}
+});
+
+// Intercept attachment uploads before the legacy purchasing router. Content is
+// verified from bytes, multipart parsing is bounded, and the canonical detected
+// extension is used for local storage rather than trusting the client filename.
+router.post('/:id/attachments',evidenceUpload.single('file'),async(req,res)=>{
+  if(!req.file)return res.status(400).json({error:'No supported evidence file uploaded'});
+  const validation=validateMemoryUpload(req.file,{kind:'evidence'});
+  if(!validation.ok)return res.status(415).json({error:validation.error});
+  try{
+    const {rows:[po]}=await db.execute({sql:'SELECT id FROM purchase_orders WHERE id=?',args:[req.params.id]});
+    if(!po)return res.status(404).json({error:'Not found'});
+    const allowedTypes=new Set(['purchase_request','supplier_quotation','other']);
+    const documentType=allowedTypes.has(String(req.body?.document_type||''))?String(req.body.document_type):'other';
+    const unique=`${Date.now()}-${Math.round(Math.random()*1e6)}`;
+    const cloudResult=await cloudUpload(req.file.buffer,{folder:'pos-system/po-attachments',public_id:unique,resource_type:'auto'});
+    let storedName;
+    if(cloudResult)storedName=cloudResult.secure_url;
+    else{
+      fs.mkdirSync(localUploadDir,{recursive:true});
+      storedName=`${unique}${validation.extension}`;
+      fs.writeFileSync(path.join(localUploadDir,storedName),req.file.buffer,{mode:0o600});
+    }
+    try{
+      const result=await db.execute({sql:'INSERT INTO po_attachments (po_id,document_type,original_name,stored_name,mime_type,file_size) VALUES (?,?,?,?,?,?)',args:[po.id,documentType,String(req.file.originalname||'evidence').slice(0,255),storedName,validation.mime,req.file.size]});
+      const {rows:[row]}=await db.execute({sql:'SELECT * FROM po_attachments WHERE id=?',args:[Number(result.lastInsertRowid)]});
+      res.status(201).json(row);
+    }catch(e){
+      if(!cloudResult){const filePath=path.join(localUploadDir,storedName);try{if(fs.existsSync(filePath))fs.unlinkSync(filePath);}catch(_){} }
+      throw e;
+    }
+  }catch(e){res.status(500).json({error:'Unable to store purchase-order evidence'});}
 });
 
 router.post('/',requirePermission('purchasing_create'),async(req,res,next)=>{
