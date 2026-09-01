@@ -16,10 +16,18 @@ const SENSITIVE_CUSTOMER_FIELDS=[
   'rental_reference_relationship',
   'tax_exemption_number',
 ];
+const SENSITIVE_CUSTOMER_WRITE_FIELDS=[
+  'rental_id_type',
+  'rental_id_number',
+  'rental_address_proof_type',
+  'rental_address_proof_details',
+  'rental_reference_name',
+  'rental_reference_phone',
+  'rental_reference_relationship',
+  'tax_exempt',
+  'tax_exemption_number',
+];
 function mayViewSensitive(req){
-  // API keys are intentionally integration-only and receive the minimized
-  // customer representation. Sensitive identity/compliance data requires an
-  // authenticated employee with an explicit non-inheriting authority.
   if(req.apiKey)return false;
   return can(req.employee?.permissions,'customers_sensitive') || can(req.employee?.permissions,'security_manage');
 }
@@ -42,6 +50,15 @@ function redactSensitiveCustomerReads(req,res,next){
   res.json=payload=>original(redactPayload(payload));
   res.setHeader('X-Customer-Data-Scope','minimized');
   next();
+}
+function sensitiveWriteRequested(body){
+  return SENSITIVE_CUSTOMER_WRITE_FIELDS.some(key=>Object.prototype.hasOwnProperty.call(body||{},key));
+}
+function requireSensitiveCustomerWrite(req,res,next){
+  if(!sensitiveWriteRequested(req.body))return next();
+  if(req.apiKey)return res.status(403).json({error:'Integration API keys cannot write customer identity/compliance data'});
+  if(can(req.employee?.permissions,'customers_sensitive')||can(req.employee?.permissions,'security_manage'))return next();
+  return res.status(403).json({error:'Missing permission: customers_sensitive'});
 }
 function normalize(req,res,next){
   const b=req.body||{};
@@ -78,8 +95,9 @@ async function duplicate(req,res,next){
   }catch(e){res.status(500).json({error:'Unable to validate customer uniqueness'});}
 }
 router.use(redactSensitiveCustomerReads);
-router.post('/',requirePermission('customers_add'),normalize,duplicate);
-router.put('/:id',requirePermission('customers_edit'),normalize,duplicate);
+router.post('/',requirePermission('customers_add'),requireSensitiveCustomerWrite,normalize,duplicate);
+router.put('/:id',requirePermission('customers_edit'),requireSensitiveCustomerWrite,normalize,duplicate);
 module.exports=router;
 module.exports.SENSITIVE_CUSTOMER_FIELDS=SENSITIVE_CUSTOMER_FIELDS;
 module.exports.redactCustomer=redactCustomer;
+module.exports.requireSensitiveCustomerWrite=requireSensitiveCustomerWrite;
