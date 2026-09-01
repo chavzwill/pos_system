@@ -11,7 +11,19 @@ const {validateMemoryUpload,imageMulterFilter}=require('../lib/uploadSecurity');
 
 const clean=v=>String(v??'').trim();
 const finiteNonNegative=v=>{const n=Number(v??0);return Number.isFinite(n)&&n>=0?n:null;};
-const secureIdUpload=multer({storage:multer.memoryStorage(),limits:{fileSize:5*1024*1024,files:1,fields:4},fileFilter:imageMulterFilter});
+const secureIdUpload=multer({
+  storage:multer.memoryStorage(),
+  limits:{
+    fileSize:5*1024*1024,
+    files:1,
+    fields:4,
+    parts:5,
+    fieldNameSize:100,
+    fieldSize:64*1024,
+    headerPairs:50,
+  },
+  fileFilter:imageMulterFilter,
+});
 const SENSITIVE_CUSTOMER_FIELDS=[
   'rental_id_number',
   'rental_id_scan_path',
