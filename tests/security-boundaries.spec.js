@@ -216,4 +216,81 @@ test.describe('Operational security boundaries', () => {
       await cleanupLimitedOperator(admin.cookie, fixture);
     }
   });
+
+  test('security_assign cannot promote or demote identities above the actor authority envelope', async () => {
+    const admin = await login();
+    const branches = await api(admin.cookie, '/api/branches');
+    expect(branches.status).toBe(200);
+    const branch = branches.body.find(b => b.active !== 0) || branches.body[0];
+    expect(branch).toBeTruthy();
+    expect(admin.body.security_group_id).toBeTruthy();
+
+    const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const group = await api(admin.cookie, '/api/security-groups', {
+      method: 'POST',
+      body: JSON.stringify({
+        name: `Bounded Security Assigner ${suffix}`,
+        description: 'Temporary least-privilege assignment certification group',
+        reason: 'Bounded security assignment certification',
+        permissions: { security_assign: true },
+      }),
+    });
+    expect(group.status).toBe(201);
+
+    const username = `sec_${suffix.replace(/[^a-z0-9]/gi, '').slice(-16)}`;
+    const password = `Sec!${suffix}Aa1`;
+    const pin = `9${String(Date.now()).slice(-5)}`;
+    let employee = null;
+    try {
+      const created = await api(admin.cookie, '/api/employees', {
+        method: 'POST',
+        body: JSON.stringify({
+          first_name: 'Bounded', last_name: 'Assigner', username, password, pin,
+          security_group_id: group.body.id,
+          default_branch_id: branch.id,
+          must_change_password: false,
+        }),
+      });
+      expect(created.status).toBe(201);
+      employee = created.body;
+      const limited = await login(username, password);
+
+      const promote = await api(limited.cookie, `/api/security-groups/${admin.body.security_group_id}/assign`, {
+        method: 'POST',
+        body: JSON.stringify({ employee_id: employee.id, reason: 'Attempt privilege escalation certification' }),
+      });
+      expect(promote.status).toBe(403);
+      expect(promote.body?.error).toMatch(/authority you do not hold/i);
+
+      const demoteAdmin = await api(limited.cookie, `/api/security-groups/${admin.body.security_group_id}/assign/${admin.body.id}?reason=Attempt%20privileged%20demotion%20certification`, {
+        method: 'DELETE',
+      });
+      expect(demoteAdmin.status).toBe(403);
+      expect(demoteAdmin.body?.error).toMatch(/authority you do not hold/i);
+
+      const profile = await api(limited.cookie, '/api/workspace-profile/me');
+      expect(profile.status).toBe(200);
+      expect(Number(profile.body.employee?.security_group_id)).toBe(Number(group.body.id));
+
+      const adminProfile = await api(admin.cookie, '/api/workspace-profile/me');
+      expect(adminProfile.status).toBe(200);
+      expect(Number(adminProfile.body.employee?.security_group_id)).toBe(Number(admin.body.security_group_id));
+    } finally {
+      if (employee?.id) {
+        await api(admin.cookie, `/api/employees/${employee.id}`, {
+          method: 'PUT',
+          body: JSON.stringify({
+            first_name: employee.first_name,
+            last_name: employee.last_name,
+            username,
+            active: 0,
+            security_group_id: group.body.id,
+            default_branch_id: employee.default_branch_id,
+            must_change_password: false,
+          }),
+        });
+      }
+      await api(admin.cookie, `/api/security-groups/${group.body.id}?reason=Bounded%20security%20assignment%20cleanup`, { method: 'DELETE' });
+    }
+  });
 });
