@@ -3,6 +3,7 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {requirePermission,can}=require('../lib/permissions');
+const {findEmployeeByPin}=require('../lib/pinAuth');
 const {ensureInventoryMovementValuation,valueStockAdjustment}=require('../lib/inventory-movement-valuation');
 const {getAvailableQty}=require('../lib/inventory-stock-status');
 const {normalizeSignedInventoryQuantity}=require('../lib/inventory-quantity-precision');
@@ -49,7 +50,7 @@ async function authorizeLargeReduction(req,estimatedLoss){
   if(!pin)throw Object.assign(new Error(`Supervisor approval is required because this negative stock adjustment represents approximately ${estimatedLoss.toFixed(2)} of inventory value.`),{status:409});
   if(approvalReason.length<5)throw Object.assign(new Error('A meaningful supervisor approval reason is required for this high-value stock reduction.'),{status:400});
   const {rows:employees}=await db.execute({sql:`SELECT e.id,e.first_name,e.last_name,e.pin,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.active=1`,args:[]});
-  const authorizer=employees.find(e=>String(e.pin)===pin&&(()=>{let p={};try{p=JSON.parse(e.permissions||'{}');}catch{}return can(p,'inventory_writeoff_approve')||can(p,'reports_financial')||can(p,'security_manage');})());
+  const authorizer=await findEmployeeByPin(employees,pin,e=>{let p={};try{p=JSON.parse(e.permissions||'{}');}catch{}return can(p,'inventory_writeoff_approve')||can(p,'reports_financial')||can(p,'security_manage');});
   if(!authorizer)throw Object.assign(new Error('Invalid supervisor PIN or insufficient inventory-loss approval authority.'),{status:403});
   if(!await settingBool('loss_control_inventory_adjustment_allow_self_approval',false)&&req.employee&&String(req.employee.id)===String(authorizer.id))throw Object.assign(new Error('Independent supervisor authorization is required for this high-value stock reduction.'),{status:403});
   return {required:true,threshold,authorizer,approvalReason};
