@@ -1,0 +1,48 @@
+name: Candidate Host Assessment Certification
+
+on:
+  push:
+    branches:
+      - ops/host-selection-budget
+    paths:
+      - scripts/candidate-host-assessment.sh
+      - .github/workflows/candidate-host-assessment-certification.yml
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  certify-assessment:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - name: Checkout
+        uses: actions/checkout@v4
+
+      - name: Validate shell syntax
+        run: bash -n scripts/candidate-host-assessment.sh
+
+      - name: Verify assessment on supported host class
+        run: |
+          bash scripts/candidate-host-assessment.sh | tee /tmp/assessment.txt
+          grep -Eq '^DECISION: (PASS|CONDITIONAL)' /tmp/assessment.txt
+
+      - name: Verify tool can fail closed
+        run: |
+          mkdir -p /tmp/fakebin
+          cat >/tmp/fakebin/getconf <<'EOF'
+          #!/usr/bin/env bash
+          if [ "${1:-}" = "_NPROCESSORS_ONLN" ]; then
+            echo 1
+          else
+            /usr/bin/getconf "$@"
+          fi
+          EOF
+          chmod +x /tmp/fakebin/getconf
+          set +e
+          PATH="/tmp/fakebin:$PATH" bash scripts/candidate-host-assessment.sh >/tmp/assessment-fail.txt 2>&1
+          code=$?
+          set -e
+          test "$code" -eq 2
+          grep -q '^DECISION: FAIL' /tmp/assessment-fail.txt
