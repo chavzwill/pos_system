@@ -14,10 +14,15 @@ const writeoffs=read('routes/inventory-writeoffs.js');
 const repairCompletion=read('routes/work-order-completion-hardening.js');
 const logistics=read('routes/logistics-intelligence.js');
 for(const [name,src] of Object.entries({permissions,apiAuth,apiKeys,sessionAuth,ledger,settlements,compensation,writeoffGuard,writeoffs,repairCompletion,logistics}))new vm.Script(src,{filename:name});
-const endpointDenialStart=apiAuth.indexOf('if (!needed) {');
-const endpointAudit=apiAuth.indexOf("control: 'api_key_endpoint_policy'",endpointDenialStart);
-const endpointReject=apiAuth.indexOf("return res.status(403).json({ error: 'API keys are not permitted on this employee endpoint' })",endpointDenialStart);
-const wildcardScopeCheck=apiAuth.indexOf("scopes.includes('*')",endpointDenialStart);
+function segment(src,startNeedle,endNeedle){
+  const start=src.indexOf(startNeedle);if(start<0)return '';
+  const end=endNeedle?src.indexOf(endNeedle,start+startNeedle.length):-1;
+  return src.slice(start,end<0?undefined:end);
+}
+const noEndpointBlock=segment(apiAuth,'if (!needed) {','if (!scopes.includes');
+const wildcardIndex=apiAuth.indexOf("scopes.includes('*')");
+const endpointBlockIndex=apiAuth.indexOf('if (!needed) {');
+const endpoint403Index=noEndpointBlock.indexOf("return res.status(403).json({ error: 'API keys are not permitted on this employee endpoint' })");
 const checks=[
  ['server RBAC tree defines granular financial and destructive permissions',permissions.includes('reports_financial')&&permissions.includes('inventory_writeoff_create')&&permissions.includes('inventory_writeoff_approve')&&permissions.includes('employees_salaries')],
  ['rental management compatibility alias does not create a new authority',permissions.includes("rentals_manage: 'rentals_manage_items'")],
@@ -37,9 +42,8 @@ const checks=[
  ['API keys cannot operate internal Dispatch workflows',permissions.includes('API keys cannot operate internal Dispatch workflows')],
  ['authorized Dispatch requests short-circuit legacy transfer permission checks',permissions.includes("if(dispatch==='allow')return next()")],
  ['department handoffs still continue into their original business permission checks',permissions.includes("if(required==='source_handoff')return 'continue'")],
- ['API keys fail closed outside explicit integration endpoints',endpointDenialStart>=0&&endpointReject>endpointDenialStart],
- ['known API key endpoint-policy denials are audited before rejection',endpointAudit>endpointDenialStart&&endpointAudit<endpointReject],
- ['legacy API wildcard cannot unlock unmapped employee APIs',wildcardScopeCheck>endpointReject],
+ ['API keys fail closed outside explicit integration endpoints',endpointBlockIndex>=0&&noEndpointBlock.includes('await auditApiKeyDenied(req')&&noEndpointBlock.includes("control: 'api_key_endpoint_policy'")&&endpoint403Index>=0],
+ ['legacy API wildcard cannot unlock unmapped employee APIs',endpointBlockIndex>=0&&wildcardIndex>=0&&endpointBlockIndex<wildcardIndex],
  ['API key scopes include repair portal scopes explicitly',apiKeys.includes("'repairs:read'")&&apiKeys.includes("'repairs:write'")],
  ['new API keys do not default to wildcard',apiKeys.includes("scopes = ['products:read']")&&!apiKeys.includes("scopes = ['*']")],
  ['API key administration requires integration-settings authority',apiKeys.includes("requirePermission('settings_integrations')")],
@@ -61,4 +65,4 @@ const checks=[
 ];
 let failed=0;for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} RBAC/security certification: ${name}`);if(!ok)failed++;}
 if(failed){console.error(`RBAC/security certification FAILED (${failed}/${checks.length} failed).`);process.exit(1);}
-console.log(`RBAC/security certification OK (${checks.length} checks). Dispatch view/plan/execute/admin authority is explicit, API-key employee-endpoint denials are audited before rejection, legacy wildcard scopes cannot bypass endpoint policy, and unknown logistics mutations fail closed.`);
+console.log(`RBAC/security certification OK (${checks.length} checks). Dispatch view/plan/execute/admin authority is explicit, supersedes legacy transfer gates, and unknown logistics mutations fail closed.`);
