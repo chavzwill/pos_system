@@ -17,7 +17,11 @@ const SENSITIVE_CUSTOMER_FIELDS=[
   'tax_exemption_number',
 ];
 function mayViewSensitive(req){
-  return !!req.apiKey || can(req.employee?.permissions,'customers_sensitive') || can(req.employee?.permissions,'security_manage');
+  // API keys are intentionally integration-only and receive the minimized
+  // customer representation. Sensitive identity/compliance data requires an
+  // authenticated employee with an explicit non-inheriting authority.
+  if(req.apiKey)return false;
+  return can(req.employee?.permissions,'customers_sensitive') || can(req.employee?.permissions,'security_manage');
 }
 function redactCustomer(customer){
   if(!customer||typeof customer!=='object'||Array.isArray(customer))return customer;
