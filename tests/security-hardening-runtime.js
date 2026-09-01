@@ -157,4 +157,37 @@ test.describe('POS security hardening', () => {
     expect(last.status).toBe(429);
     expect(last.headers.get('retry-after')).toBeTruthy();
   });
+
+  test('identity, signature and procurement evidence are not bearer-accessible static files', async () => {
+    const protectedPaths = [
+      '/uploads/customer-ids/security-probe.png',
+      '/uploads/rental-signatures/security-probe.png',
+      '/uploads/rental-po-attachments/security-probe.pdf',
+      '/uploads/po-attachments/security-probe.pdf',
+    ];
+    for (const path of protectedPaths) {
+      const anonymous = await fetch(`${BASE}${path}`);
+      expect(anonymous.status, `${path} must require authentication`).toBe(401);
+      expect(anonymous.headers.get('cache-control') || '').toMatch(/no-store/);
+    }
+
+    const admin = await login();
+    let fixture = null;
+    try {
+      fixture = await makeRestrictedEmployee(admin.cookie);
+      const restricted = await login(fixture.username, fixture.password);
+      const denied = await fetch(`${BASE}/uploads/customer-ids/security-probe.png`, {
+        headers: { Cookie: restricted.cookie },
+      });
+      expect(denied.status).toBe(403);
+
+      const authorizedMissing = await fetch(`${BASE}/uploads/customer-ids/security-probe.png`, {
+        headers: { Cookie: admin.cookie },
+      });
+      expect(authorizedMissing.status).toBe(404);
+      expect(authorizedMissing.headers.get('cache-control') || '').toMatch(/no-store/);
+    } finally {
+      await cleanup(admin.cookie, fixture);
+    }
+  });
 });
