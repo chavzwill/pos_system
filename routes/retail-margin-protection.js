@@ -3,6 +3,7 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {can,requirePermission}=require('../lib/permissions');
+const {findEmployeeByPin}=require('../lib/pinAuth');
 
 let readyPromise=null;
 const r2=v=>Number(Number(v||0).toFixed(2));
@@ -54,7 +55,7 @@ async function authorizeOverride(req){
   if(!pin)return {error:'Supervisor authorization is required because this sale falls below the configured gross-margin floor.'};
   if(reason.length<5)return {error:'A meaningful margin override reason is required.'};
   const {rows:employees}=await db.execute({sql:`SELECT e.id,e.first_name,e.last_name,e.pin,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.active=1`,args:[]});
-  const authorizer=employees.find(e=>String(e.pin)===pin&&(()=>{let p={};try{p=JSON.parse(e.permissions||'{}');}catch{}return can(p,'reports_financial')||can(p,'security_manage');})());
+  const authorizer=await findEmployeeByPin(employees,pin,e=>{let p={};try{p=JSON.parse(e.permissions||'{}');}catch{}return can(p,'reports_financial')||can(p,'security_manage');});
   if(!authorizer)return {error:'Invalid supervisor PIN or insufficient margin-override authority.'};
   if(!await settingBool('loss_control_margin_override_allow_self',false)&&req.employee&&String(authorizer.id)===String(req.employee.id))return {error:'Independent supervisor authorization is required for a below-floor margin sale.'};
   return {authorizer,reason};
