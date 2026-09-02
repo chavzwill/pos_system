@@ -149,6 +149,7 @@ router.put('/:id/change-password', requireAuth, async (req, res) => {
     const tx = await db.transaction('write');
     try {
       await tx.execute({ sql: 'UPDATE employees SET password=?,must_change_password=0 WHERE id=?', args: [hash, targetId] });
+      await destroyEmployeeSessions(targetId, tx);
       await recordSecurityAudit({
         actorEmployeeId: targetId,
         action: 'password_changed_self',
@@ -168,7 +169,6 @@ router.put('/:id/change-password', requireAuth, async (req, res) => {
       await tx.rollback().catch(() => {});
       throw error;
     }
-    await destroyEmployeeSessions(targetId);
     clearSessionCookie(res);
     res.json({ success: true, reauthentication_required: true });
   } catch (e) {
@@ -192,6 +192,7 @@ router.post('/:id/reset-password', requirePermission('security_manage'), async (
     const tx = await db.transaction('write');
     try {
       await tx.execute({ sql: 'UPDATE employees SET password=?,must_change_password=1 WHERE id=?', args: [hash, targetId] });
+      await destroyEmployeeSessions(targetId, tx);
       await recordSecurityAudit({
         actorEmployeeId: req.employee.id,
         action: 'password_reset_by_admin',
@@ -211,7 +212,6 @@ router.post('/:id/reset-password', requirePermission('security_manage'), async (
       await tx.rollback().catch(() => {});
       throw error;
     }
-    await destroyEmployeeSessions(targetId);
     res.json({ success: true, must_change_password: true, sessions_revoked: true });
   } catch (e) {
     res.status(400).json({ error: 'Unable to reset password' });
