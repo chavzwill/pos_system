@@ -1,9 +1,8 @@
 import { test, expect } from '@playwright/test';
-import { createRequire } from 'module';
+import { createClient } from '@libsql/client';
+import secureSettings from '../lib/secureSettings.js';
 
-const require=createRequire(import.meta.url);
-const { createClient }=require('@libsql/client');
-const { isEncryptedSettingValue,revealSettingValue }=require('../lib/secureSettings');
+const { isEncryptedSettingValue, revealSettingValue } = secureSettings;
 const BASE='http://localhost:3001';
 const ADMIN_USER=process.env.POS_TEST_USER||'admin';
 const ADMIN_PASSWORD=process.env.POS_TEST_PASSWORD||'CI-Test-Auth!2026';
