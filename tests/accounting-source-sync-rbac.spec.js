@@ -14,7 +14,7 @@ async function api(cookie,method,path,body){
 }
 
 test.describe('Accounting financial authority isolation',()=>{
-  test('ordinary reports authority cannot inspect financial intelligence or create ledger postings',async()=>{
+  test('ordinary reports authority cannot inspect financial intelligence, financial controls, or create ledger postings',async()=>{
     const admin=await login();expect(admin.status).toBe(200);
     const stamp=Date.now();
     const group=await api(admin.cookie,'POST','/api/security-groups',{
@@ -39,6 +39,10 @@ test.describe('Accounting financial authority isolation',()=>{
     expect(intelligence.status).toBe(403);
     expect(intelligence.body.error).toMatch(/reports_financial/i);
 
+    const controls=await api(restricted.cookie,'GET','/api/financial-controls-intelligence/command-center');
+    expect(controls.status).toBe(403);
+    expect(controls.body.error).toMatch(/reports_financial/i);
+
     const posting=await api(restricted.cookie,'POST','/api/accounting-source-sync/sync',{});
     expect(posting.status).toBe(403);
     expect(posting.body.error).toMatch(/reports_financial/i);
@@ -47,6 +51,7 @@ test.describe('Accounting financial authority isolation',()=>{
     expect(audit.status).toBe(200);
     const denials=audit.body.filter(x=>x.action==='permission_denied'&&Number(x.actor_employee_id)===Number(employee.body.id));
     expect(denials.some(x=>String(x.path||'').includes('/api/accounting-intelligence/overview')&&String(x.new_value||'').includes('reports_financial'))).toBe(true);
+    expect(denials.some(x=>String(x.path||'').includes('/api/financial-controls-intelligence/command-center')&&String(x.new_value||'').includes('reports_financial'))).toBe(true);
     expect(denials.some(x=>String(x.path||'').includes('/api/accounting-source-sync/sync')&&String(x.new_value||'').includes('reports_financial'))).toBe(true);
   });
 });
