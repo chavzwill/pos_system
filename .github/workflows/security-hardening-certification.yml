@@ -27,19 +27,15 @@ jobs:
     steps:
       - name: Checkout hardened head
         uses: actions/checkout@v4
-
       - name: Use Node.js 22
         uses: actions/setup-node@v4
         with:
           node-version: 22
           cache: npm
-
       - name: Install locked dependencies
         run: npm ci
-
       - name: Verify production dependency audit
         run: npm audit --omit=dev --audit-level=moderate
-
       - name: Validate hardened security module syntax
         run: |
           node --check lib/securityHardening.js
@@ -50,33 +46,26 @@ jobs:
           node --check routes/security-groups.js
           node --check scripts/production-credential-preflight.js
           node --check server.js
-
       - name: Install Chromium runtime
         run: npx playwright install --with-deps chromium
-
       - name: Bootstrap isolated local runtime database
         run: |
           rm -f pos.db pos.db-shm pos.db-wal
           node scripts/ci-runtime-bootstrap.js
-
       - name: Run full release gate with adversarial security tests
         run: npm run test:release-gate -- --workers=1
-
       - name: Certify inherited security assignment boundaries
         run: npx playwright test tests/security-assignment-boundaries.spec.js --workers=1
-
       - name: Certify atomic security governance evidence
         run: npx playwright test tests/security-governance-atomicity.spec.js --workers=1
-
       - name: Certify known API key denial audit evidence
         run: npx playwright test tests/api-key-audit.spec.js --workers=1
-
+      - name: Certify forced first-login password boundary
+        run: npx playwright test tests/forced-password-change.spec.js --workers=1
       - name: Certify PIN hashing and legacy migration
         run: npx playwright test tests/pin-security-runtime.spec.js --workers=1
-
       - name: Certify request abuse controls
         run: npx playwright test tests/request-abuse-security.spec.js --workers=1
-
       - name: Upload Playwright diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
