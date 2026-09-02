@@ -6,6 +6,7 @@ const { db, ensureReady } = require('../database');
 const USERNAME = String(process.env.POS_BOOTSTRAP_ADMIN_USER || 'admin').trim();
 const BOOTSTRAP_PASSWORD = String(process.env.POS_BOOTSTRAP_ADMIN_PASSWORD || '');
 const BOOTSTRAP_PIN = String(process.env.POS_BOOTSTRAP_ADMIN_PIN || '');
+const LOCKED_CREDENTIAL = '!LOCKED!';
 const COMMON_PASSWORDS = ['123456','12345678','password','password1','admin','admin123','letmein','qwerty','welcome','totaltools'];
 const COMMON_PINS = new Set(['000000','111111','123456','654321','121212','112233','999999']);
 
@@ -45,7 +46,7 @@ async function migratePlaintextPins() {
   for (const employee of rows) {
     if (isBcrypt(employee.pin)) continue;
     const raw = String(employee.pin || '');
-    if (!raw) continue;
+    if (!raw || raw === LOCKED_CREDENTIAL) continue;
     const hash = await bcrypt.hash(raw, 12);
     const result = await db.execute({ sql: 'UPDATE employees SET pin=? WHERE id=? AND pin=?', args: [hash, employee.id, employee.pin] });
     if (Number(result.rowsAffected || 0) > 0) migrated += 1;
