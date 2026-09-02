@@ -95,6 +95,8 @@ jobs:
         run: npx playwright test tests/password-reset-security.spec.js --workers=1
       - name: Certify settings and integration-secret governance
         run: npx playwright test tests/settings-security-governance.spec.js --workers=1
+      - name: Certify live integration secrets encrypted at rest
+        run: npx playwright test tests/settings-secret-at-rest.spec.js --workers=1
       - name: Certify WooCommerce credential governance
         run: npx playwright test tests/woocommerce-secret-governance.spec.js --workers=1
       - name: Certify explicit integration settings UI authority
