@@ -3,8 +3,9 @@ import './pos-financial-runtime.js';
 import './security-hardening-runtime.js';
 
 const BASE = 'http://localhost:3001';
+const TEST_PASSWORD = process.env.POS_TEST_PASSWORD || 'CI-Test-Auth!2026';
 
-async function login(username = process.env.POS_TEST_USER || 'admin', password = process.env.POS_TEST_PASSWORD || '123456') {
+async function login(username = process.env.POS_TEST_USER || 'admin', password = TEST_PASSWORD) {
   const response = await fetch(`${BASE}/api/employees/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
@@ -43,13 +44,15 @@ test.describe('Known API key denial audit trail', () => {
     const adminCookie = await login();
     const suffix = `${Date.now()}-${Math.random().toString(36).slice(2, 8)}`;
     const name = `Runtime API denial ${suffix}`;
+    const createReason = `Runtime denial audit certification ${suffix}`;
+    const revokeReason = `Runtime denial audit cleanup ${suffix}`;
 
     let keyId = null;
     let rawKey = null;
     try {
       const created = await sessionApi(adminCookie, '/api/api-keys', {
         method: 'POST',
-        body: JSON.stringify({ name, scopes: ['products:read'] }),
+        body: JSON.stringify({ name, scopes: ['products:read'], reason: createReason }),
       });
       expect(created.status).toBe(201);
       rawKey = created.body?.key;
@@ -109,7 +112,10 @@ test.describe('Known API key denial audit trail', () => {
       expect(newApiKeyAuditRows).toHaveLength(0);
     } finally {
       if (keyId) {
-        const revoked = await sessionApi(adminCookie, `/api/api-keys/${keyId}`, { method: 'DELETE' });
+        const revoked = await sessionApi(adminCookie, `/api/api-keys/${keyId}`, {
+          method: 'DELETE',
+          body: JSON.stringify({ reason: revokeReason }),
+        });
         expect(revoked.status).toBe(200);
       }
     }
