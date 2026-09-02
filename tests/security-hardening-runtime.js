@@ -323,7 +323,12 @@ test.describe('POS security hardening', () => {
       expect(adminDetail.body.rental_id_number).toBe('SECURITY-ID-12345');
 
       const createdKey=await api(admin.cookie,'/api/api-keys',{
-        method:'POST',body:JSON.stringify({name:`Security customer read ${Date.now()}`,scopes:['customers:read']})
+        method:'POST',
+        body:JSON.stringify({
+          name:`Security customer read ${Date.now()}`,
+          scopes:['customers:read'],
+          reason:'Customer minimization integration security certification',
+        }),
       });
       expect(createdKey.status).toBe(201);
       const keyList=await api(admin.cookie,'/api/api-keys');
@@ -337,9 +342,12 @@ test.describe('POS security hardening', () => {
       expect(integrationBody.rental_id_number).toBeUndefined();
       expect(integrationBody.rental_reference_phone).toBeUndefined();
     } finally {
-      if(apiKeyId)await api(admin.cookie,`/api/api-keys/${apiKeyId}`,{method:'DELETE'});
-      if (customer?.body?.id) await api(admin.cookie, `/api/customers/${customer.body.id}`, { method: 'DELETE' });
-      await cleanup(admin.cookie, fixture);
+      if(apiKeyId)await api(admin.cookie,`/api/api-keys/${apiKeyId}`,{
+        method:'DELETE',
+        body:JSON.stringify({reason:'Customer minimization integration security cleanup'}),
+      });
+      if(customer?.body?.id)await api(admin.cookie,`/api/customers/${customer.body.id}`,{method:'DELETE'});
+      await cleanup(admin.cookie,fixture);
     }
   });
 });
