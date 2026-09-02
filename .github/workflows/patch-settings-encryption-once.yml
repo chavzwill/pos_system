@@ -1,0 +1,104 @@
+name: Patch settings encryption once
+
+on:
+  push:
+    branches:
+      - security/pos-hardening-v1
+    paths:
+      - .github/workflows/patch-settings-encryption-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-settings-encryption:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/pos-hardening-v1
+          fetch-depth: 0
+      - name: Wire encrypted settings storage and consumers
+        shell: python
+        run: |
+          from pathlib import Path
+          import re
+
+          settings=Path('routes/settings.js')
+          s=settings.read_text()
+          audit_import="const { ensureSecurityAuditTable, recordSecurityAudit } = require('../lib/securityAudit');\n"
+          secure_import=audit_import+"const { SECRET_SETTING_KEYS, protectSettingValue, secretValuesEqual } = require('../lib/secureSettings');\n"
+          if s.count(audit_import)!=1: raise SystemExit(f'Expected one settings audit import, found {s.count(audit_import)}')
+          s=s.replace(audit_import,secure_import)
+          s,count=re.subn(r"const SECRET_KEYS = new Set\(\[\n.*?\n\]\);", "const SECRET_KEYS = SECRET_SETTING_KEYS;", s, count=1, flags=re.S)
+          if count!=1: raise SystemExit(f'Expected one local SECRET_KEYS block, found {count}')
+          old_loop="""        const next=value==null?'':String(value);\n        const previous=existing.has(key)?existing.get(key):null;\n        if(String(previous??'')===next) continue;\n        await tx.execute({sql:'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',args:[key,next]});"""
+          new_loop="""        const rawNext=value==null?'':String(value);\n        const previous=existing.has(key)?existing.get(key):null;\n        if(secretValuesEqual(key,previous,rawNext)) continue;\n        const next=SECRET_KEYS.has(key)?protectSettingValue(key,rawNext):rawNext;\n        await tx.execute({sql:'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',args:[key,next]});"""
+          if s.count(old_loop)!=1: raise SystemExit(f'Expected one settings storage loop, found {s.count(old_loop)}')
+          s=s.replace(old_loop,new_loop)
+          settings.write_text(s)
+
+          for filename,func in [('routes/email.js','getSettings'),('routes/repair-notification-worker.js','settings')]:
+            p=Path(filename); text=p.read_text()
+            db_import="const { db } = require('../database');\n"
+            replacement=db_import+"const { revealSettingsRows } = require('../lib/secureSettings');\n"
+            if text.count(db_import)!=1: raise SystemExit(f'{filename}: expected one database import, found {text.count(db_import)}')
+            text=text.replace(db_import,replacement)
+            if func=='getSettings':
+              old="""  const { rows } = await db.execute({ sql: 'SELECT * FROM settings', args: [] });\n  const s = {};\n  rows.forEach(r => { s[r.key] = r.value; });\n  return s;"""
+            else:
+              old="""  const { rows } = await db.execute({ sql: 'SELECT key,value FROM settings', args: [] });\n  const out = {}; for (const row of rows) out[row.key] = row.value; return out;"""
+            new=("  const { rows } = await db.execute({ sql: 'SELECT * FROM settings', args: [] });\n  return revealSettingsRows(rows);" if func=='getSettings' else "  const { rows } = await db.execute({ sql: 'SELECT key,value FROM settings', args: [] });\n  return revealSettingsRows(rows);")
+            if text.count(old)!=1: raise SystemExit(f'{filename}: expected one raw settings projection, found {text.count(old)}')
+            text=text.replace(old,new)
+            p.write_text(text)
+
+          woo=Path('routes/woocommerce.js'); w=woo.read_text()
+          db_import="const { db } = require('../database');\n"
+          replacement=db_import+"const { revealSettingsRows } = require('../lib/secureSettings');\n"
+          if w.count(db_import)!=1: raise SystemExit(f'WooCommerce: expected one database import, found {w.count(db_import)}')
+          w=w.replace(db_import,replacement)
+          old="""  const s = {};\n  rows.forEach(r => { s[r.key] = r.value; });"""
+          new="  const s = revealSettingsRows(rows);"
+          if w.count(old)!=1: raise SystemExit(f'WooCommerce: expected one raw secret projection, found {w.count(old)}')
+          w=w.replace(old,new)
+          woo.write_text(w)
+
+          entry=Path('docker-entrypoint.sh'); e=entry.read_text()
+          anchor="  su-exec app node --require ./lib/local-sqlite-runtime.js scripts/production-credential-preflight.js\n"
+          replacement=anchor+"  su-exec app node --require ./lib/local-sqlite-runtime.js scripts/production-settings-secret-preflight.js\n"
+          if e.count(anchor)!=1: raise SystemExit(f'Expected one production credential preflight call, found {e.count(anchor)}')
+          entry.write_text(e.replace(anchor,replacement))
+
+          compose=Path('docker-compose.yml'); c=compose.read_text()
+          anchor="      TURSO_AUTH_TOKEN: ${TURSO_AUTH_TOKEN:-}\n"
+          replacement=anchor+"      # 32-byte base64/hex key used for authenticated encryption of stored integration secrets.\n      POS_SETTINGS_ENCRYPTION_KEY: ${POS_SETTINGS_ENCRYPTION_KEY:-}\n"
+          if c.count(anchor)!=1: raise SystemExit(f'Expected one Turso auth environment anchor, found {c.count(anchor)}')
+          compose.write_text(c.replace(anchor,replacement))
+
+          env=Path('.env.production.example'); v=env.read_text()
+          anchor="# Only needed if docker-compose.yml is changed from local SQLite to remote Turso.\nTURSO_AUTH_TOKEN=\n"
+          replacement="""# SETTINGS / INTEGRATION SECRET ENCRYPTION:\n# Required before configuring SMTP passwords, WooCommerce credentials, webhook tokens,\n# or other integration secrets. Generate once (for example: openssl rand -base64 32),\n# store only on the production host/secret manager, back it up securely, and do not rotate\n# it without a controlled re-encryption procedure. Losing it makes encrypted settings unreadable.\nPOS_SETTINGS_ENCRYPTION_KEY=\n\n# Only needed if docker-compose.yml is changed from local SQLite to remote Turso.\nTURSO_AUTH_TOKEN=\n"""
+          if v.count(anchor)!=1: raise SystemExit(f'Expected one production env Turso anchor, found {v.count(anchor)}')
+          env.write_text(v.replace(anchor,replacement))
+      - name: Verify encryption wiring
+        run: |
+          node --check lib/secureSettings.js
+          node --check scripts/production-settings-secret-preflight.js
+          node --check scripts/certify-settings-secret-encryption.js
+          node --check routes/settings.js
+          node --check routes/email.js
+          node --check routes/repair-notification-worker.js
+          node --check routes/woocommerce.js
+          grep -F "protectSettingValue" routes/settings.js
+          grep -F "revealSettingsRows" routes/email.js routes/repair-notification-worker.js routes/woocommerce.js
+          grep -F "production-settings-secret-preflight.js" docker-entrypoint.sh
+          grep -F "POS_SETTINGS_ENCRYPTION_KEY" docker-compose.yml .env.production.example
+          git diff --check
+      - name: Commit encrypted settings runtime
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/secureSettings.js scripts/production-settings-secret-preflight.js scripts/certify-settings-secret-encryption.js routes/settings.js routes/email.js routes/repair-notification-worker.js routes/woocommerce.js docker-entrypoint.sh docker-compose.yml .env.production.example
+          git commit -m "Encrypt integration settings at rest"
+          git push origin HEAD:security/pos-hardening-v1
