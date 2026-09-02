@@ -44,6 +44,7 @@ async function main() {
   const tx = await db.transaction('write');
   try {
     await tx.execute({ sql: 'UPDATE employees SET password=?,must_change_password=1 WHERE id=?', args: [hash, target.id] });
+    await destroyEmployeeSessions(target.id, tx);
     await recordSecurityAudit({
       action: 'operator_password_recovery',
       targetType: 'employee',
@@ -60,7 +61,6 @@ async function main() {
     throw error;
   }
 
-  await destroyEmployeeSessions(target.id);
   console.log(`Production recovery completed for ${USERNAME}. All sessions were revoked and the temporary password must be changed at next login.`);
 }
 
