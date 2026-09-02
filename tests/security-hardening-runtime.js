@@ -113,9 +113,16 @@ test.describe('POS security hardening', () => {
       });
       expect(escalation.status).toBe(403);
 
-      const selfChange = await api(restricted.cookie, `/api/employees/${fixture.employee.id}/change-password`, {
+      const missingCurrentPassword = await api(restricted.cookie, `/api/employees/${fixture.employee.id}/change-password`, {
         method: 'PUT',
         body: JSON.stringify({ password: fixture.replacement }),
+      });
+      expect(missingCurrentPassword.status).toBe(403);
+      expect(missingCurrentPassword.body?.error).toMatch(/current password/i);
+
+      const selfChange = await api(restricted.cookie, `/api/employees/${fixture.employee.id}/change-password`, {
+        method: 'PUT',
+        body: JSON.stringify({ password: fixture.replacement, current_password: fixture.password }),
       });
       expect(selfChange.status).toBe(200);
       expect(selfChange.body?.reauthentication_required).toBe(true);
