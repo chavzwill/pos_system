@@ -1,0 +1,45 @@
+name: Patch security self-change test once
+
+on:
+  push:
+    branches:
+      - security/pos-hardening-v1
+    paths:
+      - .github/workflows/patch-security-self-change-test-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-security-self-change-test:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/pos-hardening-v1
+          fetch-depth: 0
+      - name: Update self-change runtime expectation
+        shell: python
+        run: |
+          from pathlib import Path
+          path = Path('tests/security-hardening-runtime.js')
+          source = path.read_text()
+          old = """      const selfChange = await api(restricted.cookie, `/api/employees/${fixture.employee.id}/change-password`, {\n        method: 'PUT',\n        body: JSON.stringify({ password: fixture.replacement }),\n      });\n      expect(selfChange.status).toBe(200);\n"""
+          new = """      const missingCurrentPassword = await api(restricted.cookie, `/api/employees/${fixture.employee.id}/change-password`, {\n        method: 'PUT',\n        body: JSON.stringify({ password: fixture.replacement }),\n      });\n      expect(missingCurrentPassword.status).toBe(403);\n      expect(missingCurrentPassword.body?.error).toMatch(/current password/i);\n\n      const selfChange = await api(restricted.cookie, `/api/employees/${fixture.employee.id}/change-password`, {\n        method: 'PUT',\n        body: JSON.stringify({ password: fixture.replacement, current_password: fixture.password }),\n      });\n      expect(selfChange.status).toBe(200);\n"""
+          count = source.count(old)
+          if count != 1:
+            raise SystemExit(f'Expected one stale self-change block, found {count}')
+          path.write_text(source.replace(old, new))
+      - name: Verify narrow test patch
+        run: |
+          node --check tests/security-hardening-runtime.js
+          grep -F "current_password: fixture.password" tests/security-hardening-runtime.js
+          git diff --check
+          git diff -- tests/security-hardening-runtime.js
+      - name: Commit test contract update
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add tests/security-hardening-runtime.js
+          git commit -m "Align security runtime with password reauthentication"
+          git push origin HEAD:security/pos-hardening-v1
