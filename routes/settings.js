@@ -25,7 +25,7 @@ const upload = multer({
 
 const SECRET_KEYS = new Set([
   'email_smtp_pass','repair_notify_sms_webhook_token','repair_notify_whatsapp_webhook_token',
-  'woocommerce_consumer_key','woocommerce_consumer_secret','woocommerce_webhook_secret','stripe_secret_key','stripe_webhook_secret',
+  'woo_consumer_key','woo_consumer_secret','woocommerce_consumer_key','woocommerce_consumer_secret','woocommerce_webhook_secret','stripe_secret_key','stripe_webhook_secret',
   'twilio_auth_token','whatsapp_access_token','openai_api_key'
 ]);
 const INTEGRATION_KEYS = new Set([
@@ -33,7 +33,7 @@ const INTEGRATION_KEYS = new Set([
   'repair_notify_email_enabled','repair_notify_sms_enabled','repair_notify_whatsapp_enabled',
   'repair_notify_sms_webhook_url','repair_notify_sms_webhook_token',
   'repair_notify_whatsapp_webhook_url','repair_notify_whatsapp_webhook_token',
-  'woo_url','woo_sync_branch_id','woo_sync_interval','woocommerce_consumer_key','woocommerce_consumer_secret','woocommerce_webhook_secret',
+  'woo_url','woo_consumer_key','woo_consumer_secret','woo_pos_url','woo_sync_branch_id','woo_sync_interval','woocommerce_consumer_key','woocommerce_consumer_secret','woocommerce_webhook_secret',
   'stripe_secret_key','stripe_webhook_secret','twilio_auth_token','whatsapp_access_token','openai_api_key'
 ]);
 const COMPANY_KEYS = new Set(['store_name','store_phone','store_email','store_address','currency','receipt_footer']);
@@ -44,7 +44,7 @@ const MANAGED_KEYS = new Set([
   'repair_notify_email_enabled','repair_notify_sms_enabled','repair_notify_whatsapp_enabled',
   'repair_notify_sms_webhook_url','repair_notify_sms_webhook_token',
   'repair_notify_whatsapp_webhook_url','repair_notify_whatsapp_webhook_token',
-  'wo_assessment_fee','woo_sync_interval',
+  'wo_assessment_fee','woo_url','woo_consumer_key','woo_consumer_secret','woo_pos_url','woo_sync_branch_id','woo_sync_interval',
   'loss_control_min_gross_margin_pct','loss_control_margin_override_allow_self',
   'loss_control_cash_shortage_threshold','loss_control_return_rate_threshold_pct',
   'loss_control_return_value_threshold','loss_control_dead_stock_days'

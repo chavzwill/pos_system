@@ -4,6 +4,10 @@ const crypto = require('crypto');
 const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
 
+function redactWcConfigValue(key, value) {
+  return ['woo_consumer_key','woo_consumer_secret'].includes(key) && value ? '••••••••' : value;
+}
+
 // ── WC API helpers ───────────────────────────────────────────────────────────
 
 async function getWcSettings() {
@@ -484,7 +488,7 @@ async function runSyncAll() {
 // ── Routes ───────────────────────────────────────────────────────────────────
 
 // Lives on the Settings page alongside company/tax/API-keys config.
-router.use(requirePermission('settings'));
+router.use(requirePermission('settings_integrations'));
 
 router.get('/config', async (req, res) => {
   try {
@@ -493,7 +497,7 @@ router.get('/config', async (req, res) => {
       args: [],
     });
     const config = {};
-    rows.forEach(r => { config[r.key] = r.value; });
+    rows.forEach(r => { config[r.key] = redactWcConfigValue(r.key, r.value); });
     res.json(config);
   } catch (e) { res.status(500).json({ error: e.message }); }
 });
