@@ -43,8 +43,10 @@ jobs:
           node --check lib/apiKeyAuth.js
           node --check lib/sessionAuth.js
           node --check lib/passwordPolicy.js
+          node --check lib/permissions.js
           node --check routes/employees.js
           node --check routes/security-groups.js
+          node --check routes/settings.js
           node --check scripts/production-credential-preflight.js
           node --check scripts/certify-production-credential-bootstrap.js
           node --check scripts/production-account-recovery.js
@@ -72,6 +74,8 @@ jobs:
         run: npx playwright test tests/forced-password-change.spec.js --workers=1
       - name: Certify password reset and recovery runtime boundary
         run: npx playwright test tests/password-reset-security.spec.js --workers=1
+      - name: Certify settings and integration-secret governance
+        run: npx playwright test tests/settings-security-governance.spec.js --workers=1
       - name: Certify PIN hashing and legacy migration
         run: npx playwright test tests/pin-security-runtime.spec.js --workers=1
       - name: Certify request abuse controls
