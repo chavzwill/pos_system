@@ -3,7 +3,7 @@
 const bcrypt = require('bcryptjs');
 const { db, ensureReady } = require('../database');
 const { can } = require('../lib/permissions');
-const { recordSecurityAudit } = require('../lib/securityAudit');
+const { ensureSecurityAuditTable, recordSecurityAudit } = require('../lib/securityAudit');
 const { strongPassword, passwordPolicyError } = require('../lib/passwordPolicy');
 const { destroyEmployeeSessions } = require('../lib/sessionAuth');
 
@@ -40,6 +40,7 @@ async function main() {
     throw new Error('Production account recovery is restricted to an active Security Management administrator.');
   }
 
+  await ensureSecurityAuditTable();
   const hash = await bcrypt.hash(TEMPORARY_PASSWORD, 12);
   const tx = await db.transaction('write');
   try {
