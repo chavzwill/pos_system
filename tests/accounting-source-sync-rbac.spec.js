@@ -13,15 +13,15 @@ async function api(cookie,method,path,body){
   return {status:r.status,body:await r.json().catch(()=>null)};
 }
 
-test.describe('Accounting source synchronization RBAC',()=>{
-  test('ordinary reports authority cannot create ledger postings',async()=>{
+test.describe('Accounting financial authority isolation',()=>{
+  test('ordinary reports authority cannot inspect financial intelligence or create ledger postings',async()=>{
     const admin=await login();expect(admin.status).toBe(200);
     const stamp=Date.now();
     const group=await api(admin.cookie,'POST','/api/security-groups',{
       name:`Read-only Reports ${stamp}`,
-      description:'Runtime accounting posting authorization certification',
+      description:'Runtime financial authorization certification',
       permissions:{reports:true},
-      reason:'Certify accounting posting financial authority',
+      reason:'Certify accounting financial authority',
     });
     expect(group.status,JSON.stringify(group.body)).toBe(201);
 
@@ -35,14 +35,18 @@ test.describe('Accounting source synchronization RBAC',()=>{
     expect(employee.status,JSON.stringify(employee.body)).toBe(201);
     const restricted=await login(username,password);expect(restricted.status).toBe(200);
 
-    const denied=await api(restricted.cookie,'POST','/api/accounting-source-sync/sync',{});
-    expect(denied.status).toBe(403);
-    expect(denied.body.error).toMatch(/reports_financial/i);
+    const intelligence=await api(restricted.cookie,'GET','/api/accounting-intelligence/overview');
+    expect(intelligence.status).toBe(403);
+    expect(intelligence.body.error).toMatch(/reports_financial/i);
+
+    const posting=await api(restricted.cookie,'POST','/api/accounting-source-sync/sync',{});
+    expect(posting.status).toBe(403);
+    expect(posting.body.error).toMatch(/reports_financial/i);
 
     const audit=await api(admin.cookie,'GET','/api/security-groups/audit/recent');
     expect(audit.status).toBe(200);
-    const denial=audit.body.find(x=>x.action==='permission_denied'&&Number(x.actor_employee_id)===Number(employee.body.id)&&String(x.path||'').includes('/api/accounting-source-sync/sync'));
-    expect(denial).toBeTruthy();
-    expect(String(denial.new_value||'')).toContain('reports_financial');
+    const denials=audit.body.filter(x=>x.action==='permission_denied'&&Number(x.actor_employee_id)===Number(employee.body.id));
+    expect(denials.some(x=>String(x.path||'').includes('/api/accounting-intelligence/overview')&&String(x.new_value||'').includes('reports_financial'))).toBe(true);
+    expect(denials.some(x=>String(x.path||'').includes('/api/accounting-source-sync/sync')&&String(x.new_value||'').includes('reports_financial'))).toBe(true);
   });
 });
