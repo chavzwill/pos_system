@@ -25,8 +25,8 @@ async function main(){
   }
 
   const username=process.env.POS_TEST_USER||'admin';
-  const password=process.env.POS_TEST_PASSWORD||'123456';
-  const pin=process.env.POS_TEST_PIN||'123456';
+  const password=process.env.POS_TEST_PASSWORD||'CI-Test-Auth!2026';
+  const pin=process.env.POS_TEST_PIN||'864209';
   const [hash,pinHash]=await Promise.all([bcrypt.hash(password,12),bcrypt.hash(pin,12)]);
   let {rows:[employee]}=await db.execute({sql:'SELECT * FROM employees WHERE username=?',args:[username]});
   if(employee){
