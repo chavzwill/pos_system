@@ -1,12 +1,13 @@
 const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
-const {requireAnyPermission}=require('../lib/permissions');
+const {requirePermission}=require('../lib/permissions');
 const {ensureLedger,postSourceJournal}=require('../lib/accounting-posting');
 const {syncRetailReturns}=require('../lib/accounting-retail-returns');
 const {syncRentalAccounting}=require('../lib/accounting-rentals');
 const {syncPurchasingAccounting}=require('../lib/accounting-purchasing');
-router.use(requireAnyPermission('reports_financial','reports'));
+// This router creates ledger postings; read-only Reports authority must never imply posting authority.
+router.use(requirePermission('reports_financial'));
 function actor(req){return req.employee?.id||req.user?.employee_id||null;}
 async function exists(table){const {rows:[r]}=await db.execute({sql:"SELECT name FROM sqlite_master WHERE type='table' AND name=?",args:[table]});return !!r;}
 async function ensureBridgeAccounts(){
