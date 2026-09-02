@@ -18,7 +18,7 @@ async function keyRequest(raw,path='/api/products'){
 }
 
 test.describe('API key credential lifecycle governance',()=>{
-  test('creation, rotation and revocation are explicit, audited, and invalidate old credentials',async()=>{
+  test('creation, rotation and terminal revocation are explicit, audited, and invalidate old credentials',async()=>{
     const admin=await login();expect(admin.status).toBe(200);
     const stamp=Date.now();
 
@@ -55,6 +55,11 @@ test.describe('API key credential lifecycle governance',()=>{
     const oldWorks=await keyRequest(oldRaw);
     expect(oldWorks.status).toBe(200);
 
+    const badBoolean=await api(admin.cookie,'PATCH',`/api/api-keys/${id}`,{is_active:'false',reason:'Reject string boolean coercion attempt'});
+    expect(badBoolean.status).toBe(400);
+    expect(badBoolean.body.error).toMatch(/boolean/i);
+    expect((await keyRequest(oldRaw)).status).toBe(200);
+
     const rotated=await api(admin.cookie,'POST',`/api/api-keys/${id}/rotate`,{reason:'Rotate runtime credential after certification'});
     expect(rotated.status,JSON.stringify(rotated.body)).toBe(200);
     expect(rotated.body.key).toMatch(/^pos_[a-f0-9]{40}$/);
@@ -73,10 +78,25 @@ test.describe('API key credential lifecycle governance',()=>{
     const revokedRejected=await keyRequest(newRaw);
     expect(revokedRejected.status).toBe(401);
 
+    const reactivate=await api(admin.cookie,'PATCH',`/api/api-keys/${id}`,{is_active:true,reason:'Attempt to reactivate revoked credential'});
+    expect(reactivate.status).toBe(409);
+    expect(reactivate.body.error).toMatch(/reactivation|new credential/i);
+    expect((await keyRequest(newRaw)).status).toBe(401);
+
+    const rotateRevoked=await api(admin.cookie,'POST',`/api/api-keys/${id}/rotate`,{reason:'Attempt rotation after terminal revocation'});
+    expect(rotateRevoked.status).toBe(409);
+    expect(rotateRevoked.body.error).toMatch(/revoked|new credential/i);
+    expect((await keyRequest(newRaw)).status).toBe(401);
+
+    const secondRevoke=await api(admin.cookie,'DELETE',`/api/api-keys/${id}`,{reason:'Confirm idempotent terminal revocation'});
+    expect(secondRevoke.status).toBe(200);
+    expect(secondRevoke.body.changed).toBe(false);
+
     const audit=await api(admin.cookie,'GET','/api/security-groups/audit/recent');
     expect(audit.status).toBe(200);
-    const events=audit.body.filter(x=>Number(x.target_id)===Number(id)&&['api_key_created','api_key_rotated','api_key_revoked'].includes(x.action));
+    const events=audit.body.filter(x=>Number(x.target_id)===Number(id)&&['api_key_created','api_key_rotated','api_key_revoked','api_key_reactivated'].includes(x.action));
     expect(events.map(x=>x.action)).toEqual(expect.arrayContaining(['api_key_created','api_key_rotated','api_key_revoked']));
+    expect(events.some(x=>x.action==='api_key_reactivated')).toBe(false);
     const evidence=JSON.stringify(events);
     expect(evidence).not.toContain(oldRaw);
     expect(evidence).not.toContain(newRaw);
