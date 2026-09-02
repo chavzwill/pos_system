@@ -5,6 +5,7 @@ const fs = require('fs');
 const multer = require('multer');
 const { db } = require('../database');
 const { requireAuth, requirePermission, can } = require('../lib/permissions');
+const { ensureSecurityAuditTable, recordSecurityAudit } = require('../lib/securityAudit');
 const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
 const { validateMemoryUpload, imageMulterFilter } = require('../lib/uploadSecurity');
 
@@ -27,6 +28,14 @@ const SECRET_KEYS = new Set([
   'woocommerce_consumer_secret','woocommerce_webhook_secret','stripe_secret_key','stripe_webhook_secret',
   'twilio_auth_token','whatsapp_access_token','openai_api_key'
 ]);
+const INTEGRATION_KEYS = new Set([
+  'email_smtp_host','email_smtp_port','email_smtp_secure','email_smtp_user','email_smtp_pass','email_from',
+  'repair_notify_email_enabled','repair_notify_sms_enabled','repair_notify_whatsapp_enabled',
+  'repair_notify_sms_webhook_url','repair_notify_sms_webhook_token',
+  'repair_notify_whatsapp_webhook_url','repair_notify_whatsapp_webhook_token',
+  'woo_sync_interval','woocommerce_consumer_secret','woocommerce_webhook_secret','stripe_secret_key','stripe_webhook_secret',
+  'twilio_auth_token','whatsapp_access_token','openai_api_key'
+]);
 const MANAGED_KEYS = new Set([
   'store_name','store_phone','store_email','store_address','currency','tax_rate','receipt_footer',
   'email_smtp_host','email_smtp_port','email_smtp_secure','email_smtp_user','email_smtp_pass','email_from',
@@ -38,27 +47,65 @@ const MANAGED_KEYS = new Set([
   'loss_control_cash_shortage_threshold','loss_control_return_rate_threshold_pct',
   'loss_control_return_value_threshold','loss_control_dead_stock_days'
 ]);
-function mayManage(req){ return !!req.apiKey || can(req.employee?.permissions,'settings'); }
 function redact(key,value){ return SECRET_KEYS.has(key) && value ? '••••••••' : value; }
+function isIntegrationKey(key){ return INTEGRATION_KEYS.has(key) || SECRET_KEYS.has(key); }
+function canManageIntegrations(req){ return !req.apiKey && can(req.employee?.permissions,'settings_integrations'); }
+function blockApiKey(req,res){
+  if(!req.apiKey) return false;
+  res.status(403).json({error:'API keys cannot read or modify internal settings administration'});
+  return true;
+}
+function auditValue(key,value){
+  if(isIntegrationKey(key)) return { configured: value != null && String(value) !== '' };
+  return value == null ? '' : String(value);
+}
+async function auditSettingsChange(tx,req,action,oldValues,newValues,reason){
+  await recordSecurityAudit({
+    executor:tx,
+    actorEmployeeId:req.employee?.id||null,
+    action,
+    targetType:'settings',
+    oldValue:oldValues,
+    newValue:newValues,
+    reason:reason||'Settings configuration updated',
+    requestId:req.requestId||null,
+    method:req.method||null,
+    path:String(req.originalUrl||req.path||'').split('?')[0],
+    control:'settings_governance',
+  });
+}
 
 router.get('/', requireAuth, async (req, res) => {
+  if(blockApiKey(req,res)) return;
   try {
     const { rows } = await db.execute({ sql: 'SELECT * FROM settings', args: [] });
     const settings = {};
-    const privileged = mayManage(req);
-    rows.forEach(r => { settings[r.key] = privileged ? redact(r.key,r.value) : (SECRET_KEYS.has(r.key) ? undefined : r.value); });
-    for (const key of Object.keys(settings)) if (settings[key] === undefined) delete settings[key];
+    const integrationAuthority = canManageIntegrations(req);
+    rows.forEach(r => {
+      if(isIntegrationKey(r.key) && !integrationAuthority) return;
+      settings[r.key] = redact(r.key,r.value);
+    });
     res.json(settings);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(500).json({ error: 'Unable to load settings' }); }
 });
 
 router.get('/manage', requirePermission('settings'), async (req,res)=>{
+  if(blockApiKey(req,res)) return;
   try {
+    const integrationAuthority=canManageIntegrations(req);
     const { rows } = await db.execute({ sql:'SELECT key,value FROM settings ORDER BY key', args:[] });
     const values={};
-    for(const row of rows) if(MANAGED_KEYS.has(row.key)) values[row.key]=redact(row.key,row.value);
-    res.json({ values, secret_keys:[...SECRET_KEYS].filter(k=>MANAGED_KEYS.has(k)) });
-  } catch(e){ res.status(500).json({error:e.message}); }
+    for(const row of rows){
+      if(!MANAGED_KEYS.has(row.key)) continue;
+      if(isIntegrationKey(row.key) && !integrationAuthority) continue;
+      values[row.key]=redact(row.key,row.value);
+    }
+    res.json({
+      values,
+      secret_keys:integrationAuthority?[...SECRET_KEYS].filter(k=>MANAGED_KEYS.has(k)):[],
+      integration_authority:integrationAuthority,
+    });
+  } catch(e){ res.status(500).json({error:'Unable to load managed settings'}); }
 });
 
 router.get('/public', async (req, res) => {
@@ -67,22 +114,61 @@ router.get('/public', async (req, res) => {
     const settings = {};
     rows.forEach(r => { settings[r.key] = r.value; });
     res.json(settings);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(500).json({ error: 'Unable to load public settings' }); }
 });
 
 router.put('/', requirePermission('settings'), async (req, res) => {
+  if(blockApiKey(req,res)) return;
   try {
-    const entries=Object.entries(req.body||{}).filter(([key])=>MANAGED_KEYS.has(key));
+    const body=req.body||{};
+    const entries=Object.entries(body).filter(([key])=>MANAGED_KEYS.has(key));
     if(!entries.length) return res.status(400).json({error:'No supported settings supplied'});
-    for (const [key, value] of entries) {
-      if(SECRET_KEYS.has(key) && (value === '••••••••' || value === '')) continue;
-      await db.execute({ sql: 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', args: [key, value == null ? '' : String(value)] });
+    const integrationEntries=entries.filter(([key])=>isIntegrationKey(key));
+    const integrationAuthority=canManageIntegrations(req);
+    if(integrationEntries.length && !integrationAuthority){
+      return res.status(403).json({error:'Integration and secret settings require explicit Integration Settings authority'});
     }
-    res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+    const reason=String(body.reason||body._reason||'').trim();
+    if(integrationEntries.length && reason.length<8){
+      return res.status(400).json({error:'A reason is required for integration or secret settings changes'});
+    }
+
+    await ensureSecurityAuditTable();
+    const keys=entries.map(([key])=>key);
+    const placeholders=keys.map(()=>'?').join(',');
+    const {rows:existingRows}=await db.execute({sql:`SELECT key,value FROM settings WHERE key IN (${placeholders})`,args:keys});
+    const existing=new Map(existingRows.map(row=>[row.key,row.value]));
+    const tx=await db.transaction('write');
+    try{
+      const oldValues={};
+      const newValues={};
+      const changedKeys=[];
+      for(const [key,value] of entries){
+        if(SECRET_KEYS.has(key) && (value==='••••••••' || value==='')) continue;
+        const next=value==null?'':String(value);
+        const previous=existing.has(key)?existing.get(key):null;
+        if(String(previous??'')===next) continue;
+        await tx.execute({sql:'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',args:[key,next]});
+        oldValues[key]=auditValue(key,previous);
+        newValues[key]=auditValue(key,next);
+        changedKeys.push(key);
+      }
+      if(!changedKeys.length){
+        await tx.rollback().catch(()=>{});
+        return res.json({success:true,changed_keys:[]});
+      }
+      await auditSettingsChange(tx,req,integrationEntries.length?'integration_settings_updated':'settings_updated',oldValues,newValues,integrationEntries.length?reason:'Settings configuration updated');
+      await tx.commit();
+      res.json({success:true,changed_keys:changedKeys});
+    }catch(error){
+      await tx.rollback().catch(()=>{});
+      throw error;
+    }
+  } catch(e) { res.status(500).json({ error: 'Unable to update settings' }); }
 });
 
 router.post('/logo', requirePermission('settings'), upload.single('logo'), async (req, res) => {
+  if(blockApiKey(req,res)) return;
   if (!req.file) return res.status(400).json({ error: 'A JPEG, PNG, or WebP logo is required' });
   const validation = validateMemoryUpload(req.file, { kind: 'image' });
   if (!validation.ok) return res.status(415).json({ error: validation.error });
@@ -98,7 +184,17 @@ router.post('/logo', requirePermission('settings'), upload.single('logo'), async
       fs.writeFileSync(path.join(dir, filename), req.file.buffer);
       logoUrl = `/uploads/branding/${filename}`;
     }
-    await db.execute({ sql: 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', args: ['company_logo_url', logoUrl] });
+    await ensureSecurityAuditTable();
+    const tx=await db.transaction('write');
+    try{
+      await tx.execute({ sql: 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', args: ['company_logo_url', logoUrl] });
+      await auditSettingsChange(tx,req,'company_logo_updated',{company_logo_url:existing?.value||null},{company_logo_url:logoUrl},'Company logo updated');
+      await tx.commit();
+    }catch(error){
+      await tx.rollback().catch(()=>{});
+      if(!result){const created=path.join(__dirname,'..',logoUrl);if(fs.existsSync(created))fs.unlinkSync(created);}
+      throw error;
+    }
     if (existing?.value && existing.value !== logoUrl) {
       if (existing.value.startsWith('https://')) await cloudDestroy(existing.value);
       else { const old = path.join(__dirname, '..', existing.value); if (fs.existsSync(old)) fs.unlinkSync(old); }
@@ -108,15 +204,25 @@ router.post('/logo', requirePermission('settings'), upload.single('logo'), async
 });
 
 router.delete('/logo', requirePermission('settings'), async (req, res) => {
+  if(blockApiKey(req,res)) return;
   try {
     const { rows: [existing] } = await db.execute({ sql: "SELECT value FROM settings WHERE key = 'company_logo_url'", args: [] });
+    await ensureSecurityAuditTable();
+    const tx=await db.transaction('write');
+    try{
+      await tx.execute({ sql: "DELETE FROM settings WHERE key = 'company_logo_url'", args: [] });
+      await auditSettingsChange(tx,req,'company_logo_deleted',{company_logo_url:existing?.value||null},{company_logo_url:null},'Company logo removed');
+      await tx.commit();
+    }catch(error){
+      await tx.rollback().catch(()=>{});
+      throw error;
+    }
     if (existing?.value) {
       if (existing.value.startsWith('https://')) await cloudDestroy(existing.value);
       else { const old = path.join(__dirname, '..', existing.value); if (fs.existsSync(old)) fs.unlinkSync(old); }
     }
-    await db.execute({ sql: "DELETE FROM settings WHERE key = 'company_logo_url'", args: [] });
     res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(500).json({ error: 'Unable to remove company logo' }); }
 });
 
 module.exports = router;
