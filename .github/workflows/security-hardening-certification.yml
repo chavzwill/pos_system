@@ -49,6 +49,7 @@ jobs:
           node --check routes/settings.js
           node --check routes/api-keys.js
           node --check routes/woocommerce.js
+          node --check routes/email.js
           node --check routes/accounting-intelligence.js
           node --check routes/financial-controls-intelligence.js
           node --check routes/accounting-source-sync.js
@@ -91,8 +92,10 @@ jobs:
         run: npx playwright test tests/woocommerce-secret-governance.spec.js --workers=1
       - name: Certify explicit integration settings UI authority
         run: npx playwright test tests/settings-permission-ui.spec.js --workers=1
-      - name: Certify accounting source sync financial authority
+      - name: Certify accounting financial authority isolation
         run: npx playwright test tests/accounting-source-sync-rbac.spec.js --workers=1
+      - name: Certify outbound document and SMTP authorization
+        run: npx playwright test tests/email-document-rbac.spec.js --workers=1
       - name: Certify PIN hashing and legacy migration
         run: npx playwright test tests/pin-security-runtime.spec.js --workers=1
       - name: Certify request abuse controls
