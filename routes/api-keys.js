@@ -120,6 +120,8 @@ router.patch('/:id', async (req, res) => {
     const { name, scopes, is_active } = req.body||{};
     if(name!==undefined&&!String(name||'').trim())return res.status(400).json({error:'Name cannot be empty'});
     if(scopes!==undefined&&!validScopes(scopes))return res.status(400).json({error:'At least one valid explicit API scope is required'});
+    if(is_active!==undefined&&typeof is_active!=='boolean')return res.status(400).json({error:'is_active must be a boolean'});
+    if(is_active===true)return res.status(409).json({error:'API key reactivation is not supported. Create a new credential instead.'});
     if(name===undefined&&scopes===undefined&&is_active===undefined)return res.status(400).json({error:'Nothing to update'});
 
     await ensureSecurityAuditTable();
@@ -130,13 +132,13 @@ router.patch('/:id', async (req, res) => {
       const next={...current};
       if(name!==undefined)next.name=String(name).trim();
       if(scopes!==undefined)next.scopes=JSON.stringify(scopes);
-      if(is_active!==undefined)next.is_active=is_active?1:0;
+      if(is_active===false)next.is_active=0;
       const oldState=publicState(current),newState=publicState(next);
       if(JSON.stringify(oldState)===JSON.stringify(newState)){
         await tx.rollback().catch(()=>{});return res.json({success:true,changed:false});
       }
       await tx.execute({sql:'UPDATE api_keys SET name=?,scopes=?,is_active=? WHERE id=?',args:[next.name,next.scopes,next.is_active,current.id]});
-      const action=oldState.is_active&&!newState.is_active?'api_key_revoked':(!oldState.is_active&&newState.is_active?'api_key_reactivated':'api_key_updated');
+      const action=oldState.is_active&&!newState.is_active?'api_key_revoked':'api_key_updated';
       await audit(tx,req,action,current.id,oldState,newState,reason);
       await tx.commit();
       res.json({success:true,changed:true});
