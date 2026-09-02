@@ -12,6 +12,24 @@ async function api(cookie,method,path,body){
   const r=await fetch(`${BASE}${path}`,{method,headers:{Cookie:cookie,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
   return {status:r.status,body:await r.json().catch(()=>null)};
 }
+async function makeEmployee(admin,stamp,label,permissions){
+  const group=await api(admin.cookie,'POST','/api/security-groups',{
+    name:`${label} ${stamp}`,
+    description:'Runtime settings permission certification',
+    permissions,
+    reason:'Certify settings permission boundary',
+  });
+  expect(group.status,JSON.stringify(group.body)).toBe(201);
+  const username=`${label.toLowerCase().replace(/\W/g,'_')}_${stamp}`;
+  const password=`Settings-${stamp}-${label}-A9!`;
+  const employee=await api(admin.cookie,'POST','/api/employees',{
+    first_name:'Settings',last_name:label,username,pin:String(100000+((stamp+label.length)%899999)).slice(0,6),
+    password,security_group_id:group.body.id,default_branch_id:admin.body?.default_branch_id||1,
+  });
+  expect(employee.status,JSON.stringify(employee.body)).toBe(201);
+  const session=await login(username,password);expect(session.status).toBe(200);
+  return {group,employee,session,username,password};
+}
 
 test.describe('Settings and integration-secret governance',()=>{
   test('broad settings authority cannot inherit integration secrets and audited secret changes stay redacted',async()=>{
@@ -100,5 +118,42 @@ test.describe('Settings and integration-secret governance',()=>{
     const broadSettingsOnly=group.body.permissions||{};
     expect(broadSettingsOnly.settings).toBe(true);
     expect(broadSettingsOnly.settings_integrations).not.toBe(true);
+  });
+
+  test('company, tax, integration, and broad settings authorities remain isolated',async()=>{
+    const admin=await login();expect(admin.status).toBe(200);
+    const stamp=Date.now()+1000;
+
+    const companyOnly=await makeEmployee(admin,stamp,'CompanyOnly',{settings_company:true});
+    const companyManage=await api(companyOnly.session.cookie,'GET','/api/settings/manage');
+    expect(companyManage.status).toBe(200);
+    expect(companyManage.body.capabilities).toMatchObject({company:true,tax:false,integrations:false,general:false});
+    expect(companyManage.body.values).not.toHaveProperty('tax_rate');
+    expect(companyManage.body.values).not.toHaveProperty('email_smtp_host');
+    expect(companyManage.body.values).not.toHaveProperty('loss_control_min_gross_margin_pct');
+
+    const companyUpdate=await api(companyOnly.session.cookie,'PUT','/api/settings',{receipt_footer:`Company-only-${stamp}`});
+    expect(companyUpdate.status).toBe(200);
+    const taxEscalation=await api(companyOnly.session.cookie,'PUT','/api/settings',{tax_rate:'99'});
+    expect(taxEscalation.status).toBe(403);
+    expect(taxEscalation.body.error).toMatch(/settings_tax/i);
+    const generalEscalation=await api(companyOnly.session.cookie,'PUT','/api/settings',{loss_control_min_gross_margin_pct:'99'});
+    expect(generalEscalation.status).toBe(403);
+    expect(generalEscalation.body.error).toMatch(/settings/i);
+
+    const integrationOnly=await makeEmployee(admin,stamp+1,'IntegrationOnly',{settings_integrations:true});
+    const integrationManage=await api(integrationOnly.session.cookie,'GET','/api/settings/manage');
+    expect(integrationManage.status).toBe(200);
+    expect(integrationManage.body.capabilities).toMatchObject({company:false,tax:false,integrations:true,general:false});
+    expect(integrationManage.body.values).not.toHaveProperty('receipt_footer');
+    const integrationUpdate=await api(integrationOnly.session.cookie,'PUT','/api/settings',{
+      email_smtp_host:`isolated-${stamp}.example.invalid`,
+      reason:'Certify explicit integration authority',
+    });
+    expect(integrationUpdate.status).toBe(200);
+    expect(integrationUpdate.body.changed_keys).toContain('email_smtp_host');
+    const companyEscalation=await api(integrationOnly.session.cookie,'PUT','/api/settings',{receipt_footer:`Forbidden-${stamp}`});
+    expect(companyEscalation.status).toBe(403);
+    expect(companyEscalation.body.error).toMatch(/settings_company/i);
   });
 });
