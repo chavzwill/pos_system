@@ -48,6 +48,7 @@ jobs:
           node --check routes/security-groups.js
           node --check routes/settings.js
           node --check routes/api-keys.js
+          node --check routes/accounting-source-sync.js
           node --check public/security-permission-extension.js
           node --check public/settings-workspace.js
           node --check public/integration-admin-workspace.js
@@ -84,6 +85,8 @@ jobs:
         run: npx playwright test tests/settings-security-governance.spec.js --workers=1
       - name: Certify explicit integration settings UI authority
         run: npx playwright test tests/settings-permission-ui.spec.js --workers=1
+      - name: Certify accounting source sync financial authority
+        run: npx playwright test tests/accounting-source-sync-rbac.spec.js --workers=1
       - name: Certify PIN hashing and legacy migration
         run: npx playwright test tests/pin-security-runtime.spec.js --workers=1
       - name: Certify request abuse controls
