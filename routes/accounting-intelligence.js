@@ -3,7 +3,8 @@ const router = express.Router();
 const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
 
-router.use(requirePermission('reports'));
+// Revenue, margin, COGS and receivables are financial-report data, not general operational reports.
+router.use(requirePermission('reports_financial'));
 
 function period(req) {
   const end = req.query.end || new Date().toISOString().slice(0,10);
