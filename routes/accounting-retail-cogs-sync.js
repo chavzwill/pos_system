@@ -2,7 +2,7 @@
 const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
-const {requireAnyPermission}=require('../lib/permissions');
+const {requirePermission}=require('../lib/permissions');
 const {ensureCostSnapshots}=require('./retail-cost-snapshot');
 const {postSourceJournal}=require('../lib/accounting-posting');
 
@@ -31,7 +31,7 @@ async function syncRetailCogs(actorId){
   }
   return stats;
 }
-router.post('/sync',requireAnyPermission('reports_financial','reports'),async(req,res,next)=>{
+router.post('/sync',requirePermission('reports_financial'),async(req,res,next)=>{
   try{
     const stats=await syncRetailCogs(req.employee?.id||req.user?.employee_id||null);req.retailCogsSyncStats=stats;
     const original=res.json.bind(res);res.json=function(payload){if(payload&&typeof payload==='object'&&!Array.isArray(payload)){payload.retail_cogs_sync=stats;if(payload.stats&&typeof payload.stats==='object')payload.stats.retail_cogs=stats;}return original(payload);};next();

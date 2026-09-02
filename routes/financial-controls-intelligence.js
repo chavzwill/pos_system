@@ -3,7 +3,8 @@ const router = express.Router();
 const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
 
-router.use(requirePermission('reports'));
+// Collections, commitments, receivables, inventory capital and finalized payroll are financial-report data.
+router.use(requirePermission('reports_financial'));
 
 async function tableExists(name) {
   const { rows:[row] } = await db.execute({ sql:"SELECT name FROM sqlite_master WHERE type='table' AND name=? LIMIT 1", args:[name] });
