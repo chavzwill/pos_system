@@ -6,6 +6,8 @@ const { createSession, destroySession, destroyEmployeeSessions, setSessionCookie
 const { requireAuth, requirePermission, can } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
 const { loginRateLimit, privilegedPinRateLimit, resetRequestRateLimit } = require('../lib/securityHardening');
+const { recordSecurityAudit } = require('../lib/securityAudit');
+const { strongPassword, passwordPolicyError } = require('../lib/passwordPolicy');
 
 const PASSWORD_COST = 12;
 const PIN_COST = 12;
@@ -18,6 +20,11 @@ function validPin(value) {
 }
 async function hashPin(pin) {
   return bcrypt.hash(String(pin), PIN_COST);
+}
+async function verifyPassword(stored, supplied) {
+  if (!stored || !supplied) return false;
+  if (isBcryptHash(stored)) return bcrypt.compare(String(supplied), stored);
+  return String(stored) === String(supplied);
 }
 async function verifyPin(stored, supplied) {
   if (!stored || !validPin(supplied)) return false;
@@ -121,23 +128,93 @@ router.post('/', requirePermission('employees'), async (req, res) => {
 });
 
 router.put('/:id/change-password', requireAuth, async (req, res) => {
-  const { password } = req.body;
-  if (!password || String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
+  if (req.apiKey) return res.status(403).json({ error: 'API keys cannot change employee credentials' });
+  const { password, current_password } = req.body || {};
+  const policyError = passwordPolicyError(password);
+  if (policyError) return res.status(400).json({ error: policyError });
   const targetId = Number(req.params.id);
-  const self = Number(req.employee?.id) === targetId;
-  if (!self && !can(req.employee?.permissions, 'security_manage')) {
-    return res.status(403).json({ error: 'Changing another employee password requires Security Management authority' });
+  if (Number(req.employee?.id) !== targetId) {
+    return res.status(403).json({ error: 'Use the privileged reset-password operation for another employee' });
   }
   try {
-    const { rows: [target] } = await db.execute({ sql: 'SELECT id FROM employees WHERE id = ?', args: [targetId] });
+    const { rows: [target] } = await db.execute({ sql: 'SELECT id,password,must_change_password FROM employees WHERE id = ?', args: [targetId] });
     if (!target) return res.status(404).json({ error: 'Employee not found' });
+    if (!Number(target.must_change_password) && !(await verifyPassword(target.password, current_password))) {
+      return res.status(403).json({ error: 'Current password is required and must be valid' });
+    }
+    if (await verifyPassword(target.password, password)) {
+      return res.status(400).json({ error: 'New password must be different from the current password' });
+    }
     const hash = await bcrypt.hash(password, PASSWORD_COST);
-    await db.execute({ sql: 'UPDATE employees SET password=?,must_change_password=0 WHERE id=?', args: [hash, targetId] });
+    const tx = await db.transaction('write');
+    try {
+      await tx.execute({ sql: 'UPDATE employees SET password=?,must_change_password=0 WHERE id=?', args: [hash, targetId] });
+      await recordSecurityAudit({
+        actorEmployeeId: targetId,
+        action: 'password_changed_self',
+        targetType: 'employee',
+        targetId,
+        oldValue: { must_change_password: Number(target.must_change_password || 0) },
+        newValue: { must_change_password: 0, sessions_revoked: true },
+        reason: Number(target.must_change_password) ? 'Completed mandatory password change' : 'Authenticated self-service password change',
+        requestId: req.requestId || null,
+        method: req.method,
+        path: req.originalUrl,
+        control: 'credential_lifecycle',
+        executor: tx,
+      });
+      await tx.commit();
+    } catch (error) {
+      await tx.rollback().catch(() => {});
+      throw error;
+    }
     await destroyEmployeeSessions(targetId);
-    if (self) clearSessionCookie(res);
-    res.json({ success: true, reauthentication_required: self });
+    clearSessionCookie(res);
+    res.json({ success: true, reauthentication_required: true });
   } catch (e) {
     res.status(400).json({ error: 'Unable to change password' });
+  }
+});
+
+router.post('/:id/reset-password', requirePermission('security_manage'), async (req, res) => {
+  if (req.apiKey) return res.status(403).json({ error: 'API keys cannot reset employee credentials' });
+  const targetId = Number(req.params.id);
+  if (Number(req.employee?.id) === targetId) return res.status(400).json({ error: 'Use change-password for your own account' });
+  const { temporary_password, reason } = req.body || {};
+  const policyError = passwordPolicyError(temporary_password);
+  if (policyError) return res.status(400).json({ error: policyError });
+  if (String(reason || '').trim().length < 8) return res.status(400).json({ error: 'A reset reason is required' });
+  try {
+    const { rows: [target] } = await db.execute({ sql: 'SELECT id,username,active,must_change_password FROM employees WHERE id=?', args: [targetId] });
+    if (!target) return res.status(404).json({ error: 'Employee not found' });
+    if (Number(target.active) === 0) return res.status(400).json({ error: 'Cannot reset an inactive employee' });
+    const hash = await bcrypt.hash(temporary_password, PASSWORD_COST);
+    const tx = await db.transaction('write');
+    try {
+      await tx.execute({ sql: 'UPDATE employees SET password=?,must_change_password=1 WHERE id=?', args: [hash, targetId] });
+      await recordSecurityAudit({
+        actorEmployeeId: req.employee.id,
+        action: 'password_reset_by_admin',
+        targetType: 'employee',
+        targetId,
+        oldValue: { must_change_password: Number(target.must_change_password || 0) },
+        newValue: { must_change_password: 1, sessions_revoked: true },
+        reason: String(reason).trim(),
+        requestId: req.requestId || null,
+        method: req.method,
+        path: req.originalUrl,
+        control: 'credential_lifecycle',
+        executor: tx,
+      });
+      await tx.commit();
+    } catch (error) {
+      await tx.rollback().catch(() => {});
+      throw error;
+    }
+    await destroyEmployeeSessions(targetId);
+    res.json({ success: true, must_change_password: true, sessions_revoked: true });
+  } catch (e) {
+    res.status(400).json({ error: 'Unable to reset password' });
   }
 });
 
@@ -147,6 +224,8 @@ router.put('/:id', requirePermission('employees'), async (req, res) => {
   try {
     const existing = await employeeSecurityContext(targetId);
     if (!existing) return res.status(404).json({ error: 'Employee not found' });
+
+    if (password) return res.status(400).json({ error: 'Use the dedicated reset-password credential operation instead of employee profile edit' });
 
     const assignment = await assertAssignableSecurityGroup(req, security_group_id);
     if (!assignment.ok) return res.status(assignment.status).json({ error: assignment.error });
