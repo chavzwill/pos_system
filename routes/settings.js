@@ -25,7 +25,7 @@ const upload = multer({
 
 const SECRET_KEYS = new Set([
   'email_smtp_pass','repair_notify_sms_webhook_token','repair_notify_whatsapp_webhook_token',
-  'woocommerce_consumer_secret','woocommerce_webhook_secret','stripe_secret_key','stripe_webhook_secret',
+  'woocommerce_consumer_key','woocommerce_consumer_secret','woocommerce_webhook_secret','stripe_secret_key','stripe_webhook_secret',
   'twilio_auth_token','whatsapp_access_token','openai_api_key'
 ]);
 const INTEGRATION_KEYS = new Set([
@@ -33,8 +33,8 @@ const INTEGRATION_KEYS = new Set([
   'repair_notify_email_enabled','repair_notify_sms_enabled','repair_notify_whatsapp_enabled',
   'repair_notify_sms_webhook_url','repair_notify_sms_webhook_token',
   'repair_notify_whatsapp_webhook_url','repair_notify_whatsapp_webhook_token',
-  'woo_sync_interval','woocommerce_consumer_secret','woocommerce_webhook_secret','stripe_secret_key','stripe_webhook_secret',
-  'twilio_auth_token','whatsapp_access_token','openai_api_key'
+  'woo_url','woo_sync_branch_id','woo_sync_interval','woocommerce_consumer_key','woocommerce_consumer_secret','woocommerce_webhook_secret',
+  'stripe_secret_key','stripe_webhook_secret','twilio_auth_token','whatsapp_access_token','openai_api_key'
 ]);
 const COMPANY_KEYS = new Set(['store_name','store_phone','store_email','store_address','currency','receipt_footer']);
 const TAX_KEYS = new Set(['tax_rate']);
