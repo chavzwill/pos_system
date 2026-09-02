@@ -36,8 +36,10 @@ const INTEGRATION_KEYS = new Set([
   'woo_sync_interval','woocommerce_consumer_secret','woocommerce_webhook_secret','stripe_secret_key','stripe_webhook_secret',
   'twilio_auth_token','whatsapp_access_token','openai_api_key'
 ]);
+const COMPANY_KEYS = new Set(['store_name','store_phone','store_email','store_address','currency','receipt_footer']);
+const TAX_KEYS = new Set(['tax_rate']);
 const MANAGED_KEYS = new Set([
-  'store_name','store_phone','store_email','store_address','currency','tax_rate','receipt_footer',
+  ...COMPANY_KEYS,...TAX_KEYS,
   'email_smtp_host','email_smtp_port','email_smtp_secure','email_smtp_user','email_smtp_pass','email_from',
   'repair_notify_email_enabled','repair_notify_sms_enabled','repair_notify_whatsapp_enabled',
   'repair_notify_sms_webhook_url','repair_notify_sms_webhook_token',
@@ -50,6 +52,19 @@ const MANAGED_KEYS = new Set([
 function redact(key,value){ return SECRET_KEYS.has(key) && value ? '••••••••' : value; }
 function isIntegrationKey(key){ return INTEGRATION_KEYS.has(key) || SECRET_KEYS.has(key); }
 function canManageIntegrations(req){ return !req.apiKey && can(req.employee?.permissions,'settings_integrations'); }
+function explicitBroadSettings(req){ return req.employee?.permissions?.settings === true; }
+function requiredPermissionForKey(key){
+  if(isIntegrationKey(key)) return 'settings_integrations';
+  if(COMPANY_KEYS.has(key)) return 'settings_company';
+  if(TAX_KEYS.has(key)) return 'settings_tax';
+  return 'settings';
+}
+function canManageKey(req,key){
+  const required=requiredPermissionForKey(key);
+  if(required==='settings_integrations') return canManageIntegrations(req);
+  if(required==='settings_company' || required==='settings_tax') return can(req.employee?.permissions,required);
+  return explicitBroadSettings(req);
+}
 function blockApiKey(req,res){
   if(!req.apiKey) return false;
   res.status(403).json({error:'API keys cannot read or modify internal settings administration'});
@@ -96,14 +111,19 @@ router.get('/manage', requirePermission('settings'), async (req,res)=>{
     const { rows } = await db.execute({ sql:'SELECT key,value FROM settings ORDER BY key', args:[] });
     const values={};
     for(const row of rows){
-      if(!MANAGED_KEYS.has(row.key)) continue;
-      if(isIntegrationKey(row.key) && !integrationAuthority) continue;
+      if(!MANAGED_KEYS.has(row.key) || !canManageKey(req,row.key)) continue;
       values[row.key]=redact(row.key,row.value);
     }
     res.json({
       values,
       secret_keys:integrationAuthority?[...SECRET_KEYS].filter(k=>MANAGED_KEYS.has(k)):[],
       integration_authority:integrationAuthority,
+      capabilities:{
+        company:can(req.employee?.permissions,'settings_company'),
+        tax:can(req.employee?.permissions,'settings_tax'),
+        integrations:integrationAuthority,
+        general:explicitBroadSettings(req),
+      },
     });
   } catch(e){ res.status(500).json({error:'Unable to load managed settings'}); }
 });
@@ -123,11 +143,15 @@ router.put('/', requirePermission('settings'), async (req, res) => {
     const body=req.body||{};
     const entries=Object.entries(body).filter(([key])=>MANAGED_KEYS.has(key));
     if(!entries.length) return res.status(400).json({error:'No supported settings supplied'});
-    const integrationEntries=entries.filter(([key])=>isIntegrationKey(key));
-    const integrationAuthority=canManageIntegrations(req);
-    if(integrationEntries.length && !integrationAuthority){
-      return res.status(403).json({error:'Integration and secret settings require explicit Integration Settings authority'});
+    for(const [key] of entries){
+      if(canManageKey(req,key)) continue;
+      const required=requiredPermissionForKey(key);
+      const message=required==='settings_integrations'
+        ? 'Integration and secret settings require explicit Integration Settings authority'
+        : `Missing permission: ${required}`;
+      return res.status(403).json({error:message});
     }
+    const integrationEntries=entries.filter(([key])=>isIntegrationKey(key));
     const reason=String(body.reason||body._reason||'').trim();
     if(integrationEntries.length && reason.length<8){
       return res.status(400).json({error:'A reason is required for integration or secret settings changes'});
@@ -136,10 +160,10 @@ router.put('/', requirePermission('settings'), async (req, res) => {
     await ensureSecurityAuditTable();
     const keys=entries.map(([key])=>key);
     const placeholders=keys.map(()=>'?').join(',');
-    const {rows:existingRows}=await db.execute({sql:`SELECT key,value FROM settings WHERE key IN (${placeholders})`,args:keys});
-    const existing=new Map(existingRows.map(row=>[row.key,row.value]));
     const tx=await db.transaction('write');
     try{
+      const {rows:existingRows}=await tx.execute({sql:`SELECT key,value FROM settings WHERE key IN (${placeholders})`,args:keys});
+      const existing=new Map(existingRows.map(row=>[row.key,row.value]));
       const oldValues={};
       const newValues={};
       const changedKeys=[];
@@ -169,6 +193,7 @@ router.put('/', requirePermission('settings'), async (req, res) => {
 
 router.post('/logo', requirePermission('settings'), upload.single('logo'), async (req, res) => {
   if(blockApiKey(req,res)) return;
+  if(!can(req.employee?.permissions,'settings_company')) return res.status(403).json({error:'Missing permission: settings_company'});
   if (!req.file) return res.status(400).json({ error: 'A JPEG, PNG, or WebP logo is required' });
   const validation = validateMemoryUpload(req.file, { kind: 'image' });
   if (!validation.ok) return res.status(415).json({ error: validation.error });
@@ -196,7 +221,7 @@ router.post('/logo', requirePermission('settings'), upload.single('logo'), async
       throw error;
     }
     if (existing?.value && existing.value !== logoUrl) {
-      if (existing.value.startsWith('https://')) await cloudDestroy(existing.value);
+      if (existing.value.startsWith('https://')) await cloudDestroy(existing.value).catch(()=>{});
       else { const old = path.join(__dirname, '..', existing.value); if (fs.existsSync(old)) fs.unlinkSync(old); }
     }
     res.json({ logo_url: logoUrl });
@@ -205,6 +230,7 @@ router.post('/logo', requirePermission('settings'), upload.single('logo'), async
 
 router.delete('/logo', requirePermission('settings'), async (req, res) => {
   if(blockApiKey(req,res)) return;
+  if(!can(req.employee?.permissions,'settings_company')) return res.status(403).json({error:'Missing permission: settings_company'});
   try {
     const { rows: [existing] } = await db.execute({ sql: "SELECT value FROM settings WHERE key = 'company_logo_url'", args: [] });
     await ensureSecurityAuditTable();
@@ -218,7 +244,7 @@ router.delete('/logo', requirePermission('settings'), async (req, res) => {
       throw error;
     }
     if (existing?.value) {
-      if (existing.value.startsWith('https://')) await cloudDestroy(existing.value);
+      if (existing.value.startsWith('https://')) await cloudDestroy(existing.value).catch(()=>{});
       else { const old = path.join(__dirname, '..', existing.value); if (fs.existsSync(old)) fs.unlinkSync(old); }
     }
     res.json({ success: true });
