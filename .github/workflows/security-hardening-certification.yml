@@ -49,7 +49,10 @@ jobs:
           node --check routes/settings.js
           node --check routes/api-keys.js
           node --check routes/woocommerce.js
+          node --check routes/accounting-intelligence.js
+          node --check routes/financial-controls-intelligence.js
           node --check routes/accounting-source-sync.js
+          node --check routes/accounting-retail-cogs-sync.js
           node --check public/security-permission-extension.js
           node --check public/settings-workspace.js
           node --check public/integration-admin-workspace.js
