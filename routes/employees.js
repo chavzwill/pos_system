@@ -6,7 +6,7 @@ const { createSession, destroySession, destroyEmployeeSessions, setSessionCookie
 const { requireAuth, requirePermission, can } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
 const { loginRateLimit, privilegedPinRateLimit, resetRequestRateLimit } = require('../lib/securityHardening');
-const { recordSecurityAudit } = require('../lib/securityAudit');
+const { ensureSecurityAuditTable, recordSecurityAudit } = require('../lib/securityAudit');
 const { strongPassword, passwordPolicyError } = require('../lib/passwordPolicy');
 
 const PASSWORD_COST = 12;
@@ -145,6 +145,7 @@ router.put('/:id/change-password', requireAuth, async (req, res) => {
     if (await verifyPassword(target.password, password)) {
       return res.status(400).json({ error: 'New password must be different from the current password' });
     }
+    await ensureSecurityAuditTable();
     const hash = await bcrypt.hash(password, PASSWORD_COST);
     const tx = await db.transaction('write');
     try {
@@ -188,6 +189,7 @@ router.post('/:id/reset-password', requirePermission('security_manage'), async (
     const { rows: [target] } = await db.execute({ sql: 'SELECT id,username,active,must_change_password FROM employees WHERE id=?', args: [targetId] });
     if (!target) return res.status(404).json({ error: 'Employee not found' });
     if (Number(target.active) === 0) return res.status(400).json({ error: 'Cannot reset an inactive employee' });
+    await ensureSecurityAuditTable();
     const hash = await bcrypt.hash(temporary_password, PASSWORD_COST);
     const tx = await db.transaction('write');
     try {
