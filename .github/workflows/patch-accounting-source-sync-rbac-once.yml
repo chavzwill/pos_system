@@ -1,0 +1,49 @@
+name: Patch accounting source sync RBAC once
+
+on:
+  push:
+    branches:
+      - security/pos-hardening-v1
+    paths:
+      - .github/workflows/patch-accounting-source-sync-rbac-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-accounting-sync-rbac:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/pos-hardening-v1
+          fetch-depth: 0
+      - name: Make financial posting authority route local
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('routes/accounting-source-sync.js')
+          s=p.read_text()
+          old="const {requireAnyPermission}=require('../lib/permissions');"
+          new="const {requirePermission}=require('../lib/permissions');"
+          if s.count(old)!=1: raise SystemExit(f'Expected one permission import, found {s.count(old)}')
+          s=s.replace(old,new)
+          old="router.use(requireAnyPermission('reports_financial','reports'));"
+          new="// This router creates ledger postings; read-only Reports authority must never imply posting authority.\nrouter.use(requirePermission('reports_financial'));"
+          if s.count(old)!=1: raise SystemExit(f'Expected one broad accounting sync guard, found {s.count(old)}')
+          s=s.replace(old,new)
+          p.write_text(s)
+      - name: Verify accounting sync RBAC patch
+        run: |
+          node --check routes/accounting-source-sync.js
+          grep -F "router.use(requirePermission('reports_financial'))" routes/accounting-source-sync.js
+          ! grep -F "requireAnyPermission('reports_financial','reports')" routes/accounting-source-sync.js
+          git diff --check
+          git diff -- routes/accounting-source-sync.js
+      - name: Commit route-local financial authority
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add routes/accounting-source-sync.js
+          git commit -m "Require financial authority for accounting source sync"
+          git push origin HEAD:security/pos-hardening-v1
