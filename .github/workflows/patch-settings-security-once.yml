@@ -1,0 +1,284 @@
+name: Patch settings security once
+
+on:
+  push:
+    branches:
+      - security/pos-hardening-v1
+    paths:
+      - .github/workflows/patch-settings-security-once.yml
+
+permissions:
+  contents: write
+
+jobs:
+  patch-settings-security:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: security/pos-hardening-v1
+          fetch-depth: 0
+      - name: Verify expected source baselines
+        run: |
+          test "$(git hash-object routes/settings.js)" = "4ca8bba98bc2dcd6b2312b251d4b527f26355510"
+          test "$(git hash-object lib/permissions.js)" = "34e4c928cc82a4830905c252d36b2c3ce9b40ba6"
+          test "$(git hash-object public/settings-workspace.js)" = "d44c72a4747d52404b3854c46b8ccdc20e5c322e"
+      - name: Harden integration permission inheritance
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('lib/permissions.js')
+          s=p.read_text()
+          old="const EXPLICIT_ONLY_PERMISSIONS = new Set(['customers_sensitive']);"
+          new="const EXPLICIT_ONLY_PERMISSIONS = new Set(['customers_sensitive','settings_integrations']);"
+          if s.count(old)!=1: raise SystemExit('Expected one explicit-only permission declaration')
+          p.write_text(s.replace(old,new))
+      - name: Replace settings route with atomic least-privilege implementation
+        shell: bash
+        run: |
+          cat > routes/settings.js <<'EOF'
+          const express = require('express');
+          const router = express.Router();
+          const path = require('path');
+          const fs = require('fs');
+          const multer = require('multer');
+          const { db } = require('../database');
+          const { requireAuth, requirePermission, can } = require('../lib/permissions');
+          const { ensureSecurityAuditTable, recordSecurityAudit } = require('../lib/securityAudit');
+          const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
+          const { validateMemoryUpload, imageMulterFilter } = require('../lib/uploadSecurity');
+
+          const upload = multer({
+            storage: multer.memoryStorage(),
+            limits: { fileSize: 5 * 1024 * 1024, files: 1, fields: 2, parts: 3, fieldNameSize: 100, fieldSize: 64 * 1024, headerPairs: 50 },
+            fileFilter: imageMulterFilter,
+          });
+
+          const SECRET_KEYS = new Set([
+            'email_smtp_pass','repair_notify_sms_webhook_token','repair_notify_whatsapp_webhook_token',
+            'woocommerce_consumer_secret','woocommerce_webhook_secret','stripe_secret_key','stripe_webhook_secret',
+            'twilio_auth_token','whatsapp_access_token','openai_api_key'
+          ]);
+          const MANAGED_KEYS = new Set([
+            'store_name','store_phone','store_email','store_address','currency','tax_rate','receipt_footer',
+            'email_smtp_host','email_smtp_port','email_smtp_secure','email_smtp_user','email_smtp_pass','email_from',
+            'repair_notify_email_enabled','repair_notify_sms_enabled','repair_notify_whatsapp_enabled',
+            'repair_notify_sms_webhook_url','repair_notify_sms_webhook_token',
+            'repair_notify_whatsapp_webhook_url','repair_notify_whatsapp_webhook_token',
+            'wo_assessment_fee','woo_sync_interval',
+            'loss_control_min_gross_margin_pct','loss_control_margin_override_allow_self',
+            'loss_control_cash_shortage_threshold','loss_control_return_rate_threshold_pct',
+            'loss_control_return_value_threshold','loss_control_dead_stock_days'
+          ]);
+          const COMPANY_KEYS = new Set(['store_name','store_phone','store_email','store_address','receipt_footer','wo_assessment_fee']);
+          const TAX_KEYS = new Set(['currency','tax_rate']);
+          const INTEGRATION_KEYS = new Set([
+            'email_smtp_host','email_smtp_port','email_smtp_secure','email_smtp_user','email_smtp_pass','email_from',
+            'repair_notify_email_enabled','repair_notify_sms_enabled','repair_notify_whatsapp_enabled',
+            'repair_notify_sms_webhook_url','repair_notify_sms_webhook_token',
+            'repair_notify_whatsapp_webhook_url','repair_notify_whatsapp_webhook_token','woo_sync_interval'
+          ]);
+          function redact(key,value){ return SECRET_KEYS.has(key) && value ? '••••••••' : value; }
+          function hasIntegrationAuthority(req){ return !!req.employee && can(req.employee.permissions,'settings_integrations'); }
+          function hasRootSettings(req){ return req.employee?.permissions?.settings === true; }
+          function canManageKey(req,key){
+            if(INTEGRATION_KEYS.has(key)) return hasIntegrationAuthority(req);
+            if(COMPANY_KEYS.has(key)) return !!req.employee && can(req.employee.permissions,'settings_company');
+            if(TAX_KEYS.has(key)) return !!req.employee && can(req.employee.permissions,'settings_tax');
+            return hasRootSettings(req);
+          }
+          function hasOrdinaryAuthority(req){
+            return hasRootSettings(req) || (!!req.employee && ['settings_company','settings_tax','settings_payment'].some(k=>can(req.employee.permissions,k)));
+          }
+          function capabilities(req){ return { ordinary:hasOrdinaryAuthority(req), integrations:hasIntegrationAuthority(req) }; }
+          function auditEvidence(entries){
+            const changed_keys=entries.map(([key])=>key).sort();
+            const secret_keys_changed=changed_keys.filter(key=>SECRET_KEYS.has(key));
+            const cleared_secret_keys=entries.filter(([key,value])=>SECRET_KEYS.has(key)&&value===null).map(([key])=>key).sort();
+            return { changed_keys, secret_keys_changed, cleared_secret_keys };
+          }
+
+          router.get('/', requireAuth, async (req, res) => {
+            try {
+              const { rows } = await db.execute({ sql: 'SELECT * FROM settings', args: [] });
+              const settings = {};
+              const integrationAuthority=hasIntegrationAuthority(req);
+              rows.forEach(r => {
+                if(INTEGRATION_KEYS.has(r.key) && !integrationAuthority) return;
+                if(SECRET_KEYS.has(r.key)) {
+                  if(integrationAuthority) settings[r.key]=redact(r.key,r.value);
+                  return;
+                }
+                settings[r.key]=r.value;
+              });
+              res.json(settings);
+            } catch(e) { res.status(500).json({ error: 'Unable to load settings' }); }
+          });
+
+          router.get('/manage', requirePermission('settings'), async (req,res)=>{
+            try {
+              const caps=capabilities(req);
+              if(!caps.ordinary&&!caps.integrations) return res.status(403).json({error:'Missing Settings authority'});
+              const { rows } = await db.execute({ sql:'SELECT key,value FROM settings ORDER BY key', args:[] });
+              const values={}, allowedKeys=[];
+              for(const key of MANAGED_KEYS) if(canManageKey(req,key)) allowedKeys.push(key);
+              for(const row of rows) if(MANAGED_KEYS.has(row.key)&&canManageKey(req,row.key)) values[row.key]=redact(row.key,row.value);
+              res.json({
+                values,
+                secret_keys:[...SECRET_KEYS].filter(k=>MANAGED_KEYS.has(k)&&canManageKey(req,k)),
+                allowed_keys:allowedKeys.sort(),
+                capabilities:caps,
+              });
+            } catch(e){ res.status(500).json({error:'Unable to load managed settings'}); }
+          });
+
+          router.get('/public', async (req, res) => {
+            try {
+              const { rows } = await db.execute({ sql: "SELECT key, value FROM settings WHERE key IN ('store_name','company_logo_url')", args: [] });
+              const settings = {};
+              rows.forEach(r => { settings[r.key] = r.value; });
+              res.json(settings);
+            } catch(e) { res.status(500).json({ error: 'Unable to load public settings' }); }
+          });
+
+          router.put('/', requirePermission('settings'), async (req, res) => {
+            try {
+              const requested=Object.entries(req.body||{}).filter(([key])=>MANAGED_KEYS.has(key));
+              if(!requested.length) return res.status(400).json({error:'No supported settings supplied'});
+              for(const [key] of requested) {
+                if(!canManageKey(req,key)) return res.status(403).json({error:`Missing permission: ${INTEGRATION_KEYS.has(key)?'settings_integrations':'settings'}`});
+              }
+              const entries=requested.filter(([key,value])=>!(SECRET_KEYS.has(key)&&(value==='••••••••'||value==='')));
+              if(!entries.length) return res.json({success:true,changed_keys:[]});
+
+              await ensureSecurityAuditTable();
+              const tx=await db.transaction('write');
+              try {
+                for(const [key,value] of entries) {
+                  await tx.execute({
+                    sql:'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',
+                    args:[key,value===null?'':String(value)],
+                  });
+                }
+                const evidence=auditEvidence(entries);
+                await recordSecurityAudit({
+                  executor:tx,
+                  actorEmployeeId:req.employee?.id||null,
+                  action:'settings_updated',
+                  targetType:'settings',
+                  oldValue:{changed_keys:evidence.changed_keys},
+                  newValue:evidence,
+                  reason:'POS configuration updated',
+                  requestId:req.requestId||null,
+                  method:req.method,
+                  path:String(req.originalUrl||req.path||'').split('?')[0],
+                  control:'settings_configuration',
+                });
+                await tx.commit();
+                res.json({success:true,changed_keys:evidence.changed_keys});
+              } catch(error) {
+                await tx.rollback().catch(()=>{});
+                throw error;
+              }
+            } catch(e) { res.status(500).json({ error: 'Unable to update settings' }); }
+          });
+
+          router.post('/logo', requirePermission('settings_company'), upload.single('logo'), async (req, res) => {
+            if (!req.file) return res.status(400).json({ error: 'A JPEG, PNG, or WebP logo is required' });
+            const validation = validateMemoryUpload(req.file, { kind: 'image' });
+            if (!validation.ok) return res.status(415).json({ error: validation.error });
+            try {
+              const { rows: [existing] } = await db.execute({ sql: "SELECT value FROM settings WHERE key = 'company_logo_url'", args: [] });
+              const result = await cloudUpload(req.file.buffer, { folder: 'pos-system/branding', public_id: 'company-logo', overwrite: true, resource_type: 'image' });
+              let logoUrl;
+              if (result) logoUrl = result.secure_url;
+              else {
+                const dir = path.join(__dirname, '../uploads/branding');
+                fs.mkdirSync(dir, { recursive: true });
+                const filename = `company-logo-${Date.now()}${validation.extension}`;
+                fs.writeFileSync(path.join(dir, filename), req.file.buffer);
+                logoUrl = `/uploads/branding/${filename}`;
+              }
+              await db.execute({ sql: 'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value', args: ['company_logo_url', logoUrl] });
+              if (existing?.value && existing.value !== logoUrl) {
+                if (existing.value.startsWith('https://')) await cloudDestroy(existing.value);
+                else { const old = path.join(__dirname, '..', existing.value); if (fs.existsSync(old)) fs.unlinkSync(old); }
+              }
+              res.json({ logo_url: logoUrl });
+            } catch(e) { res.status(500).json({ error: 'Unable to store company logo' }); }
+          });
+
+          router.delete('/logo', requirePermission('settings_company'), async (req, res) => {
+            try {
+              const { rows: [existing] } = await db.execute({ sql: "SELECT value FROM settings WHERE key = 'company_logo_url'", args: [] });
+              if (existing?.value) {
+                if (existing.value.startsWith('https://')) await cloudDestroy(existing.value);
+                else { const old = path.join(__dirname, '..', existing.value); if (fs.existsSync(old)) fs.unlinkSync(old); }
+              }
+              await db.execute({ sql: "DELETE FROM settings WHERE key = 'company_logo_url'", args: [] });
+              res.json({ success: true });
+            } catch(e) { res.status(500).json({ error: 'Unable to remove company logo' }); }
+          });
+
+          module.exports = router;
+          EOF
+          sed -i 's/^          //' routes/settings.js
+      - name: Make Settings workspace capability-aware
+        shell: bash
+        run: |
+          cat > public/settings-workspace.js <<'EOF'
+          (()=>{'use strict';
+          const state={open:false,values:{},secrets:new Set(),allowed:new Set(),capabilities:{ordinary:false,integrations:false},tab:'company',saving:false};
+          const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+          async function api(url,opts={}){const r=await fetch(url,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||`Request failed (${r.status})`);return data;}
+          function root(){let e=document.getElementById('tt-settings');if(!e){e=document.createElement('div');e.id='tt-settings';e.className='tt-settings';document.body.appendChild(e);}return e;}
+          function close(){root().remove();state.open=false;}
+          function ingest(data){state.values=data.values||{};state.secrets=new Set(data.secret_keys||[]);state.allowed=new Set(data.allowed_keys||[]);state.capabilities=data.capabilities||{ordinary:false,integrations:false};}
+          function tabList(){const tabs=[];if(state.capabilities.ordinary)tabs.push(['company','Company']);if(state.capabilities.integrations)tabs.push(['email','Email'],['notifications','Repair notifications'],['integrations','Integrations']);return tabs;}
+          async function load(){root().innerHTML='<div class="tt-settings__shade"></div><section class="tt-settings__panel"><div class="tt-settings__state">Loading system configuration…</div></section>';try{const data=await api('/api/settings/manage');ingest(data);const tabs=tabList();if(!tabs.some(([k])=>k===state.tab))state.tab=tabs[0]?.[0]||'company';render();}catch(e){root().innerHTML=`<div class="tt-settings__shade" data-close></div><section class="tt-settings__panel"><header><div><span>Administration</span><h2>System Configuration</h2></div><button data-close>×</button></header><div class="tt-settings__state is-error">${esc(e.message)}</div></section>`;bindClose();}}
+          function field(label,key,type='text',hint=''){if(!state.allowed.has(key))return '';const v=state.values[key]??'';const secret=state.secrets.has(key);return `<label class="tt-settings__field"><span>${esc(label)}</span><input name="${esc(key)}" type="${secret?'password':type}" value="${esc(v)}" ${type==='number'?'step="0.01"':''} autocomplete="off">${hint?`<small>${esc(hint)}</small>`:''}</label>`;}
+          function toggle(label,key,hint=''){if(!state.allowed.has(key))return '';const on=['1','true','yes','on','enabled'].includes(String(state.values[key]||'').toLowerCase());return `<label class="tt-settings__toggle"><span><strong>${esc(label)}</strong>${hint?`<small>${esc(hint)}</small>`:''}</span><input name="${esc(key)}" type="checkbox" ${on?'checked':''}></label>`;}
+          function company(){return `<div class="tt-settings__grid">${field('Store / company name','store_name')}${field('Phone','store_phone')}${field('Email','store_email','email')}${field('Address','store_address')}${field('Currency','currency')}${field('Default tax rate (%)','tax_rate','number')}${field('Receipt footer','receipt_footer')}</div>`;}
+          function email(){return `<div class="tt-settings__notice">SMTP credentials are masked after save. Leaving a masked password unchanged keeps the current secret.</div><div class="tt-settings__grid">${field('SMTP host','email_smtp_host')}${field('SMTP port','email_smtp_port','number')}${toggle('Secure SMTP','email_smtp_secure','Enable for implicit TLS providers.')}${field('SMTP username','email_smtp_user')}${field('SMTP password','email_smtp_pass')}${field('From address','email_from','email')}</div>`;}
+          function notifications(){return `<div class="tt-settings__notice">Channel enablement and provider readiness are separate. A channel can be enabled but remain unavailable until its provider endpoint or SMTP configuration is valid.</div><div class="tt-settings__stack">${toggle('Repair email notifications','repair_notify_email_enabled')}${toggle('Repair SMS notifications','repair_notify_sms_enabled')}${toggle('Repair WhatsApp notifications','repair_notify_whatsapp_enabled')}</div><div class="tt-settings__grid">${field('SMS provider webhook URL','repair_notify_sms_webhook_url','url')}${field('SMS provider token','repair_notify_sms_webhook_token')}${field('WhatsApp provider webhook URL','repair_notify_whatsapp_webhook_url','url')}${field('WhatsApp provider token','repair_notify_whatsapp_webhook_token')}</div>`;}
+          function integrations(){return `<div class="tt-settings__grid">${field('WooCommerce sync interval (minutes)','woo_sync_interval','number','Use 0 to disable in-process automatic sync where supported.')}</div><div class="tt-settings__notice">Provider credentials not listed here remain managed by environment configuration or their dedicated integration screens. This workspace intentionally avoids becoming a generic secret editor.</div>`;}
+          function body(){return state.tab==='company'?company():state.tab==='email'?email():state.tab==='notifications'?notifications():integrations();}
+          function render(){const tabs=tabList();if(!tabs.length){root().innerHTML='<div class="tt-settings__shade" data-close></div><section class="tt-settings__panel"><div class="tt-settings__state is-error">No settings authority is assigned.</div></section>';bindClose();return;}root().innerHTML=`<div class="tt-settings__shade" data-close></div><section class="tt-settings__panel"><header><div><span>Administration</span><h2>System Configuration</h2><p>Native, permission-controlled company, messaging and integration settings.</p></div><button data-close>×</button></header><nav>${tabs.map(([k,l])=>`<button data-tab="${k}" class="${state.tab===k?'is-active':''}">${l}</button>`).join('')}</nav><form id="tt-settings-form"><div class="tt-settings__body">${body()}</div><footer><span>Changes apply to the shared POS configuration.</span><button type="button" data-close>Cancel</button><button class="primary" type="submit" ${state.saving?'disabled':''}>${state.saving?'Saving…':'Save changes'}</button></footer></form></section>`;bind();}
+          function bindClose(){root().querySelectorAll('[data-close]').forEach(x=>x.onclick=close);}
+          function bind(){bindClose();root().querySelectorAll('[data-tab]').forEach(b=>b.onclick=()=>{state.tab=b.dataset.tab;render();});document.getElementById('tt-settings-form').onsubmit=save;}
+          async function save(e){e.preventDefault();const form=e.currentTarget,payload={};form.querySelectorAll('input[name]').forEach(i=>{payload[i.name]=i.type==='checkbox'?(i.checked?'true':'false'):i.value;});state.saving=true;render();try{await api('/api/settings',{method:'PUT',body:JSON.stringify(payload)});const data=await api('/api/settings/manage');ingest(data);state.saving=false;render();const note=document.createElement('div');note.className='tt-settings__toast';note.textContent='Configuration saved.';root().querySelector('.tt-settings__panel')?.appendChild(note);setTimeout(()=>note.remove(),2200);}catch(err){state.saving=false;render();alert(err.message);}}
+          async function open(){if(state.open)return;state.open=true;await load();}
+          window.TotalToolsSettingsWorkspace={open,close,refresh:load};
+          })();
+          EOF
+          sed -i 's/^          //' public/settings-workspace.js
+      - name: Extend main security certification
+        shell: python
+        run: |
+          from pathlib import Path
+          p=Path('.github/workflows/security-hardening-certification.yml')
+          s=p.read_text()
+          syntax="          node --check routes/security-groups.js\n"
+          if s.count(syntax)!=1: raise SystemExit('Expected security-groups syntax anchor once')
+          s=s.replace(syntax,syntax+"          node --check routes/settings.js\n")
+          anchor="      - name: Certify PIN hashing and legacy migration\n"
+          insertion="      - name: Certify settings and integration-secret boundary\n        run: npx playwright test tests/settings-security.spec.js --workers=1\n"
+          if s.count(anchor)!=1: raise SystemExit('Expected PIN certification anchor once')
+          p.write_text(s.replace(anchor,insertion+anchor))
+      - name: Verify settings security patch
+        run: |
+          node --check routes/settings.js
+          node --check lib/permissions.js
+          node --check public/settings-workspace.js
+          node --check tests/settings-security.spec.js
+          grep -F "settings_integrations']);" lib/permissions.js
+          grep -F "action:'settings_updated'" routes/settings.js
+          grep -F "tests/settings-security.spec.js" .github/workflows/security-hardening-certification.yml
+          git diff --check
+      - name: Commit settings security hardening
+        run: |
+          git config user.name "github-actions[bot]"
+          git config user.email "41898282+github-actions[bot]@users.noreply.github.com"
+          git add lib/permissions.js routes/settings.js public/settings-workspace.js .github/workflows/security-hardening-certification.yml
+          git commit -m "Harden settings integration secret boundary"
+          git push origin HEAD:security/pos-hardening-v1
