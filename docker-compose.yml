@@ -16,6 +16,8 @@ services:
       # tool like Portainer, which injects stack env vars into the compose
       # process rather than writing a literal .env file into the stack folder.
       TURSO_AUTH_TOKEN: ${TURSO_AUTH_TOKEN:-}
+      # 32-byte base64/hex key used for authenticated encryption of stored integration secrets.
+      POS_SETTINGS_ENCRYPTION_KEY: ${POS_SETTINGS_ENCRYPTION_KEY:-}
     volumes:
       - ./data:/app/data
       - ./uploads:/app/uploads

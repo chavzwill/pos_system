@@ -2,11 +2,12 @@ const express = require('express');
 const nodemailer = require('nodemailer');
 const router = express.Router();
 const { db } = require('../database');
+const { revealSettingsRows } = require('../lib/secureSettings');
 const { requirePermission } = require('../lib/permissions');
 
 async function settings() {
   const { rows } = await db.execute({ sql: 'SELECT key,value FROM settings', args: [] });
-  const out = {}; for (const row of rows) out[row.key] = row.value; return out;
+  return revealSettingsRows(rows);
 }
 function truthy(v){ return ['1','true','yes','on','enabled'].includes(String(v||'').toLowerCase()); }
 function errText(e){ return String(e?.message || e || 'Unknown transport error').slice(0,1200); }

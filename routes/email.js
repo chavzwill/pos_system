@@ -2,13 +2,12 @@ const express = require('express');
 const router = express.Router();
 const nodemailer = require('nodemailer');
 const { db } = require('../database');
+const { revealSettingsRows } = require('../lib/secureSettings');
 const { requireAuth, requirePermission } = require('../lib/permissions');
 
 async function getSettings() {
   const { rows } = await db.execute({ sql: 'SELECT * FROM settings', args: [] });
-  const s = {};
-  rows.forEach(r => { s[r.key] = r.value; });
-  return s;
+  return revealSettingsRows(rows);
 }
 
 function createTransporter(s) {

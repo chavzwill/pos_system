@@ -12,6 +12,7 @@ chown -R app:app /app/data /app/uploads
 # against the same configured database, before starting the HTTP server.
 if [ "${NODE_ENV:-}" = "production" ]; then
   su-exec app node --require ./lib/local-sqlite-runtime.js scripts/production-credential-preflight.js
+  su-exec app node --require ./lib/local-sqlite-runtime.js scripts/production-settings-secret-preflight.js
 fi
 
 exec su-exec app "$@"

@@ -6,6 +6,7 @@ const multer = require('multer');
 const { db } = require('../database');
 const { requireAuth, requirePermission, can } = require('../lib/permissions');
 const { ensureSecurityAuditTable, recordSecurityAudit } = require('../lib/securityAudit');
+const { SECRET_SETTING_KEYS, protectSettingValue, secretValuesEqual } = require('../lib/secureSettings');
 const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
 const { validateMemoryUpload, imageMulterFilter } = require('../lib/uploadSecurity');
 
@@ -23,11 +24,7 @@ const upload = multer({
   fileFilter: imageMulterFilter,
 });
 
-const SECRET_KEYS = new Set([
-  'email_smtp_pass','repair_notify_sms_webhook_token','repair_notify_whatsapp_webhook_token',
-  'woo_consumer_key','woo_consumer_secret','woocommerce_consumer_key','woocommerce_consumer_secret','woocommerce_webhook_secret','stripe_secret_key','stripe_webhook_secret',
-  'twilio_auth_token','whatsapp_access_token','openai_api_key'
-]);
+const SECRET_KEYS = SECRET_SETTING_KEYS;
 const INTEGRATION_KEYS = new Set([
   'email_smtp_host','email_smtp_port','email_smtp_secure','email_smtp_user','email_smtp_pass','email_from',
   'repair_notify_email_enabled','repair_notify_sms_enabled','repair_notify_whatsapp_enabled',
@@ -169,9 +166,10 @@ router.put('/', requirePermission('settings'), async (req, res) => {
       const changedKeys=[];
       for(const [key,value] of entries){
         if(SECRET_KEYS.has(key) && (value==='••••••••' || value==='')) continue;
-        const next=value==null?'':String(value);
+        const rawNext=value==null?'':String(value);
         const previous=existing.has(key)?existing.get(key):null;
-        if(String(previous??'')===next) continue;
+        if(secretValuesEqual(key,previous,rawNext)) continue;
+        const next=SECRET_KEYS.has(key)?protectSettingValue(key,rawNext):rawNext;
         await tx.execute({sql:'INSERT INTO settings (key, value) VALUES (?, ?) ON CONFLICT(key) DO UPDATE SET value = excluded.value',args:[key,next]});
         oldValues[key]=auditValue(key,previous);
         newValues[key]=auditValue(key,next);

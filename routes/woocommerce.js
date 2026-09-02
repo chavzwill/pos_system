@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const crypto = require('crypto');
 const { db } = require('../database');
+const { revealSettingsRows } = require('../lib/secureSettings');
 const { requirePermission } = require('../lib/permissions');
 
 function redactWcConfigValue(key, value) {
@@ -16,8 +17,7 @@ async function getWcSettings() {
     sql: `SELECT key, value FROM settings WHERE key IN (${keys.map(() => '?').join(',')})`,
     args: keys,
   });
-  const s = {};
-  rows.forEach(r => { s[r.key] = r.value; });
+  const s = revealSettingsRows(rows);
   if (!s.woo_url || !s.woo_consumer_key || !s.woo_consumer_secret) {
     throw new Error('WooCommerce not configured. Set URL, Consumer Key, and Consumer Secret in Settings.');
   }
