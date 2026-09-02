@@ -70,5 +70,8 @@
   },
   "devDependencies": {
     "@playwright/test": "^1.60.0"
+  },
+  "overrides": {
+    "qs": "6.16.0"
   }
 }
