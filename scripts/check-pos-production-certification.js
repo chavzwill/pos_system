@@ -22,6 +22,7 @@ const requiredSuites = [
   'tests/operations-acceptance.spec.js',
   'tests/business-integrity.spec.js',
   'tests/security-boundaries.spec.js',
+  'tests/multi-branch-read-integrity.spec.js',
   'tests/pos-financial-runtime.js',
   'tests/accounting-source-sync-rbac.spec.js',
   'tests/logistics-intelligence.spec.js',
@@ -37,9 +38,25 @@ expectContains(native, '/api/accounting-intelligence/overview', 'finance certifi
 expectContains(native, '/api/security-groups', 'administration certification');
 
 const security = read('tests/security-boundaries.spec.js');
-expectContains(security, 'view-only Dispatch role reads the board but cannot plan jobs or sell from another branch', 'branch isolation certification');
+expectContains(security, 'view-only Dispatch role reads the board but cannot plan jobs or sell from another branch', 'branch mutation isolation certification');
 expectContains(security, 'dispatch_view', 'dispatch permission separation');
 expectContains(security, 'security_assign', 'privilege-escalation certification');
+
+const branchReads = read('tests/multi-branch-read-integrity.spec.js');
+expectContains(branchReads, 'branch-scoped employee cannot inspect an arbitrary branch_id', 'branch read isolation certification');
+expectContains(branchReads, 'multi_branch_integrity', 'branch read denial evidence');
+expectContains(branchReads, '/api/products?active=1&branch_id=', 'branch inventory read certification');
+expectContains(branchReads, '/api/work-orders?branch_id=', 'branch repair read certification');
+expectContains(branchReads, '/api/rentals/agreements?branch_id=', 'branch rental read certification');
+expectContains(branchReads, '/api/purchase-orders?branch_id=', 'branch purchasing read certification');
+
+const branchGuard = read('routes/multi-branch-integrity-guard.js');
+expectContains(branchGuard, 'Branch-scoped reads are an authorization boundary', 'multi-branch read guard');
+expectContains(branchGuard, "req.query?.branch_id", 'multi-branch query guard');
+expectContains(branchGuard, "sourceBranch('transactions'", 'transaction detail IDOR guard');
+expectContains(branchGuard, "sourceBranch('work_orders'", 'repair detail IDOR guard');
+expectContains(branchGuard, "sourceBranch('rental_agreements'", 'rental detail IDOR guard');
+expectContains(branchGuard, "sourceBranch('purchase_orders'", 'purchase-order detail IDOR guard');
 
 const integrity = read('tests/business-integrity.spec.js');
 expectContains(integrity, 'registerPurchasingFinancialRuntimeCertification', 'purchasing accounting certification');
@@ -51,4 +68,4 @@ const finance = read('tests/pos-financial-runtime.js');
 expectContains(finance, 'cash sale, stock restoration, refund settlement and drawer custody remain coherent', 'retail financial certification');
 expectContains(finance, 'net_movement', 'drawer reconciliation evidence');
 
-console.log('POS production certification contract passed: native ownership, cross-module runtime suites, branch/RBAC, dispatch, and financial evidence are present.');
+console.log('POS production certification contract passed: native ownership, cross-module runtime suites, multi-branch read/write isolation, RBAC, dispatch, and financial evidence are present.');
