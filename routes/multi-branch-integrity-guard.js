@@ -138,4 +138,9 @@ router.use(async(req,res,next)=>{
 // native clients can opt in to exactly-once replay protection per mutation.
 router.use(require('./operation-idempotency'));
 
+// Resource-level lifecycle serialization is intentionally after idempotency:
+// same-key retries replay immediately, while distinct requests attempting to
+// mutate the same PO/rental/repair/return/transfer/dispatch source cannot race.
+router.use(require('./lifecycle-concurrency-guard'));
+
 module.exports=router;
