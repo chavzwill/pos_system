@@ -24,6 +24,7 @@ const requiredSuites = [
   'tests/security-boundaries.spec.js',
   'tests/multi-branch-read-integrity.spec.js',
   'tests/pos-financial-runtime.js',
+  'tests/accounting-ledger-integrity.spec.js',
   'tests/accounting-source-sync-rbac.spec.js',
   'tests/logistics-intelligence.spec.js',
   'tests/rentals-integrity.spec.js',
@@ -68,4 +69,19 @@ const finance = read('tests/pos-financial-runtime.js');
 expectContains(finance, 'cash sale, stock restoration, refund settlement and drawer custody remain coherent', 'retail financial certification');
 expectContains(finance, 'net_movement', 'drawer reconciliation evidence');
 
-console.log('POS production certification contract passed: native ownership, cross-module runtime suites, multi-branch read/write isolation, RBAC, dispatch, and financial evidence are present.');
+const ledgerTest = read('tests/accounting-ledger-integrity.spec.js');
+expectContains(ledgerTest, 'trial balance contains posted in-period evidence only and reversals restore balances', 'ledger period certification');
+expectContains(ledgerTest, 'Runtime draft exclusion certification', 'draft exclusion certification');
+expectContains(ledgerTest, 'Runtime future-period exclusion certification', 'future-period exclusion certification');
+expectContains(ledgerTest, '/reverse', 'reversal certification');
+
+const ledgerRoute = read('routes/accounting-ledger.js');
+expectContains(ledgerRoute, "WHERE je.status='posted' AND date(je.entry_date)<=date(?)", 'posted-only trial balance query');
+expectContains(ledgerRoute, 'Draft and future-dated journal lines are excluded', 'trial balance evidence basis');
+
+const posting = read('lib/accounting-posting.js');
+expectContains(posting, "const tx=await db.transaction('write')", 'atomic automatic journal posting');
+expectContains(posting, 'postSourceJournalWithExecutor', 'transaction-aware automatic posting');
+expectContains(posting, 'verifyExistingJournal', 'source-journal evidence replay verification');
+
+console.log('POS production certification contract passed: native ownership, cross-module runtime suites, multi-branch read/write isolation, RBAC, dispatch, atomic accounting posting, and period-correct ledger evidence are present.');
