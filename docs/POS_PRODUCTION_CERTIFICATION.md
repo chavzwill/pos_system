@@ -79,10 +79,14 @@ Dispatch permissions must remain separated from purchasing approval, refunds, fi
 ### Gate 9 — Accounting
 
 - Retail, purchasing, rentals, repairs, returns/refunds, settlements, and supplier payments produce traceable financial evidence.
+- Automatic source journals are atomic: the posted journal header, every journal line, and the posting event succeed together or roll back together.
+- Replaying an already-posted source verifies that the existing journal still matches authoritative source evidence rather than silently duplicating it.
+- Trial balance includes **posted, in-period** journal evidence only. Draft journals and future-dated posted journals must not leak into current balances.
 - Posted journals are immutable and corrected through reversal rather than silent editing.
 - Accounting posting authority is separate from ordinary reporting authority.
-- Trial balance remains balanced.
+- Trial balance remains balanced globally and by branch where applicable.
 - Reconciliation exceptions fail visibly rather than inventing missing evidence.
+- `tests/accounting-ledger-integrity.spec.js` proves draft exclusion, period cutoff, posting effect, balanced totals, and reversal restoration.
 
 ### Gate 10 — Recovery and production operations
 
@@ -107,6 +111,7 @@ The certification bundle includes at minimum:
 - `tests/security-boundaries.spec.js`
 - `tests/multi-branch-read-integrity.spec.js`
 - `tests/pos-financial-runtime.js`
+- `tests/accounting-ledger-integrity.spec.js`
 - `tests/accounting-source-sync-rbac.spec.js`
 - `tests/logistics-intelligence.spec.js`
 - `tests/rentals-integrity.spec.js`
