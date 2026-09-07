@@ -10,6 +10,14 @@ function run(label,command,args){
   if(result.status!==0)process.exit(result.status||1);
 }
 
+const externalBase=String(process.env.POS_TEST_BASE_URL||'').trim();
+if(externalBase && process.env.POS_TEST_ALLOW_MUTATIONS!=='YES'){
+  console.error(`Refusing to run the full production certification against external POS_TEST_BASE_URL=${externalBase}.`);
+  console.error('Several runtime suites deliberately create/update test business records. Use the local native server, or set POS_TEST_ALLOW_MUTATIONS=YES only for an isolated disposable staging database.');
+  console.error('For read-only external validation use: node scripts/run-pos-readonly-certification.js');
+  process.exit(3);
+}
+
 run('Static production contract',process.execPath,['scripts/check-pos-production-certification.js']);
 run('Native runtime architecture contract',process.execPath,['scripts/check-native-pos-runtime.js']);
 run('Backup and recovery contract',process.execPath,['scripts/check-production-recovery-contract.js']);
