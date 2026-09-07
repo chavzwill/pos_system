@@ -23,8 +23,12 @@ const inventoryModernization = read('public/native-inventory-modernization.js');
 const inventoryModernizationCss = read('public/native-inventory-modernization.css');
 const purchasingModernization = read('public/native-purchasing-modernization.js');
 const purchasingModernizationCss = read('public/native-purchasing-modernization.css');
+const financeModernization = read('public/native-finance-modernization.js');
+const financeModernizationCss = read('public/native-finance-modernization.css');
 const inventoryWorkspace = read('public/inventory-workspace.js');
 const purchasingWorkspace = read('public/purchasing-workspace.js');
+const accountingIntelligence = read('public/accounting-intelligence.js');
+const accountingLedger = read('public/accounting-ledger.js');
 const logisticsRoute = read('routes/logistics-intelligence.js');
 const commercialHandoff = read('routes/logistics-commercial-handoff.js');
 const server = read('server.js');
@@ -36,7 +40,7 @@ if (manifest.apiBase !== '/api') fail('native API base must remain /api');
 if (manifest.sameOrigin !== true) fail('frontend and POS API must remain same-origin by default');
 if (manifest.externalCommerceRuntimeRequired !== false) fail('external commerce runtime cannot be a POS boot dependency');
 
-for (const asset of ['/pos-native-runtime.js','/pos-api-client.js','/native-pos-shell.js','/native-pos-shell.css','/native-sales-modernization.js','/native-sales-modernization.css','/native-repairs-modernization.js','/native-repairs-modernization.css','/native-rentals-modernization.js','/native-rentals-modernization.css','/native-dispatch-modernization.js','/native-dispatch-modernization.css','/native-inventory-modernization.js','/native-inventory-modernization.css','/native-purchasing-modernization.js','/native-purchasing-modernization.css']) {
+for (const asset of ['/pos-native-runtime.js','/pos-api-client.js','/native-pos-shell.js','/native-pos-shell.css','/native-sales-modernization.js','/native-sales-modernization.css','/native-repairs-modernization.js','/native-repairs-modernization.css','/native-rentals-modernization.js','/native-rentals-modernization.css','/native-dispatch-modernization.js','/native-dispatch-modernization.css','/native-inventory-modernization.js','/native-inventory-modernization.css','/native-purchasing-modernization.js','/native-purchasing-modernization.css','/native-finance-modernization.js','/native-finance-modernization.css']) {
   if (!shell.includes(asset)) fail(`${asset} is missing from app shell`);
 }
 if (!bootstrap.includes("fetch('/pos-runtime.json'")) fail('frontend does not verify the POS runtime manifest');
@@ -56,6 +60,10 @@ if (!inventoryWorkspace.includes('/api/products?') || !inventoryWorkspace.includ
 if (!purchasingModernization.includes("const ROOT_ID='tt-purchasing-workspace'")) fail('purchasing enhancement must bind to native purchasing');
 if (!purchasingModernizationCss.includes('.tt-purch-modern-bar')) fail('purchasing command styling is missing');
 if (!purchasingWorkspace.includes('/api/purchase-requests') || !purchasingWorkspace.includes('/api/purchase-orders')) fail('native purchasing workflows are incomplete');
+if (!financeModernization.includes("'tt-accounting-intelligence'" ) || !financeModernization.includes("'tt-accounting-ledger'")) fail('finance enhancement must bind to native accounting workspaces');
+if (!financeModernizationCss.includes('.tt-finance-modern-bar')) fail('finance command styling is missing');
+if (!accountingIntelligence.includes('/api/accounting-intelligence') || !accountingLedger.includes('/api/accounting-ledger')) fail('native finance workspaces must use POS accounting APIs');
+if (!accountingLedger.includes('Posted journals are locked and must be corrected by reversal')) fail('posted-journal immutability guidance is missing');
 if (!logisticsRoute.includes("router.get('/command-center'")) fail('native dispatch command center API is missing');
 if (!commercialHandoff.includes("/from-purchase-order/:id") || !commercialHandoff.includes("/from-sales-invoice/:id") || !commercialHandoff.includes("/from-rental/:id") || !commercialHandoff.includes("logistics-repair-handoff")) fail('native dispatch commercial handoffs are incomplete');
 if (!server.includes("const app = express();")) fail('native Express application bootstrap missing');
@@ -63,5 +71,5 @@ if (!server.includes("app.use('/api'")) fail('native POS API mount missing');
 if (!server.includes('express.static(publicDir')) fail('POS server must serve its own frontend');
 
 if (!process.exitCode) {
-  console.log('Native POS runtime contract passed. Sales, repairs, rentals, dispatch, inventory and purchasing are POS-owned and same-origin.');
+  console.log('Native POS runtime contract passed. Sales, repairs, rentals, dispatch, inventory, purchasing and finance are POS-owned and same-origin.');
 }
