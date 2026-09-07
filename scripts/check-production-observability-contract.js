@@ -23,9 +23,13 @@ need('scripts/production-smoke.sh','check_endpoint repairs','repairs smoke cover
 need('scripts/production-smoke.sh','check_endpoint dispatch','dispatch smoke coverage');
 need('scripts/production-smoke.sh','check_endpoint accounting','accounting smoke coverage');
 
-need('scripts/production-cutover-gate.sh','CUTOVER_CONFIRM=VERIFY_ONLY','explicit cutover verification acknowledgement');
-need('scripts/production-cutover-gate.sh','POS_EXPECTED_RELEASE_SHA','release SHA pinning');
-need('scripts/production-cutover-gate.sh','POS_CUTOVER_BACKUP_ARCHIVE','release-adjacent recovery rehearsal');
-need('scripts/production-cutover-gate.sh','No deployment, package installation, database mutation, or paid service was triggered','non-deploying cutover safety');
+const gate=need('scripts/production-cutover-gate.sh','CUTOVER_CONFIRM=VERIFY_ONLY','explicit cutover verification acknowledgement');
+for(const required of ['POS_EXPECTED_RELEASE_SHA','POS_CUTOVER_BACKUP_ARCHIVE','POS_ROLLBACK_REF','POS_SMOKE_USERNAME','POS_SMOKE_PASSWORD']){
+  if(!gate.includes(`[[ -n \"\${${required}:-}\" ]]`)) throw new Error(`final cutover must fail closed when ${required} is missing`);
+}
+need('scripts/production-cutover-gate.sh','rollback ref resolves to the same commit as the release candidate','distinct rollback release verification');
+need('scripts/production-cutover-gate.sh','Authenticated read-only production smoke','non-skippable authenticated smoke');
+need('scripts/production-cutover-gate.sh','Backup restore rehearsal','non-skippable release-adjacent recovery rehearsal');
+need('scripts/production-cutover-gate.sh','No deployment, package installation, production business mutation, or paid service was triggered','non-deploying cutover safety');
 
-console.log('Production observability/cutover contract passed: startup grace, database-backed container readiness, proxy sequencing, protected readiness verification, read-only smoke coverage, release SHA pinning, and recovery evidence are required.');
+console.log('Production observability/cutover contract passed: startup grace, database-backed readiness, proxy sequencing, read-only smoke coverage, exact release pinning, distinct rollback identity, authenticated acceptance evidence, and mandatory recovery rehearsal are required.');
