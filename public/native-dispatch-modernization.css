@@ -1,0 +1,29 @@
+/* Native POS dispatch modernization — presentation only; dispatch authority remains server-side. */
+.tt-logistics-intelligence .tt-li-panel{inset:18px;border-radius:22px;border-color:#d8e2dc;background:#f4f7f5;box-shadow:0 28px 80px rgba(16,39,29,.22)}
+.tt-logistics-intelligence .tt-li-panel>header{padding:18px 20px;border-bottom:1px solid #dfe7e2;background:linear-gradient(180deg,#fff,#fbfdfc)}
+.tt-logistics-intelligence .tt-li-panel header h2{font-size:26px;letter-spacing:-.025em}
+.tt-logistics-intelligence .tt-li-panel header p{font-size:12px;line-height:1.5;max-width:720px}
+.tt-dispatch-modern-bar{display:flex;align-items:center;gap:8px;padding:10px 14px;background:#fff;border-bottom:1px solid #e0e8e3;overflow-x:auto}
+.tt-dispatch-modern-bar button{flex:none;min-height:36px;padding:0 12px;border:1px solid #d5e0da;border-radius:10px;background:#fff;color:#29463b;font-size:10px;font-weight:850;cursor:pointer}
+.tt-dispatch-modern-bar button:hover,.tt-dispatch-modern-bar button.is-active{border-color:#087b3e;background:#eef8f2;color:#087b3e}
+.tt-dispatch-modern-bar .primary{background:#087b3e;color:#fff;border-color:#087b3e}
+.tt-dispatch-modern-bar .spacer{flex:1}
+.tt-dispatch-modern-bar small{flex:none;color:#738078;font-size:9px;font-weight:750;white-space:nowrap}
+.tt-li-stats{grid-template-columns:repeat(4,minmax(0,1fr));gap:9px;padding:12px 14px 5px}
+.tt-li-stats article{padding:13px 14px;border-radius:14px;border-color:#dce5e0;box-shadow:0 4px 14px rgba(20,47,36,.035)}
+.tt-li-stats strong{font-size:24px;letter-spacing:-.03em}
+.tt-li-note{margin:7px 14px 3px;padding:10px 12px;border:1px solid #d6e6dc;border-radius:10px;background:#f1f8f4;border-left:3px solid #087b3e;line-height:1.45}
+.tt-li-grid{grid-template-columns:minmax(0,1.65fr) minmax(310px,.75fr);gap:10px;padding:10px 14px 14px}
+.tt-li-grid>section{border-radius:14px;border-color:#dbe4df;box-shadow:0 5px 18px rgba(20,47,36,.035)}
+.tt-li-section-head{padding:11px 12px;background:#fafcfb}
+.tt-li-section-head h3{font-size:13px}
+.tt-li-list{padding:8px;gap:8px}
+.tt-li-job,.tt-li-transfer{border-radius:12px;padding:11px;border-color:#dde5e1;transition:border-color .15s ease,box-shadow .15s ease,transform .15s ease}
+.tt-li-job:hover,.tt-li-transfer:hover{border-color:#abc9b9;box-shadow:0 8px 22px rgba(20,47,36,.08);transform:translateY(-1px)}
+.tt-li-job-top strong{font-size:13px}.tt-li-job-top span{font-size:9px;font-weight:800}
+.tt-li-route{margin:9px 0;padding:9px 10px;border-radius:9px;background:#f7faf8}
+.tt-li-meta{gap:5px}.tt-li-meta span{padding:5px 7px;border-radius:999px;font-weight:800;background:#f0f4f2}
+.tt-dispatch-source-badge{display:inline-flex!important;align-items:center;gap:4px;padding:4px 7px!important;border-radius:999px!important;background:#eaf5ee!important;color:#0b6b3a!important;font-size:8px!important;font-weight:900!important;text-transform:uppercase!important;letter-spacing:.04em}
+.tt-li-job[data-modern-hidden="true"]{display:none}
+.tt-dispatch-empty-filter{padding:28px 12px;text-align:center;color:#748079;font-size:10px}
+@media(max-width:900px){.tt-logistics-intelligence .tt-li-panel{inset:0;border-radius:0}.tt-dispatch-modern-bar{padding:8px}.tt-li-stats{padding:8px 8px 3px;gap:6px}.tt-li-grid{grid-template-columns:1fr;padding:8px}.tt-li-note{margin:6px 8px 2px}.tt-li-stats strong{font-size:20px}}
