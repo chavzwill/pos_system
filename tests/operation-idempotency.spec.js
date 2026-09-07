@@ -1,0 +1,67 @@
+import { test, expect } from '@playwright/test';
+
+const BASE = 'http://localhost:3001';
+
+async function login() {
+  const r = await fetch(`${BASE}/api/employees/login`, {
+    method: 'POST',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({
+      username: process.env.POS_TEST_USER || 'admin',
+      password: process.env.POS_TEST_PASSWORD || '123456',
+    }),
+  });
+  expect(r.status).toBe(200);
+  return (r.headers.get('set-cookie') || '').split(';')[0];
+}
+
+async function api(cookie, method, path, body, key) {
+  const headers = { Cookie: cookie, Accept: 'application/json', 'Content-Type': 'application/json' };
+  if (key) headers['Idempotency-Key'] = key;
+  const r = await fetch(`${BASE}${path}`, {
+    method,
+    headers,
+    body: body === undefined ? undefined : JSON.stringify(body),
+  });
+  return {
+    status: r.status,
+    replayed: r.headers.get('Idempotency-Replayed'),
+    body: await r.json().catch(() => null),
+  };
+}
+
+test.describe('Durable POS mutation idempotency', () => {
+  test('same authenticated mutation and key replays the stored result instead of executing twice', async () => {
+    const cookie = await login();
+    const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
+    const key = `idem-security-group-${stamp}`;
+    const payload = {
+      name: `Idempotency Probe ${stamp}`,
+      description: 'Temporary durable retry certification group',
+      reason: 'Operation idempotency runtime certification',
+      permissions: { dashboard: true },
+    };
+
+    const first = await api(cookie, 'POST', '/api/security-groups', payload, key);
+    expect(first.status, JSON.stringify(first.body)).toBe(201);
+    expect(first.replayed).toBe('false');
+    expect(first.body?.id).toBeTruthy();
+
+    const second = await api(cookie, 'POST', '/api/security-groups', payload, key);
+    expect(second.status, JSON.stringify(second.body)).toBe(201);
+    expect(second.replayed).toBe('true');
+    expect(second.body?.id).toBe(first.body.id);
+
+    const changed = await api(cookie, 'POST', '/api/security-groups', { ...payload, description: 'Different payload' }, key);
+    expect(changed.status).toBe(409);
+    expect(changed.body?.control).toBe('operation_idempotency');
+
+    const receipt = await api(cookie, 'GET', `/api/operation-idempotency/${encodeURIComponent(key)}`);
+    expect(receipt.status).toBe(200);
+    expect(receipt.body?.some(row => row.state === 'completed' && row.response_status === 201)).toBe(true);
+
+    const cleanupKey = `idem-security-group-cleanup-${stamp}`;
+    const cleanup = await api(cookie, 'DELETE', `/api/security-groups/${first.body.id}?reason=Operation%20idempotency%20certification%20cleanup`, undefined, cleanupKey);
+    expect([200, 204]).toContain(cleanup.status);
+  });
+});
