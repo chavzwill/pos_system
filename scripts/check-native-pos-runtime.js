@@ -16,6 +16,8 @@ const nativeShell = read('public/native-pos-shell.js');
 const nativeShellCss = read('public/native-pos-shell.css');
 const salesModernization = read('public/native-sales-modernization.js');
 const salesModernizationCss = read('public/native-sales-modernization.css');
+const repairsModernization = read('public/native-repairs-modernization.js');
+const repairsModernizationCss = read('public/native-repairs-modernization.css');
 const server = read('server.js');
 
 if (manifest.runtime !== 'native-pos') fail('runtime identity must be native-pos');
@@ -31,6 +33,8 @@ if (!shell.includes('/native-pos-shell.js')) fail('native POS shell enhancement 
 if (!shell.includes('/native-pos-shell.css')) fail('native POS shell stylesheet is missing from app shell');
 if (!shell.includes('/native-sales-modernization.js')) fail('native cashier enhancement is missing from app shell');
 if (!shell.includes('/native-sales-modernization.css')) fail('native cashier stylesheet is missing from app shell');
+if (!shell.includes('/native-repairs-modernization.js')) fail('native repairs enhancement is missing from app shell');
+if (!shell.includes('/native-repairs-modernization.css')) fail('native repairs stylesheet is missing from app shell');
 if (!bootstrap.includes("fetch('/pos-runtime.json'")) fail('frontend does not verify the POS runtime manifest');
 if (!apiClient.includes("const API_BASE = '/api'")) fail('POS API client must remain rooted at /api');
 if (!apiClient.includes("url.origin !== location.origin")) fail('POS API client must reject cross-origin runtime calls');
@@ -39,10 +43,13 @@ if (!nativeShellCss.includes('.pos-command-overlay')) fail('native command palet
 if (!salesModernization.includes("const ROOT_ID='tt-sales-workspace'")) fail('cashier enhancement must bind to the native POS sales workspace');
 if (!salesModernization.includes("e.key==='F2'")) fail('cashier checkout shortcut contract missing');
 if (!salesModernizationCss.includes('.pos-cashier-strip')) fail('cashier readiness strip styling is missing');
+if (!repairsModernization.includes("const ROOT_ID='tt-work-orders-workspace'")) fail('repairs enhancement must bind to the native POS work-order workspace');
+if (!repairsModernization.includes('TotalToolsNativeRepairs')) fail('native repairs enhancement API is missing');
+if (!repairsModernizationCss.includes('.tt-repair-modern-bar')) fail('repair command bar styling is missing');
 if (!server.includes("const app = express();")) fail('native Express application bootstrap missing');
 if (!server.includes("app.use('/api'")) fail('native POS API mount missing');
 if (!server.includes('express.static(publicDir')) fail('POS server must serve its own frontend');
 
 if (!process.exitCode) {
-  console.log('Native POS runtime contract passed. Frontend, cashier shell, API client and server are POS-owned and same-origin.');
+  console.log('Native POS runtime contract passed. Frontend, cashier, repairs, API client and server are POS-owned and same-origin.');
 }
