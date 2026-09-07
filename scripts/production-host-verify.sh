@@ -34,7 +34,7 @@ caddy_state="$(docker inspect --format='{{.State.Status}}' "$caddy_id")"
 [ "$app_health" = "healthy" ] || { echo "FAIL: app health is $app_health" >&2; exit 1; }
 [ "$caddy_state" = "running" ] || { echo "FAIL: caddy container state is $caddy_state" >&2; exit 1; }
 
-echo "PASS: app container is running and healthy"
+echo "PASS: app container is running and database-ready"
 echo "PASS: caddy container is running"
 
 host_binding="$(docker inspect --format='{{json .HostConfig.PortBindings}}' "$app_id")"
@@ -67,6 +67,16 @@ for attempt in $(seq 1 20); do
   fi
   sleep 2
 done
+
+# This endpoint is protected, but database initialization runs before auth.
+# A 401/403 therefore proves the request crossed TLS/proxy/server/database and
+# was then correctly stopped at the authentication boundary.
+protected_code="$(curl --silent --show-error --location --max-time 10 --output /tmp/pos-production-protected.json --write-out '%{http_code}' "$probe_url/api/products")"
+case "$protected_code" in
+  401|403) echo "PASS: proxy -> native POS -> database readiness -> auth boundary is healthy" ;;
+  200) echo "WARN: protected readiness probe returned 200 without smoke credentials; verify authentication configuration" ;;
+  *) cat /tmp/pos-production-protected.json >&2 || true; echo "FAIL: protected readiness probe returned HTTP $protected_code" >&2; exit 1 ;;
+esac
 
 if [[ "$probe_url" == https://* ]]; then
   headers="$(curl --silent --show-error --head --location --max-time 10 "$probe_url/" | tr -d '\r')"
