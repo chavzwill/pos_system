@@ -19,6 +19,7 @@ if (runtime.runtime !== 'native-pos' || runtime.frontend !== 'pos-owned' || runt
 
 const requiredSuites = [
   'tests/native-pos-certification.spec.js',
+  'tests/native-responsive-shell.spec.js',
   'tests/operations-acceptance.spec.js',
   'tests/business-integrity.spec.js',
   'tests/security-boundaries.spec.js',
@@ -39,6 +40,17 @@ expectContains(native, "externalCommerceRuntimeRequired: false", 'native POS cer
 expectContains(native, '/api/logistics-intelligence/command-center', 'dispatch certification');
 expectContains(native, '/api/accounting-intelligence/overview', 'finance certification');
 expectContains(native, '/api/security-groups', 'administration certification');
+
+const responsive = read('tests/native-responsive-shell.spec.js');
+expectContains(responsive, "name: 'desktop'", 'desktop responsive certification');
+expectContains(responsive, "name: 'tablet-portrait'", 'tablet responsive certification');
+expectContains(responsive, "name: 'phone'", 'phone responsive certification');
+expectContains(responsive, 'document.documentElement.scrollWidth', 'horizontal overflow certification');
+expectContains(responsive, 'broken native assets', 'owned frontend asset certification');
+
+const playwrightConfig = read('playwright.config.js');
+expectContains(playwrightConfig, 'POS_PLAYWRIGHT_EXECUTABLE_PATH', 'portable Playwright browser override');
+expectContains(playwrightConfig, 'existsSync(asoundBuilder)', 'optional Linux compatibility helper');
 
 const security = read('tests/security-boundaries.spec.js');
 expectContains(security, 'view-only Dispatch role reads the board but cannot plan jobs or sell from another branch', 'branch mutation isolation certification');
@@ -132,4 +144,4 @@ expectContains(recovery, 'production-restore.sh', 'production restore certificat
 expectContains(recovery, 'production-recovery-rehearsal.sh', 'recovery rehearsal certification');
 expectContains(recovery, 'production-smoke.sh', 'post-recovery smoke certification');
 
-console.log('POS production certification contract passed: native ownership, multi-branch isolation, RBAC, durable idempotency, resource-level lifecycle serialization, financial/ledger integrity, and backup/restore recovery evidence are present.');
+console.log('POS production certification contract passed: native ownership, responsive shell coverage, multi-branch isolation, RBAC, durable idempotency, resource-level lifecycle serialization, financial/ledger integrity, and backup/restore recovery evidence are present.');
