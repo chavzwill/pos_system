@@ -8,11 +8,12 @@ const viewports = [
 ];
 
 for (const viewport of viewports) {
-  test(`native shell remains usable without horizontal overflow at ${viewport.name}`, async ({ page }) => {
+  test(`native shell remains usable without horizontal overflow at ${viewport.name}`, async ({ page, baseURL }) => {
     const brokenAssets = [];
+    const expectedOrigin = new URL(baseURL).origin;
     page.on('response', response => {
       const url = new URL(response.url());
-      const isOwnedAsset = url.origin === 'http://localhost:3001' && /\.(?:css|js|png|jpg|jpeg|svg|webp|ico)(?:\?|$)/i.test(url.pathname);
+      const isOwnedAsset = url.origin === expectedOrigin && /\.(?:css|js|png|jpg|jpeg|svg|webp|ico)$/i.test(url.pathname);
       if (isOwnedAsset && response.status() >= 400) brokenAssets.push(`${response.status()} ${url.pathname}`);
     });
 
