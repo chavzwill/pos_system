@@ -183,15 +183,27 @@ router.post('/journals/:id/reverse',async(req,res)=>{
 
 router.get('/trial-balance/report',async(req,res)=>{
   try{
-    const end=String(req.query.end||new Date().toISOString().slice(0,10));const branchId=req.query.branch_id?Number(req.query.branch_id):null;const args=[end];let branch='';if(branchId){branch=' AND COALESCE(jl.branch_id,je.branch_id)=?';args.push(branchId);}
+    const end=String(req.query.end||new Date().toISOString().slice(0,10));
+    const branchId=req.query.branch_id?Number(req.query.branch_id):null;
+    const args=[end];
+    let branch='';
+    if(branchId){branch=' AND COALESCE(jl.branch_id,je.branch_id)=?';args.push(branchId);}
     const {rows}=await db.execute({sql:`SELECT la.id,la.code,la.name,la.account_type,la.normal_balance,
-      COALESCE(SUM(jl.debit),0) debit,COALESCE(SUM(jl.credit),0) credit,
-      COALESCE(SUM(jl.debit-jl.credit),0) debit_balance
-      FROM ledger_accounts la LEFT JOIN journal_lines jl ON jl.ledger_account_id=la.id LEFT JOIN journal_entries je ON je.id=jl.journal_entry_id AND je.status='posted' AND date(je.entry_date)<=date(?)
-      WHERE la.active=1${branch} GROUP BY la.id ORDER BY la.code`,args});
+      COALESCE(p.debit,0) debit,COALESCE(p.credit,0) credit,
+      COALESCE(p.debit-p.credit,0) debit_balance
+      FROM ledger_accounts la
+      LEFT JOIN (
+        SELECT jl.ledger_account_id,ROUND(SUM(jl.debit),2) debit,ROUND(SUM(jl.credit),2) credit
+        FROM journal_lines jl
+        JOIN journal_entries je ON je.id=jl.journal_entry_id
+        WHERE je.status='posted' AND date(je.entry_date)<=date(?)${branch}
+        GROUP BY jl.ledger_account_id
+      ) p ON p.ledger_account_id=la.id
+      WHERE la.active=1
+      ORDER BY la.code`,args});
     const clean=rows.map(r=>({...r,debit:num(r.debit),credit:num(r.credit),balance:r.normal_balance==='credit'?num(r.credit-r.debit):num(r.debit-r.credit)}));
     const totalDebit=num(clean.reduce((s,r)=>s+num(r.debit),0)),totalCredit=num(clean.reduce((s,r)=>s+num(r.credit),0));
-    res.json({end,branch_id:branchId,rows:clean,totals:{debit:totalDebit,credit:totalCredit,difference:num(totalDebit-totalCredit)},basis:'Trial balance contains posted journal entries only. Draft operational records do not affect ledger balances until a balanced journal is posted.'});
+    res.json({end,branch_id:branchId,rows:clean,totals:{debit:totalDebit,credit:totalCredit,difference:num(totalDebit-totalCredit)},basis:'Trial balance contains posted journal entries only. Draft and future-dated journal lines are excluded until they become posted evidence within the requested period.'});
   }catch(e){res.status(500).json({error:e.message});}
 });
 
