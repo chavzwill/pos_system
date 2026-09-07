@@ -24,7 +24,10 @@ The POS may only be promoted after all required gates are green on the exact rel
 ### Gate 3 — Multi-branch and authorization
 
 - Cross-branch sales are rejected for branch-scoped employees.
+- `branch_id` is an authorization boundary, not just a frontend filter. A branch-scoped employee cannot alter `?branch_id=` to inspect another branch's stock, repair queue, rentals, purchase orders, or purchase requests.
+- Numeric detail IDs for transactions, work orders, rentals, purchase orders, purchase requests, and inventory writeoffs are checked against the authoritative record branch before the record is returned.
 - Branch-scoped stock, purchasing, repairs, rentals, dispatch, drawers, and finance are verified.
+- Cross-branch visibility is reserved for explicitly authorized branch/security administrators.
 - Dispatch view/plan/execute/admin permissions remain independent.
 - Security-group assignment cannot escalate privileges beyond the actor's authority envelope.
 - Anonymous access is rejected before business logic executes.
@@ -97,10 +100,12 @@ The certification bundle includes at minimum:
 
 - `scripts/check-native-pos-runtime.js`
 - `scripts/check-pos-production-certification.js`
+- `scripts/run-pos-production-certification.js`
 - `tests/native-pos-certification.spec.js`
 - `tests/operations-acceptance.spec.js`
 - `tests/business-integrity.spec.js`
 - `tests/security-boundaries.spec.js`
+- `tests/multi-branch-read-integrity.spec.js`
 - `tests/pos-financial-runtime.js`
 - `tests/accounting-source-sync-rbac.spec.js`
 - `tests/logistics-intelligence.spec.js`
@@ -108,6 +113,16 @@ The certification bundle includes at minimum:
 - `tests/repair-quality-integrity.spec.js`
 
 The static certification contract confirms the required production evidence exists. Runtime suites still have to be executed against the release candidate; static presence is not a substitute for runtime proof.
+
+For a local checkout with the repository-approved dependencies already installed, run:
+
+```bash
+node scripts/run-pos-production-certification.js
+```
+
+The runner deliberately does **not** install packages, download dependencies, deploy, or invoke paid services. If Playwright is not already installed in the checkout it stops and reports the prerequisite instead of silently using `npx` to fetch anything.
+
+The multi-branch runtime test is intentionally environment-bound. Set `POS_BRANCH_TEST_USER`, `POS_BRANCH_TEST_PASSWORD`, `POS_BRANCH_TEST_OWN_BRANCH`, and `POS_BRANCH_TEST_OTHER_BRANCH` to a branch-scoped test identity and two distinct active branch IDs. If those values are absent, that runtime test skips rather than pretending cross-branch certification occurred.
 
 ## Completion definition
 
