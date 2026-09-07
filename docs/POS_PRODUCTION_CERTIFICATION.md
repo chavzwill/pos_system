@@ -88,19 +88,25 @@ Dispatch permissions must remain separated from purchasing approval, refunds, fi
 - Reconciliation exceptions fail visibly rather than inventing missing evidence.
 - `tests/accounting-ledger-integrity.spec.js` proves draft exclusion, period cutoff, posting effect, balanced totals, and reversal restoration.
 
-### Gate 10 — Failure, retry, and duplicate-submission safety
+### Gate 10 — Failure, retry, duplicate-submission, and concurrency safety
 
 - Mutating native POS requests carry an `Idempotency-Key`.
+- Native sale creation and rental-agreement creation require request identity; they fail closed if the key is missing.
 - The server binds that key to the authenticated actor, HTTP method, route, query, and request body fingerprint.
 - Repeating the same committed request with the same key replays the stored result and does not execute the business mutation again.
 - Reusing a key with a different payload fails closed with `409`.
-- A second request that arrives while the first is still unresolved is blocked as `operation_idempotency_in_progress` rather than executing concurrently.
-- If the connection drops after the server commits but before the browser receives the response, the native frontend retries the transport once with the **same** key.
+- A second request using the same key while the first is unresolved is blocked as `operation_idempotency_in_progress`.
+- Distinct idempotency keys do **not** bypass lifecycle safety. Resource-level leases serialize conflicting mutations against the same authoritative PO, rental agreement, work order, sales return, branch transfer, or Dispatch source.
+- PO receiving, rental checkout/issue/return/settlement, repair financial completion, transaction returns, transfer receiving, and commercial Dispatch handoffs use durable resource keys.
+- Lifecycle locks are database-backed, unique per resource, and expire automatically after a short lease so a crashed process cannot leave a permanent deadlock.
+- Concurrent ownership failure returns a visible `lifecycle_concurrency` conflict with `Retry-After`; callers must refresh authoritative state before retrying.
+- If the connection drops after the server commits but before the browser receives the response, the native frontend retries transport once with the **same** idempotency key.
 - The global native runtime protects older workspaces that still call `window.fetch` directly; POS_API callers use the same contract.
 - An idempotency receipt that cannot be persisted is treated as an ambiguous outcome. Operators must verify the business record before attempting a new key.
 - `tests/operation-idempotency.spec.js` proves stored response replay and request-fingerprint mismatch rejection.
+- `tests/lifecycle-concurrency.spec.js` proves only one concurrent owner can hold a protected business lifecycle resource and that release permits the next owner.
 
-This gate applies to high-impact lifecycles including checkout, returns/refunds, PO receiving, rental checkout/return, repair completion/payment, inventory movements, transfers, and Dispatch handoffs.
+This gate applies to checkout, returns/refunds, PO receiving, rental checkout/return, repair completion/payment, inventory-linked transfers, and Dispatch handoffs.
 
 ### Gate 11 — Recovery and production operations
 
@@ -125,6 +131,7 @@ The certification bundle includes at minimum:
 - `tests/security-boundaries.spec.js`
 - `tests/multi-branch-read-integrity.spec.js`
 - `tests/operation-idempotency.spec.js`
+- `tests/lifecycle-concurrency.spec.js`
 - `tests/pos-financial-runtime.js`
 - `tests/accounting-ledger-integrity.spec.js`
 - `tests/accounting-source-sync-rbac.spec.js`
@@ -148,4 +155,4 @@ The multi-branch runtime test is intentionally environment-bound. Set `POS_BRANC
 
 A roadmap item can move to **Completed** only after:
 
-Implementation -> Integration -> Permission boundary -> Multi-branch behavior -> Financial impact -> Failure/retry behavior -> Automated runtime test -> Responsive QA -> Production certification.
+Implementation -> Integration -> Permission boundary -> Multi-branch behavior -> Financial impact -> Failure/retry behavior -> Concurrency behavior -> Automated runtime test -> Responsive QA -> Production certification.
