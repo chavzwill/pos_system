@@ -37,6 +37,8 @@ const crmWorkspace = read('public/customer-crm-workspace.js');
 const adminWorkspace = read('public/admin-workspace.js');
 const logisticsRoute = read('routes/logistics-intelligence.js');
 const commercialHandoff = read('routes/logistics-commercial-handoff.js');
+const branchGuard = read('routes/multi-branch-integrity-guard.js');
+const idempotency = read('routes/operation-idempotency.js');
 const server = read('server.js');
 
 if (manifest.runtime !== 'native-pos') fail('runtime identity must be native-pos');
@@ -50,8 +52,12 @@ for (const asset of ['/pos-native-runtime.js','/pos-api-client.js','/native-pos-
   if (!shell.includes(asset)) fail(`${asset} is missing from app shell`);
 }
 if (!bootstrap.includes("fetch('/pos-runtime.json'")) fail('frontend does not verify the POS runtime manifest');
-if (!apiClient.includes("const API_BASE = '/api'")) fail('POS API client must remain rooted at /api');
-if (!apiClient.includes("url.origin !== location.origin")) fail('POS API client must reject cross-origin runtime calls');
+if (!apiClient.includes("if (value.startsWith('/api/')) return value")) fail('POS API client must remain rooted at /api');
+if (!apiClient.includes('POS native API client only accepts same-origin paths')) fail('POS API client must reject cross-origin runtime calls');
+if (!apiClient.includes("init.headers['Idempotency-Key']")) fail('native mutation client must attach durable idempotency keys');
+if (!apiClient.includes('Retry only transport failures')) fail('native mutation retries must be limited to ambiguous transport failures');
+if (!branchGuard.includes("require('./operation-idempotency')")) fail('server mutation idempotency must run after branch authorization');
+if (!idempotency.includes('UNIQUE(scope,idempotency_key)')) fail('durable operation idempotency storage is missing');
 if (!nativeShell.includes('TotalToolsNativePosShell')) fail('native command shell API is missing');
 if (!nativeShellCss.includes('.pos-command-overlay')) fail('native command palette styling is missing');
 if (!salesModernization.includes("const ROOT_ID='tt-sales-workspace'")) fail('cashier enhancement must bind to native sales');
@@ -84,5 +90,5 @@ if (!server.includes("app.use('/api'")) fail('native POS API mount missing');
 if (!server.includes('express.static(publicDir')) fail('POS server must serve its own frontend');
 
 if (!process.exitCode) {
-  console.log('Native POS runtime contract passed. Sales, repairs, rentals, dispatch, inventory, purchasing, finance, CRM and administration are POS-owned and same-origin.');
+  console.log('Native POS runtime contract passed. POS-owned same-origin workspaces and durable mutation retry protection are present.');
 }
