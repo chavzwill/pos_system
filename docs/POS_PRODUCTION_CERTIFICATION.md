@@ -110,13 +110,33 @@ This gate applies to checkout, returns/refunds, PO receiving, rental checkout/re
 
 ### Gate 11 — Recovery and production operations
 
-Before launch:
+The production state is the database **and** uploaded operational evidence. Recovery must keep those together.
 
-- backup is created and restored successfully in a rehearsal
-- migrations are rehearsed against a production-like copy
-- rollback path is documented and exercised
-- error/queue/job observability is available
-- production smoke test passes after deployment
+- `scripts/production-backup.sh` refuses to back up while the application container is still accepting writes.
+- Backup archives contain `data/` and `uploads/` together, exclude source/secrets, carry the release commit SHA in the manifest, and are SHA-256 verified after creation.
+- `scripts/production-restore.sh` requires an explicit destructive-restore acknowledgement, validates the archive checksum and contents, makes a pre-restore safety copy, and automatically puts that original state back if extraction/validation fails.
+- `scripts/production-recovery-rehearsal.sh` restores only into a temporary directory. It never replaces live state. It performs SQLite `quick_check`, full `integrity_check`, critical-table verification, and read-only database access checks.
+- `scripts/production-smoke.sh` is read-only and verifies the application shell, anonymous API protection, employee authentication when smoke credentials are supplied, and representative Inventory, Purchasing, Rentals, Repairs, Dispatch and Accounting reads.
+- `node scripts/check-production-recovery-contract.js` must pass on the exact release candidate.
+- A real backup must complete the non-destructive recovery rehearsal before launch. Static existence of recovery scripts is not proof of recoverability.
+- Migration/schema initialization must be exercised against a restored production-like copy before production is upgraded.
+- Rollback requires both the previous application release and the verified pre-change state backup; neither code rollback nor data rollback alone is sufficient after an incompatible migration.
+- Operational logs must preserve request IDs and expose startup/database initialization failures instead of serving a partially initialized POS.
+
+For a verified backup archive, rehearse recovery without touching live data:
+
+```bash
+scripts/production-recovery-rehearsal.sh /absolute/path/to/pos-state-....tar.gz
+```
+
+Or bind it into the full certification runner:
+
+```bash
+POS_RECOVERY_REHEARSAL_ARCHIVE=/absolute/path/to/pos-state-....tar.gz \
+  node scripts/run-pos-production-certification.js
+```
+
+The rehearsal requires existing `tar`, `sha256sum`, and `sqlite3` tools and will not install them automatically.
 
 ## Required automated evidence
 
@@ -124,7 +144,12 @@ The certification bundle includes at minimum:
 
 - `scripts/check-native-pos-runtime.js`
 - `scripts/check-pos-production-certification.js`
+- `scripts/check-production-recovery-contract.js`
 - `scripts/run-pos-production-certification.js`
+- `scripts/production-backup.sh`
+- `scripts/production-restore.sh`
+- `scripts/production-recovery-rehearsal.sh`
+- `scripts/production-smoke.sh`
 - `tests/native-pos-certification.spec.js`
 - `tests/operations-acceptance.spec.js`
 - `tests/business-integrity.spec.js`
@@ -139,7 +164,7 @@ The certification bundle includes at minimum:
 - `tests/rentals-integrity.spec.js`
 - `tests/repair-quality-integrity.spec.js`
 
-The static certification contract confirms the required production evidence exists. Runtime suites still have to be executed against the release candidate; static presence is not a substitute for runtime proof.
+The static certification contract confirms the required production evidence exists. Runtime suites and a real recovery rehearsal still have to be executed against the release candidate; static presence is not a substitute for runtime proof.
 
 For a local checkout with the repository-approved dependencies already installed, run:
 
@@ -155,4 +180,4 @@ The multi-branch runtime test is intentionally environment-bound. Set `POS_BRANC
 
 A roadmap item can move to **Completed** only after:
 
-Implementation -> Integration -> Permission boundary -> Multi-branch behavior -> Financial impact -> Failure/retry behavior -> Concurrency behavior -> Automated runtime test -> Responsive QA -> Production certification.
+Implementation -> Integration -> Permission boundary -> Multi-branch behavior -> Financial impact -> Failure/retry behavior -> Concurrency behavior -> Automated runtime test -> Responsive QA -> Backup/recovery rehearsal -> Production certification.
