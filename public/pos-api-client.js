@@ -10,8 +10,18 @@
     return `/api/${value.replace(/^\/+/, '')}`;
   }
 
+  function mutation(method) {
+    return ['POST', 'PATCH', 'PUT', 'DELETE'].includes(String(method || 'GET').toUpperCase());
+  }
+
+  function newIdempotencyKey() {
+    if (globalThis.crypto?.randomUUID) return globalThis.crypto.randomUUID();
+    return `pos-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
+  }
+
   async function request(path, options) {
     const init = Object.assign({ credentials: 'same-origin' }, options || {});
+    init.method = String(init.method || 'GET').toUpperCase();
     init.headers = Object.assign({ Accept: 'application/json' }, init.headers || {});
 
     if (init.body && typeof init.body !== 'string' && !(init.body instanceof FormData)) {
@@ -19,7 +29,26 @@
       init.body = JSON.stringify(init.body);
     }
 
-    const response = await fetch(normalizePath(path), init);
+    // Every native mutation gets a durable operation identity. If the browser
+    // loses the response after the server committed, a network retry reuses
+    // the same key and the server replays the stored outcome instead of
+    // charging, receiving, issuing, returning, or dispatching twice.
+    if (mutation(init.method)) {
+      init.headers['Idempotency-Key'] = init.headers['Idempotency-Key'] || init.idempotencyKey || newIdempotencyKey();
+      delete init.idempotencyKey;
+    }
+
+    const url = normalizePath(path);
+    let response;
+    try {
+      response = await fetch(url, init);
+    } catch (error) {
+      if (!mutation(init.method)) throw error;
+      // Retry only transport failures, never an HTTP response. The same
+      // Idempotency-Key makes this safe even when the first request committed.
+      response = await fetch(url, init);
+    }
+
     const contentType = response.headers.get('content-type') || '';
     const payload = contentType.includes('application/json')
       ? await response.json()
@@ -33,9 +62,17 @@
       );
       error.status = response.status;
       error.payload = payload;
+      error.idempotencyReplayed = response.headers.get('Idempotency-Replayed') === 'true';
       throw error;
     }
 
+    if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
+      Object.defineProperty(payload, '__idempotencyReplayed', {
+        value: response.headers.get('Idempotency-Replayed') === 'true',
+        enumerable: false,
+        configurable: true,
+      });
+    }
     return payload;
   }
 
