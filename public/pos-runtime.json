@@ -1,0 +1,10 @@
+{
+  "product": "Total Tools POS",
+  "runtime": "native-pos",
+  "frontend": "pos-owned",
+  "server": "pos-owned",
+  "apiBase": "/api",
+  "sameOrigin": true,
+  "externalCommerceRuntimeRequired": false,
+  "architectureVersion": 1
+}
