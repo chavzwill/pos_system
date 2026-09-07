@@ -27,6 +27,8 @@ const suites=[
   'tests/security-boundaries.spec.js',
   'tests/multi-branch-read-integrity.spec.js',
   'tests/business-integrity.spec.js',
+  'tests/pos-financial-runtime.js',
+  'tests/accounting-ledger-integrity.spec.js',
   'tests/accounting-source-sync-rbac.spec.js',
   'tests/logistics-intelligence.spec.js',
   'tests/rentals-integrity.spec.js',
