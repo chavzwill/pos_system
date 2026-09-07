@@ -23,6 +23,21 @@ services:
       - ./uploads:/app/uploads
     expose:
       - "3001"
+    # Readiness intentionally probes a protected API rather than the public shell.
+    # The request must pass database initialization before authentication can return
+    # 401/403, so a healthy result proves both the native server and database are ready
+    # without requiring or exposing a monitoring credential.
+    healthcheck:
+      test:
+        - CMD
+        - node
+        - -e
+        - >-
+          fetch('http://127.0.0.1:3001/api/products').then(r=>{if(![200,401,403].includes(r.status))process.exit(1)}).catch(()=>process.exit(1))
+      interval: 15s
+      timeout: 5s
+      retries: 4
+      start_period: 20s
     # No `ports:` mapping — internal-only on the Docker network. Point your
     # own reverse proxy (nginx, Traefik, etc.) at this container's :3001,
     # or add a `ports:` mapping here if you want it reachable directly.
