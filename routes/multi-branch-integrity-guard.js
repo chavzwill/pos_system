@@ -25,8 +25,41 @@ router.use('/logistics-intelligence',require('./logistics-runtime-integrity-guar
 
 router.use(async(req,res,next)=>{
   try{
-    if(req.apiKey||!req.employee||req.method==='GET'||req.method==='HEAD'||req.method==='OPTIONS')return next();
+    if(req.apiKey||!req.employee||req.method==='OPTIONS')return next();
     const p=req.path;
+    const read=req.method==='GET'||req.method==='HEAD';
+
+    // Branch-scoped reads are an authorization boundary, not merely a UI
+    // filter. A user may not tamper with ?branch_id= to inspect another
+    // branch's stock, work queue, rentals or procurement records. Dedicated
+    // cross-branch administrators retain company-wide visibility.
+    if(read&&req.query?.branch_id!=null&&!assertBranch(req,res,req.query.branch_id))return;
+
+    // Detail endpoints must not become IDORs just because the caller knows a
+    // numeric record id. Resolve the authoritative branch before the domain
+    // router returns the record. Global administrators are handled by
+    // assertBranch/crossBranch above.
+    if(read){
+      let readId=numericId(p,/^\/work-orders\/(\d+)(?:\/|$)/);
+      if(readId){const branchId=await sourceBranch('work_orders',readId);if(branchId!=null&&!assertBranch(req,res,branchId))return;}
+
+      readId=numericId(p,/^\/rentals\/agreements\/(\d+)(?:\/|$)/);
+      if(readId){const branchId=await sourceBranch('rental_agreements',readId);if(branchId!=null&&!assertBranch(req,res,branchId))return;}
+
+      readId=numericId(p,/^\/purchase-orders\/(\d+)(?:\/|$)/);
+      if(readId){const branchId=await sourceBranch('purchase_orders',readId);if(branchId!=null&&!assertBranch(req,res,branchId))return;}
+
+      readId=numericId(p,/^\/purchase-requests\/(\d+)(?:\/|$)/);
+      if(readId){const branchId=await sourceBranch('purchase_requests',readId);if(branchId!=null&&!assertBranch(req,res,branchId))return;}
+
+      readId=numericId(p,/^\/transactions\/(\d+)(?:\/|$)/);
+      if(readId){const branchId=await sourceBranch('transactions',readId);if(branchId!=null&&!assertBranch(req,res,branchId))return;}
+
+      readId=numericId(p,/^\/inventory-writeoffs\/(\d+)(?:\/|$)/);
+      if(readId){const branchId=await sourceBranch('inventory_writeoffs',readId);if(branchId!=null&&!assertBranch(req,res,branchId))return;}
+
+      return next();
+    }
 
     // POS transaction creation is a branch-custody event. Enforce the branch
     // boundary before traceability, reservation, margin, drawer, or product
@@ -45,6 +78,7 @@ router.use(async(req,res,next)=>{
 
     if(p==='/work-orders'&&req.method==='POST'){
       if(!assertBranch(req,res,req.body?.branch_id))return;
+      req.body ||= {};
       req.body.employee_id=req.employee.id;
       return next();
     }
