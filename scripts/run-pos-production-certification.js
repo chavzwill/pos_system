@@ -12,6 +12,13 @@ function run(label,command,args){
 
 run('Static production contract',process.execPath,['scripts/check-pos-production-certification.js']);
 run('Native runtime architecture contract',process.execPath,['scripts/check-native-pos-runtime.js']);
+run('Backup and recovery contract',process.execPath,['scripts/check-production-recovery-contract.js']);
+
+if(process.env.POS_RECOVERY_REHEARSAL_ARCHIVE){
+  run('Non-destructive recovery rehearsal','bash',['scripts/production-recovery-rehearsal.sh',process.env.POS_RECOVERY_REHEARSAL_ARCHIVE]);
+}else{
+  console.log('\nRecovery rehearsal archive not supplied; static recovery contract passed, but backup restore rehearsal is not being claimed. Set POS_RECOVERY_REHEARSAL_ARCHIVE to a verified production-style backup to exercise it.');
+}
 
 let playwrightCli;
 try{
