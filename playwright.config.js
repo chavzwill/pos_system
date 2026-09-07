@@ -22,20 +22,26 @@ if (existsSync(asoundStub)) {
   launchOptions.env = { ...process.env, LD_LIBRARY_PATH: '/tmp' };
 }
 
+const baseURL = String(process.env.POS_TEST_BASE_URL || 'http://127.0.0.1:3001').replace(/\/$/, '');
+const externalServer = Boolean(process.env.POS_TEST_BASE_URL);
+
 module.exports = defineConfig({
   testDir: './tests',
   timeout: 30_000,
   expect: { timeout: 5_000 },
   reporter: 'list',
   use: {
-    baseURL: 'http://localhost:3001',
+    baseURL,
     viewport: { width: 1280, height: 800 },
     launchOptions,
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  webServer: {
+  // Local certification owns its temporary native POS server. When an explicit
+  // POS_TEST_BASE_URL is supplied (for a pre-existing staging/candidate host),
+  // Playwright must not start a second server or silently test the wrong code.
+  webServer: externalServer ? undefined : {
     command: 'node server.js',
-    url: 'http://localhost:3001',
+    url: baseURL,
     reuseExistingServer: true,
     timeout: 15_000,
   },
