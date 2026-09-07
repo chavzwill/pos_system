@@ -126,4 +126,10 @@ expectContains(posting, "const tx=await db.transaction('write')", 'atomic automa
 expectContains(posting, 'postSourceJournalWithExecutor', 'transaction-aware automatic posting');
 expectContains(posting, 'verifyExistingJournal', 'source-journal evidence replay verification');
 
-console.log('POS production certification contract passed: native ownership, multi-branch isolation, RBAC, durable idempotency, resource-level lifecycle serialization, dispatch, atomic accounting posting, and period-correct ledger evidence are present.');
+const recovery = requireFile('scripts/check-production-recovery-contract.js');
+expectContains(recovery, 'production-backup.sh', 'production backup certification');
+expectContains(recovery, 'production-restore.sh', 'production restore certification');
+expectContains(recovery, 'production-recovery-rehearsal.sh', 'recovery rehearsal certification');
+expectContains(recovery, 'production-smoke.sh', 'post-recovery smoke certification');
+
+console.log('POS production certification contract passed: native ownership, multi-branch isolation, RBAC, durable idempotency, resource-level lifecycle serialization, financial/ledger integrity, and backup/restore recovery evidence are present.');
