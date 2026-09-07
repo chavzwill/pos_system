@@ -12,8 +12,9 @@ Record before cutover:
 - operator
 - change window start/end
 - rollback owner
-- last known-good release SHA
+- last known-good release SHA or tag
 - backup archive path and checksum
+- designated smoke-test employee
 
 The release candidate used for certification must be the same SHA promoted to production.
 
@@ -37,18 +38,24 @@ bash scripts/production-recovery-rehearsal.sh /absolute/path/to/pos-state-....ta
 
 The rehearsal must pass checksum validation, SQLite `quick_check`, full `integrity_check`, critical-table verification, and read-only database opening.
 
-## 3. Verify exact release candidate
+## 3. Verify exact release candidate and rollback identity
 
-Set the expected SHA and run the non-deploying technical cutover gate:
+Final cutover verification is fail-closed. It will not produce a passing result unless the exact release SHA, a distinct last-known-good rollback ref, a verified backup, and authenticated smoke credentials are all supplied.
 
 ```bash
 export CUTOVER_CONFIRM=VERIFY_ONLY
 export POS_EXPECTED_RELEASE_SHA=<exact-release-sha>
+export POS_ROLLBACK_REF=<last-known-good-tag-or-sha>
 export POS_CUTOVER_BACKUP_ARCHIVE=/absolute/path/to/pos-state-....tar.gz
+export POS_SMOKE_USERNAME=<smoke-user>
+export POS_SMOKE_PASSWORD=<smoke-password>
+
 bash scripts/production-cutover-gate.sh
 ```
 
-The gate runs production preflight, native runtime ownership checks, recovery contract checks, startup/health checks, host verification, read-only smoke tests, and the isolated backup rehearsal.
+The rollback ref must resolve to a real commit and must not resolve to the same commit as the candidate release.
+
+The gate runs production preflight, native runtime ownership checks, recovery contract checks, startup/health checks, host verification, authenticated read-only smoke tests, and the isolated backup rehearsal.
 
 ## 4. Container and proxy readiness
 
@@ -66,15 +73,9 @@ Host verification must prove:
 - persisted SQLite database exists
 - uploads path is writable by the application identity
 
-## 5. Read-only employee smoke
+## 5. Authenticated read-only employee smoke
 
-Provide a designated smoke employee where possible:
-
-```bash
-export POS_SMOKE_USERNAME=<smoke-user>
-export POS_SMOKE_PASSWORD=<smoke-password>
-bash scripts/production-smoke.sh
-```
+The final cutover gate does not allow authenticated smoke to be skipped. The designated smoke employee should have enough read permissions to exercise the operating areas expected for launch.
 
 The smoke test performs reads only. It verifies authentication and representative Inventory, Branches, Workspace, Operations, Purchasing, Rentals, Repairs, Dispatch, and Accounting endpoints according to the employee's permissions.
 
@@ -82,18 +83,18 @@ The smoke test performs reads only. It verifies authentication and representativ
 
 Production promotion is **GO** only when all of these are true:
 
-- exact release SHA is pinned
+- exact release SHA is pinned and matches the checked-out candidate
 - production certification is green on that SHA
 - release-adjacent backup exists and checksum passes
 - isolated restore rehearsal passed
-- last known-good release SHA is recorded
+- last known-good rollback ref resolves to a distinct commit
 - data rollback implications are documented for schema-changing releases
 - rollback owner is present
-- smoke employee is available
+- authenticated smoke employee is available
 - no unresolved severity-1 or severity-2 blocker remains
 - application health is green behind the production proxy
 
-Any failed item is **NO-GO**.
+Any failed or missing item is **NO-GO**.
 
 ## 7. Rollback trigger
 
@@ -114,12 +115,13 @@ Code rollback alone is insufficient if a release introduced incompatible data ch
 
 Retain with the release record:
 
-- exact SHA
+- exact release SHA
+- resolved rollback SHA
 - certification output
 - backup manifest/checksum
 - recovery rehearsal output
 - host verification output
-- production smoke output
+- authenticated production smoke output
 - cutover timestamp
 - rollback decision if one occurred
 
