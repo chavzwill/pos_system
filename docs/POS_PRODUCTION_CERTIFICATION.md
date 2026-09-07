@@ -88,7 +88,21 @@ Dispatch permissions must remain separated from purchasing approval, refunds, fi
 - Reconciliation exceptions fail visibly rather than inventing missing evidence.
 - `tests/accounting-ledger-integrity.spec.js` proves draft exclusion, period cutoff, posting effect, balanced totals, and reversal restoration.
 
-### Gate 10 — Recovery and production operations
+### Gate 10 — Failure, retry, and duplicate-submission safety
+
+- Mutating native POS requests carry an `Idempotency-Key`.
+- The server binds that key to the authenticated actor, HTTP method, route, query, and request body fingerprint.
+- Repeating the same committed request with the same key replays the stored result and does not execute the business mutation again.
+- Reusing a key with a different payload fails closed with `409`.
+- A second request that arrives while the first is still unresolved is blocked as `operation_idempotency_in_progress` rather than executing concurrently.
+- If the connection drops after the server commits but before the browser receives the response, the native frontend retries the transport once with the **same** key.
+- The global native runtime protects older workspaces that still call `window.fetch` directly; POS_API callers use the same contract.
+- An idempotency receipt that cannot be persisted is treated as an ambiguous outcome. Operators must verify the business record before attempting a new key.
+- `tests/operation-idempotency.spec.js` proves stored response replay and request-fingerprint mismatch rejection.
+
+This gate applies to high-impact lifecycles including checkout, returns/refunds, PO receiving, rental checkout/return, repair completion/payment, inventory movements, transfers, and Dispatch handoffs.
+
+### Gate 11 — Recovery and production operations
 
 Before launch:
 
@@ -110,6 +124,7 @@ The certification bundle includes at minimum:
 - `tests/business-integrity.spec.js`
 - `tests/security-boundaries.spec.js`
 - `tests/multi-branch-read-integrity.spec.js`
+- `tests/operation-idempotency.spec.js`
 - `tests/pos-financial-runtime.js`
 - `tests/accounting-ledger-integrity.spec.js`
 - `tests/accounting-source-sync-rbac.spec.js`
