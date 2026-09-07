@@ -26,6 +26,7 @@ const suites=[
   'tests/operations-acceptance.spec.js',
   'tests/security-boundaries.spec.js',
   'tests/multi-branch-read-integrity.spec.js',
+  'tests/operation-idempotency.spec.js',
   'tests/business-integrity.spec.js',
   'tests/pos-financial-runtime.js',
   'tests/accounting-ledger-integrity.spec.js',
