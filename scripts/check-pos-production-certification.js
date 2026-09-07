@@ -23,6 +23,7 @@ const requiredSuites = [
   'tests/business-integrity.spec.js',
   'tests/security-boundaries.spec.js',
   'tests/multi-branch-read-integrity.spec.js',
+  'tests/operation-idempotency.spec.js',
   'tests/pos-financial-runtime.js',
   'tests/accounting-ledger-integrity.spec.js',
   'tests/accounting-source-sync-rbac.spec.js',
@@ -58,6 +59,24 @@ expectContains(branchGuard, "sourceBranch('transactions'", 'transaction detail I
 expectContains(branchGuard, "sourceBranch('work_orders'", 'repair detail IDOR guard');
 expectContains(branchGuard, "sourceBranch('rental_agreements'", 'rental detail IDOR guard');
 expectContains(branchGuard, "sourceBranch('purchase_orders'", 'purchase-order detail IDOR guard');
+expectContains(branchGuard, "require('./operation-idempotency')", 'idempotency placement after branch authorization');
+
+const idempotency = read('routes/operation-idempotency.js');
+expectContains(idempotency, 'UNIQUE(scope,idempotency_key)', 'durable idempotency uniqueness');
+expectContains(idempotency, "state TEXT NOT NULL DEFAULT 'in_progress'", 'in-progress duplicate suppression');
+expectContains(idempotency, 'request_hash', 'idempotency payload binding');
+expectContains(idempotency, 'Idempotency-Replayed', 'idempotent response replay evidence');
+expectContains(idempotency, 'operation_idempotency_in_progress', 'ambiguous-outcome duplicate suppression');
+
+const idempotencyTest = read('tests/operation-idempotency.spec.js');
+expectContains(idempotencyTest, 'same authenticated mutation and key replays the stored result instead of executing twice', 'runtime duplicate submission certification');
+expectContains(idempotencyTest, "expect(second.replayed).toBe('true')", 'runtime replay certification');
+expectContains(idempotencyTest, 'Different payload', 'idempotency-key payload mismatch certification');
+
+const nativeClient = read('public/pos-api-client.js');
+expectContains(nativeClient, "init.headers['Idempotency-Key']", 'native mutation idempotency key');
+expectContains(nativeClient, 'Retry only transport failures', 'transport retry discipline');
+expectContains(nativeClient, 'response = await fetch(url, init)', 'same-key transport retry');
 
 const integrity = read('tests/business-integrity.spec.js');
 expectContains(integrity, 'registerPurchasingFinancialRuntimeCertification', 'purchasing accounting certification');
@@ -84,4 +103,4 @@ expectContains(posting, "const tx=await db.transaction('write')", 'atomic automa
 expectContains(posting, 'postSourceJournalWithExecutor', 'transaction-aware automatic posting');
 expectContains(posting, 'verifyExistingJournal', 'source-journal evidence replay verification');
 
-console.log('POS production certification contract passed: native ownership, cross-module runtime suites, multi-branch read/write isolation, RBAC, dispatch, atomic accounting posting, and period-correct ledger evidence are present.');
+console.log('POS production certification contract passed: native ownership, multi-branch read/write isolation, RBAC, durable mutation idempotency, dispatch, atomic accounting posting, and period-correct ledger evidence are present.');
