@@ -6,6 +6,7 @@ const { requirePermission } = require('../lib/permissions');
 // API keys bypass requirePermission after apiKeyAuth validates their scope.
 // Browser staff need inventory permission to inspect the same integration data.
 router.use(requirePermission('inventory'));
+router.use('/catalog-cleanup-dependencies', require('./catalog-cleanup-dependencies'));
 
 const CONTRACT_VERSION = '2026-08-23.1';
 
