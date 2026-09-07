@@ -24,6 +24,7 @@ const requiredSuites = [
   'tests/security-boundaries.spec.js',
   'tests/multi-branch-read-integrity.spec.js',
   'tests/operation-idempotency.spec.js',
+  'tests/lifecycle-concurrency.spec.js',
   'tests/pos-financial-runtime.js',
   'tests/accounting-ledger-integrity.spec.js',
   'tests/accounting-source-sync-rbac.spec.js',
@@ -60,6 +61,7 @@ expectContains(branchGuard, "sourceBranch('work_orders'", 'repair detail IDOR gu
 expectContains(branchGuard, "sourceBranch('rental_agreements'", 'rental detail IDOR guard');
 expectContains(branchGuard, "sourceBranch('purchase_orders'", 'purchase-order detail IDOR guard');
 expectContains(branchGuard, "require('./operation-idempotency')", 'idempotency placement after branch authorization');
+expectContains(branchGuard, "require('./lifecycle-concurrency-guard')", 'lifecycle concurrency placement after idempotency');
 
 const idempotency = read('routes/operation-idempotency.js');
 expectContains(idempotency, 'UNIQUE(scope,idempotency_key)', 'durable idempotency uniqueness');
@@ -72,6 +74,22 @@ const idempotencyTest = read('tests/operation-idempotency.spec.js');
 expectContains(idempotencyTest, 'same authenticated mutation and key replays the stored result instead of executing twice', 'runtime duplicate submission certification');
 expectContains(idempotencyTest, "expect(second.replayed).toBe('true')", 'runtime replay certification');
 expectContains(idempotencyTest, 'Different payload', 'idempotency-key payload mismatch certification');
+
+const concurrency = read('routes/lifecycle-concurrency-guard.js');
+expectContains(concurrency, 'lifecycle_operation_locks', 'durable lifecycle lock table');
+expectContains(concurrency, 'resource_key TEXT PRIMARY KEY', 'single-owner lifecycle lock');
+expectContains(concurrency, "datetime('now','+45 seconds')", 'crash-expiring lifecycle lease');
+expectContains(concurrency, "purchase_order:${id}:receiving", 'purchase receiving serialization');
+expectContains(concurrency, "rental_agreement:${id}:lifecycle", 'rental lifecycle serialization');
+expectContains(concurrency, "work_order:${id}:financial_lifecycle", 'repair lifecycle serialization');
+expectContains(concurrency, "transaction:${id}:return", 'return serialization');
+expectContains(concurrency, "control:'lifecycle_concurrency'", 'concurrency denial evidence');
+expectContains(concurrency, "control:'operation_identity_required'", 'creation operation identity enforcement');
+
+const concurrencyTest = read('tests/lifecycle-concurrency.spec.js');
+expectContains(concurrencyTest, 'distinct requests cannot concurrently own the same business lifecycle resource', 'runtime lifecycle race certification');
+expectContains(concurrencyTest, 'expect(winners).toHaveLength(1)', 'single lifecycle owner certification');
+expectContains(concurrencyTest, 'high-risk routes collapse onto authoritative lifecycle resource keys', 'resource-key mapping certification');
 
 const bootstrap = read('public/pos-native-runtime.js');
 expectContains(bootstrap, 'window.fetch = async function posProtectedFetch', 'legacy workspace mutation protection');
@@ -108,4 +126,4 @@ expectContains(posting, "const tx=await db.transaction('write')", 'atomic automa
 expectContains(posting, 'postSourceJournalWithExecutor', 'transaction-aware automatic posting');
 expectContains(posting, 'verifyExistingJournal', 'source-journal evidence replay verification');
 
-console.log('POS production certification contract passed: native ownership, multi-branch isolation, RBAC, global durable mutation idempotency, dispatch, atomic accounting posting, and period-correct ledger evidence are present.');
+console.log('POS production certification contract passed: native ownership, multi-branch isolation, RBAC, durable idempotency, resource-level lifecycle serialization, dispatch, atomic accounting posting, and period-correct ledger evidence are present.');
