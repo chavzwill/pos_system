@@ -93,3 +93,6 @@ router.use(async(req,res,next)=>{
 module.exports=router;
 module.exports.ensureSchema=ensureSchema;
 module.exports.resourceFor=resourceFor;
+module.exports.acquire=acquire;
+module.exports.release=release;
+module.exports.requiresRequestIdentity=requiresRequestIdentity;
