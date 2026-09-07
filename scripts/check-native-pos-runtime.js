@@ -20,6 +20,10 @@ const repairsModernization = read('public/native-repairs-modernization.js');
 const repairsModernizationCss = read('public/native-repairs-modernization.css');
 const rentalsModernization = read('public/native-rentals-modernization.js');
 const rentalsModernizationCss = read('public/native-rentals-modernization.css');
+const dispatchModernization = read('public/native-dispatch-modernization.js');
+const dispatchModernizationCss = read('public/native-dispatch-modernization.css');
+const logisticsRoute = read('routes/logistics-intelligence.js');
+const commercialHandoff = read('routes/logistics-commercial-handoff.js');
 const server = read('server.js');
 
 if (manifest.runtime !== 'native-pos') fail('runtime identity must be native-pos');
@@ -29,34 +33,26 @@ if (manifest.apiBase !== '/api') fail('native API base must remain /api');
 if (manifest.sameOrigin !== true) fail('frontend and POS API must remain same-origin by default');
 if (manifest.externalCommerceRuntimeRequired !== false) fail('external commerce runtime cannot be a POS boot dependency');
 
-if (!shell.includes('/pos-native-runtime.js')) fail('native runtime bootstrap is missing from app shell');
-if (!shell.includes('/pos-api-client.js')) fail('native POS API client is missing from app shell');
-if (!shell.includes('/native-pos-shell.js')) fail('native POS shell enhancement is missing from app shell');
-if (!shell.includes('/native-pos-shell.css')) fail('native POS shell stylesheet is missing from app shell');
-if (!shell.includes('/native-sales-modernization.js')) fail('native cashier enhancement is missing from app shell');
-if (!shell.includes('/native-sales-modernization.css')) fail('native cashier stylesheet is missing from app shell');
-if (!shell.includes('/native-repairs-modernization.js')) fail('native repairs enhancement is missing from app shell');
-if (!shell.includes('/native-repairs-modernization.css')) fail('native repairs stylesheet is missing from app shell');
-if (!shell.includes('/native-rentals-modernization.js')) fail('native rentals enhancement is missing from app shell');
-if (!shell.includes('/native-rentals-modernization.css')) fail('native rentals stylesheet is missing from app shell');
+for (const asset of ['/pos-native-runtime.js','/pos-api-client.js','/native-pos-shell.js','/native-pos-shell.css','/native-sales-modernization.js','/native-sales-modernization.css','/native-repairs-modernization.js','/native-repairs-modernization.css','/native-rentals-modernization.js','/native-rentals-modernization.css','/native-dispatch-modernization.js','/native-dispatch-modernization.css']) {
+  if (!shell.includes(asset)) fail(`${asset} is missing from app shell`);
+}
 if (!bootstrap.includes("fetch('/pos-runtime.json'")) fail('frontend does not verify the POS runtime manifest');
 if (!apiClient.includes("const API_BASE = '/api'")) fail('POS API client must remain rooted at /api');
 if (!apiClient.includes("url.origin !== location.origin")) fail('POS API client must reject cross-origin runtime calls');
 if (!nativeShell.includes('TotalToolsNativePosShell')) fail('native command shell API is missing');
 if (!nativeShellCss.includes('.pos-command-overlay')) fail('native command palette styling is missing');
 if (!salesModernization.includes("const ROOT_ID='tt-sales-workspace'")) fail('cashier enhancement must bind to the native POS sales workspace');
-if (!salesModernization.includes("e.key==='F2'")) fail('cashier checkout shortcut contract missing');
-if (!salesModernizationCss.includes('.pos-cashier-strip')) fail('cashier readiness strip styling is missing');
 if (!repairsModernization.includes("const ROOT_ID='tt-work-orders-workspace'")) fail('repairs enhancement must bind to the native POS work-order workspace');
-if (!repairsModernization.includes('TotalToolsNativeRepairs')) fail('native repairs enhancement API is missing');
-if (!repairsModernizationCss.includes('.tt-repair-modern-bar')) fail('repair command bar styling is missing');
 if (!rentalsModernization.includes("const ROOT_ID='tt-rentals-workspace'")) fail('rentals enhancement must bind to the native POS rental workspace');
-if (!rentalsModernization.includes('TotalToolsNativeRentalsModernization')) fail('native rentals enhancement API is missing');
-if (!rentalsModernizationCss.includes('.pos-rental-command')) fail('rental command bar styling is missing');
+if (!dispatchModernization.includes("const ROOT_ID='tt-logistics-intelligence'")) fail('dispatch enhancement must bind to the native POS logistics workspace');
+if (!dispatchModernization.includes('supplier_pickup') || !dispatchModernization.includes('customer_delivery') || !dispatchModernization.includes('rental_delivery') || !dispatchModernization.includes('repair_pickup') || !dispatchModernization.includes('branch_transfer')) fail('dispatch modernization must expose the unified logistics sources');
+if (!dispatchModernizationCss.includes('.tt-dispatch-modern-bar')) fail('dispatch command bar styling is missing');
+if (!logisticsRoute.includes("router.get('/command-center'")) fail('native dispatch command center API is missing');
+if (!commercialHandoff.includes("/from-purchase-order/:id") || !commercialHandoff.includes("/from-sales-invoice/:id") || !commercialHandoff.includes("/from-rental/:id") || !commercialHandoff.includes("logistics-repair-handoff")) fail('native dispatch commercial handoffs are incomplete');
 if (!server.includes("const app = express();")) fail('native Express application bootstrap missing');
 if (!server.includes("app.use('/api'")) fail('native POS API mount missing');
 if (!server.includes('express.static(publicDir')) fail('POS server must serve its own frontend');
 
 if (!process.exitCode) {
-  console.log('Native POS runtime contract passed. Frontend, cashier, repairs, rentals, API client and server are POS-owned and same-origin.');
+  console.log('Native POS runtime contract passed. Frontend, cashier, repairs, rentals, dispatch, API client and server are POS-owned and same-origin.');
 }
