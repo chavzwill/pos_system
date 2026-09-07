@@ -73,6 +73,11 @@ expectContains(idempotencyTest, 'same authenticated mutation and key replays the
 expectContains(idempotencyTest, "expect(second.replayed).toBe('true')", 'runtime replay certification');
 expectContains(idempotencyTest, 'Different payload', 'idempotency-key payload mismatch certification');
 
+const bootstrap = read('public/pos-native-runtime.js');
+expectContains(bootstrap, 'window.fetch = async function posProtectedFetch', 'legacy workspace mutation protection');
+expectContains(bootstrap, "headers.set('Idempotency-Key', newKey())", 'global mutation idempotency key');
+expectContains(bootstrap, 'Retry transport ambiguity once with the exact same idempotency key', 'global transport retry discipline');
+
 const nativeClient = read('public/pos-api-client.js');
 expectContains(nativeClient, "init.headers['Idempotency-Key']", 'native mutation idempotency key');
 expectContains(nativeClient, 'Retry only transport failures', 'transport retry discipline');
@@ -103,4 +108,4 @@ expectContains(posting, "const tx=await db.transaction('write')", 'atomic automa
 expectContains(posting, 'postSourceJournalWithExecutor', 'transaction-aware automatic posting');
 expectContains(posting, 'verifyExistingJournal', 'source-journal evidence replay verification');
 
-console.log('POS production certification contract passed: native ownership, multi-branch read/write isolation, RBAC, durable mutation idempotency, dispatch, atomic accounting posting, and period-correct ledger evidence are present.');
+console.log('POS production certification contract passed: native ownership, multi-branch isolation, RBAC, global durable mutation idempotency, dispatch, atomic accounting posting, and period-correct ledger evidence are present.');
