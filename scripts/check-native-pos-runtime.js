@@ -55,7 +55,14 @@ if (!bootstrap.includes("fetch('/pos-runtime.json'")) fail('frontend does not ve
 if (!apiClient.includes("if (value.startsWith('/api/')) return value")) fail('POS API client must remain rooted at /api');
 if (!apiClient.includes('POS native API client only accepts same-origin paths')) fail('POS API client must reject cross-origin runtime calls');
 if (!apiClient.includes("init.headers['Idempotency-Key']")) fail('native mutation client must attach durable idempotency keys');
-if (!apiClient.includes('Retry only transport failures')) fail('native mutation retries must be limited to ambiguous transport failures');
+if (!apiClient.includes('const nativeFetch = window.fetch.bind(window)')) fail('native API client must retain an unwrapped transport for its own requests');
+if (!apiClient.includes('window.fetch = protectedDirectFetch')) fail('direct same-origin API mutations must be intercepted by the durable mutation layer');
+if (!apiClient.includes("response.status >= 500")) fail('ambiguous server failures must preserve pending mutation identity');
+if (!apiClient.includes('operation_idempotency_outcome_unknown')) fail('native client must recognize unresolved idempotency outcomes');
+if (!apiClient.includes("'/api/employees/login'")) fail('authentication must remain outside business-operation idempotency interception');
+const apiClientIndex = shell.indexOf('/pos-api-client.js');
+const appShellIndex = shell.indexOf('/app-shell.js');
+if (apiClientIndex < 0 || appShellIndex < 0 || apiClientIndex > appShellIndex) fail('POS API protection must load before workspace shell code');
 if (!branchGuard.includes("require('./operation-idempotency')")) fail('server mutation idempotency must run after branch authorization');
 if (!idempotency.includes('UNIQUE(scope,idempotency_key)')) fail('durable operation idempotency storage is missing');
 if (!nativeShell.includes('TotalToolsNativePosShell')) fail('native command shell API is missing');
@@ -90,5 +97,5 @@ if (!server.includes("app.use('/api'")) fail('native POS API mount missing');
 if (!server.includes('express.static(publicDir')) fail('POS server must serve its own frontend');
 
 if (!process.exitCode) {
-  console.log('Native POS runtime contract passed. POS-owned same-origin workspaces and durable mutation retry protection are present.');
+  console.log('Native POS runtime contract passed. POS-owned same-origin workspaces and durable mutation protection are present, including direct fetch interception.');
 }
