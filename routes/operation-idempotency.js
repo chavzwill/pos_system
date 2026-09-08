@@ -5,6 +5,7 @@ const { db } = require('../database');
 
 const router = express.Router();
 let readyPromise = null;
+const ACTIVE_WINDOW_SECONDS = 15;
 
 function ensureSchema() {
   if (readyPromise) return readyPromise;
@@ -38,12 +39,7 @@ function stable(value) {
 }
 
 function hashRequest(req) {
-  const payload = JSON.stringify({
-    method: req.method,
-    path: req.path,
-    query: stable(req.query || {}),
-    body: stable(req.body || {}),
-  });
+  const payload = JSON.stringify({ method: req.method, path: req.path, query: stable(req.query || {}), body: stable(req.body || {}) });
   return crypto.createHash('sha256').update(payload).digest('hex');
 }
 
@@ -53,12 +49,12 @@ function actor(req) {
   return { type: 'anonymous', id: null };
 }
 
-function mutation(req) {
-  return ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method);
-}
-
-function keyFrom(req) {
-  return String(req.get('Idempotency-Key') || req.get('X-Idempotency-Key') || '').trim();
+function mutation(req) { return ['POST', 'PATCH', 'PUT', 'DELETE'].includes(req.method); }
+function keyFrom(req) { return String(req.get('Idempotency-Key') || req.get('X-Idempotency-Key') || '').trim(); }
+function ageSeconds(row) {
+  if (!row?.created_at) return null;
+  const raw = String(row.created_at).includes('T') ? String(row.created_at) : String(row.created_at).replace(' ', 'T') + 'Z';
+  const ms = Date.parse(raw); return Number.isFinite(ms) ? Math.max(0, Math.floor((Date.now() - ms) / 1000)) : null;
 }
 
 router.use(async (req, res, next) => {
@@ -82,51 +78,77 @@ router.use(async (req, res, next) => {
         args: [scope, key, requestHash, req.method, req.path, who.type, who.id],
       });
     } catch (error) {
-      const { rows: [existing] } = await db.execute({
-        sql: 'SELECT * FROM operation_idempotency WHERE scope=? AND idempotency_key=?',
-        args: [scope, key],
-      });
+      const { rows: [existing] } = await db.execute({ sql: 'SELECT * FROM operation_idempotency WHERE scope=? AND idempotency_key=?', args: [scope, key] });
       if (!existing) throw error;
       if (existing.request_hash !== requestHash) {
-        return res.status(409).json({
-          error: 'This Idempotency-Key was already used with a different request payload',
-          control: 'operation_idempotency',
-        });
+        return res.status(409).json({ error: 'This Idempotency-Key was already used with a different request payload', control: 'operation_idempotency' });
       }
       if (existing.state === 'completed') {
         res.set('Idempotency-Replayed', 'true');
         const status = Number(existing.response_status || 200);
         let payload = null;
         try { payload = JSON.parse(existing.response_json || 'null'); } catch (_) { payload = null; }
+        if (status === 204) return res.status(204).end();
         return res.status(status).json(payload);
       }
+      const age = ageSeconds(existing);
+      if (age != null && age < ACTIVE_WINDOW_SECONDS) res.set('Retry-After', String(Math.max(1, ACTIVE_WINDOW_SECONDS - age)));
       return res.status(409).json({
-        error: 'An operation with this Idempotency-Key is already in progress. Do not submit it again with a new key until its outcome is known.',
-        control: 'operation_idempotency_in_progress',
+        error: age != null && age >= ACTIVE_WINDOW_SECONDS
+          ? 'The earlier operation did not record a final receipt. Its business outcome is unknown. Verify the related sale, receipt, rental, repair, inventory or dispatch record before starting a new operation.'
+          : 'An operation with this Idempotency-Key is already in progress. Wait for its outcome and retry with the same operation identity.',
+        control: age != null && age >= ACTIVE_WINDOW_SECONDS ? 'operation_idempotency_outcome_unknown' : 'operation_idempotency_in_progress',
+        idempotency_key: key,
+        age_seconds: age,
       });
     }
 
-    let captured = null;
+    let captured = false;
+    let bypass = false;
     const originalJson = res.json.bind(res);
-    res.json = function idempotentJson(payload) {
-      if (captured) return originalJson(payload);
-      captured = payload;
-      const status = res.statusCode || 200;
-      Promise.resolve(db.execute({
-        sql: `UPDATE operation_idempotency
-              SET state='completed',response_status=?,response_json=?,completed_at=CURRENT_TIMESTAMP
+    const originalEnd = res.end.bind(res);
+
+    async function persistReceipt(status, payload) {
+      await db.execute({
+        sql: `UPDATE operation_idempotency SET state='completed',response_status=?,response_json=?,completed_at=CURRENT_TIMESTAMP
               WHERE scope=? AND idempotency_key=? AND state='in_progress'`,
         args: [status, JSON.stringify(payload ?? null), scope, key],
-      })).then(() => {
+      });
+    }
+
+    async function receiptFailure(error) {
+      console.error('Unable to persist idempotent operation response:', error && (error.stack || error.message || error));
+      if (res.headersSent) return originalEnd();
+      bypass = true;
+      res.status(500);
+      return originalJson({
+        error: 'The business operation may have completed, but its retry receipt could not be persisted. Verify the operation before retrying.',
+        control: 'operation_idempotency_receipt_failure',
+        idempotency_key: key,
+      });
+    }
+
+    res.json = function idempotentJson(payload) {
+      if (bypass || captured) return originalJson(payload);
+      captured = true;
+      const status = res.statusCode || 200;
+      Promise.resolve(persistReceipt(status, payload)).then(() => {
+        bypass = true;
         res.set('Idempotency-Replayed', 'false');
         originalJson(payload);
-      }).catch(error => {
-        console.error('Unable to persist idempotent operation response:', error && (error.stack || error.message || error));
-        if (!res.headersSent) originalJson({
-          error: 'The business operation may have completed, but its retry receipt could not be persisted. Verify the operation before retrying.',
-          control: 'operation_idempotency_receipt_failure',
-        });
-      });
+      }).catch(receiptFailure);
+      return res;
+    };
+
+    res.end = function idempotentEnd(chunk, encoding, callback) {
+      if (bypass || captured) return originalEnd(chunk, encoding, callback);
+      captured = true;
+      const status = res.statusCode || 200;
+      Promise.resolve(persistReceipt(status, null)).then(() => {
+        bypass = true;
+        res.set('Idempotency-Replayed', 'false');
+        originalEnd(chunk, encoding, callback);
+      }).catch(receiptFailure);
       return res;
     };
 
@@ -143,11 +165,10 @@ router.get('/operation-idempotency/:key', async (req, res) => {
     if (who.type === 'anonymous') return res.status(401).json({ error: 'Authentication required' });
     const { rows } = await db.execute({
       sql: `SELECT idempotency_key,method,path,state,response_status,created_at,completed_at
-            FROM operation_idempotency WHERE actor_type=? AND actor_id=? AND idempotency_key=?
-            ORDER BY id DESC LIMIT 20`,
+            FROM operation_idempotency WHERE actor_type=? AND actor_id=? AND idempotency_key=? ORDER BY id DESC LIMIT 20`,
       args: [who.type, who.id, req.params.key],
     });
-    res.json(rows);
+    res.json(rows.map(row => ({ ...row, age_seconds: row.state === 'in_progress' ? ageSeconds(row) : null })));
   } catch (error) {
     res.status(500).json({ error: error.message });
   }
