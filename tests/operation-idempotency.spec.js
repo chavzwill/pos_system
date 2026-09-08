@@ -25,6 +25,7 @@ async function api(cookie, method, path, body, key) {
   return {
     status: r.status,
     replayed: r.headers.get('Idempotency-Replayed'),
+    idempotencyKey: r.headers.get('Idempotency-Key'),
     body: await r.json().catch(() => null),
   };
 }
@@ -62,7 +63,12 @@ test.describe('Durable POS mutation idempotency', () => {
     expect(receipt.body?.some(row => row.state === 'completed' && row.response_status === 201)).toBe(true);
 
     const cleanupKey = `idem-security-group-cleanup-${stamp}`;
-    const cleanup = await api(cookie, 'DELETE', `/api/security-groups/${first.body.id}?reason=Operation%20idempotency%20certification%20cleanup`, undefined, cleanupKey);
+    const cleanupPath = `/api/security-groups/${first.body.id}?reason=Operation%20idempotency%20certification%20cleanup`;
+    const cleanup = await api(cookie, 'DELETE', cleanupPath, undefined, cleanupKey);
     expect([200, 204]).toContain(cleanup.status);
+
+    const cleanupReplay = await api(cookie, 'DELETE', cleanupPath, undefined, cleanupKey);
+    expect(cleanupReplay.status).toBe(cleanup.status);
+    expect(cleanupReplay.replayed).toBe('true');
   });
 });
