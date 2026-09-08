@@ -4,24 +4,17 @@ const path=require('path');
 const root=path.resolve(__dirname,'..');
 const runner=fs.readFileSync(path.join(root,'scripts/run-pos-disposable-release-certification.js'),'utf8');
 const focused=fs.readFileSync(path.join(root,'scripts/run-pos-disposable-certification.js'),'utf8');
+const portHelper=fs.readFileSync(path.join(root,'scripts/disposable-certification-port.js'),'utf8');
 const playwright=fs.readFileSync(path.join(root,'playwright.config.js'),'utf8');
-const helper=fs.readFileSync(path.join(root,'tests/test-base-url.js'),'utf8');
-const nativeCert=fs.readFileSync(path.join(root,'tests/native-pos-certification.spec.js'),'utf8');
-const securityCert=fs.readFileSync(path.join(root,'tests/security-boundaries.spec.js'),'utf8');
-const erpCert=fs.readFileSync(path.join(root,'tests/erp-intelligence.spec.js'),'utf8');
-const inventoryCert=fs.readFileSync(path.join(root,'tests/inventory-intelligence.spec.js'),'utf8');
-const reportsCert=fs.readFileSync(path.join(root,'tests/operational-reports.spec.js'),'utf8');
-const technicianCert=fs.readFileSync(path.join(root,'tests/technician-compensation.spec.js'),'utf8');
-const ledgerCert=fs.readFileSync(path.join(root,'tests/accounting-ledger-integrity.spec.js'),'utf8');
-const accountingRbacCert=fs.readFileSync(path.join(root,'tests/accounting-source-sync-rbac.spec.js'),'utf8');
-const posFinancialCert=fs.readFileSync(path.join(root,'tests/pos-financial-runtime.js'),'utf8');
+const sharedTarget=fs.readFileSync(path.join(root,'scripts/check-shared-test-target-contract.js'),'utf8');
+const activeTargetAudit=fs.readFileSync(path.join(root,'scripts/check-active-certification-targets.js'),'utf8');
 const need=(content,needle,label)=>{if(!content.includes(needle))throw new Error(`${label} missing: ${needle}`);};
 const forbid=(content,needle,label)=>{if(content.includes(needle))throw new Error(`${label} must not contain: ${needle}`);};
 
 need(runner,"POS_TEST_BASE_URL must not be set",'external target refusal');
 need(runner,"!inheritedDb.startsWith('file:')",'remote database refusal');
-need(runner,"Port ${certificationPort} is already in use or unavailable",'occupied-port refusal');
-need(runner,"POS_DISPOSABLE_PORT overrides are not supported",'legacy hard-coded port drift refusal');
+need(runner,"selectFreePort",'dynamic release port selection');
+need(runner,"POS_TEST_BASE_URL: certificationBaseURL",'release shared target injection');
 need(runner,"Playwright is not installed",'no-install dependency failure');
 need(runner,"fs.mkdtempSync",'isolated temporary state');
 need(runner,"npmCommand",'cross-platform npm invocation');
@@ -42,33 +35,26 @@ need(runner,"tests/rentals-integrity.spec.js",'rental runtime coverage');
 need(runner,"tests/repair-quality-integrity.spec.js",'repair runtime coverage');
 need(runner,"tests/service-completion-integrity.spec.js",'service completion runtime coverage');
 need(runner,"fs.rmSync(tempRoot",'temporary state cleanup');
-need(focused,"Port ${certificationPort} is already in use or unavailable",'focused disposable occupied-port refusal');
-need(playwright,"reuseExistingServer: disposableCertification ? false : true",'Playwright disposable server ownership');
+forbid(runner,"const certificationPort = '3001'",'release fixed port');
+forbid(runner,"POS_DISPOSABLE_PORT overrides are not supported",'release arbitrary-port refusal');
+
+need(focused,"selectFreePort",'focused dynamic port selection');
+need(focused,"POS_TEST_BASE_URL: certificationBaseURL",'focused shared target injection');
+forbid(focused,"const certificationPort = '3001'",'focused fixed port');
+forbid(focused,"POS_DISPOSABLE_PORT overrides are not supported",'focused arbitrary-port refusal');
+
+need(portHelper,"server.listen(0,'127.0.0.1'",'OS-assigned free port selection');
+need(portHelper,"probePort",'selected-port availability verification');
+need(portHelper,"validatePort",'requested-port validation');
+
 need(playwright,"POS_DISPOSABLE_CERTIFICATION === 'YES'",'Playwright disposable mode detection');
+need(playwright,"Boolean(process.env.POS_TEST_BASE_URL) && !disposableCertification",'disposable local target ownership');
+need(playwright,"reuseExistingServer: disposableCertification ? false : true",'Playwright disposable server ownership');
 
-need(helper,"POS_TEST_BASE_URL",'shared test target helper');
-need(helper,"assertSafeMutationTarget",'shared mutation target guard');
-for(const [label,content] of [
-  ['native certification',nativeCert],
-  ['security certification',securityCert],
-  ['ERP intelligence certification',erpCert],
-  ['inventory intelligence certification',inventoryCert],
-  ['operational reports certification',reportsCert],
-  ['technician compensation certification',technicianCert],
-  ['accounting ledger certification',ledgerCert],
-  ['accounting RBAC certification',accountingRbacCert],
-  ['POS financial certification',posFinancialCert],
-]){
-  need(content,"./test-base-url.js",`${label} shared target`);
-  forbid(content,"http://localhost:3001",`${label} portability`);
-}
-for(const [label,content] of [
-  ['security certification',securityCert],
-  ['accounting ledger certification',ledgerCert],
-  ['accounting RBAC certification',accountingRbacCert],
-  ['POS financial certification',posFinancialCert],
-]){
-  need(content,"assertSafeMutationTarget",`${label} mutation target guard`);
-}
+need(sharedTarget,"check-active-certification-targets",'shared target graph audit integration');
+need(activeTargetAudit,"fixedTargetPattern",'active fixed-target detection');
+need(activeTargetAudit,"run-pos-disposable-release-certification.js",'release runner graph discovery');
+need(activeTargetAudit,"run-pos-disposable-certification.js",'focused runner graph discovery');
+need(activeTargetAudit,"repair-financial-runtime-helper.migrated.js",'migrated repair helper enforcement');
 
-console.log('Disposable release certification contract passed: isolated database/server ownership, occupied-port refusal, syntax/static gates, branch isolation, financial/accounting lifecycles, shared target plumbing across core, intelligence and financial certification suites, mutation-target guards, and cleanup are all required.');
+console.log('Disposable release certification contract passed: isolated database ownership, dynamic loopback server ownership, no-reuse Playwright startup, active target graph auditing, branch isolation, financial/accounting lifecycle coverage, and cleanup are all required.');
