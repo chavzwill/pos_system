@@ -15,16 +15,16 @@ async function protectSubmit(e){
   }else if(form.id==='tt-wo-qc'){
     const result=selectedSubmitter(e)?.value;
     if(result==='pass')options={title:'Record QC pass?',message:`This records a supervisor quality pass for ${workOrderLabel(form)}. Verify the operation, safety, finish and reported-issue checks before continuing.`,confirmLabel:'Record QC pass'};
-    if(result==='fail')options={title:'Record QC failure?',message:`This records a failed quality review for ${workOrderLabel(form)} and becomes technician/performance evidence that may require rework before closeout.`,confirmLabel:'Record QC failure',destructive:true};
+    if(result==='fail')options={title:'Record QC failure?',message:`This records a failed quality review for ${workOrderLabel(form)} and becomes technician/performance evidence that may require rework before closeout.`,confirmLabel:'Record QC failure',tone:'danger'};
   }else if(form.id==='tt-wo-comeback'){
     const fd=new FormData(form),confirmed=fd.get('confirmed')==='true';
-    options=confirmed?{title:'Confirm technician-attributable comeback?',message:`This permanently records the comeback review against ${workOrderLabel(form)} as technician-attributable performance evidence. Confirm only after the return/rework investigation is complete.`,confirmLabel:'Record confirmed comeback',destructive:true}:{title:'Clear comeback attribution?',message:`This records that the reviewed comeback is not technician-attributable. The reason remains part of the quality history.`,confirmLabel:'Record cleared review'};
+    options=confirmed?{title:'Confirm technician-attributable comeback?',message:`This permanently records the comeback review against ${workOrderLabel(form)} as technician-attributable performance evidence. Confirm only after the return/rework investigation is complete.`,confirmLabel:'Record confirmed comeback',tone:'danger'}:{title:'Clear comeback attribution?',message:`This records that the reviewed comeback is not technician-attributable. The reason remains part of the quality history.`,confirmLabel:'Record cleared review'};
   }else if(form.classList.contains('tt-rpi-action')){
     const action=selectedSubmitter(e)?.value;if(!action)return;
     const fd=new FormData(form),qty=Number(fd.get('quantity')||0),part=partLabel(form);
     const map={
       reserve:{title:'Reserve repair inventory?',message:`Reserve ${qty} unit(s) of ${part} for this work order. Available-to-promise inventory will be reduced.`,confirmLabel:'Reserve inventory'},
-      consume:{title:'Consume repair inventory?',message:`Consume ${qty} unit(s) of ${part}. This posts a physical inventory reduction against the repair and becomes inventory evidence.`,confirmLabel:'Consume inventory',destructive:true},
+      consume:{title:'Consume repair inventory?',message:`Consume ${qty} unit(s) of ${part}. This posts a physical inventory reduction against the repair and becomes inventory evidence.`,confirmLabel:'Consume inventory',tone:'danger'},
       return:{title:'Return repair part to stock?',message:`Return ${qty} unit(s) of ${part} to available inventory. Use this only for an eligible unused/returned repair part.`,confirmLabel:'Return to stock'},
       release:{title:'Release repair reservation?',message:`Release ${qty} reserved unit(s) of ${part}. Those units will become available to other demand again.`,confirmLabel:'Release reservation'}
     };options=map[action]||null;
