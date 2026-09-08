@@ -1,0 +1,31 @@
+'use strict';
+const fs=require('fs');
+const path=require('path');
+const root=path.resolve(__dirname,'..');
+const runner=fs.readFileSync(path.join(root,'scripts/run-pos-disposable-release-certification.js'),'utf8');
+const need=(needle,label)=>{if(!runner.includes(needle))throw new Error(`${label} missing: ${needle}`);};
+
+need("POS_TEST_BASE_URL must not be set",'external target refusal');
+need("!inheritedDb.startsWith('file:')",'remote database refusal');
+need("Playwright is not installed",'no-install dependency failure');
+need("fs.mkdtempSync",'isolated temporary state');
+need("npmCommand",'cross-platform npm invocation');
+need("['run', 'check:syntax']",'repository syntax gate');
+need("POS_TEST_ALLOW_MUTATIONS: 'YES'",'explicit disposable mutation authority');
+need("POS_BRANCH_TEST_USER: 'jdoe'",'branch-scoped runtime identity');
+need("branchPermissions.multi_branch_access===true",'branch authority assertion');
+need("tests/multi-branch-read-integrity.spec.js",'multi-branch read isolation runtime coverage');
+need("tests/purchase-order-hardening.spec.js",'purchase order hardening runtime coverage');
+need("tests/procurement-intelligence-integrity.spec.js",'procurement integrity runtime coverage');
+need("tests/loss-control-integrity.spec.js",'loss control runtime coverage');
+need("tests/technician-compensation.spec.js",'technician compensation runtime coverage');
+need("tests/erp-intelligence.spec.js",'ERP intelligence runtime coverage');
+need("tests/inventory-intelligence.spec.js",'inventory intelligence runtime coverage');
+need("tests/operational-reports.spec.js",'operational reports runtime coverage');
+need("tests/accounting-ledger-integrity.spec.js",'ledger runtime coverage');
+need("tests/rentals-integrity.spec.js",'rental runtime coverage');
+need("tests/repair-quality-integrity.spec.js",'repair runtime coverage');
+need("tests/service-completion-integrity.spec.js",'service completion runtime coverage');
+need("fs.rmSync(tempRoot",'temporary state cleanup');
+
+console.log('Disposable release certification contract passed: isolated database ownership, syntax/static gates, branch isolation, legacy release-gate suites, financial/accounting lifecycles, and cleanup are all required.');
