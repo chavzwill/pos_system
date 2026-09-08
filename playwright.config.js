@@ -24,6 +24,7 @@ if (existsSync(asoundStub)) {
 
 const baseURL = String(process.env.POS_TEST_BASE_URL || 'http://127.0.0.1:3001').replace(/\/$/, '');
 const externalServer = Boolean(process.env.POS_TEST_BASE_URL);
+const disposableCertification = process.env.POS_DISPOSABLE_CERTIFICATION === 'YES';
 
 module.exports = defineConfig({
   testDir: './tests',
@@ -38,11 +39,13 @@ module.exports = defineConfig({
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
   // Local certification owns its temporary native POS server. When an explicit
   // POS_TEST_BASE_URL is supplied (for a pre-existing staging/candidate host),
-  // Playwright must not start a second server or silently test the wrong code.
+  // Playwright must not start a second server. Disposable certification is even
+  // stricter: it must never reuse an already-running process on port 3001,
+  // because that could point mutation-heavy tests at the wrong database.
   webServer: externalServer ? undefined : {
     command: 'node server.js',
     url: baseURL,
-    reuseExistingServer: true,
+    reuseExistingServer: disposableCertification ? false : true,
     timeout: 15_000,
   },
 });
