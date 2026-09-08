@@ -26,6 +26,7 @@ const tempRoot = fs.mkdtempSync(path.join(os.tmpdir(), 'total-tools-pos-cert-'))
 const dbPath = path.join(tempRoot, 'pos-cert.db');
 const testPassword = process.env.POS_DISPOSABLE_TEST_PASSWORD || 'LocalCertificationOnly-2026!';
 const testPin = process.env.POS_DISPOSABLE_TEST_PIN || '246810';
+const branchPassword = process.env.POS_DISPOSABLE_BRANCH_PASSWORD || 'BranchCertificationOnly-2026!';
 
 const env = {
   ...process.env,
@@ -38,6 +39,8 @@ const env = {
   POS_TEST_PIN: testPin,
   POS_TEST_ALLOW_MUTATIONS: 'YES',
   POS_DISPOSABLE_CERTIFICATION: 'YES',
+  POS_BRANCH_TEST_USER: 'jdoe',
+  POS_BRANCH_TEST_PASSWORD: branchPassword,
 };
 delete env.VERCEL;
 delete env.POS_TEST_BASE_URL;
@@ -53,23 +56,62 @@ function run(label, command, args, extraEnv = {}) {
   if (result.status !== 0) process.exit(result.status || 1);
 }
 
+function capture(command, args, extraEnv = {}) {
+  const result = spawnSync(command, args, {
+    cwd: root,
+    encoding: 'utf8',
+    env: { ...env, ...extraEnv },
+  });
+  if (result.error) throw result.error;
+  if (result.status !== 0) {
+    if (result.stderr) process.stderr.write(result.stderr);
+    process.exit(result.status || 1);
+  }
+  return String(result.stdout || '').trim();
+}
+
 try {
-  run('Initialize isolated POS database and test administrator', process.execPath, ['-e', `
+  run('Initialize isolated POS database and certification identities', process.execPath, ['-e', `
     const bcrypt=require('bcryptjs');
     const {ensureReady,db}=require('./database');
     (async()=>{
       await ensureReady();
-      const passwordHash=await bcrypt.hash(process.env.POS_TEST_PASSWORD,12);
-      const pinHash=await bcrypt.hash(process.env.POS_TEST_PIN,12);
-      const result=await db.execute({sql:"UPDATE employees SET password=?,pin=?,must_change_password=0,active=1 WHERE username='admin'",args:[passwordHash,pinHash]});
-      if(Number(result.rowsAffected||0)!==1) throw new Error('Disposable admin bootstrap did not update exactly one employee');
+      const [adminPasswordHash,adminPinHash,branchPasswordHash]=await Promise.all([
+        bcrypt.hash(process.env.POS_TEST_PASSWORD,12),
+        bcrypt.hash(process.env.POS_TEST_PIN,12),
+        bcrypt.hash(process.env.POS_BRANCH_TEST_PASSWORD,12),
+      ]);
+      const adminResult=await db.execute({sql:"UPDATE employees SET password=?,pin=?,must_change_password=0,active=1 WHERE username='admin'",args:[adminPasswordHash,adminPinHash]});
+      if(Number(adminResult.rowsAffected||0)!==1) throw new Error('Disposable admin bootstrap did not update exactly one employee');
+      const branchResult=await db.execute({sql:"UPDATE employees SET password=?,must_change_password=0,active=1 WHERE username='jdoe'",args:[branchPasswordHash]});
+      if(Number(branchResult.rowsAffected||0)!==1) throw new Error('Disposable branch-scoped user bootstrap did not update exactly one employee');
       const {rows:[admin]}=await db.execute({sql:"SELECT e.id,e.username,e.security_group_id,e.default_branch_id,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.username='admin'",args:[]});
+      const {rows:[branchUser]}=await db.execute({sql:"SELECT e.id,e.username,e.security_group_id,e.default_branch_id,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.username='jdoe'",args:[]});
       if(!admin||!admin.security_group_id||!admin.default_branch_id) throw new Error('Disposable admin is missing security-group or branch authority');
-      const permissions=JSON.parse(admin.permissions||'{}');
-      if(!permissions.pos||!permissions.inventory||!permissions.work_orders) throw new Error('Disposable admin authority is incomplete');
-      console.log('PASS: isolated POS database initialized and admin credentials provisioned');
+      if(!branchUser||!branchUser.security_group_id||!branchUser.default_branch_id) throw new Error('Disposable branch-scoped user is missing security-group or branch authority');
+      const adminPermissions=JSON.parse(admin.permissions||'{}');
+      const branchPermissions=JSON.parse(branchUser.permissions||'{}');
+      if(!adminPermissions.pos||!adminPermissions.inventory||!adminPermissions.work_orders) throw new Error('Disposable admin authority is incomplete');
+      if(branchPermissions.multi_branch_access===true) throw new Error('Disposable branch test user unexpectedly has multi-branch access');
+      console.log('PASS: isolated POS database initialized with admin and branch-scoped certification identities');
     })().catch(err=>{console.error(err);process.exit(1);});
   `]);
+
+  const branchJson = capture(process.execPath, ['-e', `
+    const {ensureReady,db}=require('./database');
+    (async()=>{
+      await ensureReady();
+      const {rows}=await db.execute({sql:"SELECT id,branch_code FROM branches WHERE active=1 AND branch_code IN ('BR-001','BR-002') ORDER BY branch_code",args:[]});
+      const own=rows.find(r=>r.branch_code==='BR-001');
+      const other=rows.find(r=>r.branch_code==='BR-002');
+      if(!own||!other||Number(own.id)===Number(other.id)) throw new Error('Disposable certification requires two distinct active branches');
+      process.stdout.write(JSON.stringify({own:String(own.id),other:String(other.id)}));
+    })().catch(err=>{console.error(err);process.exit(1);});
+  `]);
+  const branchIds = JSON.parse(branchJson);
+  env.POS_BRANCH_TEST_OWN_BRANCH = branchIds.own;
+  env.POS_BRANCH_TEST_OTHER_BRANCH = branchIds.other;
+  console.log(`PASS: branch isolation fixtures resolved own=${branchIds.own}, other=${branchIds.other}`);
 
   run('Static production certification', process.execPath, ['scripts/check-pos-production-certification.js']);
   run('Native runtime architecture contract', process.execPath, ['scripts/check-native-pos-runtime.js']);
@@ -81,6 +123,7 @@ try {
     'tests/native-responsive-shell.spec.js',
     'tests/operations-acceptance.spec.js',
     'tests/security-boundaries.spec.js',
+    'tests/multi-branch-read-integrity.spec.js',
     'tests/operation-idempotency.spec.js',
     'tests/lifecycle-concurrency.spec.js',
     'tests/business-integrity.spec.js',
