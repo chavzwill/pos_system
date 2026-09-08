@@ -3,7 +3,9 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {requireAnyPermission}=require('../lib/permissions');
+const fieldExecution=require('./logistics-field-execution');
 
+router.use(async(req,res,next)=>{try{await fieldExecution.ensureSchema();next();}catch(e){res.status(500).json({error:'Protected dispatch execution initialization failed',detail:e.message});}});
 function actor(req){return req.employee?.id||req.user?.employee_id||null;}
 function problem(status,message){const e=new Error(message);e.status=status;throw e;}
 async function job(id,executor=db){const {rows:[row]}=await executor.execute({sql:'SELECT * FROM dispatch_jobs WHERE id=?',args:[id]});return row||null;}
@@ -29,6 +31,7 @@ async function cancel(req,res){
  }catch(e){await tx.rollback().catch(()=>{});res.status(e.status||400).json({error:e.message});}
 }
 
+router.post('/jobs/:id/assign',requireAnyPermission('transfers'),async(req,res,next)=>{try{const x=await execution(req.params.id);if(!x)return next();return res.status(409).json({error:'This dispatch already has an execution record. Use the controlled reassignment workflow instead of overwriting the assignment.'});}catch(e){res.status(400).json({error:e.message});}});
 router.post('/jobs/:id/cancel',requireAnyPermission('transfers'),cancel);
 router.post('/jobs/:id/status',requireAnyPermission('transfers'),async(req,res,next)=>{
  const status=String(req.body?.status||'');
