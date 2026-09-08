@@ -22,9 +22,11 @@ if (existsSync(asoundStub)) {
   launchOptions.env = { ...process.env, LD_LIBRARY_PATH: '/tmp' };
 }
 
-const baseURL = String(process.env.POS_TEST_BASE_URL || 'http://127.0.0.1:3001').replace(/\/$/, '');
-const externalServer = Boolean(process.env.POS_TEST_BASE_URL);
 const disposableCertification = process.env.POS_DISPOSABLE_CERTIFICATION === 'YES';
+const baseURL = String(process.env.POS_TEST_BASE_URL || 'http://127.0.0.1:3001').replace(/\/$/, '');
+// A disposable run may set POS_TEST_BASE_URL to its own dynamically selected
+// loopback port. That is still a locally owned server, not an external target.
+const externalServer = Boolean(process.env.POS_TEST_BASE_URL) && !disposableCertification;
 
 module.exports = defineConfig({
   testDir: './tests',
@@ -37,11 +39,11 @@ module.exports = defineConfig({
     launchOptions,
   },
   projects: [{ name: 'chromium', use: { ...devices['Desktop Chrome'] } }],
-  // Local certification owns its temporary native POS server. When an explicit
-  // POS_TEST_BASE_URL is supplied (for a pre-existing staging/candidate host),
-  // Playwright must not start a second server. Disposable certification is even
-  // stricter: it must never reuse an already-running process on port 3001,
-  // because that could point mutation-heavy tests at the wrong database.
+  // Local/disposable certification owns its native POS server. An explicit
+  // POS_TEST_BASE_URL only suppresses webServer startup for non-disposable runs
+  // such as a pre-existing staging/candidate host. Disposable certification
+  // never reuses a running process, regardless of which free loopback port it
+  // selected.
   webServer: externalServer ? undefined : {
     command: 'node server.js',
     url: baseURL,
