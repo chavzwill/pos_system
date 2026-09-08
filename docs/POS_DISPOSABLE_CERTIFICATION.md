@@ -20,9 +20,27 @@ The comprehensive release runner is the preferred pre-release command. It first 
 
 That broader runtime coverage includes native shell/responsive behavior, operations acceptance, RBAC/security boundaries, cross-branch read isolation, idempotency, lifecycle concurrency, POS financial integrity, accounting, purchase-order hardening, procurement governance, loss control, technician compensation, ERP/inventory/logistics intelligence, operational reporting, rentals, repairs, and service completion.
 
-Both runners refuse `POS_TEST_BASE_URL`. The comprehensive release runner also rejects any inherited non-`file:` database URL, so a remote Turso/libSQL target cannot accidentally become the mutation-test database.
+Both runners refuse an inherited `POS_TEST_BASE_URL`. The comprehensive release runner also rejects any inherited non-`file:` database URL, so a remote Turso/libSQL target cannot accidentally become the mutation-test database.
 
-Both runners also require exclusive ownership of local port `3001`. If another POS/server is already listening there, certification stops before creating or mutating fixtures. Playwright is configured not to reuse an existing server during disposable certification. This is intentional: a mutation-heavy release suite must never silently attach to a separately running POS instance.
+## Dynamic local server ownership
+
+Disposable certification no longer depends on port `3001`. Before creating fixtures, the runner selects a free loopback port, verifies that it can bind that port, and then injects the exact same target into:
+
+- `PORT` for the native POS server
+- `POS_TEST_BASE_URL` for Playwright and direct runtime clients
+- the shared `tests/test-base-url.js` helper used by active certification suites
+
+Playwright is configured not to reuse an existing server during disposable certification. A mutation-heavy release suite therefore owns both its temporary database and its local HTTP server even when another developer POS is already running on port `3001`.
+
+An optional explicit local port can be requested when needed:
+
+```bash
+POS_DISPOSABLE_PORT=34127 node scripts/run-pos-disposable-release-certification.js
+```
+
+The override must be a valid non-privileged local port and must be free. If it is occupied, certification stops before test fixtures are created.
+
+The static target contracts also walk the active certification import graph and fail if a reachable suite reintroduces a fixed `localhost:3001` or `127.0.0.1:3001` target outside the single shared fallback helper.
 
 The temporary database is removed automatically after the run. To retain it for failure investigation only:
 
@@ -38,22 +56,21 @@ POS_DISPOSABLE_TEST_PIN='246810' \
 node scripts/run-pos-disposable-release-certification.js
 ```
 
-`POS_DISPOSABLE_PORT` is intentionally not supported while legacy release tests still address port `3001` directly. Supporting arbitrary ports before those tests are fully migrated would create a risk that part of the suite talks to a different server than the one owning the disposable database.
-
 ## Safety rules
 
 This workflow must remain fail-closed:
 
 - never point it at production or a shared database
-- never set `POS_TEST_BASE_URL`
+- never pass an inherited external `POS_TEST_BASE_URL`
 - never use a remote/non-local database
-- never run while another process owns port `3001`
 - never reuse a pre-existing server for disposable certification
+- require the selected loopback port to be bindable before fixture creation
+- require active mutation-capable suites to use the shared target and mutation guard
 - never silently install dependencies or browser binaries
 - never treat a retained throwaway database as production evidence
 - never promote a release solely because disposable certification passed; release-adjacent backup rehearsal, read-only hosted checks, and manual acceptance still apply
 
-The static `scripts/check-disposable-release-certification-contract.js` guard exists so future edits cannot quietly remove isolated database/server ownership, occupied-port refusal, branch-isolation coverage, legacy release suites, financial/accounting suites, or cleanup requirements.
+The static `scripts/check-disposable-release-certification-contract.js`, `scripts/check-shared-test-target-contract.js`, and `scripts/check-active-certification-targets.js` guards exist so future edits cannot quietly remove isolated database/server ownership, dynamic target consistency, branch-isolation coverage, legacy release suites, financial/accounting suites, mutation safety, or cleanup requirements.
 
 ## Why this exists
 
