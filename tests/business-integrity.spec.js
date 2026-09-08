@@ -3,17 +3,16 @@ import { registerPurchasingFinancialRuntimeCertification } from './purchasing-fi
 import { registerRentalFinancialRuntimeCertification } from './rental-financial-runtime-helper.js';
 import { registerRepairFinancialRuntimeCertification } from './repair-financial-runtime-helper.js';
 import { registerDispatchFieldRuntimeCertification } from './dispatch-field-runtime-helper.js';
-
-const BASE = 'http://localhost:3001';
+import { TEST_BASE_URL as BASE } from './test-base-url.js';
 
 async function loginCookie() {
+  const username = process.env.POS_TEST_USER;
+  const password = process.env.POS_TEST_PASSWORD;
+  if (!username || !password) throw new Error('POS_TEST_USER and POS_TEST_PASSWORD are required');
   const r = await fetch(`${BASE}/api/employees/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      username: process.env.POS_TEST_USER || 'admin',
-      password: process.env.POS_TEST_PASSWORD || '123456',
-    }),
+    body: JSON.stringify({ username, password }),
   });
   expect(r.status).toBe(200);
   return (r.headers.get('set-cookie') || '').split(';')[0];
