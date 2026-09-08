@@ -8,8 +8,10 @@ function selectedText(select){return select?.selectedOptions?.[0]?.textContent?.
 function clickOptions(button){
   const job=jobLabel(button),card=cardFor(button);
   if(button.matches('[data-field-assign]')){
-    const driver=selectedText(card?.querySelector('[data-driver]')),vehicle=selectedText(card?.querySelector('[data-vehicle]'));
-    return {title:'Confirm driver and vehicle assignment?',message:`${job} will be assigned to ${driver||'the selected driver'} using ${vehicle||'the selected vehicle'}. This establishes operational responsibility for the dispatch execution.`,confirmLabel:'Confirm assignment',tone:'warning'};
+    const driverSelect=card?.querySelector('[data-driver]'),vehicleSelect=card?.querySelector('[data-vehicle]');
+    if(!driverSelect?.value||!vehicleSelect?.value)return null;
+    const driver=selectedText(driverSelect),vehicle=selectedText(vehicleSelect);
+    return {title:'Confirm driver and vehicle assignment?',message:`${job} will be assigned to ${driver} using ${vehicle}. This establishes operational responsibility for the dispatch execution.`,confirmLabel:'Confirm assignment',tone:'warning'};
   }
   if(button.matches('[data-stage]')){
     const action=button.dataset.stage;
@@ -50,9 +52,10 @@ async function protectSubmit(e){
   form.dataset[BYPASS]='1';
   try{form.requestSubmit(submitter instanceof HTMLButtonElement||submitter instanceof HTMLInputElement?submitter:undefined)}finally{queueMicrotask(()=>delete form.dataset[BYPASS])}
 }
+function matchesAndDescendants(scope,selector){const out=[];if(scope?.matches?.(selector))out.push(scope);scope?.querySelectorAll?.(selector).forEach(node=>out.push(node));return out}
 function enhance(scope=document){
-  scope.querySelectorAll?.('#tt-logistics-intelligence [data-field-execution]').forEach(panel=>{panel.dataset.ttProtectedDispatch='1';panel.setAttribute('aria-label','Protected dispatch field execution controls')});
-  scope.querySelectorAll?.('#tt-logistics-intelligence [data-field-assign],#tt-logistics-intelligence [data-stage],#tt-logistics-intelligence [data-complete]').forEach(button=>button.dataset.ttProtectedAction='1');
+  matchesAndDescendants(scope,'#tt-logistics-intelligence [data-field-execution]').forEach(panel=>{panel.dataset.ttProtectedDispatch='1';panel.setAttribute('aria-label','Protected dispatch field execution controls')});
+  matchesAndDescendants(scope,'#tt-logistics-intelligence [data-field-assign],#tt-logistics-intelligence [data-stage],#tt-logistics-intelligence [data-complete]').forEach(button=>button.dataset.ttProtectedAction='1');
   const modal=scope.matches?.('#tt-field-modal')?scope:scope.querySelector?.('#tt-field-modal');
   if(modal){const form=modal.querySelector('#tt-field-form'),title=modal.querySelector('h3')?.textContent||'';if(form&&modalOptions(form)){form.dataset.ttProtectedDispatchForm='1';form.setAttribute('aria-label',`${title} — protected dispatch action`)}}
 }
