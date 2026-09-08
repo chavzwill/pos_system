@@ -44,6 +44,7 @@ function referenceText(error){return error?.requestId?`Reference: ${error.reques
 function setInlineError(form,message,error){
   const box=form?.querySelector('#shell-login-error,.tt-auth-error');if(!box)return;
   box.textContent='';box.setAttribute('role','alert');box.setAttribute('aria-live','assertive');
+  if(!message)return;
   const msg=document.createElement('div');msg.textContent=message;box.appendChild(msg);
   const ref=referenceText(error);if(ref){const small=document.createElement('small');small.textContent=ref;box.appendChild(small)}
 }
@@ -57,7 +58,7 @@ function passwordChangeView(employee){
   form?.querySelector('[data-auth-signout]')?.addEventListener('click',signOut);
   requestAnimationFrame(()=>form?.querySelector('input')?.focus());
 }
-function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}
+function escapeHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]))}
 function strongEnough(v){const p=String(v||'');return p.length>=12&&/[a-z]/.test(p)&&/[A-Z]/.test(p)&&/\d/.test(p)&&/[^A-Za-z0-9]/.test(p)}
 async function changePassword(event,employee){
   event.preventDefault();event.stopImmediatePropagation();
@@ -89,8 +90,8 @@ async function interceptLogin(event){
     const {data}=await safeRequest(LOGIN_ENDPOINT,{method:'POST',body:JSON.stringify({username,password}),timeout:15000});
     if(Number(data?.must_change_password)===1){delete form.dataset.ttAuthBusy;passwordChangeView(data);return}
     report('login_success','Employee login succeeded; reloading authenticated shell.');
-    // Do not hot-swap the entire authenticated application from inside the login submit stack.
-    // A clean navigation guarantees all deferred runtimes initialize against the authenticated DOM once.
+    // Do not hot-swap the authenticated application from inside the login submit stack.
+    // A clean navigation makes every deferred runtime initialize once against authenticated DOM.
     location.reload();
   }catch(error){
     report('login_failed',`${error?.code||error?.status||''} ${error?.message||error}`);
@@ -111,6 +112,13 @@ function fatalRecovery(message,detail){
   r.querySelector('small').textContent=detail?String(detail).slice(0,500):'';
   r.querySelector('[data-retry]').onclick=()=>location.reload();r.querySelector('[data-signout]').onclick=signOut;
 }
+function forcedPasswordSessionRecovery(){
+  const r=root();if(!r||r.dataset.ttPasswordRecovery==='1')return;
+  const empty=r.querySelector('.shell-empty');if(!empty||!/password change required/i.test(empty.textContent||''))return;
+  r.dataset.ttPasswordRecovery='1';fatalShown=true;r.className='';
+  r.innerHTML=`<section class="tt-shell-recovery" role="alert"><div class="shell-mark">TT</div><span class="tt-auth-eyebrow">Password update required</span><h1>Finish securing this account.</h1><p>Your previous sign-in created a protected session that cannot open operational workspaces until the password is changed. Sign out once, then sign back in; the POS will take you directly to the required password-change screen.</p><div><button type="button" data-signout>Continue securely</button></div><small>No sale, inventory, rental, repair, purchasing, finance or dispatch action has been started by this recovery step.</small></section>`;
+  r.querySelector('[data-signout]').onclick=signOut;
+}
 function shellNotReady(){const r=root();return !r||r.classList.contains('shell-loading')||(!r.classList.contains('shell-app')&&!document.getElementById('shell-login')&&!document.getElementById('tt-password-change'))}
 window.addEventListener('error',event=>{
   const detail=event?.error?.stack||event?.message||'Unknown client error';report('window_error',detail);
@@ -120,5 +128,8 @@ window.addEventListener('unhandledrejection',event=>{
   const reason=event?.reason,detail=reason?.stack||reason?.message||String(reason||'Unhandled promise rejection');report('unhandled_rejection',detail);
   if(shellNotReady())fatalRecovery('The POS encountered an unexpected startup failure. Retry the workspace or sign out safely.',detail);else nonFatalNotice('A background operation failed. Verify the current record before repeating the action.',detail);
 });
+const recoveryObserver=new MutationObserver(()=>forcedPasswordSessionRecovery());
+if(document.documentElement)recoveryObserver.observe(document.documentElement,{childList:true,subtree:true});
+forcedPasswordSessionRecovery();
 setTimeout(()=>{const r=root();if(r?.classList.contains('shell-loading')){report('shell_boot_timeout','Fast shell remained in loading state for more than 15 seconds.');fatalRecovery('The POS took too long to start. Check the connection and retry.','Startup timeout after 15 seconds.')}},15000);
 })();
