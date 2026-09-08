@@ -1,0 +1,68 @@
+/* Total Tools POS — premium micro-detail and brand-asset pass.
+   Loaded after the canonical 2026 visual layers. No workflow behavior is changed here. */
+
+/* Real approved Total Tools identity in the persistent shell. */
+.shell-brand{min-height:132px!important;padding:14px 14px 12px!important;background:#fff!important;border-bottom:4px solid var(--tt26-yellow)!important;box-shadow:inset 0 -1px 0 rgba(7,61,37,.08)!important}
+.shell-brand::before{content:""!important;display:block!important;width:100%!important;height:82px!important;background:url('/total-tools-brand-mark.webp') left center/contain no-repeat!important}
+.shell-brand::after{content:"SALES • RENTAL • REPAIRS • ELECTRICAL"!important;margin-top:7px!important;color:var(--tt26-green-deep)!important;font-size:7.5px!important;letter-spacing:.09em!important;font-weight:900!important}
+.shell-brand span{margin-top:4px!important;color:#66766c!important;font-size:9px!important;font-weight:750!important}.shell-brand strong{display:none!important}
+.shell-sidebar{background:linear-gradient(180deg,#073d25 0%,#06331f 72%,#052819 100%)!important}
+
+/* Login uses the approved identity instead of a generic TT tile. */
+.shell-login__brand>div::before{content:"";display:block;width:min(250px,72vw);height:154px;margin-bottom:26px;border-radius:18px;background:#fff url('/total-tools-brand-mark.webp') center/90% auto no-repeat;box-shadow:0 24px 56px rgba(0,0,0,.18);position:relative;z-index:2}
+.shell-login__brand .shell-mark{display:none!important}
+
+/* Shared interaction floor. */
+button,[role="button"],a[href]{-webkit-tap-highlight-color:transparent}
+button:not(:disabled),[role="button"]:not([aria-disabled="true"]){cursor:pointer}
+button:disabled,[aria-disabled="true"]{cursor:not-allowed!important;filter:saturate(.55);opacity:.5!important}
+button:active:not(:disabled){transform:translateY(1px)}
+input,select,textarea{color:var(--tt26-ink);background:#fff;border-color:var(--tt26-line-strong)}
+input::placeholder,textarea::placeholder{color:#8a968f;opacity:1}
+input:hover,select:hover,textarea:hover{border-color:#aebeb3}
+input:focus,select:focus,textarea:focus{border-color:var(--tt26-green)!important;box-shadow:0 0 0 4px rgba(8,122,59,.08)!important}
+
+/* Dense data stays operational, but no longer looks legacy. */
+.tt-inv__table,.tt-rent__table,.tt-purch__table,.tt-aiacct-table,.tt-ledger table{font-variant-numeric:tabular-nums}
+.tt-inv__table th,.tt-rent__table th,.tt-purch__table th,.tt-aiacct-table th,.tt-ledger th{background:#f5f8f5!important;color:#5e6d63!important;font-size:9px!important;font-weight:850!important;letter-spacing:.075em!important;border-bottom:1px solid var(--tt26-line-strong)!important}
+.tt-inv__table td,.tt-rent__table td,.tt-purch__table td,.tt-aiacct-table td,.tt-ledger td{border-color:#e8ede9!important;color:#28352d!important}
+.tt-inv__row:hover,.tt-rent__row:hover,.tt-purch__row:hover{background:#f4faf6!important}
+.tt-inv__row.is-selected,.tt-rent__row.is-selected,.tt-purch__row.is-selected{background:#eaf6ee!important;box-shadow:inset 4px 0 0 var(--tt26-green)}
+
+/* Filters and toolbars read as one system. */
+.tt-inv__toolbar,.tt-rent__toolbar,.tt-purch__toolbar,.tt-ledger__toolbar,.tt-aiacct__toolbar,.tt-crm__toolbar,.tt-admin__toolbar{background:#f7f9f6!important;border-color:var(--tt26-line)!important}
+.tt-inv__toolbar input,.tt-inv__toolbar select,.tt-rent__toolbar input,.tt-rent__toolbar select,.tt-purch__toolbar input,.tt-purch__toolbar select,.tt-ledger__toolbar input,.tt-ledger__toolbar select,.tt-crm__toolbar input,.tt-admin__toolbar input{min-height:40px!important;border:1px solid var(--tt26-line-strong)!important;border-radius:10px!important;background:#fff!important}
+
+/* Consistent semantic badges — border + text ensure state is never color-only. */
+.tt-rent__status,.tt-wo-pill,.tt-dispatch-source-badge,.tt-sales__tx em{border:1px solid #d6e1da!important;border-radius:999px!important;background:#f5f8f6!important;color:#4f6056!important;font-weight:850!important}
+
+/* POS checkout rail — strongest decision region. */
+.tt-sales__cart{position:relative!important;background:#fff!important}
+.tt-sales__totals{background:#fbfcfa!important;border-top:1px solid var(--tt26-line)!important}
+.tt-sales__totals div.total{position:relative!important;margin-top:12px!important;padding-top:13px!important;font-size:24px!important;font-weight:900!important;color:var(--tt26-green-deep)!important}
+.tt-sales__totals div.total::before{content:"";position:absolute;left:0;right:0;top:0;height:3px;border-radius:999px;background:linear-gradient(90deg,var(--tt26-yellow) 0 82px,var(--tt26-line) 82px)}
+.tt-sales__actions{position:sticky;bottom:0;z-index:3;padding-top:9px;background:linear-gradient(180deg,rgba(251,252,250,0),#fbfcfa 18%)}
+.tt-sales__actions button.primary{min-height:48px!important;background:var(--tt26-green)!important;border-color:var(--tt26-green)!important;box-shadow:0 10px 22px rgba(8,122,59,.16)!important}
+.tt-sales__actions button.primary:hover{background:var(--tt26-green-strong)!important;border-color:var(--tt26-green-strong)!important;box-shadow:0 13px 26px rgba(8,122,59,.2)!important}
+.tt-sales__product:focus-visible,.tt-inv__row:focus-visible,.tt-rent__row:focus-visible,.tt-purch__row:focus-visible{outline:3px solid rgba(243,197,29,.82)!important;outline-offset:2px!important}
+
+/* Empty and error surfaces explain themselves without looking like broken cards. */
+.shell-empty,.tt-sales__empty,.tt-sales__state,.tt-inv__empty,.tt-inv__state,.tt-rent__state,.tt-purch__state,.tt-dispatch-empty-filter{border:1px dashed #cbd7cf!important;border-radius:14px!important;background:#fbfcfa!important;color:#65736a!important;padding:24px!important}
+.tt-sales__error,.tt-inv__error{border:1px solid #f0c7c2!important;border-radius:12px!important;background:#fff4f2!important;color:var(--tt26-danger)!important;padding:12px 14px!important}
+
+/* Better touch geometry without wasting desktop density. */
+@media(max-width:900px){
+  .shell-brand{min-height:118px!important}.shell-brand::before{height:72px!important}
+  .shell-nav button{min-height:46px!important}
+  .tt-sales__tabs button,.tt-sales__toolbar button,.tt-inv__toolbar button,.tt-rent__toolbar button,.tt-purch__toolbar button,.tt-dispatch-modern-bar button,.tt-finance-modern-bar button,.tt-crm-modern-bar button,.tt-admin-modern-bar button{min-height:42px!important}
+  .tt-inv__table,.tt-rent__table,.tt-purch__table{min-width:720px}
+  .tt-inv__list,.tt-rent__list,.tt-purch__list{overflow:auto!important;overscroll-behavior:contain}
+}
+@media(max-width:520px){
+  .shell-login__brand>div::before{height:126px;margin-bottom:18px}
+  input,select,textarea{font-size:16px!important}
+  .tt-sales__products{grid-template-columns:1fr 1fr!important;gap:7px!important}
+  .tt-sales__product{min-width:0!important}
+}
+@media(prefers-reduced-motion:reduce){button,.tt-sales__product,.tt-inv__row,.tt-rent__row,.tt-purch__row{transition:none!important;transform:none!important}}
+@media(forced-colors:active){.shell-brand{border-bottom:2px solid CanvasText!important}.tt-sales__totals div.total::before{background:CanvasText!important}.tt-inv__row.is-selected,.tt-rent__row.is-selected,.tt-purch__row.is-selected{outline:2px solid Highlight!important;box-shadow:none!important}}
