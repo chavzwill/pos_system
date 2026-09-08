@@ -1,9 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { TEST_BASE_URL, assertSafeMutationTarget } from './test-base-url.js';
 
-const BASE='http://localhost:3001';
+const BASE=TEST_BASE_URL;
 const r2=v=>Number(Number(v||0).toFixed(2));
 const SIG='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
-async function login(username=process.env.POS_TEST_USER||'admin',password=process.env.POS_TEST_PASSWORD||'123456'){
+async function login(username=process.env.POS_TEST_USER,password=process.env.POS_TEST_PASSWORD){
+  if(!username||!password)throw new Error('POS_TEST_USER and POS_TEST_PASSWORD are required for rental financial certification');
   const r=await fetch(`${BASE}/api/employees/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
   expect(r.status).toBe(200);return {cookie:(r.headers.get('set-cookie')||'').split(';')[0],body:await r.json()};
 }
@@ -12,6 +14,7 @@ function line(detail,code){return detail.body?.lines?.find(x=>String(x.account_c
 
 export function registerRentalFinancialRuntimeCertification(){
   test('cash rental checkout, issue, return, refund payable and payout remain coherent',async()=>{
+    assertSafeMutationTarget();
     const admin=await login();
     const branches=await api(admin.cookie,'/api/branches');expect(branches.status).toBe(200);
     const branch=branches.body.find(b=>b.active!==0);test.skip(!branch,'Rental runtime certification requires an active branch');
