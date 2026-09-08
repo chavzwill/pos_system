@@ -1,0 +1,14 @@
+/* Total Tools POS — protected Repair workflow details. */
+.tt-wo__detail-card:has(#tt-wo-progress),.tt-wo__quality{position:relative}
+.tt-wo__detail-card:has(#tt-wo-progress)::before,.tt-wo__quality::before{content:"";position:absolute;left:0;top:18px;bottom:18px;width:3px;border-radius:99px;background:var(--tt26-yellow,#f3c51d)}
+.tt-wo__form textarea,.tt-wo__qc-form textarea{resize:vertical;min-height:72px}
+.tt-wo__error:not(:empty),.tt-wo__quality-error{border:1px solid #efc9c4;background:#fff6f4;color:var(--tt26-danger,#b9382f);border-radius:10px;padding:10px 12px;font-weight:700;line-height:1.45}
+.tt-rpi-action{border:1px solid #d9e4dc!important;border-left:4px solid var(--tt26-yellow,#f3c51d)!important;background:#fbfcfa!important;border-radius:12px!important;box-shadow:0 8px 22px rgba(7,61,37,.06)}
+.tt-rpi-action button[value="consume"]{background:var(--tt26-green,#087a3b)!important;color:#fff!important;border-color:var(--tt26-green,#087a3b)!important}
+.tt-rpi-action button[value="return"],.tt-rpi-action button[value="release"]{background:#fff!important;color:var(--tt26-green-deep,#073d25)!important;border-color:#c8d6cc!important}
+.tt-wo-row[data-tt-keyboard="1"]:focus-visible{outline:3px solid rgba(243,197,29,.85)!important;outline-offset:-3px!important;background:#f5faf6}
+.tt-repair-dispatch-actions{position:relative;padding-top:8px;margin-top:8px;border-top:1px solid #e4ebe6}
+.tt-repair-dispatch-actions::before{content:"Dispatch handoff";display:block;margin-bottom:6px;color:#6c796f;font-size:9px;font-weight:850;letter-spacing:.08em;text-transform:uppercase}
+@media(max-width:700px){.tt-rpi-action>div{display:grid;grid-template-columns:1fr 1fr;gap:7px}.tt-rpi-action button{min-height:42px}}
+@media(prefers-reduced-motion:reduce){.tt-wo-row,.tt-rpi-action button{transition:none!important}}
+@media(forced-colors:active){.tt-wo__detail-card:has(#tt-wo-progress)::before,.tt-wo__quality::before{background:Highlight}.tt-rpi-action{border-left:3px solid Highlight!important}.tt-wo-row[data-tt-keyboard="1"]:focus-visible{outline:2px solid Highlight!important}}
