@@ -8,6 +8,7 @@ const { spawnSync } = require('child_process');
 const root = path.resolve(__dirname, '..');
 const fail = message => { console.error(`ERROR: ${message}`); process.exit(2); };
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
+const certificationPort = '3001';
 
 if (String(process.env.POS_TEST_BASE_URL || '').trim()) {
   fail('POS_TEST_BASE_URL must not be set for disposable release certification. This runner owns its isolated local server/database.');
@@ -15,6 +16,22 @@ if (String(process.env.POS_TEST_BASE_URL || '').trim()) {
 const inheritedDb = String(process.env.TURSO_DATABASE_URL || '').trim();
 if (inheritedDb && !inheritedDb.startsWith('file:')) {
   fail('Refusing disposable release certification while TURSO_DATABASE_URL points at a non-local database.');
+}
+if (process.env.POS_DISPOSABLE_PORT && String(process.env.POS_DISPOSABLE_PORT) !== certificationPort) {
+  fail(`POS_DISPOSABLE_PORT overrides are not supported by the current release suites. Port ${certificationPort} is required so hard-coded legacy certification clients cannot drift to another server.`);
+}
+
+// Mutation-heavy certification must own the HTTP listener as well as the
+// temporary database. If another process already owns port 3001, fail before
+// creating fixtures instead of letting Playwright reuse or contact that process.
+const portProbe = spawnSync(process.execPath, ['-e', `
+  const net=require('net');
+  const server=net.createServer();
+  server.once('error',err=>{ console.error(err.code||err.message); process.exit(1); });
+  server.listen(${certificationPort},'127.0.0.1',()=>server.close(()=>process.exit(0)));
+`], { cwd: root, encoding: 'utf8' });
+if (portProbe.status !== 0) {
+  fail(`Port ${certificationPort} is already in use or unavailable. Stop the existing POS/server first. Disposable certification will never reuse an existing server because its tests mutate business data.`);
 }
 
 let playwrightCli;
@@ -33,7 +50,7 @@ const branchPassword = process.env.POS_DISPOSABLE_BRANCH_PASSWORD || 'BranchCert
 const env = {
   ...process.env,
   NODE_ENV: 'test',
-  PORT: process.env.POS_DISPOSABLE_PORT || '3001',
+  PORT: certificationPort,
   TURSO_DATABASE_URL: `file:${dbPath}`,
   TURSO_AUTH_TOKEN: '',
   POS_TEST_USER: 'admin',
