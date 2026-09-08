@@ -63,15 +63,19 @@ for (const file of [...active].sort()) {
 }
 
 const businessPath = 'tests/business-integrity.spec.js';
+const repairWrapperPath = 'tests/repair-financial-runtime-helper.js';
+const repairImplementationPath = 'tests/repair-financial-runtime-helper.migrated.js';
 if (active.has(businessPath)) {
   const business = fs.readFileSync(path.join(root, businessPath), 'utf8');
-  if (business.includes("./repair-financial-runtime-helper.js")) {
-    violations.push(`${businessPath}: imports obsolete fixed-target repair financial helper`);
+  if (!business.includes("./repair-financial-runtime-helper.js")) {
+    violations.push(`${businessPath}: canonical repair financial helper is not active`);
   }
-  if (!business.includes("./repair-financial-runtime-helper.migrated.js")) {
-    violations.push(`${businessPath}: migrated repair financial helper is not active`);
+  if (business.includes("./repair-financial-runtime-helper.migrated.js")) {
+    violations.push(`${businessPath}: bypasses canonical repair helper wrapper`);
   }
 }
+if (!active.has(repairWrapperPath)) violations.push(`${repairWrapperPath}: canonical repair helper is not reachable from active certification`);
+if (!active.has(repairImplementationPath)) violations.push(`${repairImplementationPath}: portable repair implementation is not reachable through the canonical wrapper`);
 
 if (violations.length) {
   console.error('Active POS certification target audit failed:');
@@ -79,4 +83,4 @@ if (violations.length) {
   process.exit(1);
 }
 
-console.log(`Active POS certification target audit passed for ${active.size} reachable test modules; no active suite is pinned to port 3001 outside the shared fallback helper.`);
+console.log(`Active POS certification target audit passed for ${active.size} reachable test modules; no active suite is pinned to port 3001 outside the shared fallback helper, and repair financial certification flows through its canonical portable wrapper.`);
