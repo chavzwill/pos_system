@@ -4,35 +4,28 @@ const fs = require('fs');
 const os = require('os');
 const path = require('path');
 const { spawnSync } = require('child_process');
+const { selectFreePort } = require('./disposable-certification-port');
 
 const root = path.resolve(__dirname, '..');
 const fail = message => { console.error(`ERROR: ${message}`); process.exit(2); };
 const npmCommand = process.platform === 'win32' ? 'npm.cmd' : 'npm';
-const certificationPort = '3001';
 
 if (String(process.env.POS_TEST_BASE_URL || '').trim()) {
-  fail('POS_TEST_BASE_URL must not be set for disposable release certification. This runner owns its isolated local server/database.');
+  fail('POS_TEST_BASE_URL must not be set for disposable release certification. This runner owns its isolated local server/database and chooses its own loopback target.');
 }
 const inheritedDb = String(process.env.TURSO_DATABASE_URL || '').trim();
 if (inheritedDb && !inheritedDb.startsWith('file:')) {
   fail('Refusing disposable release certification while TURSO_DATABASE_URL points at a non-local database.');
 }
-if (process.env.POS_DISPOSABLE_PORT && String(process.env.POS_DISPOSABLE_PORT) !== certificationPort) {
-  fail(`POS_DISPOSABLE_PORT overrides are not supported by the current release suites. Port ${certificationPort} is required so hard-coded legacy certification clients cannot drift to another server.`);
-}
 
-// Mutation-heavy certification must own the HTTP listener as well as the
-// temporary database. If another process already owns port 3001, fail before
-// creating fixtures instead of letting Playwright reuse or contact that process.
-const portProbe = spawnSync(process.execPath, ['-e', `
-  const net=require('net');
-  const server=net.createServer();
-  server.once('error',err=>{ console.error(err.code||err.message); process.exit(1); });
-  server.listen(${certificationPort},'127.0.0.1',()=>server.close(()=>process.exit(0)));
-`], { cwd: root, encoding: 'utf8' });
-if (portProbe.status !== 0) {
-  fail(`Port ${certificationPort} is already in use or unavailable. Stop the existing POS/server first. Disposable certification will never reuse an existing server because its tests mutate business data.`);
+let certificationPort;
+try {
+  certificationPort = selectFreePort(root, process.env.POS_DISPOSABLE_PORT);
+} catch (error) {
+  fail(error.message);
 }
+const certificationBaseURL = `http://127.0.0.1:${certificationPort}`;
+console.log(`Disposable release certification reserved loopback target ${certificationBaseURL}`);
 
 let playwrightCli;
 try {
@@ -53,6 +46,7 @@ const env = {
   PORT: certificationPort,
   TURSO_DATABASE_URL: `file:${dbPath}`,
   TURSO_AUTH_TOKEN: '',
+  POS_TEST_BASE_URL: certificationBaseURL,
   POS_TEST_USER: 'admin',
   POS_TEST_PASSWORD: testPassword,
   POS_TEST_PIN: testPin,
@@ -62,7 +56,6 @@ const env = {
   POS_BRANCH_TEST_PASSWORD: branchPassword,
 };
 delete env.VERCEL;
-delete env.POS_TEST_BASE_URL;
 
 function run(label, command, args, extraEnv = {}) {
   console.log(`\n=== ${label} ===`);
@@ -139,6 +132,7 @@ try {
   run('Native runtime architecture contract', process.execPath, ['scripts/check-native-pos-runtime.js']);
   run('Backup/recovery contract', process.execPath, ['scripts/check-production-recovery-contract.js']);
   run('Startup health/cutover contract', process.execPath, ['scripts/check-production-observability-contract.js']);
+  run('Shared test target contract', process.execPath, ['scripts/check-shared-test-target-contract.js']);
 
   const suites = [
     'tests/native-pos-certification.spec.js',
@@ -167,7 +161,7 @@ try {
 
   run('Disposable release runtime certification', process.execPath, [playwrightCli, 'test', ...suites]);
 
-  console.log(`\nPASS: disposable POS release certification completed using isolated database ${dbPath}`);
+  console.log(`\nPASS: disposable POS release certification completed using ${certificationBaseURL} and isolated database ${dbPath}`);
   console.log('No production database, remote database, deployment, package installation, or paid service was used.');
 } finally {
   if (process.env.POS_KEEP_DISPOSABLE_CERTIFICATION === 'YES') {
