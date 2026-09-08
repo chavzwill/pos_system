@@ -1,8 +1,7 @@
 import { test, expect } from '@playwright/test';
+import { TEST_BASE_URL as BASE, assertSafeMutationTarget } from './test-base-url.js';
 import './pos-financial-runtime.js';
 import './security-hardening-runtime.js';
-
-const BASE = 'http://localhost:3001';
 
 async function status(path, options = {}) {
   const response = await fetch(`${BASE}${path}`, options);
@@ -77,6 +76,8 @@ async function cleanupLimitedOperator(adminCookie, fixture) {
 }
 
 test.describe('Operational security boundaries', () => {
+  test.beforeAll(() => assertSafeMutationTarget());
+
   test('sensitive operational and intelligence reads reject anonymous access', async () => {
     const protectedReads = [
       '/api/workspace-profile/me',
