@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
 
-const BASE='http://localhost:3001';
+const BASE=String(process.env.POS_TEST_BASE_URL||'http://localhost:3001').replace(/\/$/,'');
 
 async function login(username,password){
   const r=await fetch(`${BASE}/api/employees/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
