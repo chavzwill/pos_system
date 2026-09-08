@@ -58,9 +58,13 @@ for(const file of mutationGuarded){
   if(!content.includes('assertSafeMutationTarget'))throw new Error(`${file} must retain external mutation-target protection`);
 }
 
+const repairWrapper=fs.readFileSync(path.join(root,'tests/repair-financial-runtime-helper.js'),'utf8');
+if(!repairWrapper.includes("./repair-financial-runtime-helper.migrated.js"))throw new Error('Canonical repair financial helper must re-export the portable implementation');
+if(repairWrapper.includes('http://localhost:3001')||repairWrapper.includes('http://127.0.0.1:3001'))throw new Error('Canonical repair financial helper must not contain a fixed target');
+
 const business=fs.readFileSync(path.join(root,'tests/business-integrity.spec.js'),'utf8');
-if(!business.includes("./repair-financial-runtime-helper.migrated.js"))throw new Error('Business integrity must use the migrated repair financial helper');
-if(business.includes("./repair-financial-runtime-helper.js"))throw new Error('Business integrity must not use the obsolete fixed-target repair financial helper');
+if(!business.includes("./repair-financial-runtime-helper.js"))throw new Error('Business integrity must import the canonical repair financial helper');
+if(business.includes("./repair-financial-runtime-helper.migrated.js"))throw new Error('Business integrity must not bypass the canonical repair helper wrapper');
 
 require('./check-active-certification-targets');
-console.log(`Shared POS test target contract passed for ${portable.length} migrated certification modules.`);
+console.log(`Shared POS test target contract passed for ${portable.length} migrated certification modules plus the canonical repair helper wrapper.`);
