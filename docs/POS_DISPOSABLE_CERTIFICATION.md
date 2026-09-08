@@ -22,20 +22,23 @@ That broader runtime coverage includes native shell/responsive behavior, operati
 
 Both runners refuse `POS_TEST_BASE_URL`. The comprehensive release runner also rejects any inherited non-`file:` database URL, so a remote Turso/libSQL target cannot accidentally become the mutation-test database.
 
+Both runners also require exclusive ownership of local port `3001`. If another POS/server is already listening there, certification stops before creating or mutating fixtures. Playwright is configured not to reuse an existing server during disposable certification. This is intentional: a mutation-heavy release suite must never silently attach to a separately running POS instance.
+
 The temporary database is removed automatically after the run. To retain it for failure investigation only:
 
 ```bash
 POS_KEEP_DISPOSABLE_CERTIFICATION=YES node scripts/run-pos-disposable-release-certification.js
 ```
 
-Optional local-only overrides:
+Optional local-only credential overrides:
 
 ```bash
-POS_DISPOSABLE_PORT=3001 \
 POS_DISPOSABLE_TEST_PASSWORD='LocalCertificationOnly-2026!' \
 POS_DISPOSABLE_TEST_PIN='246810' \
 node scripts/run-pos-disposable-release-certification.js
 ```
+
+`POS_DISPOSABLE_PORT` is intentionally not supported while legacy release tests still address port `3001` directly. Supporting arbitrary ports before those tests are fully migrated would create a risk that part of the suite talks to a different server than the one owning the disposable database.
 
 ## Safety rules
 
@@ -44,11 +47,13 @@ This workflow must remain fail-closed:
 - never point it at production or a shared database
 - never set `POS_TEST_BASE_URL`
 - never use a remote/non-local database
+- never run while another process owns port `3001`
+- never reuse a pre-existing server for disposable certification
 - never silently install dependencies or browser binaries
 - never treat a retained throwaway database as production evidence
 - never promote a release solely because disposable certification passed; release-adjacent backup rehearsal, read-only hosted checks, and manual acceptance still apply
 
-The static `scripts/check-disposable-release-certification-contract.js` guard exists so future edits cannot quietly remove the isolated-database ownership, branch-isolation coverage, legacy release suites, financial/accounting suites, or cleanup requirements.
+The static `scripts/check-disposable-release-certification-contract.js` guard exists so future edits cannot quietly remove isolated database/server ownership, occupied-port refusal, branch-isolation coverage, legacy release suites, financial/accounting suites, or cleanup requirements.
 
 ## Why this exists
 
