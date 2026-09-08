@@ -33,7 +33,7 @@ async function api(cookie, method, path, body, key) {
 assertSafeMutationTarget();
 
 test.describe('Durable POS mutation idempotency', () => {
-  test('same authenticated mutation and key replays the stored result instead of executing twice', async () => {
+  test('same authenticated mutation and key replays and exposes its authoritative reconciliation receipt', async () => {
     const cookie = await login();
     const stamp = `${Date.now()}-${Math.random().toString(36).slice(2, 7)}`;
     const key = `idem-security-group-${stamp}`;
@@ -60,7 +60,12 @@ test.describe('Durable POS mutation idempotency', () => {
 
     const receipt = await api(cookie, 'GET', `/api/operation-idempotency/${encodeURIComponent(key)}`);
     expect(receipt.status).toBe(200);
-    expect(receipt.body?.some(row => row.state === 'completed' && row.response_status === 201)).toBe(true);
+    const completed = receipt.body?.find(row => row.state === 'completed' && row.response_status === 201);
+    expect(completed).toBeTruthy();
+    expect(completed.reconciliation_state).toBe('completed');
+    expect(completed.method).toBe('POST');
+    expect(completed.path).toBe('/security-groups');
+    expect(completed.response?.id).toBe(first.body.id);
 
     const cleanupKey = `idem-security-group-cleanup-${stamp}`;
     const cleanupPath = `/api/security-groups/${first.body.id}?reason=Operation%20idempotency%20certification%20cleanup`;
@@ -70,5 +75,11 @@ test.describe('Durable POS mutation idempotency', () => {
     const cleanupReplay = await api(cookie, 'DELETE', cleanupPath, undefined, cleanupKey);
     expect(cleanupReplay.status).toBe(cleanup.status);
     expect(cleanupReplay.replayed).toBe('true');
+
+    const cleanupReceipt = await api(cookie, 'GET', `/api/operation-idempotency/${encodeURIComponent(cleanupKey)}`);
+    expect(cleanupReceipt.status).toBe(200);
+    const cleanupCompleted = cleanupReceipt.body?.find(row => row.state === 'completed');
+    expect(cleanupCompleted?.reconciliation_state).toBe('completed');
+    expect(cleanupCompleted?.response_status).toBe(cleanup.status);
   });
 });
