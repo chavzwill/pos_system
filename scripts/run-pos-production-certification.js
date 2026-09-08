@@ -23,6 +23,7 @@ run('Native runtime architecture contract',process.execPath,['scripts/check-nati
 run('Backup and recovery contract',process.execPath,['scripts/check-production-recovery-contract.js']);
 run('Startup health and cutover contract',process.execPath,['scripts/check-production-observability-contract.js']);
 run('Disposable release certification contract',process.execPath,['scripts/check-disposable-release-certification-contract.js']);
+run('Shared POS test target contract',process.execPath,['scripts/check-shared-test-target-contract.js']);
 
 if(process.env.POS_RECOVERY_REHEARSAL_ARCHIVE){
   run('Non-destructive recovery rehearsal','bash',['scripts/production-recovery-rehearsal.sh',process.env.POS_RECOVERY_REHEARSAL_ARCHIVE]);
