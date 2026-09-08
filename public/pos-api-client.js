@@ -1,6 +1,9 @@
 (function () {
   'use strict';
 
+  const JOURNAL_KEY = 'tt_pos_pending_mutations_v1';
+  const MAX_PENDING_AGE_MS = 24 * 60 * 60 * 1000;
+
   function normalizePath(path) {
     const value = String(path || '').trim();
     if (!value) throw new Error('POS API path is required');
@@ -19,59 +22,127 @@
     return `pos-${Date.now()}-${Math.random().toString(36).slice(2)}-${Math.random().toString(36).slice(2)}`;
   }
 
+  function stable(value) {
+    if (value === null || value === undefined) return value;
+    if (Array.isArray(value)) return value.map(stable);
+    if (typeof value !== 'object') return value;
+    return Object.fromEntries(Object.keys(value).sort().map(key => [key, stable(value[key])]));
+  }
+
+  function bodyIdentity(body) {
+    if (body == null) return '';
+    if (typeof body === 'string') {
+      try { return JSON.stringify(stable(JSON.parse(body))); } catch (_) { return body; }
+    }
+    if (body instanceof FormData) {
+      const parts = [];
+      for (const [key, value] of body.entries()) {
+        if (value instanceof File) parts.push([key, { file: value.name, size: value.size, type: value.type, modified: value.lastModified }]);
+        else parts.push([key, String(value)]);
+      }
+      return JSON.stringify(parts);
+    }
+    return JSON.stringify(stable(body));
+  }
+
+  function fingerprint(method, url, body) {
+    const source = `${method}\n${url}\n${bodyIdentity(body)}`;
+    let h = 2166136261;
+    for (let i = 0; i < source.length; i += 1) { h ^= source.charCodeAt(i); h = Math.imul(h, 16777619); }
+    return `m-${(h >>> 0).toString(16)}-${source.length}`;
+  }
+
+  function readJournal() {
+    try {
+      const raw = JSON.parse(sessionStorage.getItem(JOURNAL_KEY) || '{}');
+      const now = Date.now(), out = {};
+      for (const [key, entry] of Object.entries(raw && typeof raw === 'object' ? raw : {})) {
+        if (entry?.idempotencyKey && Number(entry.createdAt || 0) > now - MAX_PENDING_AGE_MS) out[key] = entry;
+      }
+      return out;
+    } catch (_) { return {}; }
+  }
+
+  function writeJournal(journal) {
+    try { sessionStorage.setItem(JOURNAL_KEY, JSON.stringify(journal)); } catch (_) {}
+  }
+
+  function rememberPending(fp, method, url, key) {
+    const journal = readJournal();
+    journal[fp] = journal[fp] || { idempotencyKey: key, method, url, createdAt: Date.now() };
+    writeJournal(journal);
+    return journal[fp].idempotencyKey;
+  }
+
+  function pendingKey(fp) { return readJournal()[fp]?.idempotencyKey || null; }
+  function clearPending(fp) { const journal = readJournal(); if (journal[fp]) { delete journal[fp]; writeJournal(journal); } }
+  function pendingMutations() { return Object.entries(readJournal()).map(([fingerprint, entry]) => ({ fingerprint, ...entry })); }
+  function abandonPending(fingerprintValue) { clearPending(String(fingerprintValue || '')); }
+
+  function ambiguousError(error, key, fp) {
+    error.ambiguousOutcome = true;
+    error.idempotencyKey = key;
+    error.mutationFingerprint = fp;
+    error.message = `${error.message || 'The server response was lost.'} The operation may already have completed. Retry the same action without changing its values; the POS will reuse its operation identity instead of creating a duplicate.`;
+    return error;
+  }
+
   async function request(path, options) {
     const init = Object.assign({ credentials: 'same-origin' }, options || {});
     init.method = String(init.method || 'GET').toUpperCase();
     init.headers = Object.assign({ Accept: 'application/json' }, init.headers || {});
+    const originalBody = init.body;
 
     if (init.body && typeof init.body !== 'string' && !(init.body instanceof FormData)) {
       init.headers['Content-Type'] = init.headers['Content-Type'] || 'application/json';
       init.body = JSON.stringify(init.body);
     }
 
-    // Every native mutation gets a durable operation identity. If the browser
-    // loses the response after the server committed, a network retry reuses
-    // the same key and the server replays the stored outcome instead of
-    // charging, receiving, issuing, returning, or dispatching twice.
-    if (mutation(init.method)) {
-      init.headers['Idempotency-Key'] = init.headers['Idempotency-Key'] || init.idempotencyKey || newIdempotencyKey();
+    const url = normalizePath(path);
+    const isMutation = mutation(init.method);
+    let fp = null, key = null;
+    if (isMutation) {
+      fp = fingerprint(init.method, url, originalBody ?? init.body);
+      key = init.headers['Idempotency-Key'] || init.idempotencyKey || pendingKey(fp) || newIdempotencyKey();
+      key = rememberPending(fp, init.method, url, key);
+      init.headers['Idempotency-Key'] = key;
       delete init.idempotencyKey;
     }
 
-    const url = normalizePath(path);
     let response;
     try {
-      response = await fetch(url, init);
+      try {
+        response = await fetch(url, init);
+      } catch (firstError) {
+        if (!isMutation) throw firstError;
+        response = await fetch(url, init);
+      }
     } catch (error) {
-      if (!mutation(init.method)) throw error;
-      // Retry only transport failures, never an HTTP response. The same
-      // Idempotency-Key makes this safe even when the first request committed.
-      response = await fetch(url, init);
+      if (!isMutation) throw error;
+      throw ambiguousError(error instanceof Error ? error : new Error(String(error)), key, fp);
     }
 
     const contentType = response.headers.get('content-type') || '';
-    const payload = contentType.includes('application/json')
-      ? await response.json()
-      : await response.text();
+    const payload = contentType.includes('application/json') ? await response.json() : await response.text();
+    const control = payload && typeof payload === 'object' ? String(payload.control || '') : '';
 
     if (!response.ok) {
-      const error = new Error(
-        payload && typeof payload === 'object' && payload.error
-          ? payload.error
-          : `POS API request failed with ${response.status}`
-      );
+      const error = new Error(payload && typeof payload === 'object' && payload.error ? payload.error : `POS API request failed with ${response.status}`);
       error.status = response.status;
       error.payload = payload;
       error.idempotencyReplayed = response.headers.get('Idempotency-Replayed') === 'true';
+      error.idempotencyKey = key;
+      error.mutationFingerprint = fp;
+      if (isMutation && (response.status >= 500 || control === 'operation_idempotency_in_progress' || control === 'operation_idempotency_receipt_failure')) {
+        throw ambiguousError(error, key, fp);
+      }
+      if (isMutation) clearPending(fp);
       throw error;
     }
 
+    if (isMutation) clearPending(fp);
     if (payload && typeof payload === 'object' && !Array.isArray(payload)) {
-      Object.defineProperty(payload, '__idempotencyReplayed', {
-        value: response.headers.get('Idempotency-Replayed') === 'true',
-        enumerable: false,
-        configurable: true,
-      });
+      Object.defineProperty(payload, '__idempotencyReplayed', { value: response.headers.get('Idempotency-Replayed') === 'true', enumerable: false, configurable: true });
     }
     return payload;
   }
@@ -83,11 +154,9 @@
     patch: (path, body, options) => request(path, Object.assign({}, options || {}, { method: 'PATCH', body })),
     put: (path, body, options) => request(path, Object.assign({}, options || {}, { method: 'PUT', body })),
     delete: (path, options) => request(path, Object.assign({}, options || {}, { method: 'DELETE' })),
+    pendingMutations,
+    abandonPending,
   });
 
-  Object.defineProperty(window, 'POS_API', {
-    value: api,
-    writable: false,
-    configurable: false,
-  });
+  Object.defineProperty(window, 'POS_API', { value: api, writable: false, configurable: false });
 })();
