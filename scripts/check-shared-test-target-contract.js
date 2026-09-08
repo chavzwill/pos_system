@@ -26,6 +26,8 @@ const portable=[
   'business-integrity.spec.js',
   'dispatch-field-runtime-helper.js',
   'purchasing-financial-runtime-helper.js',
+  'rental-financial-runtime-helper.js',
+  'repair-financial-runtime-helper.migrated.js',
 ];
 for(const file of portable){
   const content=fs.readFileSync(path.join(root,'tests',file),'utf8');
@@ -45,9 +47,14 @@ const mutationGuarded=[
   'logistics-intelligence.spec.js',
   'dispatch-field-runtime-helper.js',
   'purchasing-financial-runtime-helper.js',
+  'rental-financial-runtime-helper.js',
+  'repair-financial-runtime-helper.migrated.js',
 ];
 for(const file of mutationGuarded){
   const content=fs.readFileSync(path.join(root,'tests',file),'utf8');
   if(!content.includes('assertSafeMutationTarget'))throw new Error(`${file} must retain external mutation-target protection`);
 }
+
+const business=fs.readFileSync(path.join(root,'tests/business-integrity.spec.js'),'utf8');
+if(!business.includes("./repair-financial-runtime-helper.migrated.js"))throw new Error('Business integrity must use the migrated repair financial helper');
 console.log(`Shared POS test target contract passed for ${portable.length} migrated certification modules.`);
