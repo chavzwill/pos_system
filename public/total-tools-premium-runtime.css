@@ -6,16 +6,33 @@
 .tt-premium-toast--error{border-color:#edcbc7;background:#fffaf9}.tt-premium-toast--error .tt-premium-toast__mark{background:var(--tt26-danger,#b9382f)}
 .tt-premium-toast__copy{display:grid;gap:3px;padding:1px 0}.tt-premium-toast__copy strong{font-size:11px;font-weight:850;letter-spacing:-.01em}.tt-premium-toast__copy span{font-size:11px;line-height:1.45;color:#5e6c63;overflow-wrap:anywhere}
 .tt-premium-toast__close{width:32px;height:32px;border:1px solid #d9e2dc;border-radius:9px;background:#fff;color:#56665c;font-size:18px;line-height:1;display:grid;place-items:center}.tt-premium-toast__close:hover{background:#f4f8f5;border-color:#b9c9be;color:var(--tt26-green-deep,#073d25)}
+
+/* Search clear controls are inserted by the premium runtime only for semantic search/filter fields. */
+.tt-premium-search-clear{align-self:center;width:30px;height:30px;min-width:30px;margin-left:-38px;margin-right:7px;border:0!important;border-radius:8px!important;background:transparent!important;color:#718078!important;display:grid;place-items:center;padding:0!important;box-shadow:none!important;position:relative;z-index:4;line-height:1;font-size:17px}
+.tt-premium-search-clear:hover{background:#edf5f0!important;color:var(--tt26-green-deep,#073d25)!important}
+.tt-premium-search-clear:focus-visible{outline:3px solid rgba(243,197,29,.8)!important;outline-offset:1px!important}
+.tt-premium-search-clear[hidden]{display:none!important}
+.tt-sales__search input[data-tt-premium-search="1"],.tt-inv__toolbar input[data-tt-premium-search="1"],.tt-rent__toolbar input[data-tt-premium-search="1"],.tt-purch__toolbar input[data-tt-premium-search="1"],.tt-crm__toolbar input[data-tt-premium-search="1"],.tt-admin__toolbar input[data-tt-premium-search="1"],.tt-ledger__toolbar input[data-tt-premium-search="1"],.tt-aiacct__toolbar input[data-tt-premium-search="1"],.tt-wo__filters input[data-tt-premium-search="1"],input[type="search"][data-tt-premium-search="1"]{padding-right:42px!important}
+
+/* Busy state is perceivable without changing control geometry. */
+button.tt-is-busy{position:relative;pointer-events:none;opacity:.72!important}
+button.tt-is-busy::after{content:"";width:12px;height:12px;margin-left:7px;border:2px solid currentColor;border-right-color:transparent;border-radius:50%;display:inline-block;vertical-align:-2px;animation:tt-premium-spin .7s linear infinite}
+@keyframes tt-premium-spin{to{transform:rotate(360deg)}}
+
+.shell-login__card input[aria-invalid="true"]{border-color:var(--tt26-danger,#b9382f)!important;background:#fffafa!important;box-shadow:0 0 0 4px rgba(185,56,47,.07)!important}
+.shell-login__error[role="alert"]{font-weight:700;line-height:1.45}
+
 @media(max-width:900px){
   body.tt-drawer-open{overflow:hidden}
   .tt-shell-drawer-backdrop{display:block;position:fixed;inset:0;z-index:99;border:0;border-radius:0;background:rgba(4,24,14,.5);backdrop-filter:blur(3px);padding:0}
   .tt-shell-drawer-backdrop[hidden]{display:none}
   .shell-sidebar{z-index:100!important;box-shadow:24px 0 60px rgba(0,0,0,.24)!important}
   .tt-premium-toast-stack{top:58px;right:10px;width:min(370px,calc(100vw - 20px))}
+  .tt-premium-search-clear{width:34px;height:34px;min-width:34px;margin-left:-42px;margin-right:6px}
 }
 @media(max-width:520px){
   .tt-premium-toast-stack{top:54px;left:8px;right:8px;width:auto}
   .tt-premium-toast{border-radius:12px}
 }
-@media(prefers-reduced-motion:reduce){.tt-premium-toast,.tt-shell-drawer-backdrop{transition:none!important;animation:none!important}}
-@media(forced-colors:active){.tt-premium-toast{border:1px solid CanvasText}.tt-premium-toast__mark{background:Highlight}.tt-shell-drawer-backdrop{background:Canvas}}
+@media(prefers-reduced-motion:reduce){.tt-premium-toast,.tt-shell-drawer-backdrop{transition:none!important;animation:none!important}.tt-is-busy::after{animation:none!important;border-right-color:currentColor!important}}
+@media(forced-colors:active){.tt-premium-toast{border:1px solid CanvasText}.tt-premium-toast__mark{background:Highlight}.tt-shell-drawer-backdrop{background:Canvas}.tt-premium-search-clear{border:1px solid ButtonText!important}.shell-login__card input[aria-invalid="true"]{outline:2px solid Mark!important}}
