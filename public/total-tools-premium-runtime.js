@@ -30,8 +30,52 @@ function notify(message,{tone='error',persist=tone==='error'}={}){
   if(!persist)window.setTimeout(close,4800);
 }
 
+let activeConfirm=null;
+function confirmAction({title='Confirm action',message='',confirmLabel='Confirm',cancelLabel='Cancel',tone='standard'}={}){
+  if(activeConfirm){activeConfirm.resolve(false);activeConfirm.overlay.remove();activeConfirm=null;}
+  return new Promise(resolve=>{
+    const previous=document.activeElement;
+    const overlay=document.createElement('div');
+    overlay.className='tt-premium-confirm-overlay';
+    overlay.innerHTML=`<section class="tt-premium-confirm tt-premium-confirm--${tone==='danger'?'danger':'standard'}" role="alertdialog" aria-modal="true" aria-labelledby="tt-premium-confirm-title" aria-describedby="tt-premium-confirm-copy"><div class="tt-premium-confirm__keyline" aria-hidden="true"></div><header><span class="tt-premium-confirm__eyebrow">${tone==='danger'?'Protected action':'Confirmation'}</span><h2 id="tt-premium-confirm-title"></h2></header><p id="tt-premium-confirm-copy"></p><footer><button type="button" class="tt-premium-confirm__cancel"></button><button type="button" class="tt-premium-confirm__commit"></button></footer></section>`;
+    overlay.querySelector('h2').textContent=title;
+    overlay.querySelector('p').textContent=message;
+    const cancel=overlay.querySelector('.tt-premium-confirm__cancel');
+    const commit=overlay.querySelector('.tt-premium-confirm__commit');
+    cancel.textContent=cancelLabel;
+    commit.textContent=confirmLabel;
+    if(tone==='danger')commit.classList.add('danger');
+    document.body.appendChild(overlay);
+    document.body.classList.add('tt-dialog-open');
+    const finish=value=>{
+      if(!document.body.contains(overlay))return;
+      overlay.remove();
+      document.body.classList.remove('tt-dialog-open');
+      document.removeEventListener('keydown',onKey,true);
+      activeConfirm=null;
+      if(previous instanceof HTMLElement&&document.contains(previous))previous.focus({preventScroll:true});
+      resolve(value);
+    };
+    const onKey=e=>{
+      if(e.key==='Escape'){e.preventDefault();finish(false);return;}
+      if(e.key!=='Tab')return;
+      const items=getFocusable(overlay);
+      if(!items.length)return;
+      const first=items[0],last=items[items.length-1];
+      if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
+      else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
+    };
+    cancel.addEventListener('click',()=>finish(false));
+    commit.addEventListener('click',()=>finish(true));
+    overlay.addEventListener('click',e=>{if(e.target===overlay)finish(false);});
+    document.addEventListener('keydown',onKey,true);
+    activeConfirm={overlay,resolve};
+    requestAnimationFrame(()=>cancel.focus());
+  });
+}
+
 window.alert=(message)=>notify(message,{tone:'error',persist:true});
-window.TotalToolsPremiumUI={notify};
+window.TotalToolsPremiumUI={notify,confirm:confirmAction};
 
 let drawerBackdrop=null;
 let lastDrawerTrigger=null;
@@ -94,20 +138,13 @@ function bindDrawer(){
   root.appendChild(drawerBackdrop);
   drawerBackdrop.addEventListener('click',()=>setDrawerState(false));
   trigger.addEventListener('click',()=>queueMicrotask(syncDrawerFromClass));
-  sidebar.addEventListener('click',e=>{
-    if(e.target.closest('[data-domain],#shell-logout'))queueMicrotask(syncDrawerFromClass);
-  });
+  sidebar.addEventListener('click',e=>{if(e.target.closest('[data-domain],#shell-logout'))queueMicrotask(syncDrawerFromClass);});
   new MutationObserver(syncDrawerFromClass).observe(root,{attributes:true,attributeFilter:['class']});
   document.addEventListener('keydown',e=>{
     if(!root.classList.contains('menu-open')||!isCompact())return;
-    if(e.key==='Escape'){
-      e.preventDefault();
-      setDrawerState(false);
-      return;
-    }
+    if(e.key==='Escape'){e.preventDefault();setDrawerState(false);return;}
     if(e.key!=='Tab')return;
-    const items=getFocusable(sidebar);
-    if(!items.length)return;
+    const items=getFocusable(sidebar);if(!items.length)return;
     const first=items[0],last=items[items.length-1];
     if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus();}
     else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus();}
@@ -115,19 +152,7 @@ function bindDrawer(){
   window.addEventListener('resize',()=>{if(!isCompact())setDrawerState(false,{restoreFocus:false});},{passive:true});
 }
 
-const searchSelectors=[
-  '.tt-sales__search input',
-  '.tt-inv__toolbar input',
-  '.tt-rent__toolbar input',
-  '.tt-purch__toolbar input',
-  '.tt-crm__toolbar input',
-  '.tt-admin__toolbar input',
-  '.tt-ledger__toolbar input',
-  '.tt-aiacct__toolbar input',
-  '.tt-wo__filters input',
-  'input[type="search"]'
-].join(',');
-
+const searchSelectors=['.tt-sales__search input','.tt-inv__toolbar input','.tt-rent__toolbar input','.tt-purch__toolbar input','.tt-crm__toolbar input','.tt-admin__toolbar input','.tt-ledger__toolbar input','.tt-aiacct__toolbar input','.tt-wo__filters input','input[type="search"]'].join(',');
 function enhanceSearchInput(input){
   if(!(input instanceof HTMLInputElement)||input.dataset.ttPremiumSearch==='1')return;
   const placeholder=(input.getAttribute('placeholder')||'').toLowerCase();
@@ -135,81 +160,26 @@ function enhanceSearchInput(input){
   if(!semantic)return;
   input.dataset.ttPremiumSearch='1';
   input.setAttribute('autocomplete',input.getAttribute('autocomplete')||'off');
-  const button=document.createElement('button');
-  button.type='button';
-  button.className='tt-premium-search-clear';
-  button.setAttribute('aria-label','Clear search');
-  button.innerHTML='<span aria-hidden="true">×</span>';
+  const button=document.createElement('button');button.type='button';button.className='tt-premium-search-clear';button.setAttribute('aria-label','Clear search');button.innerHTML='<span aria-hidden="true">×</span>';
   const sync=()=>{button.hidden=!input.value;};
-  const clear=()=>{
-    if(!input.value)return input.focus();
-    input.value='';
-    input.dispatchEvent(new Event('input',{bubbles:true}));
-    input.dispatchEvent(new Event('change',{bubbles:true}));
-    input.focus({preventScroll:true});
-    sync();
-  };
-  button.addEventListener('click',clear);
-  input.addEventListener('input',sync);
-  input.addEventListener('search',sync);
-  input.insertAdjacentElement('afterend',button);
-  sync();
+  button.addEventListener('click',()=>{if(!input.value)return input.focus();input.value='';input.dispatchEvent(new Event('input',{bubbles:true}));input.dispatchEvent(new Event('change',{bubbles:true}));input.focus({preventScroll:true});sync();});
+  input.addEventListener('input',sync);input.addEventListener('search',sync);input.insertAdjacentElement('afterend',button);sync();
 }
-
 function enhanceLoginForm(){
-  const form=document.getElementById('shell-login');
-  if(!form||form.dataset.ttPremiumValidated==='1')return;
-  form.dataset.ttPremiumValidated='1';
-  form.noValidate=true;
+  const form=document.getElementById('shell-login');if(!form||form.dataset.ttPremiumValidated==='1')return;
+  form.dataset.ttPremiumValidated='1';form.noValidate=true;
   const fields=[...form.querySelectorAll('input[required]')];
-  fields.forEach(field=>{
-    const clearError=()=>{
-      if(field.value.trim())field.removeAttribute('aria-invalid');
-      const err=document.getElementById('shell-login-error');
-      if(err&&fields.every(x=>x.value.trim()))err.textContent='';
-    };
-    field.addEventListener('input',clearError);
-  });
-  form.addEventListener('submit',e=>{
-    const invalid=fields.find(field=>!field.value.trim());
-    if(!invalid)return;
-    e.preventDefault();
-    e.stopImmediatePropagation();
-    fields.forEach(field=>field.setAttribute('aria-invalid',String(!field.value.trim())));
-    const err=document.getElementById('shell-login-error');
-    if(err){
-      err.textContent=invalid.name==='username'?'Enter your username to sign in.':'Enter your password to sign in.';
-      err.setAttribute('role','alert');
-    }
-    invalid.focus();
-  },true);
+  fields.forEach(field=>field.addEventListener('input',()=>{if(field.value.trim())field.removeAttribute('aria-invalid');const err=document.getElementById('shell-login-error');if(err&&fields.every(x=>x.value.trim()))err.textContent='';}));
+  form.addEventListener('submit',e=>{const invalid=fields.find(field=>!field.value.trim());if(!invalid)return;e.preventDefault();e.stopImmediatePropagation();fields.forEach(field=>field.setAttribute('aria-invalid',String(!field.value.trim())));const err=document.getElementById('shell-login-error');if(err){err.textContent=invalid.name==='username'?'Enter your username to sign in.':'Enter your password to sign in.';err.setAttribute('role','alert');}invalid.focus();},true);
 }
-
 function syncBusyState(button){
   if(!(button instanceof HTMLButtonElement))return;
   const text=(button.textContent||'').trim().toLowerCase();
   const looksBusy=button.disabled&&(/…|\.\.\.|loading|saving|signing|processing|submitting|creating|updating|receiving|completing|posting|sending/.test(text));
-  if(looksBusy){button.setAttribute('aria-busy','true');button.classList.add('tt-is-busy');}
-  else{button.removeAttribute('aria-busy');button.classList.remove('tt-is-busy');}
+  if(looksBusy){button.setAttribute('aria-busy','true');button.classList.add('tt-is-busy');}else{button.removeAttribute('aria-busy');button.classList.remove('tt-is-busy');}
 }
-
-function enhanceInteractions(scope=document){
-  scope.querySelectorAll?.(searchSelectors).forEach(enhanceSearchInput);
-  scope.querySelectorAll?.('button').forEach(syncBusyState);
-  enhanceLoginForm();
-}
-
-const observer=new MutationObserver(records=>{
-  if(root.classList.contains('shell-app'))bindDrawer();
-  for(const record of records){
-    if(record.type==='childList')record.addedNodes.forEach(node=>{
-      if(node.nodeType===1)enhanceInteractions(node);
-    });
-    if(record.type==='attributes'&&record.target instanceof HTMLButtonElement)syncBusyState(record.target);
-  }
-  enhanceLoginForm();
-});
+function enhanceInteractions(scope=document){scope.querySelectorAll?.(searchSelectors).forEach(enhanceSearchInput);scope.querySelectorAll?.('button').forEach(syncBusyState);enhanceLoginForm();}
+const observer=new MutationObserver(records=>{if(root.classList.contains('shell-app'))bindDrawer();for(const record of records){if(record.type==='childList')record.addedNodes.forEach(node=>{if(node.nodeType===1)enhanceInteractions(node);});if(record.type==='attributes'&&record.target instanceof HTMLButtonElement)syncBusyState(record.target);}enhanceLoginForm();});
 observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','disabled']});
-if(root.classList.contains('shell-app'))bindDrawer();
-enhanceInteractions(document);
+if(root.classList.contains('shell-app'))bindDrawer();enhanceInteractions(document);
 })();
