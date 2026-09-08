@@ -95,14 +95,20 @@
   }
 
   function directFetchTarget(input) {
-    if (input instanceof Request) return null;
     try {
-      const url = new URL(String(input || ''), window.location.href);
+      const source = input instanceof Request ? input.url : String(input || '');
+      const url = new URL(source, window.location.href);
       if (url.origin !== window.location.origin) return null;
       if (!(url.pathname === '/api' || url.pathname.startsWith('/api/'))) return null;
       if (FETCH_BYPASS_PATHS.has(url.pathname)) return null;
       return { url, path: `${url.pathname}${url.search}` };
     } catch (_) { return null; }
+  }
+
+  async function requestBodyIdentity(input, init) {
+    if (Object.prototype.hasOwnProperty.call(init, 'body')) return init.body;
+    if (!(input instanceof Request)) return undefined;
+    try { return await input.clone().text(); } catch (_) { return '[request-body-unavailable]'; }
   }
 
   async function responseControl(response) {
@@ -117,12 +123,14 @@
 
   async function protectedDirectFetch(input, options) {
     const init = Object.assign({}, options || {});
-    const method = String(init.method || 'GET').toUpperCase();
+    const requestInput = input instanceof Request ? input : null;
+    const method = String(init.method || requestInput?.method || 'GET').toUpperCase();
     const target = directFetchTarget(input);
     if (!target || !mutation(method)) return nativeFetch(input, options);
 
-    const headers = new Headers(init.headers || {});
-    const originalBody = init.body;
+    const headers = new Headers(requestInput?.headers || {});
+    new Headers(init.headers || {}).forEach((value, key) => headers.set(key, value));
+    const originalBody = await requestBodyIdentity(input, init);
     const fp = fingerprint(method, target.path, originalBody);
     let key = headers.get('Idempotency-Key') || init.idempotencyKey || pendingKey(fp) || newIdempotencyKey();
     key = rememberPending(fp, method, target.path, key);
@@ -131,12 +139,14 @@
     init.method = method;
     init.headers = headers;
 
+    const firstInput = requestInput ? requestInput.clone() : input;
+    const retryInput = requestInput ? requestInput.clone() : input;
     let response;
     try {
       try {
-        response = await nativeFetch(input, init);
+        response = await nativeFetch(firstInput, init);
       } catch (firstError) {
-        response = await nativeFetch(input, init);
+        response = await nativeFetch(retryInput, init);
       }
     } catch (error) {
       throw ambiguousError(error instanceof Error ? error : new Error(String(error)), key, fp);
