@@ -1,15 +1,14 @@
 import { test, expect } from '@playwright/test';
-
-const BASE = 'http://localhost:3001';
+import { TEST_BASE_URL as BASE, assertSafeMutationTarget } from './test-base-url.js';
 
 async function login() {
+  const username = process.env.POS_TEST_USER;
+  const password = process.env.POS_TEST_PASSWORD;
+  if (!username || !password) throw new Error('POS_TEST_USER and POS_TEST_PASSWORD are required');
   const r = await fetch(`${BASE}/api/employees/login`, {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
-    body: JSON.stringify({
-      username: process.env.POS_TEST_USER || 'admin',
-      password: process.env.POS_TEST_PASSWORD || '123456',
-    }),
+    body: JSON.stringify({ username, password }),
   });
   expect(r.status).toBe(200);
   return (r.headers.get('set-cookie') || '').split(';')[0];
@@ -29,6 +28,8 @@ async function api(cookie, method, path, body, key) {
     body: await r.json().catch(() => null),
   };
 }
+
+assertSafeMutationTarget();
 
 test.describe('Durable POS mutation idempotency', () => {
   test('same authenticated mutation and key replays the stored result instead of executing twice', async () => {
