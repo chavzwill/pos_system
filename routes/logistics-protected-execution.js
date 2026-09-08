@@ -39,7 +39,7 @@ router.post('/jobs/:id/status',requireAnyPermission('transfers'),async(req,res,n
 });
 
 router.post('/jobs/:id/reassign',requireAnyPermission('transfers'),async(req,res)=>{
- const driverId=Number(req.body?.driver_employee_id),vehicleId=Number(req.body?.vehicle_id),scheduledFor=req.body?.scheduled_for||null;
+ const driverId=Number(req.body?.driver_employee_id),vehicleId=Number(req.body?.vehicle_id);
  if(!driverId||!vehicleId)return res.status(400).json({error:'Driver and vehicle are required'});
  const tx=await db.transaction('write');
  try{
@@ -47,18 +47,16 @@ router.post('/jobs/:id/reassign',requireAnyPermission('transfers'),async(req,res
   if(['completed','cancelled'].includes(current.status))problem(409,'Closed dispatch jobs cannot be reassigned');
   const x=await execution(current.id,tx);if(!x)problem(409,'Assign the dispatch before using reassignment');
   if(!['assigned','rescheduled','failed'].includes(x.stage))problem(409,`Dispatch cannot be reassigned while execution is ${x.stage}`);
-  if(x.stage==='failed'&&!scheduledFor)problem(400,'A new scheduled date/time is required when reassigning a failed attempt');
   const {rows:[driver]}=await tx.execute({sql:'SELECT id,active,is_driver FROM employees WHERE id=?',args:[driverId]});if(!driver||!driver.active||!driver.is_driver)problem(409,'Selected employee is not an active dispatch driver');
   const {rows:[vehicle]}=await tx.execute({sql:'SELECT * FROM dispatch_vehicles WHERE id=? AND active=1',args:[vehicleId]});if(!vehicle)problem(404,'Vehicle not found');
   if(!['available','assigned'].includes(vehicle.status))problem(409,`Vehicle is ${vehicle.status} and cannot be dispatched`);
   const {rows:[conflict]}=await tx.execute({sql:`SELECT dj.job_number FROM dispatch_executions de JOIN dispatch_jobs dj ON dj.id=de.dispatch_job_id WHERE (de.driver_employee_id=? OR de.vehicle_id=?) AND de.stage NOT IN ('completed','failed','cancelled') AND de.dispatch_job_id!=? LIMIT 1`,args:[driverId,vehicleId,current.id]});if(conflict)problem(409,`Driver or vehicle is already committed to ${conflict.job_number}`);
-  const nextStage=x.stage==='failed'?'rescheduled':x.stage;
-  const nextScheduled=x.stage==='failed'?scheduledFor:(current.scheduled_for||x.rescheduled_for||null);
+  const failed=x.stage==='failed',nextStatus=failed?'delayed':'scheduled';
   if(x.vehicle_id&&Number(x.vehicle_id)!==vehicleId)await releaseVehicle(tx,x.vehicle_id,current.id);
-  await tx.execute({sql:`UPDATE dispatch_executions SET driver_employee_id=?,vehicle_id=?,stage=?,assigned_at=CURRENT_TIMESTAMP,rescheduled_for=?,failure_reason=NULL,last_notes=?,updated_by_employee_id=?,updated_at=CURRENT_TIMESTAMP WHERE dispatch_job_id=?`,args:[driverId,vehicleId,nextStage,nextStage==='rescheduled'?nextScheduled:null,req.body?.notes||null,actor(req),current.id]});
-  await tx.execute({sql:`UPDATE dispatch_jobs SET assignee_employee_id=?,vehicle_label=?,status='scheduled',scheduled_for=COALESCE(?,scheduled_for),updated_at=CURRENT_TIMESTAMP WHERE id=?`,args:[driverId,vehicle.registration_number||vehicle.vehicle_number,nextScheduled,current.id]});
-  await tx.execute({sql:`UPDATE dispatch_vehicles SET status='assigned',updated_at=CURRENT_TIMESTAMP WHERE id=?`,args:[vehicleId]});
-  await event(tx,current.id,'field_reassigned',current.status,'scheduled',`Driver ${driverId} / vehicle ${vehicle.vehicle_number} reassigned${nextScheduled?` for ${nextScheduled}`:''}`,actor(req));
+  await tx.execute({sql:`UPDATE dispatch_executions SET driver_employee_id=?,vehicle_id=?,assigned_at=CURRENT_TIMESTAMP,last_notes=?,updated_by_employee_id=?,updated_at=CURRENT_TIMESTAMP WHERE dispatch_job_id=?`,args:[driverId,vehicleId,req.body?.notes||null,actor(req),current.id]});
+  await tx.execute({sql:`UPDATE dispatch_jobs SET assignee_employee_id=?,vehicle_label=?,status=?,updated_at=CURRENT_TIMESTAMP WHERE id=?`,args:[driverId,vehicle.registration_number||vehicle.vehicle_number,nextStatus,current.id]});
+  if(!failed)await tx.execute({sql:`UPDATE dispatch_vehicles SET status='assigned',updated_at=CURRENT_TIMESTAMP WHERE id=?`,args:[vehicleId]});
+  await event(tx,current.id,'field_reassigned',current.status,nextStatus,`Driver ${driverId} / vehicle ${vehicle.vehicle_number} reassigned${failed?' after failed attempt; reschedule still required':''}`,actor(req));
   await tx.commit();
   res.json({job:await job(current.id),execution:await execution(current.id)});
  }catch(e){await tx.rollback().catch(()=>{});res.status(e.status||400).json({error:e.message});}
