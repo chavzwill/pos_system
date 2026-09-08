@@ -1,0 +1,12 @@
+/* Total Tools POS — protected Dispatch execution details. */
+#tt-logistics-intelligence [data-field-execution][data-tt-protected-dispatch="1"]{position:relative!important;border-color:#d6e1d9!important;border-left:4px solid var(--tt26-yellow,#f3c51d)!important;background:linear-gradient(180deg,#fff 0%,#fbfcfa 100%)!important;box-shadow:0 8px 22px rgba(7,61,37,.055)}
+#tt-logistics-intelligence [data-field-execution][data-tt-protected-dispatch="1"]::before{content:"Protected field execution";display:block;margin-bottom:7px;color:#68766d;font-size:9px;font-weight:850;letter-spacing:.09em;text-transform:uppercase}
+#tt-logistics-intelligence [data-tt-protected-action="1"]{position:relative}
+#tt-logistics-intelligence [data-tt-protected-action="1"]:focus-visible,#tt-field-modal [data-tt-protected-dispatch-form="1"] :is(input,select,textarea,button):focus-visible{outline:3px solid rgba(243,197,29,.88)!important;outline-offset:2px!important}
+#tt-logistics-intelligence [data-complete][data-tt-protected-action="1"]{background:var(--tt26-green,#087a3b)!important;color:#fff!important;border-color:var(--tt26-green,#087a3b)!important;font-weight:780}
+#tt-field-modal [data-tt-protected-dispatch-form="1"]{border-left:3px solid var(--tt26-yellow,#f3c51d);padding-left:12px}
+#tt-field-modal [data-tt-protected-dispatch-form="1"] textarea{resize:vertical;min-height:76px}
+#tt-field-modal [data-tt-protected-dispatch-form="1"] input[type="file"]{max-width:100%}
+@media(max-width:700px){#tt-logistics-intelligence [data-field-execution][data-tt-protected-dispatch="1"] select,#tt-logistics-intelligence [data-field-execution][data-tt-protected-dispatch="1"] button{min-height:42px}#tt-field-modal [data-tt-protected-dispatch-form="1"] footer{position:sticky;bottom:0;background:#fff;padding-top:8px}}
+@media(prefers-reduced-motion:reduce){#tt-logistics-intelligence [data-field-execution],#tt-logistics-intelligence [data-field-execution] button{transition:none!important}}
+@media(forced-colors:active){#tt-logistics-intelligence [data-field-execution][data-tt-protected-dispatch="1"]{border-left:4px solid Highlight!important}#tt-logistics-intelligence [data-tt-protected-action="1"]:focus-visible,#tt-field-modal [data-tt-protected-dispatch-form="1"] :is(input,select,textarea,button):focus-visible{outline:2px solid Highlight!important}}
