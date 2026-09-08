@@ -23,6 +23,9 @@ const portable=[
   'repair-quality-integrity.spec.js',
   'service-completion-integrity.spec.js',
   'logistics-intelligence.spec.js',
+  'business-integrity.spec.js',
+  'dispatch-field-runtime-helper.js',
+  'purchasing-financial-runtime-helper.js',
 ];
 for(const file of portable){
   const content=fs.readFileSync(path.join(root,'tests',file),'utf8');
@@ -40,6 +43,8 @@ const mutationGuarded=[
   'loss-control-integrity.spec.js',
   'repair-quality-integrity.spec.js',
   'logistics-intelligence.spec.js',
+  'dispatch-field-runtime-helper.js',
+  'purchasing-financial-runtime-helper.js',
 ];
 for(const file of mutationGuarded){
   const content=fs.readFileSync(path.join(root,'tests',file),'utf8');
