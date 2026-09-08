@@ -23,8 +23,8 @@ router.use(require('./logistics-commercial-handoff'));
 router.use(require('./logistics-location-intelligence'));
 router.use(require('./logistics-route-planning'));
 router.use(require('./logistics-route-execution'));
-router.use(require('./logistics-field-execution'));
 router.use(require('./logistics-protected-execution'));
+router.use(require('./logistics-field-execution'));
 function jobNumber(){return `DSP-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;}
 function nowMs(){return Date.now();}
 function scoreJob(row){let score=0;const reasons=[];if(row.priority==='urgent'){score+=40;reasons.push('urgent priority')}else if(row.priority==='high'){score+=25;reasons.push('high priority')}if(!row.assignee_employee_id){score+=15;reasons.push('unassigned')}if(!row.scheduled_for){score+=10;reasons.push('not scheduled')}const due=row.promised_at?new Date(row.promised_at).getTime():null;if(due&&Number.isFinite(due)){const hours=(due-nowMs())/3600000;if(hours<0){score+=50;reasons.push('past promised time')}else if(hours<=4){score+=35;reasons.push('due within 4 hours')}else if(hours<=24){score+=20;reasons.push('due within 24 hours')}}if(row.status==='in_transit'){score+=8;reasons.push('already in transit')}return{score,reasons};}
