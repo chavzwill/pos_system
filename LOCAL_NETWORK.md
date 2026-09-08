@@ -29,6 +29,49 @@ The existing Node listener is reachable on the local network when the operating-
 
 Do not use a Vercel URL for branch terminals.
 
+## Certify the live LAN runtime
+
+After the server starts, run the live certification probe from the host PC or another device that can reach the server:
+
+```bash
+set POS_LAN_BASE_URL=http://192.168.1.50:3001
+node scripts/check-local-network-live.js
+```
+
+On PowerShell:
+
+```powershell
+$env:POS_LAN_BASE_URL='http://192.168.1.50:3001'
+node scripts/check-local-network-live.js
+```
+
+Without credentials, the probe verifies:
+
+- the native POS shell is reachable;
+- `pos-runtime.json` identifies the POS-owned frontend/server runtime;
+- anonymous access to the employee workspace is rejected.
+
+To certify the complete login/session/logout round trip, provide a real test employee through environment variables instead of putting credentials in source code:
+
+```powershell
+$env:POS_LAN_BASE_URL='http://192.168.1.50:3001'
+$env:POS_LAN_USERNAME='test.employee'
+$env:POS_LAN_PASSWORD='temporary-test-password'
+node scripts/check-local-network-live.js
+```
+
+The full probe verifies:
+
+- credentials are accepted;
+- the server returns a `pos_session` cookie;
+- HTTP LAN sessions are not incorrectly marked `Secure`;
+- the authenticated workspace profile can be restored from that cookie;
+- forced-password accounts are detected safely;
+- logout revokes the session;
+- a revoked cookie cannot reopen the workspace.
+
+Do not commit or paste production employee passwords into the repository. Use temporary environment variables and clear them after the test.
+
 ## Login cookies on HTTP LANs
 
 The POS session cookie now uses transport-aware security.
@@ -78,6 +121,7 @@ If credentials are accepted but the login screen immediately reappears:
 2. Confirm `POS_COOKIE_SECURE` is `auto` or `false` for HTTP.
 3. Clear any old `pos_session` cookie left from previous builds and sign in again.
 4. Confirm the server computer's date/time is correct because session expiration is UTC-based.
-5. Check the server console for `Session authentication failed` or `POS client diagnostic` messages.
+5. Run `node scripts/check-local-network-live.js` with the LAN base URL.
+6. If the live probe passes without credentials but fails with credentials, inspect the returned login error and the server console for `Session authentication failed` or `POS client diagnostic` messages.
 
 The POS should not require Vercel for normal local-network operation.
