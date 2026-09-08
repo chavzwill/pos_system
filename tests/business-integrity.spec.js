@@ -1,7 +1,7 @@
 import { test, expect } from '@playwright/test';
 import { registerPurchasingFinancialRuntimeCertification } from './purchasing-financial-runtime-helper.js';
 import { registerRentalFinancialRuntimeCertification } from './rental-financial-runtime-helper.js';
-import { registerRepairFinancialRuntimeCertification } from './repair-financial-runtime-helper.migrated.js';
+import { registerRepairFinancialRuntimeCertification } from './repair-financial-runtime-helper.js';
 import { registerDispatchFieldRuntimeCertification } from './dispatch-field-runtime-helper.js';
 import { TEST_BASE_URL as BASE } from './test-base-url.js';
 
