@@ -50,6 +50,7 @@ router.post('/jobs/:id/reassign',requireAnyPermission('transfers'),async(req,res
   const {rows:[driver]}=await tx.execute({sql:'SELECT id,active,is_driver FROM employees WHERE id=?',args:[driverId]});if(!driver||!driver.active||!driver.is_driver)problem(409,'Selected employee is not an active dispatch driver');
   const {rows:[vehicle]}=await tx.execute({sql:'SELECT * FROM dispatch_vehicles WHERE id=? AND active=1',args:[vehicleId]});if(!vehicle)problem(404,'Vehicle not found');
   if(!['available','assigned'].includes(vehicle.status))problem(409,`Vehicle is ${vehicle.status} and cannot be dispatched`);
+  if(x.stage==='failed'&&vehicle.status!=='available')problem(409,'A failed dispatch can only be reassigned to a currently available vehicle before rescheduling');
   const {rows:[conflict]}=await tx.execute({sql:`SELECT dj.job_number FROM dispatch_executions de JOIN dispatch_jobs dj ON dj.id=de.dispatch_job_id WHERE (de.driver_employee_id=? OR de.vehicle_id=?) AND de.stage NOT IN ('completed','failed','cancelled') AND de.dispatch_job_id!=? LIMIT 1`,args:[driverId,vehicleId,current.id]});if(conflict)problem(409,`Driver or vehicle is already committed to ${conflict.job_number}`);
   const failed=x.stage==='failed',nextStatus=failed?'delayed':'scheduled';
   if(x.vehicle_id&&Number(x.vehicle_id)!==vehicleId)await releaseVehicle(tx,x.vehicle_id,current.id);
