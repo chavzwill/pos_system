@@ -3,6 +3,13 @@
 
   const JOURNAL_KEY = 'tt_pos_pending_mutations_v1';
   const MAX_PENDING_AGE_MS = 24 * 60 * 60 * 1000;
+  const nativeFetch = window.fetch.bind(window);
+  const FETCH_BYPASS_PATHS = new Set([
+    '/api/employees/login',
+    '/api/employees/logout',
+    '/api/employees/change-password',
+    '/api/client-diagnostics',
+  ]);
 
   function normalizePath(path) {
     const value = String(path || '').trim();
@@ -87,8 +94,67 @@
     return error;
   }
 
+  function directFetchTarget(input) {
+    if (input instanceof Request) return null;
+    try {
+      const url = new URL(String(input || ''), window.location.href);
+      if (url.origin !== window.location.origin) return null;
+      if (!(url.pathname === '/api' || url.pathname.startsWith('/api/'))) return null;
+      if (FETCH_BYPASS_PATHS.has(url.pathname)) return null;
+      return { url, path: `${url.pathname}${url.search}` };
+    } catch (_) { return null; }
+  }
+
+  async function responseControl(response) {
+    if (!response || response.ok) return '';
+    const type = response.headers.get('content-type') || '';
+    if (!type.includes('application/json')) return '';
+    try {
+      const payload = await response.clone().json();
+      return payload && typeof payload === 'object' ? String(payload.control || payload.code || '') : '';
+    } catch (_) { return ''; }
+  }
+
+  async function protectedDirectFetch(input, options) {
+    const init = Object.assign({}, options || {});
+    const method = String(init.method || 'GET').toUpperCase();
+    const target = directFetchTarget(input);
+    if (!target || !mutation(method)) return nativeFetch(input, options);
+
+    const headers = new Headers(init.headers || {});
+    const originalBody = init.body;
+    const fp = fingerprint(method, target.path, originalBody);
+    let key = headers.get('Idempotency-Key') || init.idempotencyKey || pendingKey(fp) || newIdempotencyKey();
+    key = rememberPending(fp, method, target.path, key);
+    headers.set('Idempotency-Key', key);
+    delete init.idempotencyKey;
+    init.method = method;
+    init.headers = headers;
+
+    let response;
+    try {
+      try {
+        response = await nativeFetch(input, init);
+      } catch (firstError) {
+        response = await nativeFetch(input, init);
+      }
+    } catch (error) {
+      throw ambiguousError(error instanceof Error ? error : new Error(String(error)), key, fp);
+    }
+
+    if (response.ok) {
+      clearPending(fp);
+      return response;
+    }
+
+    const control = await responseControl(response);
+    const ambiguous = response.status >= 500 || control === 'operation_idempotency_in_progress' || control === 'operation_idempotency_outcome_unknown' || control === 'operation_idempotency_receipt_failure';
+    if (!ambiguous) clearPending(fp);
+    return response;
+  }
+
   async function fetchJson(url, init) {
-    const response = await fetch(url, init);
+    const response = await nativeFetch(url, init);
     const contentType = response.headers.get('content-type') || '';
     const payload = contentType.includes('application/json') ? await response.json() : await response.text();
     if (!response.ok) {
@@ -146,10 +212,10 @@
     let response;
     try {
       try {
-        response = await fetch(url, init);
+        response = await nativeFetch(url, init);
       } catch (firstError) {
         if (!isMutation) throw firstError;
-        response = await fetch(url, init);
+        response = await nativeFetch(url, init);
       }
     } catch (error) {
       if (!isMutation) throw error;
@@ -195,4 +261,5 @@
   });
 
   Object.defineProperty(window, 'POS_API', { value: api, writable: false, configurable: false });
+  window.fetch = protectedDirectFetch;
 })();
