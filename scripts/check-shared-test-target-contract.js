@@ -28,6 +28,8 @@ const portable=[
   'purchasing-financial-runtime-helper.js',
   'rental-financial-runtime-helper.js',
   'repair-financial-runtime-helper.migrated.js',
+  'operation-idempotency.spec.js',
+  'multi-branch-read-integrity.spec.js',
 ];
 for(const file of portable){
   const content=fs.readFileSync(path.join(root,'tests',file),'utf8');
@@ -49,6 +51,7 @@ const mutationGuarded=[
   'purchasing-financial-runtime-helper.js',
   'rental-financial-runtime-helper.js',
   'repair-financial-runtime-helper.migrated.js',
+  'operation-idempotency.spec.js',
 ];
 for(const file of mutationGuarded){
   const content=fs.readFileSync(path.join(root,'tests',file),'utf8');
@@ -57,4 +60,7 @@ for(const file of mutationGuarded){
 
 const business=fs.readFileSync(path.join(root,'tests/business-integrity.spec.js'),'utf8');
 if(!business.includes("./repair-financial-runtime-helper.migrated.js"))throw new Error('Business integrity must use the migrated repair financial helper');
+if(business.includes("./repair-financial-runtime-helper.js"))throw new Error('Business integrity must not use the obsolete fixed-target repair financial helper');
+
+require('./check-active-certification-targets');
 console.log(`Shared POS test target contract passed for ${portable.length} migrated certification modules.`);
