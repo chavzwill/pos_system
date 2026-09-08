@@ -30,7 +30,6 @@ function notify(message,{tone='error',persist=tone==='error'}={}){
   if(!persist)window.setTimeout(close,4800);
 }
 
-// Replace browser chrome alerts with an app-owned, accessible notification surface.
 window.alert=(message)=>notify(message,{tone:'error',persist:true});
 window.TotalToolsPremiumUI={notify};
 
@@ -116,9 +115,101 @@ function bindDrawer(){
   window.addEventListener('resize',()=>{if(!isCompact())setDrawerState(false,{restoreFocus:false});},{passive:true});
 }
 
-const observer=new MutationObserver(()=>{
+const searchSelectors=[
+  '.tt-sales__search input',
+  '.tt-inv__toolbar input',
+  '.tt-rent__toolbar input',
+  '.tt-purch__toolbar input',
+  '.tt-crm__toolbar input',
+  '.tt-admin__toolbar input',
+  '.tt-ledger__toolbar input',
+  '.tt-aiacct__toolbar input',
+  '.tt-wo__filters input',
+  'input[type="search"]'
+].join(',');
+
+function enhanceSearchInput(input){
+  if(!(input instanceof HTMLInputElement)||input.dataset.ttPremiumSearch==='1')return;
+  const placeholder=(input.getAttribute('placeholder')||'').toLowerCase();
+  const semantic=input.type==='search'||/search|find|filter/.test(`${placeholder} ${input.name||''} ${input.id||''}`);
+  if(!semantic)return;
+  input.dataset.ttPremiumSearch='1';
+  input.setAttribute('autocomplete',input.getAttribute('autocomplete')||'off');
+  const button=document.createElement('button');
+  button.type='button';
+  button.className='tt-premium-search-clear';
+  button.setAttribute('aria-label','Clear search');
+  button.innerHTML='<span aria-hidden="true">×</span>';
+  const sync=()=>{button.hidden=!input.value;};
+  const clear=()=>{
+    if(!input.value)return input.focus();
+    input.value='';
+    input.dispatchEvent(new Event('input',{bubbles:true}));
+    input.dispatchEvent(new Event('change',{bubbles:true}));
+    input.focus({preventScroll:true});
+    sync();
+  };
+  button.addEventListener('click',clear);
+  input.addEventListener('input',sync);
+  input.addEventListener('search',sync);
+  input.insertAdjacentElement('afterend',button);
+  sync();
+}
+
+function enhanceLoginForm(){
+  const form=document.getElementById('shell-login');
+  if(!form||form.dataset.ttPremiumValidated==='1')return;
+  form.dataset.ttPremiumValidated='1';
+  form.noValidate=true;
+  const fields=[...form.querySelectorAll('input[required]')];
+  fields.forEach(field=>{
+    const clearError=()=>{
+      if(field.value.trim())field.removeAttribute('aria-invalid');
+      const err=document.getElementById('shell-login-error');
+      if(err&&fields.every(x=>x.value.trim()))err.textContent='';
+    };
+    field.addEventListener('input',clearError);
+  });
+  form.addEventListener('submit',e=>{
+    const invalid=fields.find(field=>!field.value.trim());
+    if(!invalid)return;
+    e.preventDefault();
+    e.stopImmediatePropagation();
+    fields.forEach(field=>field.setAttribute('aria-invalid',String(!field.value.trim())));
+    const err=document.getElementById('shell-login-error');
+    if(err){
+      err.textContent=invalid.name==='username'?'Enter your username to sign in.':'Enter your password to sign in.';
+      err.setAttribute('role','alert');
+    }
+    invalid.focus();
+  },true);
+}
+
+function syncBusyState(button){
+  if(!(button instanceof HTMLButtonElement))return;
+  const text=(button.textContent||'').trim().toLowerCase();
+  const looksBusy=button.disabled&&(/…|\.\.\.|loading|saving|signing|processing|submitting|creating|updating|receiving|completing|posting|sending/.test(text));
+  if(looksBusy){button.setAttribute('aria-busy','true');button.classList.add('tt-is-busy');}
+  else{button.removeAttribute('aria-busy');button.classList.remove('tt-is-busy');}
+}
+
+function enhanceInteractions(scope=document){
+  scope.querySelectorAll?.(searchSelectors).forEach(enhanceSearchInput);
+  scope.querySelectorAll?.('button').forEach(syncBusyState);
+  enhanceLoginForm();
+}
+
+const observer=new MutationObserver(records=>{
   if(root.classList.contains('shell-app'))bindDrawer();
+  for(const record of records){
+    if(record.type==='childList')record.addedNodes.forEach(node=>{
+      if(node.nodeType===1)enhanceInteractions(node);
+    });
+    if(record.type==='attributes'&&record.target instanceof HTMLButtonElement)syncBusyState(record.target);
+  }
+  enhanceLoginForm();
 });
-observer.observe(root,{childList:true,subtree:true,attributes:true,attributeFilter:['class']});
+observer.observe(document.body,{childList:true,subtree:true,attributes:true,attributeFilter:['class','disabled']});
 if(root.classList.contains('shell-app'))bindDrawer();
+enhanceInteractions(document);
 })();
