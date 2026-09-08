@@ -12,6 +12,9 @@ const erpCert=fs.readFileSync(path.join(root,'tests/erp-intelligence.spec.js'),'
 const inventoryCert=fs.readFileSync(path.join(root,'tests/inventory-intelligence.spec.js'),'utf8');
 const reportsCert=fs.readFileSync(path.join(root,'tests/operational-reports.spec.js'),'utf8');
 const technicianCert=fs.readFileSync(path.join(root,'tests/technician-compensation.spec.js'),'utf8');
+const ledgerCert=fs.readFileSync(path.join(root,'tests/accounting-ledger-integrity.spec.js'),'utf8');
+const accountingRbacCert=fs.readFileSync(path.join(root,'tests/accounting-source-sync-rbac.spec.js'),'utf8');
+const posFinancialCert=fs.readFileSync(path.join(root,'tests/pos-financial-runtime.js'),'utf8');
 const need=(content,needle,label)=>{if(!content.includes(needle))throw new Error(`${label} missing: ${needle}`);};
 const forbid=(content,needle,label)=>{if(content.includes(needle))throw new Error(`${label} must not contain: ${needle}`);};
 
@@ -52,10 +55,20 @@ for(const [label,content] of [
   ['inventory intelligence certification',inventoryCert],
   ['operational reports certification',reportsCert],
   ['technician compensation certification',technicianCert],
+  ['accounting ledger certification',ledgerCert],
+  ['accounting RBAC certification',accountingRbacCert],
+  ['POS financial certification',posFinancialCert],
 ]){
   need(content,"./test-base-url.js",`${label} shared target`);
   forbid(content,"http://localhost:3001",`${label} portability`);
 }
-need(securityCert,"assertSafeMutationTarget",'security mutation target guard');
+for(const [label,content] of [
+  ['security certification',securityCert],
+  ['accounting ledger certification',ledgerCert],
+  ['accounting RBAC certification',accountingRbacCert],
+  ['POS financial certification',posFinancialCert],
+]){
+  need(content,"assertSafeMutationTarget",`${label} mutation target guard`);
+}
 
-console.log('Disposable release certification contract passed: isolated database/server ownership, occupied-port refusal, syntax/static gates, branch isolation, financial/accounting lifecycles, shared target plumbing across core and intelligence certification suites, and cleanup are all required.');
+console.log('Disposable release certification contract passed: isolated database/server ownership, occupied-port refusal, syntax/static gates, branch isolation, financial/accounting lifecycles, shared target plumbing across core, intelligence and financial certification suites, mutation-target guards, and cleanup are all required.');
