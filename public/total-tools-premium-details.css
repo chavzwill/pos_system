@@ -36,6 +36,9 @@ input:focus,select:focus,textarea:focus{border-color:var(--tt26-green)!important
 /* Consistent semantic badges — border + text ensure state is never color-only. */
 .tt-rent__status,.tt-wo-pill,.tt-dispatch-source-badge,.tt-sales__tx em{border:1px solid #d6e1da!important;border-radius:999px!important;background:#f5f8f6!important;color:#4f6056!important;font-weight:850!important}
 
+/* Inventory adjustment control reads as a protected operational mutation. */
+.tt-inv__adjust-help{display:block;margin-top:9px;color:#718078;font-size:9px;line-height:1.45}.tt-inv__adjust:focus-within{border-color:#b9cbbf!important;box-shadow:0 0 0 3px rgba(8,122,59,.045)}
+
 /* POS checkout rail — strongest decision region. */
 .tt-sales__cart{position:relative!important;background:#fff!important}
 .tt-sales__totals{background:#fbfcfa!important;border-top:1px solid var(--tt26-line)!important}
