@@ -8,6 +8,10 @@ const playwright=fs.readFileSync(path.join(root,'playwright.config.js'),'utf8');
 const helper=fs.readFileSync(path.join(root,'tests/test-base-url.js'),'utf8');
 const nativeCert=fs.readFileSync(path.join(root,'tests/native-pos-certification.spec.js'),'utf8');
 const securityCert=fs.readFileSync(path.join(root,'tests/security-boundaries.spec.js'),'utf8');
+const erpCert=fs.readFileSync(path.join(root,'tests/erp-intelligence.spec.js'),'utf8');
+const inventoryCert=fs.readFileSync(path.join(root,'tests/inventory-intelligence.spec.js'),'utf8');
+const reportsCert=fs.readFileSync(path.join(root,'tests/operational-reports.spec.js'),'utf8');
+const technicianCert=fs.readFileSync(path.join(root,'tests/technician-compensation.spec.js'),'utf8');
 const need=(content,needle,label)=>{if(!content.includes(needle))throw new Error(`${label} missing: ${needle}`);};
 const forbid=(content,needle,label)=>{if(content.includes(needle))throw new Error(`${label} must not contain: ${needle}`);};
 
@@ -41,10 +45,17 @@ need(playwright,"POS_DISPOSABLE_CERTIFICATION === 'YES'",'Playwright disposable 
 
 need(helper,"POS_TEST_BASE_URL",'shared test target helper');
 need(helper,"assertSafeMutationTarget",'shared mutation target guard');
-need(nativeCert,"./test-base-url.js",'native certification shared target');
-need(securityCert,"./test-base-url.js",'security certification shared target');
+for(const [label,content] of [
+  ['native certification',nativeCert],
+  ['security certification',securityCert],
+  ['ERP intelligence certification',erpCert],
+  ['inventory intelligence certification',inventoryCert],
+  ['operational reports certification',reportsCert],
+  ['technician compensation certification',technicianCert],
+]){
+  need(content,"./test-base-url.js",`${label} shared target`);
+  forbid(content,"http://localhost:3001",`${label} portability`);
+}
 need(securityCert,"assertSafeMutationTarget",'security mutation target guard');
-forbid(nativeCert,"http://localhost:3001",'native certification portability');
-forbid(securityCert,"http://localhost:3001",'security certification portability');
 
-console.log('Disposable release certification contract passed: isolated database/server ownership, occupied-port refusal, syntax/static gates, branch isolation, financial/accounting lifecycles, shared target plumbing for core certification suites, and cleanup are all required.');
+console.log('Disposable release certification contract passed: isolated database/server ownership, occupied-port refusal, syntax/static gates, branch isolation, financial/accounting lifecycles, shared target plumbing across core and intelligence certification suites, and cleanup are all required.');
