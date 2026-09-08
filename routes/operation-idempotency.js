@@ -56,6 +56,16 @@ function ageSeconds(row) {
   const raw = String(row.created_at).includes('T') ? String(row.created_at) : String(row.created_at).replace(' ', 'T') + 'Z';
   const ms = Date.parse(raw); return Number.isFinite(ms) ? Math.max(0, Math.floor((Date.now() - ms) / 1000)) : null;
 }
+function parseStoredResponse(row) {
+  if (!row || row.state !== 'completed') return null;
+  try { return JSON.parse(row.response_json || 'null'); } catch (_) { return null; }
+}
+function reconciliationState(row) {
+  if (!row) return 'not_found';
+  if (row.state === 'completed') return 'completed';
+  const age = ageSeconds(row);
+  return age != null && age >= ACTIVE_WINDOW_SECONDS ? 'outcome_unknown' : 'in_progress';
+}
 
 router.use(async (req, res, next) => {
   if (!mutation(req)) return next();
@@ -86,8 +96,7 @@ router.use(async (req, res, next) => {
       if (existing.state === 'completed') {
         res.set('Idempotency-Replayed', 'true');
         const status = Number(existing.response_status || 200);
-        let payload = null;
-        try { payload = JSON.parse(existing.response_json || 'null'); } catch (_) { payload = null; }
+        const payload = parseStoredResponse(existing);
         if (status === 204) return res.status(204).end();
         return res.status(status).json(payload);
       }
@@ -164,13 +173,24 @@ router.get('/operation-idempotency/:key', async (req, res) => {
     const who = actor(req);
     if (who.type === 'anonymous') return res.status(401).json({ error: 'Authentication required' });
     const { rows } = await db.execute({
-      sql: `SELECT idempotency_key,method,path,state,response_status,created_at,completed_at
+      sql: `SELECT idempotency_key,method,path,state,response_status,response_json,created_at,completed_at
             FROM operation_idempotency WHERE actor_type=? AND actor_id=? AND idempotency_key=? ORDER BY id DESC LIMIT 20`,
       args: [who.type, who.id, req.params.key],
     });
-    res.json(rows.map(row => ({ ...row, age_seconds: row.state === 'in_progress' ? ageSeconds(row) : null })));
+    res.json(rows.map(row => ({
+      idempotency_key: row.idempotency_key,
+      method: row.method,
+      path: row.path,
+      state: row.state,
+      reconciliation_state: reconciliationState(row),
+      response_status: row.response_status,
+      response: parseStoredResponse(row),
+      created_at: row.created_at,
+      completed_at: row.completed_at,
+      age_seconds: row.state === 'in_progress' ? ageSeconds(row) : null,
+    })));
   } catch (error) {
-    res.status(500).json({ error: error.message });
+    res.status(500).json({ error: 'Unable to read operation reconciliation receipt' });
   }
 });
 
