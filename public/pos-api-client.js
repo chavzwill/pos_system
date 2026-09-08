@@ -133,7 +133,7 @@
       error.idempotencyReplayed = response.headers.get('Idempotency-Replayed') === 'true';
       error.idempotencyKey = key;
       error.mutationFingerprint = fp;
-      if (isMutation && (response.status >= 500 || control === 'operation_idempotency_in_progress' || control === 'operation_idempotency_receipt_failure')) {
+      if (isMutation && (response.status >= 500 || control === 'operation_idempotency_in_progress' || control === 'operation_idempotency_outcome_unknown' || control === 'operation_idempotency_receipt_failure')) {
         throw ambiguousError(error, key, fp);
       }
       if (isMutation) clearPending(fp);
