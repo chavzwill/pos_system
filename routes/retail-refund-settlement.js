@@ -84,6 +84,26 @@ async function refundSettlementLockKeys(req){
   if(ret?.original_transaction_id)keys.push(`refund-tender-pool:transaction:${Number(ret.original_transaction_id)}`);
   return keys;
 }
+async function readSettlementState(returnId){
+  const {rows:[ret]}=await db.execute({sql:`SELECT r.id,r.return_number,r.original_transaction_id,r.branch_id,r.resolution,r.status,r.total,
+      a.external_refund_total,a.store_credit_restored,a.customer_entitlement_total,
+      t.payment_method original_payment_method,t.total original_total
+      FROM returns r JOIN transactions t ON t.id=r.original_transaction_id
+      LEFT JOIN retail_return_allocations a ON a.return_id=r.id WHERE r.id=?`,args:[returnId]});
+  if(!ret)return null;
+  const {rows:[settlement]}=await db.execute({sql:'SELECT * FROM retail_refund_settlements WHERE return_id=?',args:[returnId]});
+  let legs=[];if(settlement){const result=await db.execute({sql:'SELECT * FROM retail_refund_settlement_legs WHERE settlement_id=? ORDER BY id',args:[settlement.id]});legs=result.rows||[];}
+  const available=await originalTenderAvailability(ret.original_transaction_id,ret.original_total);
+  return {return:ret,settlement:settlement?{...settlement,legs}:null,remaining_original_tender:available};
+}
+
+router.get('/returns/:returnId/settlement',requirePermission('transactions_refund'),async(req,res)=>{
+  try{
+    const returnId=Number(req.params.returnId);if(!returnId)return res.status(400).json({error:'Invalid return id'});
+    const state=await readSettlementState(returnId);if(!state)return res.status(404).json({error:'Return not found'});
+    res.json(state);
+  }catch(e){res.status(e.status||500).json({error:e.message});}
+});
 
 router.post('/returns/:returnId/settle',
   withLifecycleLocks(refundSettlementLockKeys,{ttlSeconds:180,label:'refund settlement'}),
@@ -145,3 +165,4 @@ module.exports.originalTenderAvailability=originalTenderAvailability;
 module.exports.resolveRefundDrawer=resolveRefundDrawer;
 module.exports.refundSettlementLockKeys=refundSettlementLockKeys;
 module.exports.assertTenderAvailability=assertTenderAvailability;
+module.exports.readSettlementState=readSettlementState;
