@@ -18,16 +18,119 @@ router.use(require('./retail-cost-snapshot'));
 
 const allowedPayments = new Set(['cash','card','credit','bank_transfer']);
 const asMoney = v => Number.parseFloat(v || 0);
+let promotionUsageReady = null;
 
 function canOperateCrossBranch(employee) {
   if (!employee) return false;
   return can(employee.permissions, 'branches') || can(employee.permissions, 'security_manage');
 }
 
+async function ensurePromotionUsageIntegrity() {
+  if (promotionUsageReady) return promotionUsageReady;
+  promotionUsageReady = db.batch([
+    { sql: `CREATE TRIGGER IF NOT EXISTS trg_transaction_promotion_usage
+      AFTER INSERT ON transactions
+      WHEN NEW.status='completed' AND NEW.promotion_code IS NOT NULL AND TRIM(NEW.promotion_code)<>''
+      BEGIN
+        UPDATE promotion_codes
+        SET times_used=COALESCE(times_used,0)+1
+        WHERE UPPER(code)=UPPER(NEW.promotion_code);
+      END` },
+  ], 'write').catch(error => { promotionUsageReady = null; throw error; });
+  return promotionUsageReady;
+}
+
+async function promotionLockKeys(req) {
+  const keys = [];
+  if (req.body?.customer_id) keys.push(`customer-commerce:${Number(req.body.customer_id)}`);
+  const code = String(req.body?.promotion_code || '').trim();
+  if (code) {
+    const { rows: [row] } = await db.execute({ sql: 'SELECT id FROM promotion_codes WHERE code=? COLLATE NOCASE', args: [code] });
+    keys.push(`promotion-code:${row?.id || code.toUpperCase()}`);
+  }
+  return keys;
+}
+
+function promotionDiscount(promo, eligibleAmount) {
+  const value = Number(promo.value);
+  if (!Number.isFinite(value) || value < 0) throw new Error('Promotion value is invalid');
+  if (promo.type === 'percentage') {
+    if (value > 100) throw new Error('Promotion percentage cannot exceed 100%');
+    return Number((eligibleAmount * value / 100).toFixed(2));
+  }
+  if (promo.type === 'fixed') return Number(Math.min(value, eligibleAmount).toFixed(2));
+  throw new Error('Promotion type is invalid');
+}
+
+async function validatePromotionAtCheckout(body, authoritativeSubtotal, authoritativeLines) {
+  const code = String(body.promotion_code || '').trim();
+  if (!code) {
+    if (String(body.promotion_name || '').trim()) return { error: 'Promotion name cannot be supplied without a promotion code' };
+    return { discount: asMoney(body.discount_amount), evidence: null };
+  }
+
+  const { rows: [promo] } = await db.execute({ sql: `
+    SELECT pc.id AS code_id, pc.code, pc.active AS code_active, pc.usage_limit, pc.times_used,
+           p.id AS promotion_id, p.name, p.type, p.value, p.min_purchase, p.applies_to,
+           p.start_date, p.end_date, p.active AS promotion_active
+    FROM promotion_codes pc
+    JOIN promotions p ON p.id=pc.promotion_id
+    WHERE pc.code=? COLLATE NOCASE`, args: [code] });
+  if (!promo) return { error: 'Promotion code is invalid or no longer exists' };
+  if (!promo.code_active || !promo.promotion_active) return { error: 'Promotion code is inactive' };
+
+  const today = new Date().toISOString().slice(0,10);
+  if (promo.start_date && today < promo.start_date) return { error: 'Promotion has not started yet' };
+  if (promo.end_date && today > promo.end_date) return { error: 'Promotion has expired' };
+  if (promo.usage_limit != null && Number(promo.times_used || 0) >= Number(promo.usage_limit)) return { error: 'Promotion code has reached its usage limit' };
+  if (Number(promo.min_purchase || 0) > authoritativeSubtotal + 0.001) return { error: `Promotion requires a minimum merchandise subtotal of ${Number(promo.min_purchase).toFixed(2)}` };
+
+  let eligibleAmount = authoritativeSubtotal;
+  if (['specific','categories','items'].includes(String(promo.applies_to || ''))) {
+    const { rows: assignments } = await db.execute({ sql: 'SELECT item_type,item_id FROM promotion_items WHERE promotion_id=?', args: [promo.promotion_id] });
+    const productIds = new Set(assignments.filter(x => x.item_type === 'product').map(x => Number(x.item_id)));
+    const categoryIds = new Set(assignments.filter(x => x.item_type === 'category').map(x => Number(x.item_id)));
+    eligibleAmount = authoritativeLines.reduce((sum, line) => {
+      const productMatch = promo.applies_to !== 'categories' && productIds.has(Number(line.product_id));
+      const categoryMatch = promo.applies_to !== 'items' && categoryIds.has(Number(line.category_id));
+      return sum + (productMatch || categoryMatch ? Number(line.lineTotal) : 0);
+    }, 0);
+    eligibleAmount = Number(eligibleAmount.toFixed(2));
+    if (eligibleAmount <= 0) return { error: 'No item in the current cart qualifies for this promotion' };
+  }
+
+  let authoritativeDiscount;
+  try { authoritativeDiscount = promotionDiscount(promo, eligibleAmount); }
+  catch (error) { return { error: error.message }; }
+  const requested = asMoney(body.discount_amount);
+  if (!Number.isFinite(requested) || Math.abs(requested - authoritativeDiscount) > 0.01) {
+    return { error: `Promotion pricing changed. Expected discount ${authoritativeDiscount.toFixed(2)}; refresh the promotion before completing the sale.` };
+  }
+
+  body.promotion_code = String(promo.code).trim().toUpperCase();
+  body.promotion_name = promo.name;
+  body.discount_amount = authoritativeDiscount;
+  return {
+    discount: authoritativeDiscount,
+    evidence: {
+      code_id: Number(promo.code_id),
+      promotion_id: Number(promo.promotion_id),
+      code: body.promotion_code,
+      name: promo.name,
+      eligible_amount: eligibleAmount,
+      discount_amount: authoritativeDiscount,
+      usage_before: Number(promo.times_used || 0),
+      usage_limit: promo.usage_limit == null ? null : Number(promo.usage_limit),
+      validated_at: new Date().toISOString(),
+    },
+  };
+}
+
 router.post('/',
-  withLifecycleLocks(req => req.body?.customer_id ? [`customer-commerce:${Number(req.body.customer_id)}`] : [], {ttlSeconds:120,label:'customer checkout'}),
+  withLifecycleLocks(promotionLockKeys, {ttlSeconds:120,label:'customer checkout or promotion redemption'}),
   requirePermission('pos'), async (req,res,next) => {
   try {
+    await ensurePromotionUsageIntegrity();
     const body = req.body || {};
     const items = Array.isArray(body.items) ? body.items : [];
     if (!items.length) return res.status(400).json({error:'No items in transaction'});
@@ -56,15 +159,14 @@ router.post('/',
       }
     }
 
-    const discount = asMoney(body.discount_amount);
     const storeCredit = asMoney(body.store_credit_applied);
     const requestedCashBack = asMoney(body.cash_back_applied);
-    if (!Number.isFinite(discount) || discount < 0) return res.status(400).json({error:'Discount amount cannot be negative'});
     if (!Number.isFinite(storeCredit) || storeCredit < 0) return res.status(400).json({error:'Store credit amount cannot be negative'});
     if (!Number.isFinite(requestedCashBack) || requestedCashBack < 0) return res.status(400).json({error:'Cash-back amount cannot be negative'});
 
     let authoritativeSubtotal = 0;
     let authoritativeTax = 0;
+    const authoritativeLines = [];
     for (const line of items) {
       const qty = Number(line.quantity);
       if (!Number.isInteger(qty) || qty <= 0) return res.status(400).json({error:'Sale quantities must be positive whole numbers after UOM conversion'});
@@ -95,9 +197,15 @@ router.post('/',
       const lineTax = body.tax_exempt ? 0 : Number((lineTotal * Number(product.tax_rate || 0) / 100).toFixed(2));
       authoritativeSubtotal += lineTotal;
       authoritativeTax += lineTax;
+      authoritativeLines.push({ product_id: product.id, category_id: product.category_id, quantity: qty, unit_price: unitPrice, lineTotal });
     }
     authoritativeSubtotal = Number(authoritativeSubtotal.toFixed(2));
     authoritativeTax = Number(authoritativeTax.toFixed(2));
+
+    const promotionValidation = await validatePromotionAtCheckout(body, authoritativeSubtotal, authoritativeLines);
+    if (promotionValidation.error) return res.status(409).json({error:promotionValidation.error,control:'promotion_revalidation'});
+    const discount = Number(promotionValidation.discount || 0);
+    if (!Number.isFinite(discount) || discount < 0) return res.status(400).json({error:'Discount amount cannot be negative'});
     if (discount > authoritativeSubtotal + authoritativeTax) return res.status(400).json({error:'Discount cannot exceed the sale value'});
 
     let customer = null;
@@ -130,8 +238,7 @@ router.post('/',
 
     const netTotal=Number((authoritativeSubtotal+authoritativeTax-discount-storeCredit-authoritativeCashBack).toFixed(2));
     if(netTotal<0)return res.status(400).json({error:'Credits and rewards cannot exceed the sale total'});
-    // Bind the downstream transaction engine to the authoritative redemption
-    // value verified under the customer lifecycle lock.
+    body.discount_amount=discount;
     body.cash_back_applied=authoritativeCashBack;
 
     const tenders = Array.isArray(body.tenders) && body.tenders.length ? body.tenders : null;
@@ -159,7 +266,8 @@ router.post('/',
       if (method === 'cash' && Number(body.amount_tendered ?? netTotal) + 0.001 < netTotal) return res.status(400).json({error:'Cash tendered cannot be less than the sale total'});
     }
 
-    req.retailCheckoutEvidence = {authoritativeSubtotal,authoritativeTax,authoritativeCashBack,netTotal,validatedAt:new Date().toISOString(),inventoryReservationKey:req.inventoryReservationKey||null};
+    req.retailPromotionEvidence=promotionValidation.evidence;
+    req.retailCheckoutEvidence = {authoritativeSubtotal,authoritativeTax,authoritativeCashBack,netTotal,promotion:promotionValidation.evidence,validatedAt:new Date().toISOString(),inventoryReservationKey:req.inventoryReservationKey||null};
     next();
   } catch (e) {
     res.status(500).json({error:e.message});
@@ -167,3 +275,5 @@ router.post('/',
 });
 
 module.exports = router;
+module.exports.ensurePromotionUsageIntegrity=ensurePromotionUsageIntegrity;
+module.exports.validatePromotionAtCheckout=validatePromotionAtCheckout;
