@@ -6,6 +6,7 @@ const {requirePermission}=require('../lib/permissions');
 const {nextNumber}=require('../lib/nextNumber');
 const {syncBinQty}=require('../lib/binSync');
 const {ensureSchema:ensureCustomerAccountIntegrity}=require('./customer-account-integrity');
+const {withLifecycleLocks}=require('../lib/lifecycleLock');
 
 let readyPromise=null;
 const money=v=>{const n=Number(v);return Number.isFinite(n)?Number(n.toFixed(2)):0;};
@@ -45,7 +46,15 @@ async function priorAllocations(transactionId){
   return row||{};
 }
 
-router.post('/:id/return',requirePermission('transactions_returns'),async(req,res,next)=>{
+router.post('/:id/return',
+  withLifecycleLocks(async req=>{
+    const transactionId=Number(req.params.id);
+    const keys=[`retail-return:${transactionId}`];
+    const {rows:[tx]}=await db.execute({sql:'SELECT customer_id FROM transactions WHERE id=?',args:[transactionId]});
+    if(tx?.customer_id)keys.push(`customer-commerce:${Number(tx.customer_id)}`);
+    return keys;
+  },{ttlSeconds:180,label:'return or customer-account operation'}),
+  requirePermission('transactions_returns'),async(req,res,next)=>{
   try{
     if(req.body?.resolution==='replacement')return next();
     const resolution=String(req.body?.resolution||'').trim();
