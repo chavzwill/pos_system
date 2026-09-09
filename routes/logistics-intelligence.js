@@ -22,6 +22,8 @@ router.use(async (req,res,next)=>{try{await ensureSchema();next();}catch(e){res.
 router.use(require('./logistics-commercial-handoff'));
 router.use(require('./logistics-location-intelligence'));
 router.use(require('./logistics-route-planning'));
+router.use(require('./role-operations-dashboards'));
+router.use(require('./dispatch-security-release-guard'));
 router.use(require('./logistics-route-execution'));
 router.use(require('./logistics-protected-execution'));
 router.use(require('./logistics-field-execution'));
