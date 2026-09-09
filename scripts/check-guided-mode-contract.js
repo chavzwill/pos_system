@@ -24,22 +24,26 @@ check('role dashboards expose Guided Mode targets',roleUi.includes('data-guide-i
 check('cashier workflow exposes return target',cashier.includes('data-guide-id="return-workflow"'));
 check('cashier workflow exposes refund settlement target',cashier.includes('data-guide-id="refund-settlement"')&&cashier.includes('data-guide-id="refund-settlement-form"'));
 check('cashier workflow exposes void target',cashier.includes('data-guide-id="void-transaction"'));
+check('replacement guidance falls back safely to authoritative cashier workflow target',guide.includes("guideId:'replacement-workflow'")&&guide.includes("['return','replacement','refund-settlement','void']"));
 check('guide stays above role dashboards',stability.includes('#tt-guided-mode{position:fixed;inset:0;z-index:7000')&&stability.includes('body:has(#role-ops-dashboard) .tt-guide'));
 check('guide does not block role dashboard while coaching',stability.includes('body:has(#role-ops-dashboard) .tt-guide-backdrop')&&stability.includes('pointer-events:none'));
 check('guide has mobile treatment',stability.includes('@media(max-width:860px)')&&stability.includes('.tt-guide__suggestions{grid-template-columns:1fr}'));
-const taskIds=['sale','hold','return','refund-settlement','void','repair','rental','dispatch','dispatch-control','driver-dashboard','security-dashboard','accounts-dashboard','inventory-adjust','count','pr','po','transfer','reports','compensation'];
+const taskIds=['sale','hold','return','replacement','refund-settlement','void','repair','rental','dispatch','dispatch-control','driver-dashboard','security-dashboard','accounts-dashboard','inventory-adjust','count','pr','po','transfer','reports','compensation'];
 for(const id of taskIds)check(`task registered: ${id}`,guide.includes(`id:'${id}'`));
 const routeExpectations=[
- ['sale','sales-workspace'],['hold','held-sales-workspace'],['return','cashier-controls-workspace'],['refund-settlement','cashier-controls-workspace'],['void','cashier-controls-workspace'],['repair','work-orders-workspace'],['rental','rentals-workspace'],['dispatch','logistics-intelligence'],['inventory-adjust','inventory-workspace'],['count','inventory-workspace'],['pr','purchasing-workspace'],['po','purchasing-workspace'],['transfer','transfers-workspace'],['reports','operational-reports']
+ ['sale','sales-workspace'],['hold','held-sales-workspace'],['return','cashier-controls-workspace'],['replacement','cashier-controls-workspace'],['refund-settlement','cashier-controls-workspace'],['void','cashier-controls-workspace'],['repair','work-orders-workspace'],['rental','rentals-workspace'],['dispatch','logistics-intelligence'],['inventory-adjust','inventory-workspace'],['count','inventory-workspace'],['pr','purchasing-workspace'],['po','purchasing-workspace'],['transfer','transfers-workspace'],['reports','operational-reports']
 ];
 for(const [id,key] of routeExpectations){const re=new RegExp(`id:'${id}'[^\\n]*feature:'${key}'`);check(`task ${id} routes to ${key}`,re.test(guide));}
 const workflowCoverage=[
- ['routes/retail-return-hardening.js','return'],['routes/retail-refund-settlement.js','refund-settlement'],['routes/transaction-void-hardening.js','void'],['routes/retail-checkout-hardening.js','sale'],['routes/held-sale-recall-hardening.js','hold'],['routes/purchase-order-hardening.js','po'],['routes/replacement-return-hardening.js','return'],['routes/rentals.js','rental'],['routes/work-orders.js','repair'],['routes/logistics-intelligence.js','dispatch'],['routes/role-operations-dashboards.js','accounts-dashboard']
+ ['routes/retail-return-hardening.js','return'],['routes/retail-refund-settlement.js','refund-settlement'],['routes/transaction-void-hardening.js','void'],['routes/retail-checkout-hardening.js','sale'],['routes/held-sale-recall-hardening.js','hold'],['routes/purchase-order-hardening.js','po'],['routes/replacement-return-hardening.js','replacement'],['routes/retail-return-traceability-guard.js','return'],['routes/rentals.js','rental'],['routes/work-orders.js','repair'],['routes/logistics-intelligence.js','dispatch'],['routes/role-operations-dashboards.js','accounts-dashboard']
 ];
-for(const [file,task] of workflowCoverage)check(`workflow coverage maps ${file} to ${task}`,guide.includes(`'${file}'`)&&guide.includes(`['${task}'`)||guide.includes(`'${file}':['${task}'`));
+for(const [file,task] of workflowCoverage)check(`workflow coverage maps ${file} to ${task}`,guide.includes(`'${file}'`)&&guide.includes(`'${task}'`));
 check('refund guidance requires original tender evidence',guide.includes('remaining original tender')&&guide.includes('settlement/reference evidence'));
 check('refund guidance warns against duplicate retry after uncertainty',guide.includes('do not create a second refund'));
 check('void guidance preserves rental/repair reversal authority',guide.includes('is not a rental or repair transaction')&&guide.includes('their own reversal workflows'));
+check('replacement guidance documents branch and quantity revalidation',guide.includes('authoritative branch')&&guide.includes('remaining return entitlement')&&guide.includes('branch stock at commit time'));
+check('replacement guidance explicitly fail-closes tracked identity substitution',guide.includes('Serial- or lot-controlled products fail closed')&&guide.includes('never substitute an unrecorded serial or lot'));
+check('replacement guidance requires ambiguous-response reconciliation',guide.includes('Replacement returns require durable operation identity')&&guide.includes('refresh the original transaction and return history'));
 for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} Guided Mode: ${c.name}`);
 if(checks.some(c=>!c.pass))process.exit(1);
 console.log(`Guided Mode contract OK (${checks.length} checks against the authoritative runtime).`);
