@@ -55,21 +55,15 @@ async function ensureSchema(){
 }
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Role dashboard schema initialization failed',detail:e.message});}});
 function actor(req){return Number(req.employee?.id||req.user?.employee_id||0)||null;}
-function has(req,key){return Boolean(req.apiKey)||can(req.employee?.permissions||{},key);}
+function has(req,key){return can(req.employee?.permissions||{},key);}
 async function employeeFlags(id){const {rows:[e]}=await db.execute({sql:'SELECT id,is_driver,is_security,is_operator,active,default_branch_id FROM employees WHERE id=?',args:[id]});return e||null;}
 function appNumber(){return `ACC-${Date.now().toString(36).toUpperCase()}-${Math.random().toString(36).slice(2,6).toUpperCase()}`;}
+function needsSecurityRelease(job){const type=String(job?.job_type||'').toLowerCase(),source=String(job?.source_type||'').toLowerCase();if(source==='purchase_order'||type.includes('supplier_pickup'))return false;if(type.includes('repair_pickup')||type.includes('rental_pickup')||type.includes('customer_pickup'))return false;return true;}
 
 router.get('/role-dashboards/me',async(req,res)=>{
-  if(!req.employee&&!req.apiKey)return res.status(401).json({error:'Authentication required'});
-  const flags=req.employee?await employeeFlags(actor(req)):null;
-  const p=req.employee?.permissions||{};
-  res.json({
-    driver:Boolean(flags?.is_driver),
-    security:Boolean(flags?.is_security),
-    dispatch:has(req,'transfers')||has(req,'dispatch')||has(req,'dispatch_view'),
-    accounts:has(req,'accounts'),
-    branch_id:flags?.default_branch_id||req.employee?.default_branch_id||null
-  });
+  if(!req.employee)return res.status(401).json({error:'Employee session required'});
+  const flags=await employeeFlags(actor(req));
+  res.json({driver:Boolean(flags?.is_driver),security:Boolean(flags?.is_security),dispatch:has(req,'transfers')||has(req,'dispatch')||has(req,'dispatch_view'),accounts:has(req,'accounts'),branch_id:flags?.default_branch_id||req.employee?.default_branch_id||null});
 });
 
 router.get('/role-dashboards/dispatch',async(req,res)=>{
@@ -78,17 +72,16 @@ router.get('/role-dashboards/dispatch',async(req,res)=>{
     SUM(CASE WHEN de.stage NOT IN ('completed','failed','cancelled') THEN 1 ELSE 0 END) active_tasks,
     SUM(CASE WHEN de.stage='in_transit' THEN 1 ELSE 0 END) in_transit,
     MAX(de.updated_at) last_activity
-    FROM employees e LEFT JOIN branches b ON b.id=e.default_branch_id
-    LEFT JOIN dispatch_executions de ON de.driver_employee_id=e.id
+    FROM employees e LEFT JOIN branches b ON b.id=e.default_branch_id LEFT JOIN dispatch_executions de ON de.driver_employee_id=e.id
     WHERE e.is_driver=1 AND e.active=1 GROUP BY e.id ORDER BY name`,args:[]});
   const {rows:jobs}=await db.execute({sql:`SELECT dj.id,dj.job_number,dj.source_type,dj.job_type,dj.priority,dj.status,dj.origin_label,dj.destination_label,dj.promised_at,dj.scheduled_for,dj.branch_id,b.name branch_name,
     de.stage execution_stage,de.driver_employee_id,e.first_name||' '||e.last_name driver_name,dv.vehicle_number,dv.registration_number,
     CASE WHEN sr.id IS NOT NULL AND sr.revoked_at IS NULL THEN 1 ELSE 0 END security_released,sr.released_at security_released_at
     FROM dispatch_jobs dj LEFT JOIN branches b ON b.id=dj.branch_id LEFT JOIN dispatch_executions de ON de.dispatch_job_id=dj.id
-    LEFT JOIN employees e ON e.id=de.driver_employee_id LEFT JOIN dispatch_vehicles dv ON dv.id=de.vehicle_id
-    LEFT JOIN dispatch_security_releases sr ON sr.dispatch_job_id=dj.id
+    LEFT JOIN employees e ON e.id=de.driver_employee_id LEFT JOIN dispatch_vehicles dv ON dv.id=de.vehicle_id LEFT JOIN dispatch_security_releases sr ON sr.dispatch_job_id=dj.id
     WHERE dj.status NOT IN ('completed','cancelled') ORDER BY COALESCE(dj.promised_at,dj.scheduled_for,dj.created_at),dj.id DESC LIMIT 300`,args:[]});
-  res.json({summary:{drivers:drivers.length,active_drivers:drivers.filter(d=>Number(d.active_tasks)>0).length,open_jobs:jobs.length,awaiting_security:jobs.filter(j=>j.execution_stage==='at_origin'&&!j.security_released).length,in_transit:jobs.filter(j=>j.execution_stage==='in_transit').length},drivers,jobs});
+  const enriched=jobs.map(j=>({...j,security_required:needsSecurityRelease(j)}));
+  res.json({summary:{drivers:drivers.length,active_drivers:drivers.filter(d=>Number(d.active_tasks)>0).length,open_jobs:enriched.length,awaiting_security:enriched.filter(j=>j.security_required&&j.execution_stage==='at_origin'&&!j.security_released).length,in_transit:enriched.filter(j=>j.execution_stage==='in_transit').length},drivers,jobs:enriched});
 });
 
 router.get('/role-dashboards/driver',async(req,res)=>{
@@ -101,7 +94,8 @@ router.get('/role-dashboards/driver',async(req,res)=>{
     FROM dispatch_executions de JOIN dispatch_jobs dj ON dj.id=de.dispatch_job_id LEFT JOIN dispatch_vehicles dv ON dv.id=de.vehicle_id
     LEFT JOIN dispatch_security_releases sr ON sr.dispatch_job_id=dj.id
     WHERE de.driver_employee_id=? AND de.stage NOT IN ('completed','cancelled') ORDER BY COALESCE(dj.scheduled_for,dj.promised_at,dj.created_at),dj.id`,args:[driverId]});
-  res.json({driver_id:driverId,summary:{tasks:jobs.length,ready_for_pickup:jobs.filter(j=>j.execution_stage==='at_origin'&&j.security_released).length,awaiting_security:jobs.filter(j=>j.execution_stage==='at_origin'&&!j.security_released).length,in_transit:jobs.filter(j=>j.execution_stage==='in_transit').length},jobs});
+  const enriched=jobs.map(j=>({...j,security_required:needsSecurityRelease(j)}));
+  res.json({driver_id:driverId,summary:{tasks:enriched.length,ready_for_pickup:enriched.filter(j=>j.execution_stage==='at_origin'&&(!j.security_required||j.security_released)).length,awaiting_security:enriched.filter(j=>j.security_required&&j.execution_stage==='at_origin'&&!j.security_released).length,in_transit:enriched.filter(j=>j.execution_stage==='in_transit').length},jobs:enriched});
 });
 
 router.get('/role-dashboards/security',async(req,res)=>{
@@ -111,13 +105,14 @@ router.get('/role-dashboards/security',async(req,res)=>{
   const branchId=req.query.branch_id||flags.default_branch_id||null,args=[];
   let where=`WHERE dj.status NOT IN ('completed','cancelled') AND de.stage IN ('assigned','en_route_to_origin','at_origin','in_transit','at_destination')`;
   if(branchId){where+=' AND dj.branch_id=?';args.push(branchId);}
-  const {rows:jobs}=await db.execute({sql:`SELECT dj.id,dj.job_number,dj.source_type,dj.job_type,dj.origin_label,dj.destination_label,dj.priority,dj.status,dj.branch_id,b.name branch_name,
+  const {rows:rows}=await db.execute({sql:`SELECT dj.id,dj.job_number,dj.source_type,dj.job_type,dj.origin_label,dj.destination_label,dj.priority,dj.status,dj.branch_id,b.name branch_name,
     de.stage execution_stage,de.driver_employee_id,e.first_name||' '||e.last_name driver_name,dv.vehicle_number,dv.registration_number,
     sr.id release_id,sr.status release_status,sr.package_count,sr.seal_reference,sr.released_at,sr.security_employee_id
     FROM dispatch_jobs dj JOIN dispatch_executions de ON de.dispatch_job_id=dj.id LEFT JOIN branches b ON b.id=dj.branch_id
     LEFT JOIN employees e ON e.id=de.driver_employee_id LEFT JOIN dispatch_vehicles dv ON dv.id=de.vehicle_id
     LEFT JOIN dispatch_security_releases sr ON sr.dispatch_job_id=dj.id AND sr.revoked_at IS NULL ${where}
     ORDER BY CASE WHEN de.stage='at_origin' AND sr.id IS NULL THEN 0 ELSE 1 END,COALESCE(dj.promised_at,dj.scheduled_for,dj.created_at)`,args});
+  const jobs=rows.filter(needsSecurityRelease);
   res.json({branch_id:branchId,summary:{shipments:jobs.length,awaiting_release:jobs.filter(j=>j.execution_stage==='at_origin'&&!j.release_id).length,released:jobs.filter(j=>j.release_id).length,in_transit:jobs.filter(j=>j.execution_stage==='in_transit').length},jobs});
 });
 
@@ -127,6 +122,7 @@ router.post('/role-dashboards/security/:jobId/release',async(req,res)=>{
   if(!flags?.is_security&&!has(req,'security_manage'))return res.status(403).json({error:'Security personnel access required'});
   const {rows:[job]}=await db.execute({sql:`SELECT dj.*,de.stage,de.driver_employee_id,dv.registration_number FROM dispatch_jobs dj JOIN dispatch_executions de ON de.dispatch_job_id=dj.id LEFT JOIN dispatch_vehicles dv ON dv.id=de.vehicle_id WHERE dj.id=?`,args:[req.params.jobId]});
   if(!job)return res.status(404).json({error:'Dispatch shipment not found'});
+  if(!needsSecurityRelease(job))return res.status(409).json({error:'This is an external-origin collection and does not require Total Tools security release'});
   if(job.stage!=='at_origin')return res.status(409).json({error:`Shipment can only be released after driver arrival at origin. Current stage: ${job.stage}`});
   if(!job.driver_employee_id)return res.status(409).json({error:'Shipment must have an assigned driver before security release'});
   const body=req.body||{},count=body.package_count==null?null:Number(body.package_count);
@@ -170,6 +166,8 @@ router.post('/role-dashboards/accounts/:id/decision',async(req,res)=>{
   if(!app)return res.status(404).json({error:'Application not found'});
   if(['approved','rejected'].includes(app.status))return res.status(409).json({error:`Application is already ${app.status}`});
   const limit=b.approved_credit_limit==null?app.requested_credit_limit:Number(b.approved_credit_limit),terms=b.approved_terms_days==null?app.requested_terms_days:Number(b.approved_terms_days);
+  if(decision==='approved'&&(!Number.isFinite(limit)||limit<0))return res.status(400).json({error:'Approved credit limit must be zero or greater'});
+  if(decision==='approved'&&terms!=null&&(!Number.isFinite(terms)||terms<0))return res.status(400).json({error:'Approved terms must be zero or greater'});
   const tx=await db.transaction('write');
   try{
     await tx.execute({sql:`UPDATE commercial_account_applications SET status=?,reviewed_by_employee_id=?,reviewed_at=CURRENT_TIMESTAMP,decision_notes=?,approved_credit_limit=?,approved_terms_days=? WHERE id=?`,args:[decision,actor(req),b.decision_notes||null,decision==='approved'?limit:null,decision==='approved'?terms:null,app.id]});
