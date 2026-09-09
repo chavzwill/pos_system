@@ -18,10 +18,6 @@ const browserScripts = [
 ];
 for (const filename of browserScripts) compile(fs.readFileSync(path.join(publicDir, filename), 'utf8'), filename);
 
-// The production application now boots from app-shell.html. public/index.html is
-// retained only as an optional legacy surface and is intentionally empty on the
-// modernization branch. Do not let an absent legacy app prevent certification
-// of the native POS that users actually run.
 const html = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, 'utf8') : '';
 if (html.trim()) {
   const marker = 'const App = {';
@@ -41,6 +37,7 @@ require('./check-retail-customer-lifecycle-concurrency-contract');
 require('./check-retail-promotion-integrity-contract');
 require('./check-retail-void-integrity-contract');
 require('./check-retail-refund-settlement-integrity-contract');
+require('./check-replacement-return-integrity-contract');
 require('./check-logistics-commercial-handoff-contract');
 require('./check-logistics-field-execution-contract');
 require('./check-logistics-route-planning-contract');
