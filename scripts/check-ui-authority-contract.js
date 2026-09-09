@@ -7,6 +7,7 @@ const css=fs.readFileSync(path.join(root,'public/total-tools-ui-system.css'),'ut
 const workspaceCss=fs.readFileSync(path.join(root,'public/total-tools-workspace-ui.css'),'utf8');
 const refinementCss=fs.readFileSync(path.join(root,'public/total-tools-workspace-refinement.css'),'utf8');
 const secondaryCss=fs.readFileSync(path.join(root,'public/total-tools-secondary-workspace-refinement.css'),'utf8');
+const longTailCss=fs.readFileSync(path.join(root,'public/total-tools-long-tail-workspace-refinement.css'),'utf8');
 const checks=[];const check=(name,pass)=>checks.push({name,pass:!!pass});
 const banned=[
   'premium-shell-v2.css','premium-shell-v3.css','workspace-quality-pass.css',
@@ -19,7 +20,8 @@ check('canonical shell UI system is loaded',shell.includes('/total-tools-ui-syst
 check('canonical workspace UI system is loaded',shell.includes('/total-tools-workspace-ui.css'));
 check('targeted primary workspace refinement is loaded',shell.includes('/total-tools-workspace-refinement.css'));
 check('secondary workspace refinement is loaded',shell.includes('/total-tools-secondary-workspace-refinement.css'));
-check('secondary workspace refinement is the final stylesheet',shell.lastIndexOf('/total-tools-secondary-workspace-refinement.css')>shell.lastIndexOf('/total-tools-workspace-refinement.css')&&shell.indexOf('rel="stylesheet"',shell.lastIndexOf('/total-tools-secondary-workspace-refinement.css'))<0);
+check('long-tail workspace refinement is loaded',shell.includes('/total-tools-long-tail-workspace-refinement.css'));
+check('long-tail workspace refinement is the final stylesheet',shell.lastIndexOf('/total-tools-long-tail-workspace-refinement.css')>shell.lastIndexOf('/total-tools-secondary-workspace-refinement.css')&&shell.indexOf('rel="stylesheet"',shell.lastIndexOf('/total-tools-long-tail-workspace-refinement.css'))<0);
 check('historical conflicting shell layers are removed',banned.every(x=>!shell.includes('/'+x)));
 check('obsolete meeting demo DOM enhancer is not loaded',!shell.includes('/meeting-demo-shell.js'));
 check('Total Tools shell brand colors are explicit',css.includes('--tt-green:#006b3f')&&css.includes('--tt-yellow:#ffd400'));
@@ -28,6 +30,7 @@ check('desktop/tablet/mobile shell breakpoints exist',css.includes('@media(max-w
 check('workspace desktop/tablet/mobile breakpoints exist',workspaceCss.includes('@media(max-width:1200px)')&&workspaceCss.includes('@media(max-width:900px)')&&workspaceCss.includes('@media(max-width:560px)'));
 check('primary refinement covers desktop/tablet/mobile breakpoints',refinementCss.includes('@media(max-width:1180px)')&&refinementCss.includes('@media(max-width:900px)')&&refinementCss.includes('@media(max-width:560px)'));
 check('secondary refinement covers desktop/tablet/mobile breakpoints',secondaryCss.includes('@media(max-width:1000px)')&&secondaryCss.includes('@media(max-width:900px)')&&secondaryCss.includes('@media(max-width:560px)'));
+check('long-tail refinement covers desktop/tablet/mobile breakpoints',longTailCss.includes('@media(max-width:1000px)')&&longTailCss.includes('@media(max-width:900px)')&&longTailCss.includes('@media(max-width:560px)'));
 check('mobile sidebar becomes off-canvas',css.includes('transform:translateX(-104%)')&&css.includes('.shell-app.menu-open .shell-sidebar'));
 check('shell focus-visible treatment is defined',css.includes(':focus-visible')&&css.includes('--tt-focus'));
 check('workspace focus-visible treatment is defined',workspaceCss.includes(':focus-visible')&&workspaceCss.includes('--ttw-yellow'));
@@ -48,6 +51,15 @@ check('cashier controls refinement is explicit',secondaryCss.includes('.tt-cc__b
 check('settings refinement is explicit',secondaryCss.includes('.tt-settings__grid')&&secondaryCss.includes('.tt-settings__field'));
 check('RBAC refinement is explicit',secondaryCss.includes('.tt-rbac__permission-grid')&&secondaryCss.includes('.tt-rbac__warning'));
 check('system health refinement is explicit',secondaryCss.includes('.tt-mr__summary')&&secondaryCss.includes('.tt-mr__checks'));
+check('transfer refinement is explicit',longTailCss.includes('.tt-tr__body')&&longTailCss.includes('.tt-tr__composer'));
+check('reports refinement is explicit',longTailCss.includes('.tt-op-reports__controls')&&longTailCss.includes('.tt-op-reports__table'));
+check('supplier ledger refinement is explicit',longTailCss.includes('.tt-supplier-ledger__panel')&&longTailCss.includes('.tt-supplier-ledger-kpis'));
+check('settlement refinement is explicit',longTailCss.includes('.tt-settlement__panel')&&longTailCss.includes('.tt-settlement-kpis'));
+check('accounting ledger refinement is explicit',longTailCss.includes('.tt-ledger__panel')&&longTailCss.includes('.tt-ledger-kpis'));
+check('warehouse refinement is explicit',longTailCss.includes('.wow-grid')&&longTailCss.includes('.wow-table-wrap'));
+check('cash drawer refinement is explicit',longTailCss.includes('.cdw-metrics')&&longTailCss.includes('.cdw-table'));
+check('integration admin refinement is explicit',longTailCss.includes('.iaw-grid')&&longTailCss.includes('.iaw-secret'));
+check('catalog admin refinement is explicit',longTailCss.includes('.catalog-admin-head')&&longTailCss.includes('.catalog-admin-table'));
 for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} UI authority: ${c.name}`);
 if(checks.some(c=>!c.pass))process.exit(1);
 console.log(`Canonical UI authority contract OK (${checks.length} checks).`);
