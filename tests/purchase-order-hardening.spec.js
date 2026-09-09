@@ -32,7 +32,7 @@ test.describe('Purchase order lifecycle hardening', () => {
     expect(suppliers.status).toBe(200); expect(branches.status).toBe(200); expect(products.status).toBe(200);
     const supplier = suppliers.body.find(x => x.active !== 0);
     const branch = branches.body.find(x => x.active !== 0);
-    const product = products.body.find(x => x.active !== 0 && !x.is_service);
+    const product = products.body.find(x => x.active !== 0 && !x.is_service && Number(x.has_variations || 0) === 0);
     expect(supplier).toBeTruthy(); expect(branch).toBeTruthy(); expect(product).toBeTruthy();
 
     const unitCost = Number(product.cost) || 1;
@@ -97,5 +97,35 @@ test.describe('Purchase order lifecycle hardening', () => {
     const listed = await api(cookie, 'GET', `/api/purchase-orders/${po.id}/landed-cost-allocations`);
     expect(listed.status).toBe(200);
     expect(listed.body.some(x => x.id === allocation.body.id && x.items.length === 1)).toBe(true);
+  });
+
+  test('variation-bearing products fail closed until the exact variation is authoritative', async () => {
+    const cookie = await loginCookie();
+    const [suppliers, branches, products] = await Promise.all([
+      api(cookie, 'GET', '/api/suppliers'), api(cookie, 'GET', '/api/branches'), api(cookie, 'GET', '/api/products'),
+    ]);
+    const supplier=suppliers.body.find(x=>x.active!==0),branch=branches.body.find(x=>x.active!==0);
+    const product=products.body.find(x=>x.active!==0&&!x.is_service&&Number(x.has_variations||0)>0);
+    test.skip(!supplier||!branch||!product,'No active variation-bearing catalog product is available in this test database');
+    const vars=await api(cookie,'GET',`/api/products/${product.id}/variations`);expect(vars.status).toBe(200);
+    const variation=vars.body.find(v=>Number(v.active)!==0);test.skip(!variation,'No active variation is available for the selected product');
+    const cost=Number(variation.cost??product.cost)||1;
+
+    const missing=await api(cookie,'POST','/api/purchase-orders',{supplier_id:supplier.id,branch_id:branch.id,items:[{product_id:product.id,quantity_ordered:1,unit_cost:cost}]});
+    expect(missing.status).toBe(409);expect(missing.body.control).toBe('po_variation_required');
+
+    const created=await api(cookie,'POST','/api/purchase-orders',{supplier_id:supplier.id,branch_id:branch.id,items:[{product_id:product.id,variation_id:variation.id,quantity_ordered:1,unit_cost:cost}],notes:'Variation authority acceptance test'});
+    expect(created.status).toBe(201);expect(Number(created.body.items[0].variation_id)).toBe(Number(variation.id));
+    expect(created.body.items[0].variation_name).toBe(variation.name);
+
+    const detail=await api(cookie,'GET',`/api/purchase-orders/${created.body.id}`);
+    expect(detail.status).toBe(200);expect(Number(detail.body.items[0].variation_id)).toBe(Number(variation.id));
+    expect(detail.body.items[0].variation_sku).toBe(variation.sku);
+
+    const otherProduct=products.body.find(x=>Number(x.id)!==Number(product.id)&&Number(x.has_variations||0)>0);
+    if(otherProduct){
+      const otherVars=await api(cookie,'GET',`/api/products/${otherProduct.id}/variations`);const wrong=otherVars.body.find(v=>Number(v.active)!==0);
+      if(wrong){const rejected=await api(cookie,'POST','/api/purchase-orders',{supplier_id:supplier.id,branch_id:branch.id,items:[{product_id:product.id,variation_id:wrong.id,quantity_ordered:1,unit_cost:cost}]});expect(rejected.status).toBe(409);expect(rejected.body.control).toBe('po_variation_invalid');}
+    }
   });
 });
