@@ -35,6 +35,7 @@ function resourceFor(req){
   if(method==='PATCH'&&(id=matchId(p,/^\/work-orders\/(\d+)\/(?:signoff|assessment-paid|deposit-paid|final-payment)$/)))return `work_order:${id}:financial_lifecycle`;
   if(method==='POST'&&(id=matchId(p,/^\/transactions\/(\d+)\/return$/)))return `transaction:${id}:return`;
   if(method==='PATCH'&&(id=matchId(p,/^\/transactions\/(\d+)\/void$/)))return `transaction:${id}:void`;
+  if(method==='POST'&&(id=matchId(p,/^\/transactions\/returns\/(\d+)\/settle$/)))return `return:${id}:refund_settlement`;
   if(method==='POST'&&p==='/transactions'&&req.body?.source_hold_id)return `held_sale:${Number(req.body.source_hold_id)}:recall`;
   if(method==='POST'&&p==='/transactions'&&req.body?.quote_id)return `quotation:${Number(req.body.quote_id)}:checkout`;
   if(method==='POST'&&(id=matchId(p,/^\/quotations\/(\d+)\/convert$/)))return `quotation:${id}:convert`;
@@ -55,8 +56,9 @@ function resourceFor(req){
 function requiresRequestIdentity(req){
   if(req.apiKey)return false;
   const method=String(req.method).toUpperCase();
-  if(method==='POST'&&(req.path==='/transactions'||req.path==='/rentals/agreements'||/^\/quotations\/\d+\/convert$/.test(req.path)))return true;
-  if(method==='PATCH'&&/^\/transactions\/\d+\/void$/.test(req.path))return true;
+  const p=String(req.path||'');
+  if(method==='POST'&&(p==='/transactions'||p==='/rentals/agreements'||/^\/quotations\/\d+\/convert$/.test(p)||/^\/transactions\/returns\/\d+\/settle$/.test(p)))return true;
+  if(method==='PATCH'&&/^\/transactions\/\d+\/void$/.test(p))return true;
   return false;
 }
 async function acquire(resourceKey,req){
