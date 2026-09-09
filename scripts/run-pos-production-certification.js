@@ -44,6 +44,7 @@ const suites=[
   'tests/native-responsive-shell.spec.js',
   'tests/native-all-workspaces.spec.js',
   'tests/native-workspace-visual-integrity.spec.js',
+  'tests/native-fluid-responsive-sweep.spec.js',
   'tests/operations-acceptance.spec.js',
   'tests/security-boundaries.spec.js',
   'tests/multi-branch-read-integrity.spec.js',
