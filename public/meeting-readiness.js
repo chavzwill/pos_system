@@ -6,7 +6,7 @@ const ENDPOINTS=[
  {name:'Accounting intelligence',url:'/api/accounting-intelligence/overview',critical:false,validate:d=>d&&d.sales&&d.margin&&d.receivables,describe:d=>`Sales, margin and receivables payloads verified · evaluation ${Number(d.evaluation_ms||0)} ms`},
  {name:'Technician management intelligence',url:'/api/technician-management-intelligence/overview?days=30',critical:false,validate:d=>d&&typeof d==='object'&&Array.isArray(d.alerts)&&d.summary&&typeof d.summary==='object',describe:d=>`${d.alerts.length} management attention item(s) · evidence payload verified`}
 ];
-const CORE_ASSETS=['/app-shell.js','/shell-deferred.js','/meeting-demo-shell.js','/shell-native-support.js','/guided-mode.js','/operations-attention-center.js'];
+const CORE_ASSETS=['/app-shell.js','/workspace-loader-hardening.js','/shell-deferred.js','/guided-mode.js','/operations-attention-center.js'];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function ensureRoot(){let root=document.getElementById('tt-system-health-root');if(!root){root=document.createElement('div');root.id='tt-system-health-root';document.body.appendChild(root);}return root;}
 function statusLabel(c){return c.ok?'Healthy':c.protected?'Protected':c.skipped?'Not applicable':'Needs attention';}
@@ -16,7 +16,8 @@ function runtimeChecks(){const domainCount=document.querySelectorAll('.shell-nav
  {name:'Operations shell runtime',ok:!!document.querySelector('.shell-app'),critical:true,detail:document.querySelector('.shell-app')?'Application shell mounted':'Application shell did not mount'},
  {name:'Role-aware permission navigation',ok:domainCount>0,critical:true,detail:`${domainCount} permitted operational domain(s) available`},
  {name:'Operational workspace registry',ok:cardCount>0,critical:true,detail:`${cardCount} authorized tool(s) currently available`},
- {name:'Guided Mode runtime',ok:scripts.some(s=>/guided-mode\.js/.test(s.src))&&scripts.some(s=>/guided-mode-orchestrator\.js/.test(s.src)),critical:true,detail:'Guidance engine and orchestrator loaded'},
+ {name:'Hardened workspace loader',ok:!!window.TotalToolsWorkspaceLoader&&typeof window.TotalToolsShellOpen==='function',critical:true,detail:'Single authoritative workspace loader is active'},
+ {name:'Guided Mode runtime',ok:!!window.TotalToolsGuidedMode||scripts.some(s=>/guided-mode\.js/.test(s.src)),critical:true,detail:'Current native Guided Mode runtime available'},
  {name:'Cross-domain intelligence integration',ok:!!window.TotalToolsOperationsAttentionCenter||scripts.some(s=>/operations-attention-center\.js/.test(s.src)),critical:false,detail:'Operational Attention Center integration available'}
  ];}
 async function run(){if(state.running)return;state.running=true;state.started=Date.now();state.ended=null;state.checks=[];render();const [endpointChecks,assetChecks]=await Promise.all([Promise.all(ENDPOINTS.map(endpointCheck)),assetCheck()]);state.checks=[...runtimeChecks(),...assetChecks,...endpointChecks];state.running=false;state.ended=Date.now();render();return summary();}
