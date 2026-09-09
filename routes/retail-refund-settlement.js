@@ -3,6 +3,7 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {requirePermission}=require('../lib/permissions');
+const {withLifecycleLocks}=require('../lib/lifecycleLock');
 
 let readyPromise=null;
 async function ensureColumn(table,column,ddl){const {rows}=await db.execute({sql:`PRAGMA table_info(${table})`,args:[]});if(!rows.some(r=>r.name===column))await db.execute({sql:`ALTER TABLE ${table} ADD COLUMN ${ddl}`,args:[]});}
@@ -38,19 +39,28 @@ async function ensureSchema(){
 }
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Refund settlement initialization failed',detail:e.message});}});
 
-async function originalTenderAvailability(transactionId,transactionTotal){
-  const {rows:payments}=await db.execute({sql:'SELECT payment_method,amount FROM transaction_payments WHERE transaction_id=? ORDER BY id',args:[transactionId]});
+async function originalTenderAvailability(transactionId,transactionTotal,executor=db){
+  const {rows:payments}=await executor.execute({sql:'SELECT payment_method,amount FROM transaction_payments WHERE transaction_id=? ORDER BY id',args:[transactionId]});
   const pool={};
-  if(payments.length){for(const p of payments){const m=String(p.payment_method||'').trim();pool[m]=Number(((pool[m]||0)+Number(p.amount||0)).toFixed(2));}}
+  if(payments.length){for(const p of payments){const m=String(p.payment_method||'').trim().toLowerCase();pool[m]=Number(((pool[m]||0)+Number(p.amount||0)).toFixed(2));}}
   else{
-    const {rows:[tx]}=await db.execute({sql:'SELECT payment_method FROM transactions WHERE id=?',args:[transactionId]});
-    if(tx?.payment_method)pool[String(tx.payment_method)]=Number(Number(transactionTotal||0).toFixed(2));
+    const {rows:[tx]}=await executor.execute({sql:'SELECT payment_method FROM transactions WHERE id=?',args:[transactionId]});
+    if(tx?.payment_method)pool[String(tx.payment_method).trim().toLowerCase()]=Number(Number(transactionTotal||0).toFixed(2));
   }
-  const {rows:used}=await db.execute({sql:`SELECT l.payment_method,COALESCE(SUM(l.amount),0) amount
+  const {rows:used}=await executor.execute({sql:`SELECT lower(l.payment_method) payment_method,COALESCE(SUM(l.amount),0) amount
     FROM retail_refund_settlement_legs l JOIN retail_refund_settlements s ON s.id=l.settlement_id
-    WHERE s.original_transaction_id=? GROUP BY l.payment_method`,args:[transactionId]});
+    JOIN returns r ON r.id=s.return_id
+    WHERE s.original_transaction_id=? AND COALESCE(r.status,'completed')!='cancelled'
+    GROUP BY lower(l.payment_method)`,args:[transactionId]});
   for(const u of used)pool[u.payment_method]=Number(((pool[u.payment_method]||0)-Number(u.amount||0)).toFixed(2));
   return pool;
+}
+function assertTenderAvailability(available,normalized){
+  const requested={};for(const leg of normalized)requested[leg.method]=Number(((requested[leg.method]||0)+leg.amount).toFixed(2));
+  for(const [method,amount] of Object.entries(requested)){
+    const cap=Number(available[method]||0);
+    if(amount-cap>0.01){const e=new Error(`Refund to ${method} exceeds the remaining amount originally tendered by that method (${Math.max(0,cap).toFixed(2)} available)`);e.status=409;throw e;}
+  }
 }
 async function resolveRefundDrawer(req,ret,normalized){
   if(!normalized.some(x=>x.method==='cash'))return null;
@@ -67,8 +77,17 @@ async function resolveRefundDrawer(req,ret,normalized){
   if(ret.branch_id&&String(drawer.branch_id)!==String(ret.branch_id)){const e=new Error('Cash refund drawer session does not belong to the return branch');e.status=409;throw e;}
   return drawer.id;
 }
+async function refundSettlementLockKeys(req){
+  const returnId=Number(req.params.returnId);if(!returnId)return [];
+  const {rows:[ret]}=await db.execute({sql:'SELECT original_transaction_id FROM returns WHERE id=?',args:[returnId]});
+  const keys=[`refund-settlement:return:${returnId}`];
+  if(ret?.original_transaction_id)keys.push(`refund-tender-pool:transaction:${Number(ret.original_transaction_id)}`);
+  return keys;
+}
 
-router.post('/returns/:returnId/settle',requirePermission('transactions_refund'),async(req,res)=>{
+router.post('/returns/:returnId/settle',
+  withLifecycleLocks(refundSettlementLockKeys,{ttlSeconds:180,label:'refund settlement'}),
+  requirePermission('transactions_refund'),async(req,res)=>{
   try{
     const returnId=Number(req.params.returnId);if(!returnId)return res.status(400).json({error:'Invalid return id'});
     const {rows:[ret]}=await db.execute({sql:`SELECT r.*,t.status original_status,t.transaction_number original_transaction_number,t.payment_method original_payment_method,t.total original_total,
@@ -89,7 +108,7 @@ router.post('/returns/:returnId/settle',requirePermission('transactions_refund')
     const allowed=new Set(['cash','card','bank_transfer','check']);
     const normalized=[];let sum=0;
     for(const leg of legs){
-      const method=String(leg.method||leg.payment_method||'').trim();const amount=Number(leg.amount);const ref=String(leg.reference_code||leg.approval_code||'').trim()||null;
+      const method=String(leg.method||leg.payment_method||'').trim().toLowerCase();const amount=Number(leg.amount);const ref=String(leg.reference_code||leg.approval_code||'').trim()||null;
       if(!allowed.has(method))return res.status(400).json({error:`Unsupported refund method: ${method||'missing'}`});
       if(!Number.isFinite(amount)||amount<=0)return res.status(400).json({error:'Refund settlement amounts must be greater than zero'});
       if((method==='card'||method==='bank_transfer'||method==='check')&&!ref)return res.status(400).json({error:`${method} refund requires settlement/reference evidence`});
@@ -97,14 +116,17 @@ router.post('/returns/:returnId/settle',requirePermission('transactions_refund')
     }
     sum=Number(sum.toFixed(2));
     if(Math.abs(sum-total)>0.01)return res.status(400).json({error:`Refund settlement total (${sum.toFixed(2)}) must equal the external refundable amount (${total.toFixed(2)})`});
-    const available=await originalTenderAvailability(ret.original_transaction_id,ret.original_total);
-    const requested={};for(const leg of normalized)requested[leg.method]=Number(((requested[leg.method]||0)+leg.amount).toFixed(2));
-    for(const [method,amount] of Object.entries(requested)){const cap=Number(available[method]||0);if(amount-cap>0.01)return res.status(409).json({error:`Refund to ${method} exceeds the remaining amount originally tendered by that method (${Math.max(0,cap).toFixed(2)} available)`});}
+    assertTenderAvailability(await originalTenderAvailability(ret.original_transaction_id,ret.original_total),normalized);
     const drawerSessionId=await resolveRefundDrawer(req,ret,normalized);
 
     const tx=await db.transaction('write');let committed=false;
     try{
-      if(drawerSessionId){const {rows:[live]}=await tx.execute({sql:"SELECT id FROM drawer_sessions WHERE id=? AND employee_id=? AND status='open'",args:[drawerSessionId,req.employee?.id||null]});if(!live)throw Object.assign(new Error('Cash refund drawer closed or changed before settlement; retry from the active drawer'),{status:409});}
+      const {rows:[liveReturn]}=await tx.execute({sql:"SELECT id,resolution,status FROM returns WHERE id=?",args:[returnId]});
+      if(!liveReturn||liveReturn.resolution!=='refund'||String(liveReturn.status||'completed')==='cancelled')throw Object.assign(new Error('Return changed before refund settlement; refresh the return before trying again'),{status:409});
+      const {rows:[already]}=await tx.execute({sql:'SELECT id FROM retail_refund_settlements WHERE return_id=?',args:[returnId]});
+      if(already)throw Object.assign(new Error('This return was settled by another completed request; refresh to load the recorded settlement'),{status:409,code:'refund_already_settled'});
+      assertTenderAvailability(await originalTenderAvailability(ret.original_transaction_id,ret.original_total,tx),normalized);
+      if(drawerSessionId){const {rows:[live]}=await tx.execute({sql:"SELECT id,branch_id FROM drawer_sessions WHERE id=? AND employee_id=? AND status='open'",args:[drawerSessionId,req.employee?.id||null]});if(!live||String(live.branch_id)!==String(ret.branch_id))throw Object.assign(new Error('Cash refund drawer closed, changed, or moved before settlement; retry from the active return-branch drawer'),{status:409});}
       const r=await tx.execute({sql:`INSERT INTO retail_refund_settlements(return_id,original_transaction_id,return_number,branch_id,drawer_session_id,total,settled_by_employee_id)
         VALUES(?,?,?,?,?,?,?)`,args:[returnId,ret.original_transaction_id,ret.return_number,ret.branch_id||null,drawerSessionId,total,req.employee?.id||null]});
       const settlementId=Number(r.lastInsertRowid);
@@ -113,7 +135,7 @@ router.post('/returns/:returnId/settle',requirePermission('transactions_refund')
       const {rows:[saved]}=await db.execute({sql:'SELECT * FROM retail_refund_settlements WHERE id=?',args:[settlementId]});
       const {rows:savedLegs}=await db.execute({sql:'SELECT * FROM retail_refund_settlement_legs WHERE settlement_id=? ORDER BY id',args:[settlementId]});
       res.status(201).json({...saved,legs:savedLegs,store_credit_restored:Number(ret.store_credit_restored||0),customer_entitlement_total:Number(ret.customer_entitlement_total||ret.total||0)});
-    }catch(e){if(!committed)await tx.rollback();res.status(e.status|| (committed?500:400)).json({error:e.message});}
+    }catch(e){if(!committed)await tx.rollback();res.status(e.status||500).json({error:e.message,code:e.code});}
   }catch(e){res.status(e.status||500).json({error:e.message});}
 });
 
@@ -121,3 +143,5 @@ module.exports=router;
 module.exports.ensureSchema=ensureSchema;
 module.exports.originalTenderAvailability=originalTenderAvailability;
 module.exports.resolveRefundDrawer=resolveRefundDrawer;
+module.exports.refundSettlementLockKeys=refundSettlementLockKeys;
+module.exports.assertTenderAvailability=assertTenderAvailability;
