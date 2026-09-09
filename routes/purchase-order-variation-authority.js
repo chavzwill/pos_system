@@ -16,6 +16,7 @@ async function ensureSchema(){
   return readyPromise;
 }
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Purchase-order variation authority initialization failed',detail:e.message});}});
+router.use(requirePermission('purchasing'));
 
 async function resolveVariation(executor,item){
   const productId=Number(item.product_id||0),variationId=Number(item.variation_id||0);
@@ -30,7 +31,7 @@ async function resolveVariation(executor,item){
   return {product,variation};
 }
 
-router.post('/',requirePermission('purchasing_create'),async(req,res,next)=>{
+router.post('/',requirePermission('purchasing_create'),async(req,res)=>{
   try{
     const {supplier_id,branch_id,employee_id,items,notes,expected_date}=req.body||{};
     if(!supplier_id)return res.status(400).json({error:'A supplier is required for a purchase order'});
