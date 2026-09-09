@@ -8,6 +8,7 @@ const workspaceCss=fs.readFileSync(path.join(root,'public/total-tools-workspace-
 const refinementCss=fs.readFileSync(path.join(root,'public/total-tools-workspace-refinement.css'),'utf8');
 const secondaryCss=fs.readFileSync(path.join(root,'public/total-tools-secondary-workspace-refinement.css'),'utf8');
 const longTailCss=fs.readFileSync(path.join(root,'public/total-tools-long-tail-workspace-refinement.css'),'utf8');
+const commissionsCss=fs.readFileSync(path.join(root,'public/commissions-workspace.css'),'utf8');
 const checks=[];const check=(name,pass)=>checks.push({name,pass:!!pass});
 const banned=[
   'premium-shell-v2.css','premium-shell-v3.css','workspace-quality-pass.css',
@@ -58,8 +59,11 @@ check('settlement refinement is explicit',longTailCss.includes('.tt-settlement__
 check('accounting ledger refinement is explicit',longTailCss.includes('.tt-ledger__panel')&&longTailCss.includes('.tt-ledger-kpis'));
 check('warehouse refinement is explicit',longTailCss.includes('.wow-grid')&&longTailCss.includes('.wow-table-wrap'));
 check('cash drawer refinement is explicit',longTailCss.includes('.cdw-metrics')&&longTailCss.includes('.cdw-table'));
+check('accounts receivable refinement is explicit',longTailCss.includes('.arw-detail')&&longTailCss.includes('.arw-toolbar'));
 check('integration admin refinement is explicit',longTailCss.includes('.iaw-grid')&&longTailCss.includes('.iaw-secret'));
 check('catalog admin refinement is explicit',longTailCss.includes('.catalog-admin-head')&&longTailCss.includes('.catalog-admin-table'));
+check('commissions refinement is explicit',longTailCss.includes('.cm-layout')&&longTailCss.includes('.cm-toolbar'));
+check('commissions table styles are locally scoped',commissionsCss.includes('.cm-overlay table{')&&commissionsCss.includes('.cm-overlay th{')&&commissionsCss.includes('.cm-overlay td{')&&!/(^|})table\{/.test(commissionsCss));
 for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} UI authority: ${c.name}`);
 if(checks.some(c=>!c.pass))process.exit(1);
 console.log(`Canonical UI authority contract OK (${checks.length} checks).`);
