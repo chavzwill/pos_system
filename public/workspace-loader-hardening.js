@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const VERSION='20260909-stability-4';
+const VERSION='20260909-refund-workflow-v2';
 const assets={
 'sales-workspace':['/sales-workspace.css','/sales-workspace.js','TotalToolsSalesWorkspace'],
 'quotations-workspace':['/quotations-workspace.css','/quotations-workspace.js','TotalToolsQuotationsWorkspace'],
