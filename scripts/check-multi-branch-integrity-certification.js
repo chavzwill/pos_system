@@ -22,6 +22,7 @@ const checks=[
  ['POS forces authenticated employee identity',checkout.includes('body.employee_id = req.employee.id')],
  ['POS drawer session must match employee',checkout.includes('This cash drawer session belongs to another employee')],
  ['POS drawer session must match selling branch',checkout.includes('Cash drawer session does not belong to the selling branch')],
+ ['all retail returns use stored original transaction branch authority',guard.includes('/^\\/transactions\\/(\\d+)\\/return$/')&&guard.includes("sourceBranch('transactions',id)")&&guard.includes('req.body.employee_id=req.employee.id')],
  ['whole-sale void uses stored transaction branch authority',guard.includes('/^\\/transactions\\/(\\d+)\\/void$/')&&guard.includes("sourceBranch('transactions',id)")],
  ['refund settlement write uses stored return branch authority',guard.includes('/^\\/transactions\\/returns\\/(\\d+)\\/settle$/')&&guard.includes("sourceBranch('returns',id)")],
  ['refund settlement read uses stored return branch authority',guard.includes('/^\\/transactions\\/returns\\/(\\d+)\\/settlement$/')],
