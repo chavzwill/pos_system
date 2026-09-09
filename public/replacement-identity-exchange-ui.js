@@ -61,12 +61,13 @@ async function submitReplacement(){
     else tell(e.message);
   }
 }
+function patchGuide(){const task=window.TotalToolsGuidedMode?.tasks?.find?.(x=>x.id==='replacement');if(!task)return false;task.steps=['Open Returns, Voids & Receipt Evidence and select the original completed sale at its authoritative branch.','Select the exact quantity being exchanged and choose Replacement. The POS rechecks remaining return entitlement and live branch stock at commit time.','For serial-controlled items, scan the returned serial from the original sale and a different available replacement serial. For lot-controlled items, record the exact returned and issued lot allocations. Returned identities are quarantined; issued identities are deducted and trace-linked atomically.','Review the replacement custody and identity evidence, then submit once. If the response is lost, refresh the original transaction and return history before doing anything else; never issue a second replacement to guess the outcome.'];return true;}
 function onChange(e){if(e.target?.id==='tt-cc-resolution'){if(e.target.value==='replacement')loadIdentityOptions();else cashier()?.querySelectorAll('[data-replacement-identity]').forEach(x=>x.remove());}}
 function onClickCapture(e){
   const button=e.target?.closest?.('#tt-cc-return');if(button&&replacementSelected()){e.preventDefault();e.stopImmediatePropagation();submitReplacement();return;}
   if(e.target?.closest?.('.tt-cc__tx[data-tx]'))setTimeout(()=>{state.data=null;state.transactionId=null;if(replacementSelected())loadIdentityOptions();},80);
 }
-function observe(){ensureStyle();document.addEventListener('change',onChange,true);document.addEventListener('click',onClickCapture,true);const mo=new MutationObserver(()=>{if(replacementSelected()&&selectedTransactionId()&&(!state.data||state.transactionId!==selectedTransactionId()))loadIdentityOptions();});mo.observe(document.body,{childList:true,subtree:true});}
+function observe(){ensureStyle();patchGuide()||setTimeout(patchGuide,250);document.addEventListener('change',onChange,true);document.addEventListener('click',onClickCapture,true);const mo=new MutationObserver(()=>{if(replacementSelected()&&selectedTransactionId()&&(!state.data||state.transactionId!==selectedTransactionId()))loadIdentityOptions();});mo.observe(document.body,{childList:true,subtree:true});}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',observe,{once:true});else observe();
 window.TotalToolsReplacementIdentityExchange={refresh:loadIdentityOptions};
 })();
