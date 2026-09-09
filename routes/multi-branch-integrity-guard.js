@@ -36,6 +36,8 @@ router.use(async(req,res,next)=>{
 
       let readId=numericId(p,/^\/transactions\/(\d+)$/);
       if(readId){const branchId=await sourceBranch('transactions',readId);if(branchId!=null&&!assertBranch(req,res,branchId))return;}
+      readId=numericId(p,/^\/transactions\/returns\/(\d+)\/settlement$/);
+      if(readId){const branchId=await sourceBranch('returns',readId);if(branchId!=null&&!assertBranch(req,res,branchId))return;}
       readId=numericId(p,/^\/work-orders\/(\d+)$/);
       if(readId){const branchId=await sourceBranch('work_orders',readId);if(branchId!=null&&!assertBranch(req,res,branchId))return;}
       readId=numericId(p,/^\/rentals\/agreements\/(\d+)$/);
