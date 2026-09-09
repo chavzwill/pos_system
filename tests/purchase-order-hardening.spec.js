@@ -128,4 +128,34 @@ test.describe('Purchase order lifecycle hardening', () => {
       if(wrong){const rejected=await api(cookie,'POST','/api/purchase-orders',{supplier_id:supplier.id,branch_id:branch.id,items:[{product_id:product.id,variation_id:wrong.id,quantity_ordered:1,unit_cost:cost}]});expect(rejected.status).toBe(409);expect(rejected.body.control).toBe('po_variation_invalid');}
     }
   });
+
+  test('PR conversion is single-winner and receiving updates exact variation stock', async () => {
+    const cookie=await loginCookie();
+    const [suppliers,branches,products]=await Promise.all([api(cookie,'GET','/api/suppliers'),api(cookie,'GET','/api/branches'),api(cookie,'GET','/api/products')]);
+    const supplier=suppliers.body.find(x=>x.active!==0),branch=branches.body.find(x=>x.active!==0);
+    let product=null,variation=null;
+    for(const candidate of products.body.filter(x=>x.active!==0&&!x.is_service&&Number(x.has_variations||0)>0)){
+      const profile=await api(cookie,'GET',`/api/inventory-traceability/profiles/${candidate.id}`);if(profile.status!==200||profile.body.tracking_mode!=='none')continue;
+      const v=await api(cookie,'GET',`/api/products/${candidate.id}/variations`);const active=v.body?.find(x=>Number(x.active)!==0);if(active){product=candidate;variation=active;break;}
+    }
+    test.skip(!supplier||!branch||!product||!variation,'No untracked active variation-bearing product is available in this test database');
+    const cost=Number(variation.cost??product.cost)||1;
+    const createdPr=await api(cookie,'POST','/api/purchase-requests',{branch_id:branch.id,request_type:'sale_items',items:[{product_id:product.id,product_name:product.name,quantity:1,unit_cost:cost}],notes:'PR variation conversion race test'});
+    expect(createdPr.status).toBe(201);
+    expect((await api(cookie,'PATCH',`/api/purchase-requests/${createdPr.body.id}/status`,{status:'submitted'})).status).toBe(200);
+    expect((await api(cookie,'PATCH',`/api/purchase-requests/${createdPr.body.id}/status`,{status:'approved'})).status).toBe(200);
+    const pr=await api(cookie,'GET',`/api/purchase-requests/${createdPr.body.id}`);expect(pr.status).toBe(200);
+    const prItem=pr.body.items[0];expect(Number(prItem.active_variation_count)).toBeGreaterThan(0);
+    const payload={supplier_id:supplier.id,expected_date:new Date(Date.now()+86400000).toISOString().slice(0,10),variations:[{pr_item_id:prItem.id,variation_id:variation.id}]};
+    const attempts=await Promise.all([api(cookie,'POST',`/api/purchase-requests/${pr.body.id}/convert`,payload),api(cookie,'POST',`/api/purchase-requests/${pr.body.id}/convert`,payload)]);
+    const winners=attempts.filter(x=>x.status===201),losers=attempts.filter(x=>x.status===409);
+    expect(winners).toHaveLength(1);expect(losers).toHaveLength(1);
+    const po=winners[0].body;expect(Number(po.items[0].variation_id)).toBe(Number(variation.id));
+    const approved=await api(cookie,'PATCH',`/api/purchase-orders/${po.id}/status`,{status:'approved'});expect(approved.status).toBe(200);
+    const beforeVars=await api(cookie,'GET',`/api/products/${product.id}/variations`);const before=beforeVars.body.find(x=>Number(x.id)===Number(variation.id));
+    const received=await api(cookie,'PATCH',`/api/purchase-orders/${po.id}/receive`,{items:[{item_id:po.items[0].id,quantity_received:1}]});expect(received.status).toBe(200);
+    const afterVars=await api(cookie,'GET',`/api/products/${product.id}/variations`);const after=afterVars.body.find(x=>Number(x.id)===Number(variation.id));
+    expect(Number(after.stock_qty)).toBe(Number(before.stock_qty||0)+1);
+    expect(Number(received.body.items[0].variation_id)).toBe(Number(variation.id));
+  });
 });
