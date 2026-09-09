@@ -34,6 +34,10 @@ function resourceFor(req){
   if(method==='PATCH'&&(id=matchId(p,/^\/rentals\/agreements\/(\d+)\/(?:checkout|issue|return|collect-balance)$/)))return `rental_agreement:${id}:lifecycle`;
   if(method==='PATCH'&&(id=matchId(p,/^\/work-orders\/(\d+)\/(?:signoff|assessment-paid|deposit-paid|final-payment)$/)))return `work_order:${id}:financial_lifecycle`;
   if(method==='POST'&&(id=matchId(p,/^\/transactions\/(\d+)\/return$/)))return `transaction:${id}:return`;
+  if(method==='POST'&&p==='/transactions'&&req.body?.source_hold_id)return `held_sale:${Number(req.body.source_hold_id)}:recall`;
+  if(method==='POST'&&p==='/transactions'&&req.body?.quote_id)return `quotation:${Number(req.body.quote_id)}:checkout`;
+  if(method==='POST'&&(id=matchId(p,/^\/quotations\/(\d+)\/convert$/)))return `quotation:${id}:convert`;
+  if(method==='PATCH'&&(id=matchId(p,/^\/quotations\/(\d+)\/status$/)))return `quotation:${id}:status`;
   if(method==='PATCH'&&(id=matchId(p,/^\/transfers\/(\d+)\/receive$/)))return `transfer:${id}:receive`;
   if(method==='POST'&&(id=matchId(p,/^\/logistics-intelligence\/from-purchase-order\/(\d+)$/)))return `dispatch:purchase_order:${id}:supplier_pickup`;
   if(method==='POST'&&(id=matchId(p,/^\/logistics-intelligence\/from-sales-invoice\/(\d+)$/)))return `dispatch:sales_invoice:${id}:customer_delivery`;
@@ -49,8 +53,9 @@ function resourceFor(req){
 }
 function requiresRequestIdentity(req){
   if(req.apiKey)return false;
-  if(String(req.method).toUpperCase()!=='POST')return false;
-  return req.path==='/transactions'||req.path==='/rentals/agreements';
+  const method=String(req.method).toUpperCase();
+  if(method==='POST'&&(req.path==='/transactions'||req.path==='/rentals/agreements'||/^\/quotations\/\d+\/convert$/.test(req.path)))return true;
+  return false;
 }
 async function acquire(resourceKey,req){
   const token=crypto.randomUUID();
@@ -82,9 +87,12 @@ router.use(async(req,res,next)=>{
       return res.status(409).json({error:'Another request is already changing this business record. Wait for it to finish, then refresh before retrying.',control:'lifecycle_concurrency',resource:resourceKey});
     }
     let released=false;
-    const cleanup=()=>{if(released)return;released=true;release(resourceKey,lock.token);};
+    const cleanup=()=>{if(released)return;released=true;void release(resourceKey,lock.token);};
+    // Do not release on client connection close. A disconnect can happen after
+    // the server has started committing the mutation but before the response is
+    // observed. Holding the lock until a normal finish (or bounded expiry) keeps
+    // a new request from racing an ambiguous in-flight business outcome.
     res.once('finish',cleanup);
-    res.once('close',cleanup);
     req.lifecycleConcurrency={resourceKey,lockToken:lock.token};
     next();
   }catch(e){res.status(500).json({error:'Lifecycle concurrency protection failed',detail:e.message,control:'lifecycle_concurrency'});}
