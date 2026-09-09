@@ -133,14 +133,20 @@ router.use(async(req,res,next)=>{
   }catch(e){res.status(500).json({error:'Multi-branch integrity check failed',detail:e.message});}
 });
 
-// Durable retry protection runs only after branch authorization has succeeded.
-// Existing callers remain compatible when no Idempotency-Key is supplied;
-// native clients can opt in to exactly-once replay protection per mutation.
+// Source lineage is part of the authorization/integrity boundary. A checkout
+// claiming to originate from a held sale or quotation must reference the exact
+// authoritative source record before retry/idempotency handling begins.
+router.use(require('./retail-source-integrity'));
+
+// Durable retry protection runs only after branch and source authorization have
+// succeeded. Existing callers remain compatible when no Idempotency-Key is
+// supplied; native clients can opt in to exactly-once replay protection.
 router.use(require('./operation-idempotency'));
 
 // Resource-level lifecycle serialization is intentionally after idempotency:
 // same-key retries replay immediately, while distinct requests attempting to
-// mutate the same PO/rental/repair/return/transfer/dispatch source cannot race.
+// mutate the same PO/rental/repair/return/transfer/dispatch/quote source cannot
+// race each other.
 router.use(require('./lifecycle-concurrency-guard'));
 
 module.exports=router;
