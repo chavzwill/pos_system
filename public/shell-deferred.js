@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const VERSION='20260909-replacement-variation-v5';
+const VERSION='20260909-branch-variation-v1';
 const loaded=new Set();
 let scheduled=false;
 function ensureStyle(){if(document.querySelector('link[data-native-pos-stability]'))return;const l=document.createElement('link');l.rel='stylesheet';l.href=`/native-pos-stability.css?v=${VERSION}`;l.dataset.nativePosStability='1';document.head.appendChild(l);}
@@ -12,6 +12,7 @@ function loadAuthenticatedEnhancers(){if(scheduled)return;scheduled=true;const r
   [
     '/security-permission-extension.js',
     '/guided-mode.js',
+    '/guided-mode-branch-variation-extension.js',
     '/replacement-identity-exchange-ui.js',
     '/total-tools-identity.js',
     '/shell-native-support.js',
