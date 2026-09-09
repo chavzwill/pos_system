@@ -19,8 +19,10 @@ const checks=[
  ['successful sale finalizes serial as sold',guard.includes("SET status='sold'")],
  ['successful sale decrements exact lot balance',guard.includes('SET available_quantity=available_quantity-?')],
  ['sale identity event links to transaction',guard.includes("'transaction'")&&guard.includes("'sold'")],
- ['failed checkout releases identity reservation',guard.includes("release(key).catch")],
- ['disconnect releases identity reservation',guard.includes("res.on('close'")],
+ ['definitive failed checkout releases identity reservation',guard.includes('definitiveFailure=true')&&guard.includes('release(key).catch')],
+ ['successful response finish can release unresolved non-committed hold',guard.includes("res.on('finish'")],
+ ['ambiguous disconnect does not release identity reservation',!guard.includes("res.on('close'")&&guard.includes('client disconnect is ambiguous')],
+ ['ambiguous reservation remains bounded by TTL',guard.includes('bounded reservation TTL expires')&&guard.includes("datetime('now','+5 minutes')")],
  ['finalization failure is fail-visible',guard.includes('transaction requires reconciliation')],
  ['serial and lot provenance remains in traceability schema',trace.includes('purchase_receipt_item_id')&&trace.includes('supplier_id')]
 ];
