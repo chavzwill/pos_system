@@ -14,7 +14,7 @@ check('settlement mutation requires refund permission',route.includes("requirePe
 check('refund settlement is serialized per return',route.includes('refund-settlement:return:${returnId}'));
 check('refund settlement serializes the original tender pool across partial returns',route.includes('refund-tender-pool:transaction:${Number(ret.original_transaction_id)}'));
 check('remaining original tender excludes cancelled return settlements',route.includes("COALESCE(r.status,'completed')!='cancelled'"));
-check('tender availability is normalized by payment method',route.includes('lower(l.payment_method) payment_method')&&route.includes("toLowerCase()"));
+check('tender availability is normalized by payment method',route.includes('lower(l.payment_method) payment_method')&&route.includes('toLowerCase()'));
 check('settlement total must equal authoritative external refund',route.includes('must equal the external refundable amount'));
 check('non-cash refund requires settlement evidence',route.includes('refund requires settlement/reference evidence'));
 check('cash refund requires authenticated employee drawer',route.includes('Cash refunds require an authenticated employee drawer session'));
@@ -27,11 +27,11 @@ check('global lifecycle guard requires operation identity for refund settlement'
 check('global lifecycle guard serializes refund settlement resource',lifecycle.includes('refund_settlement'));
 check('refund settlement write is branch-authorized',branch.includes("/^\\/transactions\\/returns\\/(\\d+)\\/settle$/")&&branch.includes("sourceBranch('returns',id)"));
 check('refund settlement read is branch-authorized',branch.includes("/^\\/transactions\\/returns\\/(\\d+)\\/settlement$/"));
-check('cashier UI loads authoritative settlement state',cashier.includes('/settlement`)')||cashier.includes('/settlement`'));
+check('cashier UI loads authoritative settlement state',cashier.includes('transactions/returns/${r.id}/settlement'));
 check('cashier UI supports split original-tender allocation',cashier.includes('data-refund-amount')&&cashier.includes('const tenders=[]'));
 check('cashier UI requires non-cash reference evidence',cashier.includes('Enter the settlement reference'));
 check('cashier UI prevents amount mismatch before submit',cashier.includes('Refund allocations must total'));
-check('cashier UI automatically offers settlement after a refund return',cashier.includes("external_refund_total")&&cashier.includes('await openSettlement(ret.id)'));
+check('cashier UI automatically offers settlement after a refund return',cashier.includes('external_refund_total')&&cashier.includes('await openSettlement(ret.id)'));
 check('accounting clears refund payable from settlement evidence',accounting.includes("sourceType:'retail_refund_settlement'")&&accounting.includes("code:'2400',debit:settlementTotal"));
 check('Guided Mode has dedicated refund settlement task',guide.includes("id:'refund-settlement'"));
 check('Guided Mode explains original tender and ambiguous retry safety',guide.includes('remaining original tender')&&guide.includes('do not create a second refund'));
