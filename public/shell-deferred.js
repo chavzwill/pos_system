@@ -1,11 +1,22 @@
 (()=>{'use strict';
-const VERSION='20260901-security';
+const VERSION='20260909-stability';
 const loaded=new Set();
-const nativeFetch=window.fetch.bind(window);
-let profileResponsePromise=null,scheduled=false;
-window.fetch=function(input,init){const url=typeof input==='string'?input:(input&&input.url)||'',method=String(init?.method||'GET').toUpperCase();if(method==='GET'&&/\/api\/workspace-profile\/me(?:\?|$)/.test(url)){if(!profileResponsePromise)profileResponsePromise=nativeFetch(input,init).then(r=>{if(!r.ok)profileResponsePromise=null;return r;}).catch(e=>{profileResponsePromise=null;throw e;});return profileResponsePromise.then(r=>r.clone());}return nativeFetch(input,init);};
-function add(src){if(loaded.has(src)||document.querySelector(`script[data-shell-deferred="${src}"]`))return;loaded.add(src);const s=document.createElement('script');s.src=`${src}?v=${VERSION}`;s.async=false;s.dataset.shellDeferred=src;document.body.appendChild(s);}
-function loadAuthenticatedEnhancers(){if(scheduled)return;scheduled=true;const run=()=>{['/security-permission-extension.js','/guided-mode.js','/guided-mode-orchestrator.js','/guided-mode-access.js','/purchase-order-document-context.js','/held-sales-recall-context.js','/guided-mode-completion.js','/guided-mode-role-context.js','/guided-mode-record-context.js','/guided-mode-exact-action.js','/guided-mode-exact-fallback.js','/guided-mode-hardening.js','/guided-mode-integrity.js','/guided-mode-adversarial.js','/guided-mode-qa.js','/total-tools-identity.js','/shell-native-support.js','/operations-attention-center.js','/workspace-quality-pass.js','/service-concessions-ui.js','/service-refunds-ui.js','/rental-fleet-management.js','/rental-fleet-disposal.js','/rental-fleet-transfer.js','/logistics-commercial-handoff.js','/logistics-field-execution.js','/logistics-route-planning.js','/logistics-location-intelligence.js'].forEach(add);};if('requestIdleCallback'in window)requestIdleCallback(run,{timeout:450});else setTimeout(run,60);}
+let scheduled=false;
+function add(src){if(loaded.has(src)||document.querySelector(`script[data-shell-deferred="${src}"]`))return;loaded.add(src);const s=document.createElement('script');s.src=`${src}?v=${VERSION}`;s.async=false;s.dataset.shellDeferred=src;s.onerror=()=>console.error('Deferred POS enhancer failed to load',src);document.body.appendChild(s);}
+function loadAuthenticatedEnhancers(){if(scheduled)return;scheduled=true;const run=()=>{
+  // Keep the global authenticated shell deliberately small. Older builds loaded
+  // many overlapping Guided Mode and logistics mutation observers here, which
+  // caused duplicated handlers, expensive DOM churn and renderer instability.
+  // Workspace-specific enhancers now belong to the workspace that opens them.
+  [
+    '/security-permission-extension.js',
+    '/guided-mode.js',
+    '/total-tools-identity.js',
+    '/shell-native-support.js',
+    '/operations-attention-center.js',
+    '/workspace-quality-pass.js'
+  ].forEach(add);
+};if('requestIdleCallback'in window)requestIdleCallback(run,{timeout:350});else setTimeout(run,40);}
 function authenticated(){return !!window.__TT_WORKSPACE_PROFILE__||!!document.querySelector('.shell-app');}
 function schedule(){if(authenticated())return loadAuthenticatedEnhancers();const root=document.getElementById('shell-root');if(!root)return;const observer=new MutationObserver(()=>{if(authenticated()){observer.disconnect();loadAuthenticatedEnhancers();}});observer.observe(root,{attributes:true,attributeFilter:['class'],childList:true,subtree:false});}
 if(document.readyState==='complete')schedule();else window.addEventListener('load',schedule,{once:true});
