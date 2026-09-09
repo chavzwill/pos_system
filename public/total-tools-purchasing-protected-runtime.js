@@ -1,5 +1,6 @@
 (()=>{'use strict';
 const ROOT_ID='tt-purchasing-workspace';
+let bindingLoadKey='';
 function root(){return document.getElementById(ROOT_ID)}
 function ui(){return window.TotalToolsPremiumUI||{}}
 function notify(message,{tone='error',persist=tone==='error'}={}){if(ui().notify)return ui().notify(message,{tone,persist});window.alert(message)}
@@ -14,6 +15,21 @@ async function receivePo(button){const x=selected(),items=receiveItems();if(!x.i
 async function approvePo(button){const x=selected();if(!x.id)return;const ok=await ask({title:`Approve ${x.number}?`,message:'Approval authorizes this supplier order to proceed under the existing purchasing controls.',confirmLabel:'Approve purchase order',tone:'warning'});if(!ok)return;button.disabled=true;button.textContent='Approving…';try{await api(`/api/purchase-orders/${encodeURIComponent(x.id)}/status`,{method:'PATCH',body:JSON.stringify({status:'approved'})});notify(`${x.number} approved.`,{tone:'success',persist:false});await refresh()}catch(e){button.disabled=false;button.textContent='Approve PO';notify(errorMessage(e))}}
 function enhanceRows(){root()?.querySelectorAll('.tt-purch__row[data-id]').forEach(row=>{if(row.dataset.ttKeyboard==='1')return;row.dataset.ttKeyboard='1';row.tabIndex=0;row.setAttribute('role','button');row.addEventListener('keydown',e=>{if(e.key==='Enter'||e.key===' '){e.preventDefault();row.click()}})})}
 function enhanceDispatchHint(){const r=root(),hint=r?.querySelector('.tt-purch-dispatch-hint');if(!hint||hint.querySelector('[data-tt-supplier-pickups]'))return;const b=document.createElement('button');b.type='button';b.dataset.ttSupplierPickups='1';b.textContent='Open supplier pickups';b.addEventListener('click',()=>{r.querySelector('[data-close]')?.click();window.TotalToolsLogisticsIntelligence?.open?.();queueMicrotask(()=>window.TotalToolsNativeDispatch?.filter?.('supplier_pickup'))});hint.appendChild(b)}
+async function enhanceVariationBindings(){
+  const r=root(),x=selected();if(!r||!x.id||!r.querySelector('.tt-purch__detail-head'))return;
+  const key=`${x.id}:${r.querySelector('.tt-purch__detail-head h3')?.textContent||''}`;if(bindingLoadKey===key||r.dataset.ttVariationLoading===key)return;r.dataset.ttVariationLoading=key;
+  try{
+    const po=await api(`/api/purchase-orders/${encodeURIComponent(x.id)}`);const items=Array.isArray(po.items)?po.items:[];const rows=[...r.querySelectorAll('.tt-purch__detail .tt-purch__item')];
+    for(let idx=0;idx<items.length;idx++){
+      const item=items[idx],row=rows[idx];if(!row||item.variation_id||Number(item.active_variation_count||0)<=0||Number(item.quantity_received||0)>0||row.querySelector('[data-variation-remediation]'))continue;
+      const variations=(await api(`/api/products/${encodeURIComponent(item.product_id)}/variations`).catch(()=>[])).filter(v=>Number(v.active)!==0);if(!variations.length)continue;
+      const box=document.createElement('div');box.dataset.variationRemediation=String(item.id);box.className='tt-purch__variation-remediation';box.innerHTML=`<strong>Variation authority required</strong><span>This legacy/unbound PO line cannot safely enter tracked inventory until the exact catalog variation is bound.</span><div><select data-variation-choice><option value="">Select exact variation</option>${variations.map(v=>`<option value="${v.id}">${String(v.name||'Variation').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]))}${v.sku?' · '+String(v.sku).replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])):''}</option>`).join('')}</select><button type="button" data-bind-variation>Bind variation</button></div>`;
+      box.querySelector('[data-bind-variation]').addEventListener('click',async e=>{const variation_id=Number(box.querySelector('[data-variation-choice]')?.value||0);if(!variation_id)return notify('Select the exact variation first.');const ok=await ask({title:'Bind this PO line variation?',message:'This establishes the variation provenance used by receiving and downstream serial/lot identity. Once receiving starts it cannot be changed.',confirmLabel:'Bind exact variation',tone:'warning'});if(!ok)return;const b=e.currentTarget;b.disabled=true;b.textContent='Binding…';try{await api(`/api/purchase-orders/${encodeURIComponent(x.id)}/items/${encodeURIComponent(item.id)}/variation`,{method:'PATCH',body:JSON.stringify({variation_id})});notify('Variation authority bound to the purchase-order line.',{tone:'success',persist:false});bindingLoadKey='';await refresh()}catch(err){b.disabled=false;b.textContent='Bind variation';notify(err.message)}});
+      row.appendChild(box);
+    }
+    bindingLoadKey=key;
+  }catch(e){console.warn('Unable to load PO variation remediation evidence',e)}finally{delete r.dataset.ttVariationLoading;}
+}
 document.addEventListener('click',e=>{const button=e.target.closest(`#${ROOT_ID} [data-action]`);if(!button)return;const action=button.dataset.action;if(!['cancel-po','receive','approve-po'].includes(action))return;e.preventDefault();e.stopImmediatePropagation();if(action==='cancel-po')void cancelPo(button);if(action==='receive')void receivePo(button);if(action==='approve-po')void approvePo(button)},true);
-const obs=new MutationObserver(()=>{enhanceRows();enhanceDispatchHint()});obs.observe(document.documentElement,{childList:true,subtree:true});enhanceRows();enhanceDispatchHint();
+const obs=new MutationObserver(()=>{enhanceRows();enhanceDispatchHint();void enhanceVariationBindings()});obs.observe(document.documentElement,{childList:true,subtree:true});enhanceRows();enhanceDispatchHint();void enhanceVariationBindings();
 })();
