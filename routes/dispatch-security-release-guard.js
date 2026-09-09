@@ -57,4 +57,5 @@ router.post('/jobs/:id/stage/pickup',async(req,res,next)=>{
   }catch(e){res.status(500).json({error:'Unable to verify security release',detail:e.message});}
 });
 
-module.exports={router,requiresCompanySecurity};
+module.exports=router;
+module.exports.requiresCompanySecurity=requiresCompanySecurity;
