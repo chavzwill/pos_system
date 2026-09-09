@@ -5,6 +5,7 @@ const { db } = require('../database');
 const { requirePermission, can } = require('../lib/permissions');
 const { getAvailableQty } = require('../lib/inventory-stock-status');
 const { getReservedQty } = require('../lib/inventory-reservations');
+const { withLifecycleLocks } = require('../lib/lifecycleLock');
 
 // Commercial loss prevention must run after virtual-bundle/UOM normalization
 // (the parent traceability router already did that) but before general stock
@@ -23,7 +24,9 @@ function canOperateCrossBranch(employee) {
   return can(employee.permissions, 'branches') || can(employee.permissions, 'security_manage');
 }
 
-router.post('/', requirePermission('pos'), async (req,res,next) => {
+router.post('/',
+  withLifecycleLocks(req => req.body?.customer_id ? [`customer-commerce:${Number(req.body.customer_id)}`] : [], {ttlSeconds:120,label:'customer checkout'}),
+  requirePermission('pos'), async (req,res,next) => {
   try {
     const body = req.body || {};
     const items = Array.isArray(body.items) ? body.items : [];
@@ -55,8 +58,10 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
 
     const discount = asMoney(body.discount_amount);
     const storeCredit = asMoney(body.store_credit_applied);
+    const requestedCashBack = asMoney(body.cash_back_applied);
     if (!Number.isFinite(discount) || discount < 0) return res.status(400).json({error:'Discount amount cannot be negative'});
     if (!Number.isFinite(storeCredit) || storeCredit < 0) return res.status(400).json({error:'Store credit amount cannot be negative'});
+    if (!Number.isFinite(requestedCashBack) || requestedCashBack < 0) return res.status(400).json({error:'Cash-back amount cannot be negative'});
 
     let authoritativeSubtotal = 0;
     let authoritativeTax = 0;
@@ -96,25 +101,50 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
     if (discount > authoritativeSubtotal + authoritativeTax) return res.status(400).json({error:'Discount cannot exceed the sale value'});
 
     let customer = null;
+    let authoritativeCashBack = 0;
     if (body.customer_id) {
-      const {rows:[row]} = await db.execute({sql:'SELECT * FROM customers WHERE id=? AND active=1',args:[body.customer_id]});
+      const {rows:[row]} = await db.execute({sql:`SELECT c.*, cbct.points_threshold, cbct.reward_amount, cbct.min_redeem_amount, cbct.min_redeem_days, cbct.active AS cash_back_type_active
+        FROM customers c LEFT JOIN cash_back_card_types cbct ON c.cash_back_card_type_id=cbct.id
+        WHERE c.id=? AND c.active=1`,args:[body.customer_id]});
       if (!row) return res.status(400).json({error:'Selected customer is unavailable'});
       customer = row;
-    }
+      if (requestedCashBack > 0) {
+        const rewardConfig={...row,active:row.cash_back_type_active};
+        const accrued = (!rewardConfig.active || !rewardConfig.points_threshold || !rewardConfig.reward_amount) ? 0 : Math.floor(Number(row.loyalty_points||0)/Number(rewardConfig.points_threshold))*Number(rewardConfig.reward_amount);
+        let availableCashBack=accrued;
+        if (availableCashBack>0 && Number(rewardConfig.min_redeem_amount||0)>0 && availableCashBack<Number(rewardConfig.min_redeem_amount)) availableCashBack=0;
+        if (availableCashBack>0 && Number(rewardConfig.min_redeem_days||0)>0 && row.cash_back_last_redeemed_at) {
+          const days=(Date.now()-new Date(row.cash_back_last_redeemed_at).getTime())/86400000;
+          if (days<Number(rewardConfig.min_redeem_days)) availableCashBack=0;
+        }
+        if (requestedCashBack-availableCashBack>0.01) return res.status(400).json({error:`Cash-back redemption exceeds the customer's available reward (${Number(availableCashBack||0).toFixed(2)})`});
+        authoritativeCashBack=Number(requestedCashBack.toFixed(2));
+      }
+    } else if (requestedCashBack>0) return res.status(400).json({error:'Cash-back redemption requires a customer'});
+
     if (storeCredit > 0) {
       if (!customer) return res.status(400).json({error:'Store credit requires a customer'});
       const availableCredit = Math.max(0, -Number(customer.account_balance || 0));
       if (storeCredit - availableCredit > 0.01) return res.status(400).json({error:`Store credit exceeds the customer’s available balance (${availableCredit.toFixed(2)})`});
     }
 
+    const netTotal=Number((authoritativeSubtotal+authoritativeTax-discount-storeCredit-authoritativeCashBack).toFixed(2));
+    if(netTotal<0)return res.status(400).json({error:'Credits and rewards cannot exceed the sale total'});
+    // Bind the downstream transaction engine to the authoritative redemption
+    // value verified under the customer lifecycle lock.
+    body.cash_back_applied=authoritativeCashBack;
+
     const tenders = Array.isArray(body.tenders) && body.tenders.length ? body.tenders : null;
     if (tenders) {
+      let tenderSum=0;
       for (const leg of tenders) {
         if (!allowedPayments.has(leg.method) || leg.method === 'credit') return res.status(400).json({error:'Invalid split-payment method'});
         const amount = asMoney(leg.amount);
         if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({error:'Split-payment amounts must be greater than zero'});
         if ((leg.method === 'card' || leg.method === 'bank_transfer') && !String(leg.approval_code || '').trim()) return res.status(400).json({error:`${leg.method === 'card' ? 'Card' : 'Bank transfer'} payment requires an approval/reference code`});
+        tenderSum+=amount;
       }
+      if(Math.abs(Number(tenderSum.toFixed(2))-netTotal)>0.01)return res.status(400).json({error:`Split tender amounts (${tenderSum.toFixed(2)}) do not match the authoritative sale total (${netTotal.toFixed(2)})`});
     } else {
       const method = body.payment_method || 'cash';
       if (!allowedPayments.has(method)) return res.status(400).json({error:'Invalid payment method'});
@@ -122,15 +152,14 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
         if (!customer) return res.status(400).json({error:'Charge Account requires a customer'});
         if (customer.customer_type !== 'credit') return res.status(400).json({error:'Customer does not have a credit account'});
         if (customer.account_blocked) return res.status(400).json({error:'Customer credit account is blocked'});
-        const projected = Number(customer.account_balance || 0) + authoritativeSubtotal + authoritativeTax - discount - storeCredit;
+        const projected = Number(customer.account_balance || 0) + netTotal;
         if (Number(customer.credit_limit || 0) > 0 && projected - Number(customer.credit_limit) > 0.01) return res.status(400).json({error:'Sale would exceed the customer credit limit'});
       }
       if ((method === 'card' || method === 'bank_transfer') && !String(body.approval_code || '').trim()) return res.status(400).json({error:`${method === 'card' ? 'Card' : 'Bank transfer'} payment requires an approval/reference code`});
-      const totalBeforeCashback = authoritativeSubtotal + authoritativeTax - discount - storeCredit;
-      if (method === 'cash' && Number(body.amount_tendered || totalBeforeCashback) + 0.001 < totalBeforeCashback) return res.status(400).json({error:'Cash tendered cannot be less than the sale total'});
+      if (method === 'cash' && Number(body.amount_tendered ?? netTotal) + 0.001 < netTotal) return res.status(400).json({error:'Cash tendered cannot be less than the sale total'});
     }
 
-    req.retailCheckoutEvidence = {authoritativeSubtotal,authoritativeTax,validatedAt:new Date().toISOString(),inventoryReservationKey:req.inventoryReservationKey||null};
+    req.retailCheckoutEvidence = {authoritativeSubtotal,authoritativeTax,authoritativeCashBack,netTotal,validatedAt:new Date().toISOString(),inventoryReservationKey:req.inventoryReservationKey||null};
     next();
   } catch (e) {
     res.status(500).json({error:e.message});
