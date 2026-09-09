@@ -3,6 +3,7 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {can}=require('../lib/permissions');
+const {ensureBranchVariationInventory}=require('../lib/branch-variation-inventory');
 
 function crossBranch(employee){return !!employee&&(can(employee.permissions,'branches')||can(employee.permissions,'security_manage'));}
 function assignedBranch(req){return req.employee?.default_branch_id==null?null:String(req.employee.default_branch_id);}
@@ -11,6 +12,8 @@ function assertBranch(req,res,branchId){if(req.apiKey||!req.employee||crossBranc
 async function sourceBranch(table,id){const {rows:[row]}=await db.execute({sql:`SELECT branch_id FROM ${table} WHERE id=?`,args:[id]});return row?row.branch_id:null;}
 function numericId(path,re){const m=path.match(re);return m?Number(m[1]):null;}
 
+router.use(async(req,res,next)=>{try{await ensureBranchVariationInventory();next();}catch(e){res.status(500).json({error:'Branch variation inventory integrity initialization failed',detail:e.message});}});
+router.use('/branch-variation-inventory',require('./branch-variation-inventory'));
 router.use('/logistics-intelligence',require('./logistics-runtime-integrity-guard'));
 router.use(async(req,res,next)=>{
   try{
