@@ -3,6 +3,7 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {requirePermission}=require('../lib/permissions');
+const {withLifecycleLocks}=require('../lib/lifecycleLock');
 
 let readyPromise=null;
 async function ensureSchema(){
@@ -59,7 +60,9 @@ router.get('/aging',requirePermission('accounts'),async(req,res)=>{
   }catch(e){res.status(500).json({error:e.message});}
 });
 
-router.post('/payments',requirePermission('accounts_payments'),async(req,res,next)=>{
+router.post('/payments',
+  withLifecycleLocks(req=>req.body?.customer_id?[`customer-commerce:${Number(req.body.customer_id)}`]:[],{ttlSeconds:180,label:'customer account operation'}),
+  requirePermission('accounts_payments'),async(req,res,next)=>{
   try{
     const customerId=Number(req.body?.customer_id),amount=Number(req.body?.amount);
     if(!customerId||!Number.isFinite(amount)||amount<=0)return res.status(400).json({error:'customer_id and positive amount required'});
@@ -72,8 +75,19 @@ router.post('/payments',requirePermission('accounts_payments'),async(req,res,nex
     let allocations=Array.isArray(req.body?.allocations)&&req.body.allocations.length?req.body.allocations:null;
     if(allocations){
       let sum=0;
-      for(const a of allocations){const id=Number(a.transaction_id),v=Number(a.amount),inv=byId.get(id);if(!inv)return res.status(400).json({error:`Invoice ${id} is not an open charge-account invoice for this customer`});if(!Number.isFinite(v)||v<=0)return res.status(400).json({error:'Payment allocation amounts must be positive'});if(v-inv.balance_due>0.01)return res.status(400).json({error:`Allocation exceeds adjusted balance for ${inv.transaction_number} (${inv.balance_due.toFixed(2)})`});sum+=v;}
-      if(sum-amount>0.01)return res.status(400).json({error:'Allocated amount cannot exceed payment amount'});
+      const seen=new Set();
+      for(const a of allocations){
+        const id=Number(a.transaction_id),v=Number(a.amount),inv=byId.get(id);
+        if(seen.has(id))return res.status(400).json({error:`Invoice ${id} is allocated more than once`});
+        seen.add(id);
+        if(!inv)return res.status(400).json({error:`Invoice ${id} is not an open charge-account invoice for this customer`});
+        if(!Number.isFinite(v)||v<=0)return res.status(400).json({error:'Payment allocation amounts must be positive'});
+        if(v-inv.balance_due>0.01)return res.status(400).json({error:`Allocation exceeds adjusted balance for ${inv.transaction_number} (${inv.balance_due.toFixed(2)})`});
+        sum+=v;
+      }
+      sum=Number(sum.toFixed(2));
+      if(Math.abs(sum-amount)>0.01)return res.status(400).json({error:`Allocated amount (${sum.toFixed(2)}) must exactly match the payment amount (${amount.toFixed(2)})`});
+      req.body.allocations=allocations;
     }else{
       allocations=[];let remaining=amount;
       for(const inv of invoices){if(remaining<=0.001)break;if(inv.balance_due<=0.001)continue;const apply=Number(Math.min(remaining,inv.balance_due).toFixed(2));allocations.push({transaction_id:inv.id,amount:apply});remaining=Number((remaining-apply).toFixed(2));}
