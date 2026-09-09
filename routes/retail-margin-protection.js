@@ -5,6 +5,11 @@ const {db}=require('../database');
 const {can,requirePermission}=require('../lib/permissions');
 const {findEmployeeByPin}=require('../lib/pinAuth');
 
+// Promotion pricing must be rebound to authoritative server state before margin
+// enforcement. Otherwise a client-supplied promo discount could either demand a
+// false override or, worse, understate the real discount and bypass the margin floor.
+router.use(require('./retail-promotion-checkout'));
+
 let readyPromise=null;
 const r2=v=>Number(Number(v||0).toFixed(2));
 async function ensureMarginProtection(){
@@ -64,7 +69,9 @@ async function evaluate(req){
   await ensureMarginProtection();
   const body=req.body||{},items=Array.isArray(body.items)?body.items:[];if(!items.length)return null;
   const discount=Number(body.discount_amount||0);if(!Number.isFinite(discount)||discount<0)return null;
-  if(discount>0&&!req.apiKey&&(!req.employee||!can(req.employee.permissions,'pos_discounts'))){const e=new Error('This employee is not authorized to apply POS discounts.');e.status=403;throw e;}
+  // A promotion discount is not a cashier-entered discretionary discount. It
+  // has already been independently validated by retail-promotion-checkout.
+  if(discount>0&&!req.retailPromotionEvidence&&!req.apiKey&&(!req.employee||!can(req.employee.permissions,'pos_discounts'))){const e=new Error('This employee is not authorized to apply POS discounts.');e.status=403;throw e;}
   const branchId=Number(body.branch_id)||null,lines=[];let gross=0,cost=0;
   for(const line of items){const pid=Number(line.product_id),qty=Number(line.quantity);if(!(pid>0&&qty>0))continue;const {rows:[product]}=await db.execute({sql:'SELECT id,name,sku,price,cost FROM products WHERE id=?',args:[pid]});if(!product)continue;const unitPrice=line.uom_base_unit_price!=null?Number(line.uom_base_unit_price):Number(product.price||0);if(!Number.isFinite(unitPrice)||unitPrice<0)continue;const costEvidence=await unitCostEvidence(pid,branchId,product),lineGross=unitPrice*qty,lineCost=Number(costEvidence.unit_cost||0)*qty;gross+=lineGross;cost+=lineCost;lines.push({product_id:pid,sku:product.sku,name:product.name,quantity:qty,unit_price:unitPrice,line_gross:r2(lineGross),unit_cost:r2(costEvidence.unit_cost),line_cost:r2(lineCost),cost_basis:costEvidence.basis});}
   gross=r2(gross);cost=r2(cost);const net=r2(gross-discount),margin=r2(net-cost),pct=marginPct(net,cost),floor=Math.max(0,await settingNumber('loss_control_min_gross_margin_pct',0));
@@ -76,14 +83,10 @@ async function evaluate(req){
 async function persistOverride(req,payload,ev){
   if(!ev?.requires_override||!payload?.id)return;
   await db.execute({sql:`INSERT INTO retail_margin_override_events(transaction_id,transaction_number,branch_id,cashier_employee_id,authorizer_employee_id,reason,gross_revenue,discount_amount,projected_net_revenue,projected_inventory_cost,projected_gross_margin,projected_gross_margin_pct,required_margin_pct,evidence_json)
-    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[payload.id,payload.transaction_number||null,req.body?.branch_id||null,req.employee?.id||payload.employee_id||null,ev.authorizer.id,ev.reason,ev.gross,ev.discount,ev.net,ev.cost,ev.margin,ev.pct,ev.floor,JSON.stringify({lines:ev.lines,authorizer_name:`${ev.authorizer.first_name||''} ${ev.authorizer.last_name||''}`.trim(),evaluated_at:new Date().toISOString()})]});
+    VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[payload.id,payload.transaction_number||null,req.body?.branch_id||null,req.employee?.id||payload.employee_id||null,ev.authorizer.id,ev.reason,ev.gross,ev.discount,ev.net,ev.cost,ev.margin,ev.pct,ev.floor,JSON.stringify({lines:ev.lines,authorizer_name:`${ev.authorizer.first_name||''} ${ev.authorizer.last_name||''}`.trim(),promotion:req.retailPromotionEvidence||null,evaluated_at:new Date().toISOString()})]});
 }
 router.use(async(req,res,next)=>{try{await ensureMarginProtection();next();}catch(e){res.status(500).json({error:'Retail margin protection initialization failed',detail:e.message});}});
 router.post('/',requirePermission('pos'),async(req,res,next)=>{
-  // This router is reached through both the UOM commercial-control chain and
-  // checkout hardening. Evaluate exactly once per request: an approved override
-  // deliberately removes the raw PIN before downstream processing, so a second
-  // evaluation must reuse the first decision rather than demand the secret again.
   if(req.retailMarginEvidence)return next();
   const accessError=branchAccessError(req);if(accessError)return res.status(403).json({error:accessError,control:'retail_branch_access'});
   let ev;try{ev=await evaluate(req);}catch(e){return res.status(e.status||500).json({error:e.message,...(e.details||{})});}
