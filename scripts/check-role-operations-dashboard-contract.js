@@ -7,8 +7,11 @@ function fail(m){console.error(`Role dashboard contract failed: ${m}`);process.e
 const logistics=read('routes/logistics-intelligence.js');
 const dashboards=read('routes/role-operations-dashboards.js');
 const guard=read('routes/dispatch-security-release-guard.js');
+const command=read('routes/role-operations-command-center.js');
 const shell=read('public/app-shell.html');
 const ui=read('public/role-operations-dashboard.js');
+const commandUi=read('public/dispatch-command-center-v2.js');
+const commandCss=read('public/dispatch-command-center-v2.css');
 const css=read('public/role-operations-dashboard.css');
 const guide=read('public/guided-mode.js');
 if(!logistics.includes("require('./role-operations-dashboards')"))fail('role dashboard API must be mounted in logistics intelligence');
@@ -16,6 +19,8 @@ if(!logistics.includes("require('./dispatch-security-release-guard')"))fail('dis
 if(logistics.indexOf("require('./dispatch-security-release-guard')")>logistics.indexOf("require('./logistics-field-execution')"))fail('security release guard must execute before field pickup mutation');
 if(!guard.includes('DISPATCH_SECURITY_RELEASE_REQUIRED'))fail('pickup must fail closed without security release');
 if(!guard.includes("source==='purchase_order'"))fail('supplier-origin pickup must remain exempt from Total Tools branch security release');
+if(!guard.includes("require('./role-operations-command-center')"))fail('advanced dispatch command-center routes must be mounted');
+if(!guard.includes('module.exports=router'))fail('security release guard must export Express middleware directly');
 if(!dashboards.includes('commercial_account_applications'))fail('website credit/commercial application queue is missing');
 if(!dashboards.includes("if(!req.apiKey&&!req.employee)"))fail('account application intake must require authenticated integration or employee session');
 if(dashboards.includes("function has(req,key){return Boolean(req.apiKey)"))fail('API keys must not inherit internal employee dashboard permissions');
@@ -23,8 +28,10 @@ if(!dashboards.includes('is_driver=1'))fail('dispatch dashboard must enumerate c
 if(!dashboards.includes('is_security'))fail('security dashboard must be bound to security personnel identity');
 if(!shell.includes('/role-operations-dashboard.js?v=20260909-2'))fail('upgraded role dashboard UI must load in the native shell');
 if(!shell.includes('/role-operations-dashboard.css?v=20260909-2'))fail('upgraded role dashboard responsive styles must load in the native shell');
+if(!shell.includes('/dispatch-command-center-v2.js?v=20260909-1'))fail('advanced Dispatch Control Tower runtime must load in the native shell');
+if(!shell.includes('/dispatch-command-center-v2.css?v=20260909-1'))fail('advanced Dispatch Control Tower styles must load in the native shell');
 for(const label of ['Dispatch Control','My Driver Dashboard','Security Shipments','Accounts Approvals'])if(!ui.includes(label))fail(`native navigation entry missing: ${label}`);
-if(/\bprompt\s*\(/.test(ui)||/\bconfirm\s*\(/.test(ui))fail('role dashboards must not use native prompt/confirm dialogs');
+if(/\bprompt\s*\(/.test(ui)||/\bconfirm\s*\(/.test(ui)||/\bprompt\s*\(/.test(commandUi)||/\bconfirm\s*\(/.test(commandUi))fail('role dashboards must not use native prompt/confirm dialogs');
 if(!ui.includes("data-guide-id=\"dispatch-control\"")||!ui.includes("data-guide-id=\"security-dashboard\"")||!ui.includes("data-guide-id=\"accounts-dashboard\""))fail('role dashboards must expose stable Guided Mode targets');
 for(const task of ['dispatch-control','driver-dashboard','security-dashboard','accounts-dashboard'])if(!guide.includes(`id:'${task}'`))fail(`Guided Mode route missing: ${task}`);
 if(!guide.includes('window.TotalToolsRoleDashboards'))fail('Guided Mode must route directly to role dashboards');
@@ -33,4 +40,13 @@ if(!ui.includes("proof_type','delivery'"))fail('driver dashboard must capture de
 if(!ui.includes('inspection_confirmed'))fail('security release form must require an explicit physical inspection acknowledgment');
 if(!ui.includes('Review application'))fail('Accounts dashboard must expose an underwriting review action');
 if(!css.includes('@media(max-width:640px)'))fail('role dashboards must include mobile-responsive layout');
-if(!process.exitCode)console.log('Role dashboard contract passed: premium dispatch, driver, security and accounts dashboards are guided, responsive and operationally protected.');
+if(!command.includes('dispatch_driver_shifts'))fail('Dispatch Control Tower must include driver shift availability');
+if(!command.includes('capacity_kg')||!command.includes('capacity_volume_m3'))fail('Dispatch Control Tower must expose vehicle capacity evidence');
+if(!command.includes('risk(')||!command.includes("level:score>=60?'critical'"))fail('Dispatch Control Tower must calculate explicit server-side operational risk');
+if(!command.includes("/role-dashboards/dispatch/jobs/:id/timeline"))fail('Dispatch Control Tower must expose a complete shipment timeline');
+if(!command.includes("/role-dashboards/dispatch/jobs/:id/reassign"))fail('Dispatch Control Tower must expose controlled reassignment');
+if(!command.includes('dispatch_security_releases SET revoked_at=CURRENT_TIMESTAMP'))fail('reassignment must invalidate prior security release');
+if(!commandUi.includes('Dispatch Control Tower')||!commandUi.includes('Security release by location'))fail('premium command-center UI is incomplete');
+if(!commandUi.includes('Assign / Reassign')||!commandUi.includes('Custody timeline'))fail('dispatcher assignment and timeline controls are missing');
+if(!commandCss.includes('@media(max-width:820px)')||!commandCss.includes('@media(max-width:520px)'))fail('Dispatch Control Tower must support tablet and phone layouts');
+if(!process.exitCode)console.log('Role dashboard contract passed: premium dispatch control tower, driver, security and accounts dashboards are guided, responsive and operationally protected.');
