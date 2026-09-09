@@ -57,5 +57,10 @@ router.post('/jobs/:id/stage/pickup',async(req,res,next)=>{
   }catch(e){res.status(500).json({error:'Unable to verify security release',detail:e.message});}
 });
 
+// Advanced dispatcher read/reassignment/timeline controls share the same
+// logistics mount but authorize their own exact routes. Keeping them here means
+// the command-center API is available before generic field execution handlers.
+router.use(require('./role-operations-command-center'));
+
 module.exports=router;
 module.exports.requiresCompanySecurity=requiresCompanySecurity;
