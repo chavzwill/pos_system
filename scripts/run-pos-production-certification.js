@@ -42,6 +42,8 @@ try{
 const suites=[
   'tests/native-pos-certification.spec.js',
   'tests/native-responsive-shell.spec.js',
+  'tests/native-all-workspaces.spec.js',
+  'tests/native-workspace-visual-integrity.spec.js',
   'tests/operations-acceptance.spec.js',
   'tests/security-boundaries.spec.js',
   'tests/multi-branch-read-integrity.spec.js',
