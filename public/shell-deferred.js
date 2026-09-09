@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const VERSION='20260909-replacement-identity-v4';
+const VERSION='20260909-replacement-variation-v5';
 const loaded=new Set();
 let scheduled=false;
 function ensureStyle(){if(document.querySelector('link[data-native-pos-stability]'))return;const l=document.createElement('link');l.rel='stylesheet';l.href=`/native-pos-stability.css?v=${VERSION}`;l.dataset.nativePosStability='1';document.head.appendChild(l);}
