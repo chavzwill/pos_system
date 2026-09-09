@@ -20,6 +20,7 @@ if(externalBase && process.env.POS_TEST_ALLOW_MUTATIONS!=='YES'){
 
 run('Static production contract',process.execPath,['scripts/check-pos-production-certification.js']);
 run('Native runtime architecture contract',process.execPath,['scripts/check-native-pos-runtime.js']);
+run('Branch variation inventory integrity contract',process.execPath,['scripts/check-branch-variation-integrity-contract.js']);
 run('Backup and recovery contract',process.execPath,['scripts/check-production-recovery-contract.js']);
 run('Startup health and cutover contract',process.execPath,['scripts/check-production-observability-contract.js']);
 run('Disposable release certification contract',process.execPath,['scripts/check-disposable-release-certification-contract.js']);
@@ -51,6 +52,7 @@ const suites=[
   'tests/operation-idempotency.spec.js',
   'tests/lifecycle-concurrency.spec.js',
   'tests/business-integrity.spec.js',
+  'tests/purchase-order-hardening.spec.js',
   'tests/pos-financial-runtime.js',
   'tests/accounting-ledger-integrity.spec.js',
   'tests/accounting-source-sync-rbac.spec.js',
