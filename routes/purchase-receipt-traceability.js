@@ -13,6 +13,9 @@ const {ensureRentalAssetReceiving,registerRentalAssetsFromReceipt}=require('../l
 
 router.use(require('./purchase-receipt-uom-guard'));
 router.use('/receiving-controls',require('./purchase-receiving-controls'));
+// This authority router owns direct PO creation and PO detail reads so an
+// exact catalog variation is captured before any downstream receiving logic.
+router.use(require('./purchase-order-variation-authority'));
 
 async function ensureColumn(table,column,definition){const {rows}=await db.execute({sql:`PRAGMA table_info(${table})`,args:[]});if(!rows.some(x=>x.name===column))await db.execute({sql:`ALTER TABLE ${table} ADD COLUMN ${column} ${definition}`,args:[]})}
 async function ensureReceiptEvidence(){
