@@ -123,17 +123,23 @@ async function finalize(key,transactionId){
 }
 
 router.post('/',requirePermission('pos'),async(req,res,next)=>{
-  let key=null,finalized=false;
+  let key=null,finalized=false,definitiveFailure=false;
   try{key=await reserveIdentities(req);if(!key)return next();req.inventoryIdentityReservationKey=key;}catch(e){return res.status(e.status||409).json({error:e.message});}
   const originalJson=res.json.bind(res);
   res.json=function(payload){
     const success=res.statusCode>=200&&res.statusCode<300&&payload&&payload.id;
     if(success){
-      return finalize(key,payload.id).then(()=>{finalized=true;return originalJson(payload);}).catch(async e=>{await release(key,'finalization_failed').catch(()=>{});if(!res.headersSent){res.status(500);return originalJson({error:'Sale posted but inventory identity finalization failed; transaction requires reconciliation',transaction_id:payload.id,detail:e.message});}});
+      return finalize(key,payload.id).then(()=>{finalized=true;return originalJson(payload);}).catch(async e=>{await release(key,'finalization_failed').catch(()=>{});definitiveFailure=true;if(!res.headersSent){res.status(500);return originalJson({error:'Sale posted but inventory identity finalization failed; transaction requires reconciliation',transaction_id:payload.id,detail:e.message});}});
     }
+    definitiveFailure=true;
     release(key).catch(()=>{});return originalJson(payload);
   };
-  res.on('close',()=>{if(!finalized)release(key).catch(()=>{});});
+  // Only release an unfinalized hold once the server has produced a definitive
+  // response. A client disconnect is ambiguous: downstream checkout may still
+  // be committing, so releasing on `close` could let another terminal sell the
+  // same serial/lot before the first mutation settles. Ambiguous holds instead
+  // remain protected until finalization or the bounded reservation TTL expires.
+  res.on('finish',()=>{if(!finalized&&!definitiveFailure)release(key).catch(()=>{});});
   next();
 });
 
