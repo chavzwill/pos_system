@@ -40,6 +40,7 @@ require('./check-native-workflow-surface-contract');
 require('./check-retail-customer-lifecycle-concurrency-contract');
 require('./check-retail-promotion-integrity-contract');
 require('./check-retail-void-integrity-contract');
+require('./check-retail-refund-settlement-integrity-contract');
 require('./check-logistics-commercial-handoff-contract');
 require('./check-logistics-field-execution-contract');
 require('./check-logistics-route-planning-contract');
