@@ -60,6 +60,20 @@ router.use(async(req,res,next)=>{
       return next();
     }
 
+    let id=numericId(p,/^\/transactions\/(\d+)\/void$/);
+    if(id&&req.method==='PATCH'){
+      const branchId=await sourceBranch('transactions',id);
+      if(branchId!=null&&!assertBranch(req,res,branchId))return;
+      return next();
+    }
+
+    id=numericId(p,/^\/transactions\/returns\/(\d+)\/settle$/);
+    if(id&&req.method==='POST'){
+      const branchId=await sourceBranch('returns',id);
+      if(branchId!=null&&!assertBranch(req,res,branchId))return;
+      return next();
+    }
+
     if(/^\/products\/\d+\/stock$/.test(p)&&req.method==='PATCH'){
       if(!assertBranch(req,res,req.body?.branch_id))return;
       return next();
@@ -70,7 +84,7 @@ router.use(async(req,res,next)=>{
       req.body.employee_id=req.employee.id;
       return next();
     }
-    let id=numericId(p,/^\/work-orders\/(\d+)(?:\/|$)/);
+    id=numericId(p,/^\/work-orders\/(\d+)(?:\/|$)/);
     if(id){
       const branchId=await sourceBranch('work_orders',id);
       if(branchId==null)return next();
@@ -140,7 +154,7 @@ router.use(require('./retail-source-integrity'));
 
 // Durable retry protection runs only after branch and source authorization have
 // succeeded. Existing callers remain compatible when no Idempotency-Key is
-// supplied; native clients can opt in to exactly-once replay protection.
+// supplied; protected lifecycle operations can require one explicitly.
 router.use(require('./operation-idempotency'));
 
 // Resource-level lifecycle serialization is intentionally after idempotency:
