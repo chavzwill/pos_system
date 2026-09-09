@@ -35,6 +35,7 @@ if (html.trim()) {
   console.log('Legacy POS index is empty; certifying native app-shell runtime only.');
 }
 if (process.exitCode) process.exit(process.exitCode);
+require('./check-ui-authority-contract');
 require('./check-native-workflow-surface-contract');
 require('./check-retail-customer-lifecycle-concurrency-contract');
 require('./check-retail-promotion-integrity-contract');
