@@ -3,12 +3,28 @@ import { test, expect } from '@playwright/test';
 const user = process.env.POS_TEST_USER || 'admin';
 const password = process.env.POS_TEST_PASSWORD || '123456';
 
+// Responsive certification deliberately includes breakpoint edges, common POS/laptop
+// resolutions, phones in both orientations, tablets, large desktops and ultrawide.
 const VIEWPORTS = [
-  { name: 'wide-desktop', width: 1440, height: 900 },
-  { name: 'desktop', width: 1280, height: 800 },
-  { name: 'small-laptop', width: 1024, height: 768 },
-  { name: 'tablet', width: 768, height: 1024 },
-  { name: 'phone', width: 390, height: 844 },
+  { name: 'small-phone-portrait', width: 320, height: 568 },
+  { name: 'phone-360', width: 360, height: 640 },
+  { name: 'phone-375', width: 375, height: 667 },
+  { name: 'phone-390', width: 390, height: 844 },
+  { name: 'large-phone-portrait', width: 430, height: 932 },
+  { name: 'small-phone-landscape', width: 568, height: 320 },
+  { name: 'phone-landscape', width: 844, height: 390 },
+  { name: 'small-tablet-portrait', width: 600, height: 960 },
+  { name: 'tablet-portrait', width: 768, height: 1024 },
+  { name: 'large-tablet-portrait', width: 820, height: 1180 },
+  { name: 'tablet-landscape', width: 1024, height: 768 },
+  { name: 'large-tablet-landscape', width: 1180, height: 820 },
+  { name: 'small-laptop', width: 1024, height: 700 },
+  { name: 'laptop-1280', width: 1280, height: 720 },
+  { name: 'laptop-1366', width: 1366, height: 768 },
+  { name: 'desktop-1440', width: 1440, height: 900 },
+  { name: 'desktop-1536', width: 1536, height: 864 },
+  { name: 'full-hd', width: 1920, height: 1080 },
+  { name: 'qhd', width: 2560, height: 1440 },
 ];
 
 async function login(page) {
@@ -65,7 +81,7 @@ async function visualSnapshot(page) {
     const severeClipping = [];
     const fixedOrDialog = [...document.querySelectorAll('[role="dialog"], dialog[open], [class*="overlay"], [class*="panel"], [class*="drawer"]')]
       .filter(visible)
-      .slice(0, 120);
+      .slice(0, 160);
 
     for (const element of fixedOrDialog) {
       const rect = element.getBoundingClientRect();
@@ -89,7 +105,7 @@ async function visualSnapshot(page) {
     const tinyTargets = [];
     const actionable = [...document.querySelectorAll('button:not([disabled]),a[href],input:not([type="hidden"]),select,textarea,[role="button"]')]
       .filter(visible)
-      .slice(0, 500);
+      .slice(0, 650);
     for (const element of actionable) {
       const rect = element.getBoundingClientRect();
       if (rect.width < 24 || rect.height < 24) {
@@ -103,30 +119,28 @@ async function visualSnapshot(page) {
     }
 
     const unreadableText = [];
-    const textNodes = [...document.querySelectorAll('small,label,button,th,td,p,span')].filter(visible).slice(0, 800);
+    const textNodes = [...document.querySelectorAll('small,label,button,th,td,p,span')].filter(visible).slice(0, 1000);
     for (const element of textNodes) {
       const text = (element.textContent || '').trim();
       if (!text) continue;
       const size = parseFloat(getComputedStyle(element).fontSize || '0');
-      if (size > 0 && size < 9) {
-        unreadableText.push({ text: text.slice(0, 80), size });
-      }
+      if (size > 0 && size < 9) unreadableText.push({ text: text.slice(0, 80), size });
     }
 
     return {
       rootOverflow,
       bodyOverflow,
-      severeClipping: severeClipping.slice(0, 12),
-      tinyTargets: tinyTargets.slice(0, 20),
-      unreadableText: unreadableText.slice(0, 20),
+      severeClipping: severeClipping.slice(0, 16),
+      tinyTargets: tinyTargets.slice(0, 24),
+      unreadableText: unreadableText.slice(0, 24),
       activeWorkspace: document.documentElement.dataset.ttActiveWorkspace || '',
     };
   });
 }
 
 for (const viewport of VIEWPORTS) {
-  test(`every native workspace remains usable at ${viewport.name}`, async ({ page }) => {
-    test.setTimeout(180_000);
+  test(`every native workspace remains usable at ${viewport.name} ${viewport.width}x${viewport.height}`, async ({ page }) => {
+    test.setTimeout(240_000);
     await page.setViewportSize({ width: viewport.width, height: viewport.height });
     const runtimeFailures = captureRuntimeFailures(page);
     await login(page);
@@ -151,7 +165,7 @@ for (const viewport of VIEWPORTS) {
         continue;
       }
 
-      await page.waitForTimeout(100);
+      await page.waitForTimeout(80);
       const snapshot = await visualSnapshot(page);
       if (snapshot.activeWorkspace !== key) failures.push({ key, kind: 'wrong-active-workspace', detail: snapshot.activeWorkspace });
       if (snapshot.rootOverflow > 4 || snapshot.bodyOverflow > 4) failures.push({ key, kind: 'horizontal-overflow', detail: snapshot });
