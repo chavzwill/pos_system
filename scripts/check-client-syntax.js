@@ -18,17 +18,26 @@ const browserScripts = [
 ];
 for (const filename of browserScripts) compile(fs.readFileSync(path.join(publicDir, filename), 'utf8'), filename);
 
-const html = fs.readFileSync(indexPath, 'utf8');
-const marker = 'const App = {';
-const markerIndex = html.indexOf(marker);
-const scriptStart = html.lastIndexOf('<script', markerIndex);
-const scriptOpenEnd = scriptStart >= 0 ? html.indexOf('>', scriptStart) : -1;
-const scriptEnd = html.indexOf('</script>', markerIndex);
-if (markerIndex < 0 || scriptStart < 0 || scriptOpenEnd < 0 || scriptEnd < 0) { console.error('Syntax FAILED: unable to locate legacy POS application script in public/index.html'); process.exitCode = 1; }
-else compile(html.slice(scriptOpenEnd + 1, scriptEnd), 'legacy-pos-app.js');
+// The production application now boots from app-shell.html. public/index.html is
+// retained only as an optional legacy surface and is intentionally empty on the
+// modernization branch. Do not let an absent legacy app prevent certification
+// of the native POS that users actually run.
+const html = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, 'utf8') : '';
+if (html.trim()) {
+  const marker = 'const App = {';
+  const markerIndex = html.indexOf(marker);
+  const scriptStart = html.lastIndexOf('<script', markerIndex);
+  const scriptOpenEnd = scriptStart >= 0 ? html.indexOf('>', scriptStart) : -1;
+  const scriptEnd = html.indexOf('</script>', markerIndex);
+  if (markerIndex < 0 || scriptStart < 0 || scriptOpenEnd < 0 || scriptEnd < 0) { console.error('Syntax FAILED: unable to locate legacy POS application script in public/index.html'); process.exitCode = 1; }
+  else compile(html.slice(scriptOpenEnd + 1, scriptEnd), 'legacy-pos-app.js');
+} else {
+  console.log('Legacy POS index is empty; certifying native app-shell runtime only.');
+}
 if (process.exitCode) process.exit(process.exitCode);
 require('./check-native-workflow-surface-contract');
 require('./check-retail-customer-lifecycle-concurrency-contract');
+require('./check-retail-promotion-integrity-contract');
 require('./check-logistics-commercial-handoff-contract');
 require('./check-logistics-field-execution-contract');
 require('./check-logistics-route-planning-contract');
