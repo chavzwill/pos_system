@@ -60,6 +60,10 @@ jobs:
           node-version: 22
           cache: npm
 
+      - name: Generate isolated CI encryption key
+        shell: bash
+        run: echo "POS_SETTINGS_ENCRYPTION_KEY=$(node -e \"process.stdout.write(require('crypto').randomBytes(32).toString('base64'))\")" >> "$GITHUB_ENV"
+
       - name: Install dependencies
         run: npm ci
 
@@ -80,7 +84,7 @@ jobs:
           node scripts/certify-production-account-recovery.js
 
       - name: Certify settings secret encryption
-        run: POS_SETTINGS_ENCRYPTION_KEY="$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))")" node scripts/certify-settings-secret-encryption.js
+        run: node scripts/certify-settings-secret-encryption.js
 
       - name: Install Chromium runtime
         run: npx playwright install --with-deps chromium
