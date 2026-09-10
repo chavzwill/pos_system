@@ -1,7 +1,4 @@
-import { test, expect } from '@playwright/test';
-import { createRequire } from 'module';
-
-const require = createRequire(import.meta.url);
+const { test, expect } = require('@playwright/test');
 const { db, ensureReady } = require('../database');
 const { nextNumber } = require('../lib/nextNumber');
 
