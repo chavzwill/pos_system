@@ -5,7 +5,8 @@ on:
     branches:
       - gate0/security-release-certification
     paths:
-      - '.github/workflows/gate0-pin-lifecycle-refactor.yml'
+      - scripts/gate0-pin-lifecycle-refactor.js
+      - .github/workflows/gate0-pin-lifecycle-refactor.yml
   workflow_dispatch:
 
 permissions:
@@ -20,160 +21,12 @@ jobs:
         with:
           ref: gate0/security-release-certification
           fetch-depth: 0
-
       - uses: actions/setup-node@v4
         with:
           node-version: 22
-
-      - name: Refactor PIN lifecycle into dedicated atomic routes
-        shell: bash
-        run: |
-          python3 - <<'PY'
-          from pathlib import Path
-          import re
-
-          employees = Path('routes/employees.js')
-          text = employees.read_text()
-
-          marker = "router.post('/:id/reset-password', requirePermission('security_manage'), async (req, res) => {"
-          if text.count(marker) != 1:
-              raise SystemExit('reset-password insertion marker drifted')
-
-          pin_routes = r'''router.put('/:id/change-pin', requireAuth, async (req, res) => {
-            if (req.apiKey) return res.status(403).json({ error: 'API keys cannot change employee credentials' });
-            const targetId = Number(req.params.id);
-            const { pin, current_pin } = req.body || {};
-            if (Number(req.employee?.id) !== targetId) return res.status(403).json({ error: 'Use the privileged reset-pin operation for another employee' });
-            if (!validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
-            try {
-              const { rows: [target] } = await db.execute({ sql: 'SELECT id,pin,active FROM employees WHERE id=?', args: [targetId] });
-              if (!target) return res.status(404).json({ error: 'Employee not found' });
-              if (Number(target.active) === 0) return res.status(400).json({ error: 'Cannot change PIN for an inactive employee' });
-              if (!(await verifyPin(target.pin, current_pin))) return res.status(403).json({ error: 'Current PIN is required and must be valid', code: 'CURRENT_PIN_REQUIRED' });
-              if (await verifyPin(target.pin, pin)) return res.status(400).json({ error: 'New PIN must be different from the current PIN' });
-              await ensureSecurityAuditTable();
-              const pinHash = await hashPin(pin);
-              const tx = await db.transaction('write');
-              try {
-                await tx.execute({ sql: 'UPDATE employees SET pin=? WHERE id=? AND active=1', args: [pinHash, targetId] });
-                await destroyEmployeeSessions(targetId, tx);
-                await recordSecurityAudit({
-                  actorEmployeeId: targetId,
-                  action: 'pin_changed_self',
-                  targetType: 'employee',
-                  targetId,
-                  oldValue: { credential: 'pin' },
-                  newValue: { credential: 'pin', sessions_revoked: true },
-                  reason: 'Authenticated self-service PIN change',
-                  requestId: req.requestId || null,
-                  method: req.method,
-                  path: req.originalUrl,
-                  control: 'credential_lifecycle',
-                  executor: tx,
-                });
-                await tx.commit();
-              } catch (error) {
-                await tx.rollback().catch(() => {});
-                throw error;
-              }
-              clearSessionCookie(res);
-              res.json({ success: true, reauthentication_required: true, sessions_revoked: true });
-            } catch (e) {
-              res.status(400).json({ error: 'Unable to change PIN' });
-            }
-          });
-
-          router.post('/:id/reset-pin', requirePermission('security_manage'), async (req, res) => {
-            if (req.apiKey) return res.status(403).json({ error: 'API keys cannot reset employee credentials' });
-            const targetId = Number(req.params.id);
-            if (Number(req.employee?.id) === targetId) return res.status(400).json({ error: 'Use change-pin for your own account' });
-            const { pin, reason } = req.body || {};
-            if (!validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
-            if (String(reason || '').trim().length < 8) return res.status(400).json({ error: 'A PIN reset reason is required' });
-            try {
-              const { rows: [target] } = await db.execute({ sql: 'SELECT id,pin,active FROM employees WHERE id=?', args: [targetId] });
-              if (!target) return res.status(404).json({ error: 'Employee not found' });
-              if (Number(target.active) === 0) return res.status(400).json({ error: 'Cannot reset an inactive employee' });
-              if (await verifyPin(target.pin, pin)) return res.status(400).json({ error: 'New PIN must be different from the current PIN' });
-              await ensureSecurityAuditTable();
-              const pinHash = await hashPin(pin);
-              const tx = await db.transaction('write');
-              try {
-                await tx.execute({ sql: 'UPDATE employees SET pin=? WHERE id=? AND active=1', args: [pinHash, targetId] });
-                await destroyEmployeeSessions(targetId, tx);
-                await recordSecurityAudit({
-                  actorEmployeeId: req.employee.id,
-                  action: 'pin_reset_by_admin',
-                  targetType: 'employee',
-                  targetId,
-                  oldValue: { credential: 'pin' },
-                  newValue: { credential: 'pin', sessions_revoked: true },
-                  reason: String(reason).trim(),
-                  requestId: req.requestId || null,
-                  method: req.method,
-                  path: req.originalUrl,
-                  control: 'credential_lifecycle',
-                  executor: tx,
-                });
-                await tx.commit();
-              } catch (error) {
-                await tx.rollback().catch(() => {});
-                throw error;
-              }
-              res.json({ success: true, sessions_revoked: true });
-            } catch (e) {
-              res.status(400).json({ error: 'Unable to reset PIN' });
-            }
-          });
-
-          '''
-          text = text.replace(marker, pin_routes + marker)
-
-          old_generic = """    if (password) return res.status(400).json({ error: 'Use the dedicated reset-password credential operation instead of employee profile edit' });
-
-    const assignment = await assertAssignableSecurityGroup(req, security_group_id);"""
-          new_generic = """    if (password) return res.status(400).json({ error: 'Use the dedicated reset-password credential operation instead of employee profile edit' });
-    if (pin !== undefined && pin !== null && String(pin) !== '') return res.status(400).json({ error: 'Use change-pin for your own PIN or reset-pin for another employee instead of employee profile edit' });
-
-    const assignment = await assertAssignableSecurityGroup(req, security_group_id);"""
-          if text.count(old_generic) != 1:
-              raise SystemExit('generic credential guard marker drifted')
-          text = text.replace(old_generic, new_generic)
-
-          # With generic PIN edits rejected above, remove the obsolete generic
-          # credential-diff/rehash path rather than leaving dead credential code.
-          obsolete = re.compile(r"\n    const pinProvided = pin !== undefined.*?\n    let pinToStore = existing\.pin;\n    if \(pinChanged\) \{\n      pinToStore = await hashPin\(pin\);\n      credentialChanged = true;\n    \}\n", re.S)
-          text, count = obsolete.subn("\n    const groupChanged = Number(security_group_id || 0) !== Number(existing.security_group_id || 0);\n    const passwordToStore = existing.password;\n    const pinToStore = existing.pin;\n    const credentialChanged = false;\n", text, count=1)
-          if count != 1:
-              raise SystemExit('obsolete generic credential block drifted')
-
-          employees.write_text(text)
-
-          session = Path('lib/sessionAuth.js')
-          s = session.read_text()
-          s = s.replace("const { employeePinCredentialGuard } = require('./credentialMutationGuard');\n", '')
-          old_fn = """function privilegedPasswordResetRequest(req) {
-            const path = String(req.originalUrl || req.url || '').split('?')[0];
-            return req.method === 'POST' && /^\\/api\\/employees\\/\\d+\\/reset-password$/.test(path);
-          }"""
-          new_fn = """function privilegedCredentialResetRequest(req) {
-            const path = String(req.originalUrl || req.url || '').split('?')[0];
-            return req.method === 'POST' && /^\\/api\\/employees\\/\\d+\\/reset-(?:password|pin)$/.test(path);
-          }"""
-          if s.count(old_fn) != 1:
-              raise SystemExit('privileged reset matcher drifted')
-          s = s.replace(old_fn, new_fn)
-          s = s.replace('if (privilegedPasswordResetRequest(req)) {', 'if (privilegedCredentialResetRequest(req)) {')
-          s = s.replace('return employeePinCredentialGuard(req, res, next);', 'return next();')
-          s = s.replace('privilegedPasswordResetRequest,', 'privilegedCredentialResetRequest,')
-          session.write_text(s)
-
-          guard = Path('lib/credentialMutationGuard.js')
-          if guard.exists():
-              guard.unlink()
-          PY
-
-      - name: Validate surgical refactor
+      - name: Apply deterministic route refactor
+        run: node scripts/gate0-pin-lifecycle-refactor.js
+      - name: Validate changed source
         run: |
           node --check routes/employees.js
           node --check lib/sessionAuth.js
@@ -181,8 +34,7 @@ jobs:
           grep -q "router.post('/:id/reset-pin'" routes/employees.js
           grep -q "privilegedCredentialResetRequest" lib/sessionAuth.js
           test ! -e lib/credentialMutationGuard.js
-
-      - name: Commit refactor
+      - name: Commit exact changes
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
