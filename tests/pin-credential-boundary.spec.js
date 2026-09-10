@@ -62,7 +62,7 @@ async function createEmployee(admin, suffix, groupId, branchId, label) {
 }
 
 test.describe('Employee PIN credential mutation boundary', () => {
-  test('self-change requires current PIN and revokes prior sessions', async () => {
+  test('self-change uses a dedicated route, requires current PIN, commits audit atomically, and revokes prior sessions', async () => {
     const admin = await login(ADMIN_USER, ADMIN_PASSWORD);
     expect(admin.status).toBe(200);
     const branches = await api(admin.cookie, '/api/branches');
@@ -73,31 +73,44 @@ test.describe('Employee PIN credential mutation boundary', () => {
     expect(session.status).toBe(200);
     const nextPin = `9${String(Date.now()).slice(-5)}`;
 
-    const missingCurrent = await api(session.cookie, `/api/employees/${employee.id}`, {
+    const genericProfileAttempt = await api(admin.cookie, `/api/employees/${employee.id}`, {
       method: 'PUT',
       body: JSON.stringify(employeeUpdate(employee, { pin: nextPin })),
+    });
+    expect(genericProfileAttempt.status).toBe(400);
+    expect(genericProfileAttempt.body?.error).toMatch(/change-pin|reset-pin/i);
+
+    const missingCurrent = await api(session.cookie, `/api/employees/${employee.id}/change-pin`, {
+      method: 'PUT', body: JSON.stringify({ pin: nextPin }),
     });
     expect(missingCurrent.status).toBe(403);
     expect(missingCurrent.body?.code).toBe('CURRENT_PIN_REQUIRED');
 
-    const wrongCurrent = await api(session.cookie, `/api/employees/${employee.id}`, {
-      method: 'PUT',
-      body: JSON.stringify(employeeUpdate(employee, { pin: nextPin, current_pin: '111111' })),
+    const wrongCurrent = await api(session.cookie, `/api/employees/${employee.id}/change-pin`, {
+      method: 'PUT', body: JSON.stringify({ pin: nextPin, current_pin: '111111' }),
     });
     expect(wrongCurrent.status).toBe(403);
 
-    const changed = await api(session.cookie, `/api/employees/${employee.id}`, {
-      method: 'PUT',
-      body: JSON.stringify(employeeUpdate(employee, { pin: nextPin, current_pin: employee.pin })),
+    const changed = await api(session.cookie, `/api/employees/${employee.id}/change-pin`, {
+      method: 'PUT', body: JSON.stringify({ pin: nextPin, current_pin: employee.pin }),
     });
     expect(changed.status).toBe(200);
+    expect(changed.body).toMatchObject({ success: true, sessions_revoked: true, reauthentication_required: true });
 
     expect((await api(session.cookie, '/api/settings')).status).toBe(401);
     expect((await login(employee.username, employee.pin, 'pin')).status).toBe(401);
     expect((await login(employee.username, nextPin, 'pin')).status).toBe(200);
+
+    const audit = await api(admin.cookie, '/api/security-groups/audit/recent');
+    expect(audit.status).toBe(200);
+    const event = audit.body.find(row => row.action === 'pin_changed_self' && Number(row.target_id) === Number(employee.id));
+    expect(event).toBeTruthy();
+    const serialized = JSON.stringify(event);
+    expect(serialized).not.toContain(nextPin);
+    expect(serialized).not.toContain(employee.pin);
   });
 
-  test('cross-user reset requires security authority, reason, and actor password reauthentication', async () => {
+  test('cross-user reset requires security authority, reason, actor password reauthentication, and atomic audit', async () => {
     const admin = await login(ADMIN_USER, ADMIN_PASSWORD);
     expect(admin.status).toBe(200);
     const branches = await api(admin.cookie, '/api/branches');
@@ -123,41 +136,37 @@ test.describe('Employee PIN credential mutation boundary', () => {
     expect(targetSession.status).toBe(200);
     const nextPin = `8${String(Date.now()).slice(-5)}`;
 
-    const unauthorized = await api(actorSession.cookie, `/api/employees/${target.id}`, {
-      method: 'PUT',
-      body: JSON.stringify(employeeUpdate(target, { pin: nextPin, reason: 'Attempted PIN reset', reauth_password: actor.password })),
+    const unauthorized = await api(actorSession.cookie, `/api/employees/${target.id}/reset-pin`, {
+      method: 'POST',
+      body: JSON.stringify({ pin: nextPin, reason: 'Attempted PIN reset', reauth_password: actor.password }),
     });
     expect(unauthorized.status).toBe(403);
 
-    const noReauth = await api(admin.cookie, `/api/employees/${target.id}`, {
-      method: 'PUT',
-      body: JSON.stringify(employeeUpdate(target, { pin: nextPin, reason: 'Manager PIN reset test' })),
+    const noReauth = await api(admin.cookie, `/api/employees/${target.id}/reset-pin`, {
+      method: 'POST', body: JSON.stringify({ pin: nextPin, reason: 'Manager PIN reset test' }),
     });
     expect(noReauth.status).toBe(403);
     expect(noReauth.body?.code).toBe('REAUTHENTICATION_REQUIRED');
 
-    const wrongReauth = await api(admin.cookie, `/api/employees/${target.id}`, {
-      method: 'PUT',
-      body: JSON.stringify(employeeUpdate(target, { pin: nextPin, reason: 'Manager PIN reset test', reauth_password: `${ADMIN_PASSWORD}-wrong` })),
+    const wrongReauth = await api(admin.cookie, `/api/employees/${target.id}/reset-pin`, {
+      method: 'POST', body: JSON.stringify({ pin: nextPin, reason: 'Manager PIN reset test', reauth_password: `${ADMIN_PASSWORD}-wrong` }),
     });
     expect(wrongReauth.status).toBe(403);
 
-    const noReason = await api(admin.cookie, `/api/employees/${target.id}`, {
-      method: 'PUT',
-      body: JSON.stringify(employeeUpdate(target, { pin: nextPin, reauth_password: ADMIN_PASSWORD })),
+    const noReason = await api(admin.cookie, `/api/employees/${target.id}/reset-pin`, {
+      method: 'POST', body: JSON.stringify({ pin: nextPin, reauth_password: ADMIN_PASSWORD }),
     });
     expect(noReason.status).toBe(400);
 
-    const changed = await api(admin.cookie, `/api/employees/${target.id}`, {
-      method: 'PUT',
-      body: JSON.stringify(employeeUpdate(target, { pin: nextPin, reason: 'Manager PIN reset test', reauth_password: ADMIN_PASSWORD })),
+    const changed = await api(admin.cookie, `/api/employees/${target.id}/reset-pin`, {
+      method: 'POST', body: JSON.stringify({ pin: nextPin, reason: 'Manager PIN reset test', reauth_password: ADMIN_PASSWORD }),
     });
     expect(changed.status).toBe(200);
+    expect(changed.body).toMatchObject({ success: true, sessions_revoked: true });
     expect((await api(targetSession.cookie, '/api/settings')).status).toBe(401);
     expect((await login(target.username, target.pin, 'pin')).status).toBe(401);
     expect((await login(target.username, nextPin, 'pin')).status).toBe(200);
 
-    await new Promise(resolve => setTimeout(resolve, 100));
     const audit = await api(admin.cookie, '/api/security-groups/audit/recent');
     expect(audit.status).toBe(200);
     const event = audit.body.find(row => row.action === 'pin_reset_by_admin' && Number(row.target_id) === Number(target.id));
