@@ -24,7 +24,7 @@ async function api(cookie, path, options = {}) {
 }
 
 test.describe('Password reset and recovery runtime boundary', () => {
-  test('administrator reset is audited, revokes sessions, forces change, and normal self-change requires current password', async () => {
+  test('credential reset is target-safe, elevated, audited, revokes sessions, and forces change', async () => {
     const admin = await login(ADMIN_USER, ADMIN_PASSWORD);
     expect(admin.status).toBe(200);
 
@@ -34,6 +34,7 @@ test.describe('Password reset and recovery runtime boundary', () => {
     const temporary = `Temporary-${suffix}-B7!`;
     const changed = `Changed-${suffix}-C6!`;
     const changedAgain = `ChangedAgain-${suffix}-D5!`;
+    const unauthorizedCandidate = `Unauthorized-${suffix}-E4!`;
     const pin = String(100000 + (Number(suffix.slice(-5)) % 899999)).slice(0, 6);
 
     const created = await api(admin.cookie, '/api/employees', {
@@ -50,6 +51,22 @@ test.describe('Password reset and recovery runtime boundary', () => {
     const beforeReset = await login(username, initial);
     expect(beforeReset.status).toBe(200);
 
+    const ordinaryCrossUserChange = await api(beforeReset.cookie, `/api/employees/${admin.body.id}/change-password`, {
+      method: 'PUT',
+      body: JSON.stringify({ password: unauthorizedCandidate, current_password: initial }),
+    });
+    expect(ordinaryCrossUserChange.status).toBe(403);
+
+    const ordinaryAdminReset = await api(beforeReset.cookie, `/api/employees/${admin.body.id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({
+        temporary_password: unauthorizedCandidate,
+        reason: 'Unauthorized reset attempt must fail closed',
+        reauth_password: initial,
+      }),
+    });
+    expect(ordinaryAdminReset.status).toBe(403);
+
     const profilePasswordMutation = await api(admin.cookie, `/api/employees/${employeeId}`, {
       method: 'PUT',
       body: JSON.stringify({ password: temporary }),
@@ -58,18 +75,34 @@ test.describe('Password reset and recovery runtime boundary', () => {
     expect(profilePasswordMutation.body?.error).toMatch(/reset-password/i);
 
     const missingReason = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
-      method: 'POST', body: JSON.stringify({ temporary_password: temporary }),
+      method: 'POST', body: JSON.stringify({ temporary_password: temporary, reauth_password: ADMIN_PASSWORD }),
     });
     expect(missingReason.status).toBe(400);
 
     const weakReset = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
-      method: 'POST', body: JSON.stringify({ temporary_password: '123456', reason: 'Integrity test reset' }),
+      method: 'POST', body: JSON.stringify({ temporary_password: '123456', reason: 'Integrity test reset', reauth_password: ADMIN_PASSWORD }),
     });
     expect(weakReset.status).toBe(400);
 
+    const missingReauth = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ temporary_password: temporary, reason: 'Credential reset requires elevated authentication' }),
+    });
+    expect(missingReauth.status).toBe(403);
+
+    const wrongReauth = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ temporary_password: temporary, reason: 'Credential reset requires elevated authentication', reauth_password: 'Wrong-Admin-Password!9' }),
+    });
+    expect(wrongReauth.status).toBe(403);
+
     const reset = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
       method: 'POST',
-      body: JSON.stringify({ temporary_password: temporary, reason: 'Automated credential lifecycle certification' }),
+      body: JSON.stringify({
+        temporary_password: temporary,
+        reason: 'Automated credential lifecycle certification',
+        reauth_password: ADMIN_PASSWORD,
+      }),
     });
     expect(reset.status).toBe(200);
     expect(reset.body).toMatchObject({ success: true, must_change_password: true, sessions_revoked: true });
@@ -122,5 +155,6 @@ test.describe('Password reset and recovery runtime boundary', () => {
     expect(serializedAudit).not.toContain(temporary);
     expect(serializedAudit).not.toContain(changed);
     expect(serializedAudit).not.toContain(changedAgain);
+    expect(serializedAudit).not.toContain(ADMIN_PASSWORD);
   });
 });
