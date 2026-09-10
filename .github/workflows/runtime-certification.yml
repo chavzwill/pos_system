@@ -43,7 +43,7 @@ jobs:
   release-gate:
     name: release-gate
     runs-on: ubuntu-latest
-    timeout-minutes: 35
+    timeout-minutes: 45
     env:
       POS_TEST_USER: admin
       POS_TEST_PASSWORD: '123456'
@@ -63,6 +63,26 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Audit production dependencies
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Validate Gate 0 backend syntax
+        run: |
+          node --check lib/sessionAuth.js
+          node --check lib/credentialMutationGuard.js
+          node --check lib/nextNumber.js
+          node --check lib/securityHardening.js
+          node --check lib/securityAudit.js
+          node --check routes/employees.js
+
+      - name: Certify production credential bootstrap and recovery
+        run: |
+          node scripts/certify-production-credential-bootstrap.js
+          node scripts/certify-production-account-recovery.js
+
+      - name: Certify settings secret encryption
+        run: POS_SETTINGS_ENCRYPTION_KEY="$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))")" node scripts/certify-settings-secret-encryption.js
+
       - name: Install Chromium runtime
         run: npx playwright install --with-deps chromium
 
@@ -76,6 +96,9 @@ jobs:
 
       - name: Run Gate 0 credential and concurrency certification
         run: npx playwright test tests/password-reset-security.spec.js tests/forced-password-change.spec.js tests/pin-security-runtime.spec.js tests/pin-credential-boundary.spec.js tests/document-number-concurrency.spec.js --workers=1
+
+      - name: Run privileged security and secret governance certification
+        run: npx playwright test tests/security-assignment-boundaries.spec.js tests/security-governance-atomicity.spec.js tests/api-key-governance.spec.js tests/settings-security-governance.spec.js tests/settings-secret-at-rest.spec.js tests/woocommerce-secret-governance.spec.js tests/request-abuse-security.spec.js --workers=1
 
       - name: Upload Playwright diagnostics on failure
         if: failure()
