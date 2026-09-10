@@ -2,19 +2,19 @@ name: Runtime Certification
 
 on:
   workflow_dispatch:
+  pull_request:
+    branches:
+      - integration/pos-consolidated-2026-09-07
+      - master
   push:
     branches:
-      - feature/total-tools-pos-upgrades
-    paths:
-      - .github/workflows/runtime-certification.yml
-      - scripts/ci-runtime-bootstrap.js
-      - scripts/runtime-certification-trigger.txt
+      - integration/pos-consolidated-2026-09-07
 
 permissions:
   contents: read
 
 concurrency:
-  group: runtime-certification-${{ github.ref }}
+  group: runtime-certification-${{ github.workflow }}-${{ github.ref }}
   cancel-in-progress: true
 
 jobs:
@@ -50,6 +50,9 @@ jobs:
 
       - name: Run full release gate
         run: npm run test:release-gate -- --workers=1
+
+      - name: Run Gate 0 security and concurrency certification
+        run: npx playwright test tests/password-reset-security.spec.js tests/document-number-concurrency.spec.js --workers=1
 
       - name: Upload Playwright diagnostics on failure
         if: failure()
