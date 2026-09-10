@@ -177,6 +177,93 @@ router.put('/:id/change-password', requireAuth, async (req, res) => {
   }
 });
 
+router.put('/:id/change-pin', requireAuth, async (req, res) => {
+  if (req.apiKey) return res.status(403).json({ error: 'API keys cannot change employee credentials' });
+  const targetId = Number(req.params.id);
+  const { pin, current_pin } = req.body || {};
+  if (Number(req.employee?.id) !== targetId) return res.status(403).json({ error: 'Use the privileged reset-pin operation for another employee' });
+  if (!validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
+  try {
+    const { rows: [target] } = await db.execute({ sql: 'SELECT id,pin,active FROM employees WHERE id=?', args: [targetId] });
+    if (!target) return res.status(404).json({ error: 'Employee not found' });
+    if (Number(target.active) === 0) return res.status(400).json({ error: 'Cannot change PIN for an inactive employee' });
+    if (!(await verifyPin(target.pin, current_pin))) return res.status(403).json({ error: 'Current PIN is required and must be valid', code: 'CURRENT_PIN_REQUIRED' });
+    if (await verifyPin(target.pin, pin)) return res.status(400).json({ error: 'New PIN must be different from the current PIN' });
+    await ensureSecurityAuditTable();
+    const pinHash = await hashPin(pin);
+    const tx = await db.transaction('write');
+    try {
+      await tx.execute({ sql: 'UPDATE employees SET pin=? WHERE id=? AND active=1', args: [pinHash, targetId] });
+      await destroyEmployeeSessions(targetId, tx);
+      await recordSecurityAudit({
+        actorEmployeeId: targetId,
+        action: 'pin_changed_self',
+        targetType: 'employee',
+        targetId,
+        oldValue: { credential: 'pin' },
+        newValue: { credential: 'pin', sessions_revoked: true },
+        reason: 'Authenticated self-service PIN change',
+        requestId: req.requestId || null,
+        method: req.method,
+        path: req.originalUrl,
+        control: 'credential_lifecycle',
+        executor: tx,
+      });
+      await tx.commit();
+    } catch (error) {
+      await tx.rollback().catch(() => {});
+      throw error;
+    }
+    clearSessionCookie(res);
+    res.json({ success: true, reauthentication_required: true, sessions_revoked: true });
+  } catch (e) {
+    res.status(400).json({ error: 'Unable to change PIN' });
+  }
+});
+
+router.post('/:id/reset-pin', requirePermission('security_manage'), async (req, res) => {
+  if (req.apiKey) return res.status(403).json({ error: 'API keys cannot reset employee credentials' });
+  const targetId = Number(req.params.id);
+  if (Number(req.employee?.id) === targetId) return res.status(400).json({ error: 'Use change-pin for your own account' });
+  const { pin, reason } = req.body || {};
+  if (!validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
+  if (String(reason || '').trim().length < 8) return res.status(400).json({ error: 'A PIN reset reason is required' });
+  try {
+    const { rows: [target] } = await db.execute({ sql: 'SELECT id,pin,active FROM employees WHERE id=?', args: [targetId] });
+    if (!target) return res.status(404).json({ error: 'Employee not found' });
+    if (Number(target.active) === 0) return res.status(400).json({ error: 'Cannot reset an inactive employee' });
+    if (await verifyPin(target.pin, pin)) return res.status(400).json({ error: 'New PIN must be different from the current PIN' });
+    await ensureSecurityAuditTable();
+    const pinHash = await hashPin(pin);
+    const tx = await db.transaction('write');
+    try {
+      await tx.execute({ sql: 'UPDATE employees SET pin=? WHERE id=? AND active=1', args: [pinHash, targetId] });
+      await destroyEmployeeSessions(targetId, tx);
+      await recordSecurityAudit({
+        actorEmployeeId: req.employee.id,
+        action: 'pin_reset_by_admin',
+        targetType: 'employee',
+        targetId,
+        oldValue: { credential: 'pin' },
+        newValue: { credential: 'pin', sessions_revoked: true },
+        reason: String(reason).trim(),
+        requestId: req.requestId || null,
+        method: req.method,
+        path: req.originalUrl,
+        control: 'credential_lifecycle',
+        executor: tx,
+      });
+      await tx.commit();
+    } catch (error) {
+      await tx.rollback().catch(() => {});
+      throw error;
+    }
+    res.json({ success: true, sessions_revoked: true });
+  } catch (e) {
+    res.status(400).json({ error: 'Unable to reset PIN' });
+  }
+});
+
 router.post('/:id/reset-password', requirePermission('security_manage'), async (req, res) => {
   if (req.apiKey) return res.status(403).json({ error: 'API keys cannot reset employee credentials' });
   const targetId = Number(req.params.id);
@@ -228,6 +315,7 @@ router.put('/:id', requirePermission('employees'), async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Employee not found' });
 
     if (password) return res.status(400).json({ error: 'Use the dedicated reset-password credential operation instead of employee profile edit' });
+    if (pin !== undefined && pin !== null && String(pin) !== '') return res.status(400).json({ error: 'Use change-pin for your own PIN or reset-pin for another employee instead of employee profile edit' });
 
     const assignment = await assertAssignableSecurityGroup(req, security_group_id);
     if (!assignment.ok) return res.status(assignment.status).json({ error: assignment.error });
