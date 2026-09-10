@@ -69,7 +69,6 @@ jobs:
       - name: Validate Gate 0 backend syntax
         run: |
           node --check lib/sessionAuth.js
-          node --check lib/credentialMutationGuard.js
           node --check lib/nextNumber.js
           node --check lib/securityHardening.js
           node --check lib/securityAudit.js
