@@ -52,7 +52,7 @@ jobs:
         run: npm run test:release-gate -- --workers=1
 
       - name: Run Gate 0 security and concurrency certification
-        run: npx playwright test tests/password-reset-security.spec.js tests/document-number-concurrency.spec.js --workers=1
+        run: npx playwright test tests/password-reset-security.spec.js tests/pin-reset-security.spec.js tests/document-number-concurrency.spec.js --workers=1
 
       - name: Upload Playwright diagnostics on failure
         if: failure()
