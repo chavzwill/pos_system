@@ -1,12 +1,12 @@
 (() => {
 'use strict';
 const state={open:false,data:null,date:new Date().toISOString().slice(0,10),branch:''};
-const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot',"'":'&#39;'}[c]));
 async function api(path,opts={}){const r=await fetch('/api/scheduling-intelligence'+path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Request failed');return d;}
 function root(){return document.getElementById('tt-scheduling-intelligence');}
 function shell(){let el=root();if(el)return el;el=document.createElement('div');el.id='tt-scheduling-intelligence';el.className='tt-scheduling-intelligence';document.body.appendChild(el);return el;}
 function close(){root()?.remove();state.open=false;}
-async function open(){state.open=true;shell();renderLoading();await load();}
+async function open(){state.open=true;const employeeBranch=window.__TT_WORKSPACE_PROFILE__?.employee?.default_branch_id;if(!state.branch&&employeeBranch)state.branch=String(employeeBranch);shell();renderLoading();await load();}
 async function load(){try{const qs=new URLSearchParams({date:state.date});if(state.branch)qs.set('branch_id',state.branch);state.data=await api('/board?'+qs);render();}catch(e){renderError(e.message);}}
 function renderLoading(){shell().innerHTML=`<div class="tt-si-backdrop" data-close></div><section class="tt-si-panel"><header><div><span class="eyebrow">Repairs</span><h2>Scheduling & Capacity Intelligence</h2><p>Match repair work to technician skill, workload and branch capacity.</p></div><button data-close>×</button></header><div class="tt-si-loading">Loading technician capacity…</div></section>`;bindClose();}
 function renderError(m){shell().innerHTML=`<div class="tt-si-backdrop" data-close></div><section class="tt-si-panel"><header><div><span class="eyebrow">Repairs</span><h2>Scheduling & Capacity Intelligence</h2></div><button data-close>×</button></header><div class="tt-si-error">${esc(m)}</div></section>`;bindClose();}
