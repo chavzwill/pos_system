@@ -22,6 +22,16 @@ async function api(cookie, path, options = {}) {
   const response = await fetch(`${BASE}${path}`, { ...options, headers });
   return { status: response.status, body: await response.json().catch(() => null) };
 }
+async function loginShell(page) {
+  await page.goto('/app-shell.html');
+  const loginForm = page.locator('#shell-login');
+  if (await loginForm.count()) {
+    await loginForm.locator('input[name="username"]').fill(ADMIN_USER);
+    await loginForm.locator('input[name="password"]').fill(ADMIN_PASSWORD);
+    await loginForm.locator('button[type="submit"], button').first().click();
+  }
+  await expect(page.locator('.shell-app')).toBeVisible({ timeout: 10_000 });
+}
 
 test.describe('Password reset and recovery runtime boundary', () => {
   test('credential reset is target-safe, elevated, audited, revokes sessions, and forces change', async () => {
@@ -156,5 +166,27 @@ test.describe('Password reset and recovery runtime boundary', () => {
     expect(serializedAudit).not.toContain(changed);
     expect(serializedAudit).not.toContain(changedAgain);
     expect(serializedAudit).not.toContain(ADMIN_PASSWORD);
+  });
+
+  test('employee administration exposes the protected reset flow instead of profile password mutation', async ({ page }) => {
+    await loginShell(page);
+    await page.addScriptTag({ url: '/admin-workspace.js' });
+    await page.evaluate(() => window.TotalToolsAdminWorkspace.open());
+
+    const employeeCard = page.locator('.tt-admin-card [data-edit-employee]').first();
+    await expect(employeeCard).toBeVisible({ timeout: 10_000 });
+    await employeeCard.click();
+
+    await expect(page.locator('#tt-admin-employee-form input[name="password"]')).toHaveCount(0);
+    const resetButton = page.getByRole('button', { name: /reset password securely/i });
+    await expect(resetButton).toBeVisible();
+    await resetButton.click();
+
+    const resetForm = page.locator('#tt-admin-password-reset-form');
+    await expect(resetForm).toBeVisible();
+    await expect(resetForm.locator('input[name="temporary_password"]')).toBeVisible();
+    await expect(resetForm.locator('input[name="reauth_password"]')).toBeVisible();
+    await expect(resetForm.locator('textarea[name="reason"]')).toBeVisible();
+    await expect(resetForm.getByRole('button', { name: /reset password & revoke sessions/i })).toBeVisible();
   });
 });
