@@ -22,9 +22,19 @@ async function api(cookie, path, options = {}) {
   const response = await fetch(`${BASE}${path}`, { ...options, headers });
   return { status: response.status, body: await response.json().catch(() => null) };
 }
+async function loginShell(page) {
+  await page.goto('/app-shell.html');
+  const loginForm = page.locator('#shell-login');
+  if (await loginForm.count()) {
+    await loginForm.locator('input[name="username"]').fill(ADMIN_USER);
+    await loginForm.locator('input[name="password"]').fill(ADMIN_PASSWORD);
+    await loginForm.locator('button[type="submit"], button').first().click();
+  }
+  await expect(page.locator('.shell-app')).toBeVisible({ timeout: 10_000 });
+}
 
 test.describe('Password reset and recovery runtime boundary', () => {
-  test('administrator reset is audited, revokes sessions, forces change, and normal self-change requires current password', async () => {
+  test('credential reset is target-safe, elevated, audited, revokes sessions, and forces change', async () => {
     const admin = await login(ADMIN_USER, ADMIN_PASSWORD);
     expect(admin.status).toBe(200);
 
@@ -34,6 +44,7 @@ test.describe('Password reset and recovery runtime boundary', () => {
     const temporary = `Temporary-${suffix}-B7!`;
     const changed = `Changed-${suffix}-C6!`;
     const changedAgain = `ChangedAgain-${suffix}-D5!`;
+    const unauthorizedCandidate = `Unauthorized-${suffix}-E4!`;
     const pin = String(100000 + (Number(suffix.slice(-5)) % 899999)).slice(0, 6);
 
     const created = await api(admin.cookie, '/api/employees', {
@@ -50,6 +61,22 @@ test.describe('Password reset and recovery runtime boundary', () => {
     const beforeReset = await login(username, initial);
     expect(beforeReset.status).toBe(200);
 
+    const ordinaryCrossUserChange = await api(beforeReset.cookie, `/api/employees/${admin.body.id}/change-password`, {
+      method: 'PUT',
+      body: JSON.stringify({ password: unauthorizedCandidate, current_password: initial }),
+    });
+    expect(ordinaryCrossUserChange.status).toBe(403);
+
+    const ordinaryAdminReset = await api(beforeReset.cookie, `/api/employees/${admin.body.id}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({
+        temporary_password: unauthorizedCandidate,
+        reason: 'Unauthorized reset attempt must fail closed',
+        reauth_password: initial,
+      }),
+    });
+    expect(ordinaryAdminReset.status).toBe(403);
+
     const profilePasswordMutation = await api(admin.cookie, `/api/employees/${employeeId}`, {
       method: 'PUT',
       body: JSON.stringify({ password: temporary }),
@@ -58,18 +85,34 @@ test.describe('Password reset and recovery runtime boundary', () => {
     expect(profilePasswordMutation.body?.error).toMatch(/reset-password/i);
 
     const missingReason = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
-      method: 'POST', body: JSON.stringify({ temporary_password: temporary }),
+      method: 'POST', body: JSON.stringify({ temporary_password: temporary, reauth_password: ADMIN_PASSWORD }),
     });
     expect(missingReason.status).toBe(400);
 
     const weakReset = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
-      method: 'POST', body: JSON.stringify({ temporary_password: '123456', reason: 'Integrity test reset' }),
+      method: 'POST', body: JSON.stringify({ temporary_password: '123456', reason: 'Integrity test reset', reauth_password: ADMIN_PASSWORD }),
     });
     expect(weakReset.status).toBe(400);
 
+    const missingReauth = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ temporary_password: temporary, reason: 'Credential reset requires elevated authentication' }),
+    });
+    expect(missingReauth.status).toBe(403);
+
+    const wrongReauth = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ temporary_password: temporary, reason: 'Credential reset requires elevated authentication', reauth_password: 'Wrong-Admin-Password!9' }),
+    });
+    expect(wrongReauth.status).toBe(403);
+
     const reset = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
       method: 'POST',
-      body: JSON.stringify({ temporary_password: temporary, reason: 'Automated credential lifecycle certification' }),
+      body: JSON.stringify({
+        temporary_password: temporary,
+        reason: 'Automated credential lifecycle certification',
+        reauth_password: ADMIN_PASSWORD,
+      }),
     });
     expect(reset.status).toBe(200);
     expect(reset.body).toMatchObject({ success: true, must_change_password: true, sessions_revoked: true });
@@ -122,5 +165,28 @@ test.describe('Password reset and recovery runtime boundary', () => {
     expect(serializedAudit).not.toContain(temporary);
     expect(serializedAudit).not.toContain(changed);
     expect(serializedAudit).not.toContain(changedAgain);
+    expect(serializedAudit).not.toContain(ADMIN_PASSWORD);
+  });
+
+  test('employee administration exposes the protected reset flow instead of profile password mutation', async ({ page }) => {
+    await loginShell(page);
+    await page.addScriptTag({ url: '/admin-workspace.js' });
+    await page.evaluate(() => window.TotalToolsAdminWorkspace.open());
+
+    const employeeCard = page.locator('.tt-admin-card [data-edit-employee]').first();
+    await expect(employeeCard).toBeVisible({ timeout: 10_000 });
+    await employeeCard.click();
+
+    await expect(page.locator('#tt-admin-employee-form input[name="password"]')).toHaveCount(0);
+    const resetButton = page.getByRole('button', { name: /reset password securely/i });
+    await expect(resetButton).toBeVisible();
+    await resetButton.click();
+
+    const resetForm = page.locator('#tt-admin-password-reset-form');
+    await expect(resetForm).toBeVisible();
+    await expect(resetForm.locator('input[name="temporary_password"]')).toBeVisible();
+    await expect(resetForm.locator('input[name="reauth_password"]')).toBeVisible();
+    await expect(resetForm.locator('textarea[name="reason"]')).toBeVisible();
+    await expect(resetForm.getByRole('button', { name: /reset password & revoke sessions/i })).toBeVisible();
   });
 });
