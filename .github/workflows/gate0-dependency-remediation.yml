@@ -1,0 +1,48 @@
+name: Gate 0 Dependency Remediation
+
+on:
+  push:
+    branches:
+      - gate0/security-release-certification
+    paths:
+      - '.github/workflows/gate0-dependency-remediation.yml'
+  workflow_dispatch:
+
+permissions:
+  contents: write
+
+concurrency:
+  group: gate0-dependency-remediation
+  cancel-in-progress: false
+
+jobs:
+  remediate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: gate0/security-release-certification
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Resolve patched production dependencies
+        run: npm install --save-exact multer@2.3.0 nodemailer@9.1.1
+
+      - name: Prove production dependency audit is clean
+        run: npm audit --omit=dev --audit-level=moderate
+
+      - name: Commit deterministic manifest and lockfile
+        run: |
+          if git diff --quiet -- package.json package-lock.json; then
+            echo 'Dependency manifests already current.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add package.json package-lock.json
+          git commit -m 'Remediate audited production dependencies'
+          git push origin HEAD:gate0/security-release-certification
