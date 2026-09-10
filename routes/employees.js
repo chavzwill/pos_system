@@ -227,6 +227,107 @@ router.post('/:id/reset-password', requirePermission('security_manage'), loginRa
   }
 });
 
+router.put('/:id/change-pin', requireAuth, privilegedPinRateLimit, async (req, res) => {
+  if (req.apiKey) return res.status(403).json({ error: 'API keys cannot change employee credentials' });
+  const targetId = Number(req.params.id);
+  if (Number(req.employee?.id) !== targetId) {
+    return res.status(403).json({ error: 'Use the privileged reset-pin operation for another employee' });
+  }
+  const { pin, current_pin, current_password } = req.body || {};
+  if (!validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
+  try {
+    const { rows: [target] } = await db.execute({ sql: 'SELECT id,pin,password,active FROM employees WHERE id=?', args: [targetId] });
+    if (!target || Number(target.active) === 0) return res.status(404).json({ error: 'Active employee not found' });
+    const reauthenticated = target.password
+      ? await verifyPassword(target.password, current_password)
+      : await verifyPin(target.pin, current_pin);
+    if (!reauthenticated) return res.status(403).json({ error: target.password ? 'Current password is required and must be valid' : 'Current PIN is required and must be valid' });
+    if (await verifyPin(target.pin, pin)) return res.status(400).json({ error: 'New PIN must be different from the current PIN' });
+
+    await ensureSecurityAuditTable();
+    const pinHash = await hashPin(pin);
+    const tx = await db.transaction('write');
+    try {
+      await tx.execute({ sql: 'UPDATE employees SET pin=? WHERE id=?', args: [pinHash, targetId] });
+      await destroyEmployeeSessions(targetId, tx);
+      await recordSecurityAudit({
+        actorEmployeeId: targetId,
+        action: 'pin_changed_self',
+        targetType: 'employee',
+        targetId,
+        oldValue: { credential: 'pin' },
+        newValue: { credential: 'pin', sessions_revoked: true },
+        reason: 'Authenticated self-service PIN change',
+        requestId: req.requestId || null,
+        method: req.method,
+        path: req.originalUrl,
+        control: 'credential_lifecycle',
+        executor: tx,
+      });
+      await tx.commit();
+    } catch (error) {
+      await tx.rollback().catch(() => {});
+      throw error;
+    }
+    resetRequestRateLimit(req);
+    clearSessionCookie(res);
+    res.json({ success: true, sessions_revoked: true, reauthentication_required: true });
+  } catch (e) {
+    res.status(400).json({ error: 'Unable to change PIN' });
+  }
+});
+
+router.post('/:id/reset-pin', requirePermission('security_manage'), loginRateLimit, async (req, res) => {
+  if (req.apiKey) return res.status(403).json({ error: 'API keys cannot reset employee credentials' });
+  const targetId = Number(req.params.id);
+  if (Number(req.employee?.id) === targetId) return res.status(400).json({ error: 'Use change-pin for your own account' });
+  const { pin, reason, reauth_password } = req.body || {};
+  if (!validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
+  if (String(reason || '').trim().length < 8) return res.status(400).json({ error: 'A reset reason is required' });
+  if (!reauth_password) return res.status(403).json({ error: 'Elevated reauthentication is required' });
+  try {
+    const { rows: [actor] } = await db.execute({ sql: 'SELECT id,password,active FROM employees WHERE id=?', args: [req.employee.id] });
+    if (!actor || Number(actor.active) === 0 || !(await verifyPassword(actor.password, reauth_password))) {
+      return res.status(403).json({ error: 'Elevated reauthentication failed' });
+    }
+    resetRequestRateLimit(req);
+
+    const { rows: [target] } = await db.execute({ sql: 'SELECT id,pin,active FROM employees WHERE id=?', args: [targetId] });
+    if (!target) return res.status(404).json({ error: 'Employee not found' });
+    if (Number(target.active) === 0) return res.status(400).json({ error: 'Cannot reset an inactive employee' });
+    if (await verifyPin(target.pin, pin)) return res.status(400).json({ error: 'New PIN must be different from the current PIN' });
+
+    await ensureSecurityAuditTable();
+    const pinHash = await hashPin(pin);
+    const tx = await db.transaction('write');
+    try {
+      await tx.execute({ sql: 'UPDATE employees SET pin=? WHERE id=?', args: [pinHash, targetId] });
+      await destroyEmployeeSessions(targetId, tx);
+      await recordSecurityAudit({
+        actorEmployeeId: req.employee.id,
+        action: 'pin_reset_by_admin',
+        targetType: 'employee',
+        targetId,
+        oldValue: { credential: 'pin' },
+        newValue: { credential: 'pin', sessions_revoked: true, elevated_reauthentication: true },
+        reason: String(reason).trim(),
+        requestId: req.requestId || null,
+        method: req.method,
+        path: req.originalUrl,
+        control: 'credential_lifecycle',
+        executor: tx,
+      });
+      await tx.commit();
+    } catch (error) {
+      await tx.rollback().catch(() => {});
+      throw error;
+    }
+    res.json({ success: true, sessions_revoked: true });
+  } catch (e) {
+    res.status(400).json({ error: 'Unable to reset PIN' });
+  }
+});
+
 router.put('/:id', requirePermission('employees'), async (req, res) => {
   const { first_name, last_name, username, pin, password, must_change_password, active, security_group_id, default_branch_id, is_driver, is_operator, is_security, skill_ids } = req.body;
   const targetId = Number(req.params.id);
@@ -235,19 +336,14 @@ router.put('/:id', requirePermission('employees'), async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Employee not found' });
 
     if (password) return res.status(400).json({ error: 'Use the dedicated reset-password credential operation instead of employee profile edit' });
+    if (pin !== undefined && pin !== null && String(pin) !== '') {
+      return res.status(400).json({ error: 'Use the dedicated change-pin or reset-pin credential operation instead of employee profile edit' });
+    }
 
     const assignment = await assertAssignableSecurityGroup(req, security_group_id);
     if (!assignment.ok) return res.status(assignment.status).json({ error: assignment.error });
 
-    const pinProvided = pin !== undefined && pin !== null && String(pin) !== '';
-    if (pinProvided && !validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
     const groupChanged = Number(security_group_id || 0) !== Number(existing.security_group_id || 0);
-    const passwordChanged = Boolean(password);
-    const pinChanged = pinProvided ? !(await verifyPin(existing.pin, pin)) : false;
-    const crossUserCredentialChange = targetId !== Number(req.employee?.id) && (passwordChanged || pinChanged);
-    if (crossUserCredentialChange && !can(req.employee?.permissions, 'security_manage')) {
-      return res.status(403).json({ error: 'Changing another employee credentials requires Security Management authority' });
-    }
 
     if (can(existing.permissions, 'security_manage')) {
       if ((active === 0 || active === false) && !can(req.employee?.permissions, 'security_manage')) {
@@ -261,21 +357,8 @@ router.put('/:id', requirePermission('employees'), async (req, res) => {
       }
     }
 
-    let passwordToStore = existing.password;
-    let credentialChanged = false;
-    if (password) {
-      if (String(password).length < 8) return res.status(400).json({ error: 'Password must be at least 8 characters' });
-      passwordToStore = await bcrypt.hash(password, PASSWORD_COST);
-      credentialChanged = true;
-    }
-    let pinToStore = existing.pin;
-    if (pinChanged) {
-      pinToStore = await hashPin(pin);
-      credentialChanged = true;
-    }
-
-    await db.execute({ sql: 'UPDATE employees SET first_name=?,last_name=?,username=?,pin=?,password=?,must_change_password=?,active=?,security_group_id=?,default_branch_id=?,is_driver=?,is_operator=?,is_security=? WHERE id=?', args: [first_name, last_name, username, pinToStore, passwordToStore, must_change_password?1:0, active??1, security_group_id||null, default_branch_id||null, is_driver?1:0, is_operator?1:0, is_security?1:0, targetId] });
-    if (credentialChanged || groupChanged || active === false || active === 0) await destroyEmployeeSessions(targetId);
+    await db.execute({ sql: 'UPDATE employees SET first_name=?,last_name=?,username=?,pin=?,password=?,must_change_password=?,active=?,security_group_id=?,default_branch_id=?,is_driver=?,is_operator=?,is_security=? WHERE id=?', args: [first_name, last_name, username, existing.pin, existing.password, must_change_password?1:0, active??1, security_group_id||null, default_branch_id||null, is_driver?1:0, is_operator?1:0, is_security?1:0, targetId] });
+    if (groupChanged || active === false || active === 0) await destroyEmployeeSessions(targetId);
     if (default_branch_id) {
       await db.execute({ sql: 'INSERT OR IGNORE INTO employee_branches (employee_id, branch_id, is_default) VALUES (?,?,1)', args: [targetId, default_branch_id] });
       await db.execute({ sql: 'UPDATE employee_branches SET is_default = CASE WHEN branch_id = ? THEN 1 ELSE 0 END WHERE employee_id = ?', args: [default_branch_id, targetId] });
