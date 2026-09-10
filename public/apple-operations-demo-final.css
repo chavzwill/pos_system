@@ -1,0 +1,158 @@
+/* Total Tools Operations — Apple-inspired demo-final pass.
+   Explicitly normalizes the native operational workspaces that still carry legacy compact styling.
+   Presentation only: no business logic, state, permission or workflow changes. */
+
+:root{
+  --adf-bg:#f5f5f7;
+  --adf-surface:#fff;
+  --adf-surface-soft:rgba(118,118,128,.075);
+  --adf-line:rgba(60,60,67,.13);
+  --adf-line-strong:rgba(60,60,67,.2);
+  --adf-text:#1d1d1f;
+  --adf-muted:#6e6e73;
+  --adf-green:#0b7a43;
+  --adf-green-strong:#086536;
+  --adf-green-soft:rgba(11,122,67,.09);
+  --adf-yellow:#f2c316;
+  --adf-red:#c9342f;
+  --adf-blue:#0a84ff;
+  --adf-shadow:0 22px 65px rgba(0,0,0,.14),0 2px 10px rgba(0,0,0,.05);
+}
+
+/* Full-screen operational sheets */
+.tt-rent__panel,.tt-inv__panel,.tt-purch__panel,.tt-li-panel{
+  inset:14px!important;border-radius:20px!important;border:1px solid rgba(255,255,255,.72)!important;
+  background:rgba(246,246,248,.97)!important;box-shadow:var(--adf-shadow)!important;
+}
+.tt-rent__backdrop,.tt-inv__backdrop,.tt-purch__backdrop,.tt-li-backdrop{
+  background:rgba(28,28,30,.22)!important;backdrop-filter:blur(18px)!important;-webkit-backdrop-filter:blur(18px)!important;
+}
+.tt-rent__head,.tt-inv__head,.tt-purch__head,.tt-li-panel>header{
+  min-height:76px!important;padding:14px 18px!important;background:rgba(255,255,255,.84)!important;
+  border-bottom:1px solid var(--adf-line)!important;box-shadow:none!important;
+  backdrop-filter:saturate(180%) blur(22px)!important;-webkit-backdrop-filter:saturate(180%) blur(22px)!important;
+}
+.tt-rent__head,.tt-inv__head{border-bottom:1px solid var(--adf-line)!important}
+.tt-purch__head:before{display:none!important}.tt-purch__head>div{padding-left:0!important}
+.tt-rent__eyebrow,.tt-inv__eyebrow,.tt-purch__eyebrow,.tt-li-panel header span{
+  color:var(--adf-green)!important;font-size:11px!important;font-weight:650!important;letter-spacing:.01em!important;text-transform:none!important;
+}
+.tt-rent__head h2,.tt-inv__head h2,.tt-purch__head h2,.tt-li-panel header h2{
+  margin:3px 0 2px!important;font-size:24px!important;font-weight:720!important;letter-spacing:-.035em!important;color:var(--adf-text)!important;
+}
+.tt-rent__head p,.tt-inv__head p,.tt-purch__head p,.tt-li-panel header p{
+  font-size:12px!important;line-height:1.4!important;color:var(--adf-muted)!important;
+}
+.tt-rent__close,.tt-inv__close,.tt-purch__close,.tt-li-panel header>button{
+  width:44px!important;height:44px!important;min-height:44px!important;border-radius:11px!important;border:1px solid var(--adf-line)!important;
+  background:rgba(118,118,128,.08)!important;color:var(--adf-text)!important;font-size:19px!important;box-shadow:none!important;
+}
+
+/* Toolbars */
+.tt-rent__toolbar,.tt-inv__toolbar,.tt-purch__toolbar{
+  gap:8px!important;padding:10px 12px!important;background:rgba(255,255,255,.55)!important;border-bottom:1px solid var(--adf-line)!important;
+}
+.tt-rent__toolbar input,.tt-rent__toolbar select,.tt-inv__toolbar input,.tt-inv__toolbar select,.tt-purch__toolbar select,
+.tt-purch__convert input,.tt-purch__convert select{
+  min-height:44px!important;height:44px!important;border:1px solid var(--adf-line)!important;border-radius:10px!important;
+  background:var(--adf-surface-soft)!important;color:var(--adf-text)!important;padding:0 12px!important;font-size:12px!important;
+}
+.tt-rent__toolbar button,.tt-inv__toolbar button,.tt-purch button,
+.tt-li-section-head button,.tt-li-actions button,.tt-li-transfer button{
+  min-height:44px!important;border-radius:10px!important;padding:0 14px!important;font-size:12px!important;font-weight:650!important;
+  border:1px solid transparent!important;background:var(--adf-green)!important;color:#fff!important;box-shadow:none!important;
+}
+.tt-rent__toolbar button.secondary,.tt-inv__toolbar button.secondary,.tt-purch button.secondary,
+.tt-li-section-head button,.tt-li-actions button,.tt-li-transfer button{
+  background:rgba(255,255,255,.78)!important;color:var(--adf-text)!important;border-color:var(--adf-line)!important;
+}
+
+/* Metrics */
+.tt-rent__metrics,.tt-inv__metrics,.tt-purch__metrics,.tt-li-stats{gap:10px!important;padding:12px 12px 4px!important;background:transparent!important}
+.tt-rent__metrics article,.tt-inv__metrics article,.tt-purch__metrics article,.tt-li-stats article{
+  min-height:94px!important;padding:15px 16px!important;border:1px solid var(--adf-line)!important;border-radius:14px!important;
+  background:#fff!important;box-shadow:0 1px 2px rgba(0,0,0,.025)!important;
+}
+.tt-rent__metrics small,.tt-inv__metrics small,.tt-purch__metrics small,.tt-li-stats small{
+  color:var(--adf-muted)!important;font-size:10px!important;letter-spacing:0!important;text-transform:none!important;font-weight:560!important;
+}
+.tt-rent__metrics strong,.tt-inv__metrics strong,.tt-purch__metrics strong,.tt-li-stats strong{
+  display:block!important;margin-top:8px!important;font-size:24px!important;line-height:1!important;font-weight:720!important;letter-spacing:-.035em!important;color:var(--adf-text)!important;
+}
+
+/* Master/detail surfaces */
+.tt-rent__body,.tt-inv__body,.tt-purch__body,.tt-li-grid{gap:12px!important;padding:12px!important}
+.tt-rent__list,.tt-rent__detail,.tt-inv__list,.tt-inv__detail,.tt-purch__list,.tt-purch__detail,.tt-li-grid>section{
+  border:1px solid var(--adf-line)!important;border-radius:16px!important;background:#fff!important;box-shadow:0 1px 2px rgba(0,0,0,.025)!important;
+}
+.tt-rent__detail,.tt-inv__detail,.tt-purch__detail{padding:18px!important}
+.tt-rent__detail-head h3,.tt-inv__detail-head h3,.tt-purch__detail h3{font-size:22px!important;font-weight:700!important;letter-spacing:-.03em!important;color:var(--adf-text)!important}
+.tt-rent__detail-head span,.tt-inv__detail-head span,.tt-purch__detail-head>div>span{font-size:11px!important;color:var(--adf-muted)!important}
+
+/* Tables */
+.tt-rent__table,.tt-inv__table{border:0!important;border-radius:0!important}
+.tt-rent__table th,.tt-inv__table th{
+  height:42px!important;padding:0 12px!important;background:rgba(118,118,128,.06)!important;border-bottom:1px solid var(--adf-line)!important;
+  color:var(--adf-muted)!important;font-size:11px!important;font-weight:620!important;letter-spacing:0!important;text-transform:none!important;
+}
+.tt-rent__table td,.tt-inv__table td{height:50px!important;padding:10px 12px!important;border-bottom:1px solid rgba(60,60,67,.075)!important;font-size:12px!important}
+.tt-rent__row:hover,.tt-rent__row.is-selected,.tt-inv__row:hover,.tt-inv__row.is-selected{background:var(--adf-green-soft)!important}
+.tt-rent__name strong,.tt-inv__name strong{font-size:13px!important}.tt-rent__name span,.tt-inv__name span{font-size:11px!important;color:var(--adf-muted)!important}
+
+/* Status chips */
+.tt-rent__status,.tt-rent__tag,.tt-purch__status,.tt-wo-pill,.tt-li-job-top b,.tt-li-meta span{
+  border-radius:999px!important;padding:5px 8px!important;font-size:10px!important;font-weight:650!important;letter-spacing:0!important;text-transform:none!important;
+}
+.tt-rent__status.is-active,.tt-rent__status.is-collected,.tt-rent__status.is-approved,.tt-purch__status.is-approved,.tt-purch__status.is-received,.risk-normal{background:rgba(52,199,89,.12)!important;color:#1b6f37!important}
+.tt-rent__status.is-overdue,.tt-rent__status.is-cancelled,.tt-rent__status.is-rejected,.tt-purch__status.is-rejected,.tt-purch__status.is-cancelled,.risk-high{background:rgba(255,59,48,.10)!important;color:#b3261e!important}
+.tt-rent__status.is-awaiting_issue,.tt-rent__status.is-pending,.tt-rent__status.is-pending_approval,.tt-rent__status.is-pending_collection,.tt-purch__status.is-submitted,.tt-purch__status.is-sent,.tt-purch__status.is-partial{background:rgba(10,132,255,.10)!important;color:#1262a3!important}
+
+/* Facts / grouped cards */
+.tt-rent__facts,.tt-inv__facts,.tt-purch__facts{gap:8px!important;margin-top:14px!important}
+.tt-rent__facts div,.tt-inv__facts div,.tt-purch__facts div,.tt-rent__missing-card,.tt-wo__fact,.tt-wo__timeline article,.tt-wo__task,.tt-wo__part{
+  padding:12px!important;border:1px solid var(--adf-line)!important;border-radius:12px!important;background:rgba(118,118,128,.055)!important;
+}
+.tt-rent__facts small,.tt-inv__facts small,.tt-purch__facts small,.tt-wo__fact small{font-size:10px!important;letter-spacing:0!important;text-transform:none!important;color:var(--adf-muted)!important}
+.tt-rent__facts strong,.tt-inv__facts strong,.tt-purch__facts strong,.tt-wo__fact strong{font-size:13px!important;color:var(--adf-text)!important}
+
+/* RENTALS */
+.tt-rent__section{margin-top:16px!important;padding-top:14px!important;border-top:1px solid var(--adf-line)!important}.tt-rent__section h4{font-size:14px!important}
+.tt-rent__item,.tt-rent__pause{padding:11px 0!important}.tt-rent__item span,.tt-rent__pause span{font-size:11px!important}
+.tt-rent__actions{gap:8px!important;margin-top:14px!important}.tt-rent__actions button,.tt-rent__missing-card button,.tt-rent__modal button{min-height:44px!important;border-radius:10px!important;padding:0 14px!important;font-size:12px!important;font-weight:650!important}
+.tt-rent__modal-backdrop{background:rgba(28,28,30,.28)!important;backdrop-filter:blur(18px)!important;-webkit-backdrop-filter:blur(18px)!important}
+.tt-rent__modal{width:min(620px,calc(100vw - 32px))!important;border-radius:18px!important;border:1px solid rgba(255,255,255,.72)!important;box-shadow:var(--adf-shadow)!important}
+.tt-rent__modal>header{min-height:68px!important;padding:12px 16px!important;background:rgba(255,255,255,.9)!important}.tt-rent__modal h3{font-size:20px!important}.tt-rent__modal-body{padding:16px!important}.tt-rent__modal footer{padding:12px 16px!important;background:rgba(118,118,128,.045)!important}
+.tt-rent__form-grid{gap:12px!important}.tt-rent__form-grid label{font-size:11px!important;font-weight:600!important}.tt-rent__form-grid input,.tt-rent__form-grid select,.tt-rent__form-grid textarea{min-height:44px!important;border-radius:10px!important;border:1px solid var(--adf-line)!important;background:var(--adf-surface-soft)!important;padding:10px 12px!important;font-size:12px!important}
+
+/* INVENTORY */
+.tt-inv__adjust{margin-top:16px!important;padding-top:14px!important;border-top:1px solid var(--adf-line)!important}.tt-inv__adjust h4,.tt-inv__moves h4{font-size:14px!important}
+.tt-inv__adjust-grid{grid-template-columns:110px 1fr!important;gap:8px!important}.tt-inv__adjust input,.tt-inv__adjust textarea{min-height:44px!important;border-radius:10px!important;border:1px solid var(--adf-line)!important;background:var(--adf-surface-soft)!important;padding:10px 12px!important}
+.tt-inv__adjust button{min-height:46px!important;border-radius:10px!important;font-size:12px!important}.tt-inv__move{padding:10px 0!important;font-size:11px!important}
+
+/* PURCHASING */
+.tt-purch__tabs{padding:8px!important;gap:5px!important;background:transparent!important}.tt-purch__tabs button{min-height:38px!important;border:0!important;border-radius:9px!important;background:transparent!important;color:var(--adf-text-2)!important}.tt-purch__tabs button.is-active{background:rgba(118,118,128,.13)!important;color:var(--adf-text)!important}
+.tt-purch__row{min-height:62px!important;padding:11px 13px!important;border-bottom:1px solid rgba(60,60,67,.075)!important}.tt-purch__row:hover{background:rgba(118,118,128,.045)!important}.tt-purch__row.is-selected{background:var(--adf-green-soft)!important;box-shadow:none!important}.tt-purch__row strong{font-size:13px!important}.tt-purch__row span{font-size:11px!important}
+.tt-purch__composer-shade{background:rgba(28,28,30,.26)!important;backdrop-filter:blur(18px)!important}.tt-purch__composer{border-radius:20px!important;border:1px solid rgba(255,255,255,.72)!important;box-shadow:var(--adf-shadow)!important}.tt-purch__composer>header{padding:18px 20px!important}.tt-purch__composer>header h3{font-size:24px!important}.tt-purch__composer form{padding:18px 20px!important}.tt-purch__composer label{font-size:11px!important;letter-spacing:0!important;text-transform:none!important;font-weight:600!important}.tt-purch__composer input,.tt-purch__composer select,.tt-purch__composer textarea{min-height:44px!important;border-radius:10px!important;border:1px solid var(--adf-line)!important;background:var(--adf-surface-soft)!important;font-size:12px!important}.tt-purch__compose-lines{border-radius:14px!important;background:rgba(118,118,128,.045)!important}
+
+/* REPAIR / WORK ORDERS — master-detail native split view */
+.tt-wo{background:var(--adf-bg)!important;color:var(--adf-text)!important}.tt-wo__top{min-height:68px!important;padding:10px 16px!important;background:rgba(255,255,255,.8)!important;border-bottom:1px solid var(--adf-line)!important;backdrop-filter:saturate(180%) blur(22px)!important}.tt-wo__top h2{font-size:20px!important;font-weight:700!important;letter-spacing:-.025em!important}.tt-wo__top p{font-size:11px!important}.tt-wo__back,.tt-wo__new{min-height:44px!important;border-radius:10px!important;padding:0 14px!important;font-size:12px!important;font-weight:650!important}.tt-wo__back{background:rgba(118,118,128,.08)!important;border:1px solid var(--adf-line)!important}.tt-wo__new{background:var(--adf-green)!important;border:1px solid var(--adf-green)!important}
+.tt-wo__layout{grid-template-columns:minmax(330px,390px) minmax(0,1fr)!important}.tt-wo__list-pane{background:rgba(255,255,255,.5)!important;border-right:1px solid var(--adf-line)!important}.tt-wo__filters{padding:10px!important;gap:8px!important;background:transparent!important;border-bottom:1px solid var(--adf-line)!important}.tt-wo__filters input,.tt-wo__filters select{min-height:44px!important;height:44px!important;border-radius:10px!important;border:1px solid var(--adf-line)!important;background:var(--adf-surface-soft)!important;font-size:12px!important}.tt-wo__list{padding:8px!important;gap:7px!important}.tt-wo-row{padding:12px!important;border:1px solid transparent!important;border-radius:12px!important;background:transparent!important}.tt-wo-row:hover{background:rgba(118,118,128,.07)!important}.tt-wo-row.is-active{background:var(--adf-green-soft)!important;border-color:rgba(11,122,67,.12)!important}.tt-wo-row strong{font-size:13px!important}.tt-wo-row small{font-size:10px!important}.tt-wo-row p{font-size:11px!important;line-height:1.45!important}.tt-wo__detail{padding:14px!important}.tt-wo__detail-card{padding:16px!important;margin-bottom:10px!important;border:1px solid var(--adf-line)!important;border-radius:15px!important;background:#fff!important}.tt-wo__detail-head h1{font-size:28px!important;font-weight:720!important;letter-spacing:-.04em!important}.tt-wo__eyebrow{font-size:11px!important;letter-spacing:.01em!important;text-transform:none!important;font-weight:650!important}.tt-wo__detail-head p{font-size:12px!important}.tt-wo__facts{gap:8px!important;margin-top:14px!important}.tt-wo__grid{gap:10px!important}.tt-wo__section-head h3{font-size:15px!important}.tt-wo__section-head span{font-size:10px!important}.tt-wo__timeline,.tt-wo__tasks,.tt-wo__parts{gap:7px!important}.tt-wo__timeline strong,.tt-wo__task strong,.tt-wo__part strong{font-size:12px!important}.tt-wo__timeline p,.tt-wo__task p,.tt-wo__part p{font-size:11px!important}.tt-wo__timeline small,.tt-wo__task small,.tt-wo__part small{font-size:10px!important}.tt-wo__actions{gap:7px!important}.tt-wo__actions button,.tt-wo__form button,.tt-wo__qc-actions button,.tt-wo__quality-refresh{min-height:44px!important;border-radius:10px!important;padding:0 13px!important;font-size:11px!important;font-weight:650!important}.tt-wo__form{gap:10px!important}.tt-wo__form label,.tt-wo__qc-form>label{font-size:11px!important;font-weight:600!important}.tt-wo__form textarea,.tt-wo__form select,.tt-wo__form input,.tt-wo__qc-form textarea{min-height:44px!important;border-radius:10px!important;border:1px solid var(--adf-line)!important;background:var(--adf-surface-soft)!important;padding:10px 12px!important}.tt-wo__quality-state,.tt-wo__checks>div,.tt-wo__qc-checklist label,.tt-wo__quality-latest,.tt-wo__comeback,.tt-wo__quality-history>div{border-radius:12px!important;border-color:var(--adf-line)!important;background:rgba(118,118,128,.05)!important}
+
+/* DISPATCH / LOGISTICS */
+.tt-li-panel{color:var(--adf-text)!important}.tt-li-note{margin:8px 12px 0!important;padding:10px 12px!important;border:1px solid rgba(11,122,67,.12)!important;border-left:0!important;border-radius:12px!important;background:var(--adf-green-soft)!important;color:#315b43!important;font-size:11px!important}.tt-li-section-head{min-height:54px!important;padding:8px 12px!important;background:rgba(118,118,128,.045)!important}.tt-li-section-head h3{font-size:14px!important}.tt-li-list{padding:8px!important;gap:8px!important}.tt-li-job,.tt-li-transfer{padding:13px!important;border:1px solid var(--adf-line)!important;border-radius:13px!important;background:#fff!important}.tt-li-job-top strong,.tt-li-transfer strong{font-size:13px!important}.tt-li-job-top span,.tt-li-transfer small,.tt-li-job p{font-size:11px!important}.tt-li-route{margin:10px 0!important;padding:10px!important;border-radius:10px!important;background:rgba(118,118,128,.055)!important;border:1px solid var(--adf-line)!important;font-size:11px!important}.tt-li-actions{gap:7px!important;margin-top:10px!important}
+
+/* Popovers / dialogs / forms across these modules */
+.tt-rent__notice,.tt-purch__note,.tt-wo__quality-error{border-radius:11px!important;padding:10px 12px!important;font-size:11px!important;line-height:1.45!important}
+
+@media(max-width:900px){
+  .tt-rent__panel,.tt-inv__panel,.tt-purch__panel,.tt-li-panel{inset:0!important;border-radius:0!important}
+  .tt-rent__metrics,.tt-inv__metrics,.tt-purch__metrics,.tt-li-stats{grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  .tt-rent__body,.tt-inv__body,.tt-purch__body,.tt-li-grid{padding:8px!important;gap:8px!important}
+  .tt-rent__detail,.tt-inv__detail,.tt-purch__detail{padding:14px!important}
+  .tt-wo__layout{display:block!important}.tt-wo__list-pane{max-height:40dvh!important;border-right:0!important;border-bottom:1px solid var(--adf-line)!important}.tt-wo__detail{padding:8px!important}
+}
+@media(max-width:560px){
+  .tt-rent__head,.tt-inv__head,.tt-purch__head,.tt-li-panel>header{padding:10px 12px!important}.tt-rent__head h2,.tt-inv__head h2,.tt-purch__head h2,.tt-li-panel header h2{font-size:20px!important}
+  .tt-rent__metrics article,.tt-inv__metrics article,.tt-purch__metrics article,.tt-li-stats article{min-height:82px!important;padding:12px!important}.tt-rent__metrics strong,.tt-inv__metrics strong,.tt-purch__metrics strong,.tt-li-stats strong{font-size:21px!important}
+  .tt-wo__detail-head h1{font-size:23px!important}.tt-purch__composer{inset:0!important;border-radius:0!important}
+}
