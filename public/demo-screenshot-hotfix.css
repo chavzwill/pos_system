@@ -1,0 +1,44 @@
+/* Demo screenshot hotfix — targets the real visual defects observed on 2026-09-10. */
+:root{--demo-sidebar:216px;--demo-bg:#f5f5f7;--demo-card:#fff;--demo-line:rgba(60,60,67,.12);--demo-muted:#6e6e73;--demo-green:#0b6f3c;--demo-green-2:#095e33;--demo-yellow:#f2c316}
+html,body{overflow-x:hidden!important;background:var(--demo-bg)!important}
+.shell-app{grid-template-columns:var(--demo-sidebar) minmax(0,1fr)!important;min-width:0!important}
+.shell-sidebar{width:var(--demo-sidebar)!important;background:linear-gradient(180deg,rgba(7,66,45,.98),rgba(4,48,34,.98))!important;border-right:1px solid rgba(255,255,255,.08)!important;color:#fff!important}
+.shell-brand{min-height:82px!important;padding:16px 16px 12px!important;border-bottom:1px solid rgba(255,255,255,.08)!important}
+.shell-brand strong{font-size:15px!important;color:#fff!important}.shell-brand span{font-size:9px!important;color:rgba(255,255,255,.58)!important;letter-spacing:.06em!important;text-transform:uppercase!important}
+.shell-nav{padding:8px 8px 10px!important;gap:2px!important;overflow-y:auto!important;scrollbar-width:thin!important}
+.shell-nav button{min-height:38px!important;height:38px!important;padding:0 10px 0 30px!important;border-radius:9px!important;font-size:11.5px!important;font-weight:620!important;color:rgba(255,255,255,.78)!important;background:transparent!important;box-shadow:none!important}
+.shell-nav button:before{left:12px!important;width:6px!important;height:6px!important;background:rgba(255,255,255,.42)!important;border-radius:2px!important}
+.shell-nav button:hover{background:rgba(255,255,255,.08)!important;color:#fff!important}
+.shell-nav button.is-active{background:rgba(255,255,255,.14)!important;color:#fff!important;border:1px solid rgba(255,255,255,.12)!important;box-shadow:inset 3px 0 0 var(--demo-yellow)!important}
+.shell-nav button.is-active:before{background:var(--demo-yellow)!important}
+.shell-sidebar footer{padding:10px 12px 12px!important;background:rgba(0,0,0,.10)!important}.shell-sidebar footer button{height:36px!important;min-height:36px!important;background:rgba(255,255,255,.06)!important;color:#fff!important;border-color:rgba(255,255,255,.16)!important}
+.shell-topbar{min-height:56px!important;height:56px!important;padding:0 20px!important;background:rgba(247,247,249,.88)!important}.shell-topbar h2{font-size:14px!important}.shell-topbar>span{padding:5px 8px!important;font-size:10px!important}
+.shell-content{padding:24px 28px 36px!important;max-width:1480px!important}
+.shell-hero{padding:0 0 18px!important;gap:18px!important}.shell-hero h1{font-size:clamp(28px,3vw,38px)!important;line-height:1.04!important;margin:4px 0 7px!important;letter-spacing:-.045em!important}.shell-hero p{font-size:12.5px!important;line-height:1.5!important;max-width:680px!important}.shell-eyebrow{font-size:9.5px!important}.shell-badge{font-size:10px!important;padding:6px 9px!important}
+.shell-status{gap:8px!important}.shell-status article{min-height:86px!important;padding:13px 14px!important;border-radius:12px!important;box-shadow:none!important}.shell-status small{font-size:9px!important}.shell-status strong{font-size:23px!important;margin-top:6px!important}
+.shell-section{margin-top:20px!important}.shell-section-head{margin-bottom:8px!important}.shell-section-head h3{font-size:15px!important}.shell-section-head p{font-size:10.5px!important}.shell-grid{gap:8px!important}.shell-card{min-height:88px!important;border-radius:12px!important;box-shadow:none!important}.shell-card>div{padding:14px 16px!important}.shell-card strong{font-size:12.5px!important}.shell-card p{font-size:10.5px!important;margin-top:4px!important}.shell-card button{height:34px!important;min-height:34px!important;margin-right:14px!important;font-size:10px!important;border-radius:8px!important}
+
+/* Guided mode should never obscure a demo or normal first-load state. */
+#tt-guided-mode,.tt-guide-backdrop,.tt-guide,.shell-guide-native,.shell-guide-top{display:none!important}
+
+/* Full-screen operational windows: less dead space, more usable content. */
+.tt-sales__panel,.tt-crm__panel,.tt-inv__panel,.tt-purch__panel,.tt-rent__panel,.tt-aiacct__panel,.tt-li-panel,.tt-admin__panel,.tt-settings__panel{inset:8px!important;border-radius:16px!important}
+.tt-sales__head,.tt-crm__panel>header,.tt-inv__head,.tt-purch__head,.tt-rent__head,.tt-aiacct__panel>header,.tt-li-panel>header,.tt-admin__head,.tt-settings__panel>header{padding:11px 14px!important;min-height:64px!important}
+.tt-sales__head h2,.tt-crm__panel h2,.tt-inv__head h2,.tt-purch__head h2,.tt-rent__head h2,.tt-aiacct__panel h2,.tt-li-panel h2,.tt-admin__head h2,.tt-settings__panel h2{font-size:20px!important;letter-spacing:-.03em!important}
+
+/* Finance: stop the six-column squeeze and horizontal sprawl seen in the screenshots. */
+.tt-aiacct__filters{padding:8px 10px!important;gap:8px!important;flex-wrap:wrap!important;align-items:end!important}.tt-aiacct__filters label{font-size:10px!important}.tt-aiacct__filters input{min-width:118px!important;height:38px!important;min-height:38px!important}.tt-aiacct__filters button{height:38px!important;min-height:38px!important}
+.tt-aiacct__body{padding:10px!important;gap:10px!important;overflow:auto!important}.tt-aiacct-kpis{grid-template-columns:repeat(3,minmax(0,1fr))!important;gap:8px!important}.tt-aiacct-kpi{padding:12px!important;border-radius:11px!important}.tt-aiacct-kpi small{font-size:9px!important}.tt-aiacct-kpi strong{font-size:19px!important}.tt-aiacct-kpi span{font-size:10px!important}.tt-aiacct section{padding:12px!important;border-radius:12px!important}.tt-aiacct-tablewrap{max-width:100%!important;overflow:auto!important;border-radius:10px!important}.tt-aiacct table{min-width:760px!important}.tt-aiacct th,.tt-aiacct td{padding:9px 10px!important;font-size:10.5px!important}.tt-aiacct-exceptions{gap:8px!important}.tt-aiacct-exception{padding:11px!important;border-radius:10px!important}
+
+/* Ledger tab bars: fit cleanly and scroll rather than cramming. */
+[class*="ledger"] [class*="tabs"],[class*="accounting"] [class*="tabs"],[class*="settlement"] [class*="tabs"]{display:flex!important;gap:5px!important;overflow-x:auto!important;white-space:nowrap!important;scrollbar-width:thin!important}
+[class*="ledger"] [class*="tabs"] button,[class*="accounting"] [class*="tabs"] button,[class*="settlement"] [class*="tabs"] button{flex:0 0 auto!important;min-height:34px!important;height:34px!important;padding:0 10px!important;font-size:10px!important;border-radius:8px!important}
+
+/* Scheduling */
+.tt-si-panel{inset:8px!important;border-radius:16px!important;max-width:none!important}.tt-si-panel>header{padding:12px 14px!important}.tt-si-panel h2{font-size:20px!important}.tt-si-toolbar{padding:9px 12px!important;gap:8px!important}.tt-si-kpis{gap:8px!important;padding:8px 12px!important}.tt-si-kpi{border-radius:11px!important;padding:11px!important}.tt-si-body{gap:10px!important;padding:10px 12px 12px!important}.tt-si-error{margin:16px!important;padding:14px 16px!important;border:1px solid rgba(201,52,47,.18)!important;border-radius:12px!important;background:#fff7f6!important}
+
+/* Desktop controls should be compact; touch devices retain 44px targets. */
+@media(pointer:fine){.tt-sales button,.tt-crm button,.tt-inv button,.tt-purch button,.tt-rent button,.tt-aiacct button,.tt-li-panel button,.tt-admin button,.tt-settings button,.tt-wo button{min-height:36px!important}.tt-sales input,.tt-crm input,.tt-inv input,.tt-purch input,.tt-rent input,.tt-aiacct input,.tt-admin input,.tt-settings input,.tt-settings select{min-height:38px!important}}
+@media(pointer:coarse){button,input,select{min-height:44px!important}}
+@media(max-width:1100px){:root{--demo-sidebar:198px}.shell-content{padding:20px!important}.shell-hero h1{font-size:30px!important}.tt-aiacct-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
+@media(max-width:900px){.shell-app{display:block!important}.shell-sidebar{width:min(82vw,280px)!important}.shell-topbar{height:54px!important;min-height:54px!important}.shell-content{padding:16px 12px 26px!important}.shell-hero h1{font-size:28px!important}.shell-status{grid-template-columns:repeat(2,minmax(0,1fr))!important}.tt-aiacct-kpis{grid-template-columns:repeat(2,minmax(0,1fr))!important}}
