@@ -2,25 +2,48 @@ name: Runtime Certification
 
 on:
   workflow_dispatch:
+  pull_request:
+    paths:
+      - '**/*.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'database.js'
+      - 'public/**'
+      - 'routes/**'
+      - 'lib/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - '.github/workflows/runtime-certification.yml'
   push:
     branches:
-      - feature/total-tools-pos-upgrades
+      - master
+      - 'feature/**'
+      - 'integration/**'
+      - 'gate0/**'
     paths:
-      - .github/workflows/runtime-certification.yml
-      - scripts/ci-runtime-bootstrap.js
-      - scripts/runtime-certification-trigger.txt
+      - '**/*.js'
+      - 'package.json'
+      - 'package-lock.json'
+      - 'database.js'
+      - 'public/**'
+      - 'routes/**'
+      - 'lib/**'
+      - 'scripts/**'
+      - 'tests/**'
+      - '.github/workflows/runtime-certification.yml'
 
 permissions:
   contents: read
 
 concurrency:
-  group: runtime-certification-${{ github.ref }}
+  group: runtime-certification-${{ github.workflow }}-${{ github.event.pull_request.number || github.ref }}
   cancel-in-progress: true
 
 jobs:
   release-gate:
+    name: release-gate
     runs-on: ubuntu-latest
-    timeout-minutes: 30
+    timeout-minutes: 35
     env:
       POS_TEST_USER: admin
       POS_TEST_PASSWORD: '123456'
@@ -48,14 +71,17 @@ jobs:
           rm -f pos.db pos.db-shm pos.db-wal
           node scripts/ci-runtime-bootstrap.js
 
-      - name: Run full release gate
+      - name: Run full application release gate
         run: npm run test:release-gate -- --workers=1
+
+      - name: Run Gate 0 credential and concurrency certification
+        run: npx playwright test tests/password-reset-security.spec.js tests/forced-password-change.spec.js tests/pin-security-runtime.spec.js tests/document-number-concurrency.spec.js --workers=1
 
       - name: Upload Playwright diagnostics on failure
         if: failure()
         uses: actions/upload-artifact@v4
         with:
-          name: runtime-certification-diagnostics
+          name: runtime-certification-diagnostics-${{ github.run_id }}
           path: |
             playwright-report/
             test-results/
