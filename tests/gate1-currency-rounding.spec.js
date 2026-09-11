@@ -31,11 +31,8 @@ async function fixture(cookie, suffix, { quantity, price, taxRate }) {
   const customerResponse = await api(cookie, '/api/customers', {
     method: 'POST',
     body: JSON.stringify({
-      first_name: 'Gate1',
-      last_name: `Rounding${suffix}`,
-      customer_type: 'credit',
-      credit_limit: 10000,
-      credit_terms_days: 30,
+      first_name: 'Gate1', last_name: `Rounding${suffix}`, customer_type: 'credit',
+      credit_limit: 10000, credit_terms_days: 30,
     }),
   });
   expect(customerResponse.status, JSON.stringify(customerResponse.body)).toBe(201);
@@ -44,16 +41,8 @@ async function fixture(cookie, suffix, { quantity, price, taxRate }) {
   const productResponse = await api(cookie, '/api/products', {
     method: 'POST',
     body: JSON.stringify({
-      sku: `G1-RND-${suffix}`,
-      name: `Gate 1 Rounding ${suffix}`,
-      price,
-      cost: 0,
-      tax_rate: taxRate,
-      stock_qty: 0,
-      min_stock: 0,
-      active: 1,
-      branch_id: branch.id,
-      taxable: 1,
+      sku: `G1-RND-${suffix}`, name: `Gate 1 Rounding ${suffix}`, price, cost: 0,
+      tax_rate: taxRate, stock_qty: 0, min_stock: 0, active: 1, branch_id: branch.id, taxable: 1,
     }),
   });
   expect(productResponse.status, JSON.stringify(productResponse.body)).toBe(201);
@@ -68,12 +57,8 @@ async function fixture(cookie, suffix, { quantity, price, taxRate }) {
   const sale = await api(cookie, '/api/transactions', {
     method: 'POST',
     body: JSON.stringify({
-      branch_id: branch.id,
-      customer_id: customer.id,
-      items: [{ product_id: product.id, quantity }],
-      payment_method: 'credit',
-      amount_tendered: 0,
-      notes: 'Gate 1 deterministic rounding sale',
+      branch_id: branch.id, customer_id: customer.id, items: [{ product_id: product.id, quantity }],
+      payment_method: 'credit', amount_tendered: 0, notes: 'Gate 1 deterministic rounding sale',
     }),
   });
   expect(sale.status, JSON.stringify(sale.body)).toBe(201);
@@ -84,11 +69,7 @@ async function fixture(cookie, suffix, { quantity, price, taxRate }) {
 async function creditOne(cookie, fx, note) {
   return api(cookie, `/api/transactions/${fx.sale.id}/return`, {
     method: 'POST',
-    body: JSON.stringify({
-      resolution: 'credit_note',
-      items: [{ transaction_item_id: fx.item.id, quantity: 1 }],
-      notes: note,
-    }),
+    body: JSON.stringify({ resolution: 'credit_note', items: [{ transaction_item_id: fx.item.id, quantity: 1 }], notes: note }),
   });
 }
 
@@ -102,6 +83,8 @@ async function activeReturnItems(transactionItemId) {
   });
   return rows;
 }
+
+function cents(value) { return Math.round(Number(value || 0) * 100); }
 
 test.describe('Gate 1 deterministic currency and rounding invariants', () => {
   test('three partial returns reconcile fractional tax cents exactly to the original persisted line', async () => {
@@ -122,18 +105,16 @@ test.describe('Gate 1 deterministic currency and rounding invariants', () => {
 
     const rows = await activeReturnItems(fx.item.id);
     expect(rows).toHaveLength(3);
-    const gross = Number(rows.reduce((sum, row) => sum + Number(row.total), 0).toFixed(2));
-    const tax = Number(rows.reduce((sum, row) => sum + Number(row.tax_amount), 0).toFixed(2));
-    expect(gross).toBe(0.21);
-    expect(tax).toBe(0.02);
-    expect(rows.map(row => Number(row.tax_amount))).toEqual([0.01, 0.01, 0]);
+    expect(rows.reduce((sum, row) => sum + cents(row.total), 0)).toBe(21);
+    expect(rows.reduce((sum, row) => sum + cents(row.tax_amount), 0)).toBe(2);
+    expect(rows.map(row => cents(row.tax_amount))).toEqual([1, 1, 0]);
 
     const customer = await api(cookie, `/api/customers/${fx.customer.id}`);
     expect(customer.status).toBe(200);
-    expect(Number(customer.body.account_balance)).toBe(0);
+    expect(cents(customer.body.account_balance)).toBe(0);
   });
 
-  test('simultaneous partial returns cannot over-allocate one tax cent; retry receives the zero-cent residual', async () => {
+  test('simultaneous partial returns cannot over-allocate one tax cent under either serialized or stale-retry execution', async () => {
     const cookie = await login();
     const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
     const fx = await fixture(cookie, suffix, { quantity: 2, price: 0.06, taxRate: 8.5 });
@@ -146,36 +127,33 @@ test.describe('Gate 1 deterministic currency and rounding invariants', () => {
       creditOne(cookie, fx, 'Gate 1 concurrent rounding A'),
       creditOne(cookie, fx, 'Gate 1 concurrent rounding B'),
     ]);
-    const successes = [a, b].filter(result => result.status === 201);
-    const rejected = [a, b].filter(result => result.status !== 201);
-    expect(successes).toHaveLength(1);
-    expect(rejected).toHaveLength(1);
-    expect([400, 409]).toContain(rejected[0].status);
-    expect(String(rejected[0].body?.error || '')).toMatch(/RETURN_TAX_EXCEEDS_ORIGINAL_LINE|RETURN_QUANTITY_EXCEEDS_ELIGIBLE/);
+    const results = [a, b];
+    const rejected = results.filter(result => result.status !== 201);
+    expect(rejected.length).toBeLessThanOrEqual(1);
+    if (rejected.length === 1) {
+      expect([400, 409]).toContain(rejected[0].status);
+      expect(String(rejected[0].body?.error || '')).toMatch(/RETURN_TAX_EXCEEDS_ORIGINAL_LINE|RETURN_QUANTITY_EXCEEDS_ELIGIBLE/);
+      const retry = await creditOne(cookie, fx, 'Gate 1 concurrent rounding deterministic retry');
+      expect(retry.status, JSON.stringify(retry.body)).toBe(201);
+    } else {
+      expect(results.every(result => result.status === 201)).toBe(true);
+    }
 
-    let rows = await activeReturnItems(fx.item.id);
-    expect(rows).toHaveLength(1);
-    expect(Number(rows[0].tax_amount)).toBe(0.01);
-
-    const retry = await creditOne(cookie, fx, 'Gate 1 concurrent rounding deterministic retry');
-    expect(retry.status, JSON.stringify(retry.body)).toBe(201);
-    rows = await activeReturnItems(fx.item.id);
+    const rows = await activeReturnItems(fx.item.id);
     expect(rows).toHaveLength(2);
-    expect(Number(rows.reduce((sum, row) => sum + Number(row.total), 0).toFixed(2))).toBe(0.12);
-    expect(Number(rows.reduce((sum, row) => sum + Number(row.tax_amount), 0).toFixed(2))).toBe(0.01);
-    expect(rows.map(row => Number(row.tax_amount))).toEqual([0.01, 0]);
+    expect(rows.reduce((sum, row) => sum + cents(row.total), 0)).toBe(12);
+    expect(rows.reduce((sum, row) => sum + cents(row.tax_amount), 0)).toBe(1);
+    expect(rows.map(row => cents(row.tax_amount)).sort((x, y) => y - x)).toEqual([1, 0]);
 
     const customer = await api(cookie, `/api/customers/${fx.customer.id}`);
     expect(customer.status).toBe(200);
-    expect(Number(customer.body.account_balance)).toBe(0);
+    expect(cents(customer.body.account_balance)).toBe(0);
   });
 
   test('database return authority rejects sub-cent persisted money evidence', async () => {
     const cookie = await login();
     const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
     const fx = await fixture(cookie, suffix, { quantity: 1, price: 1, taxRate: 0 });
-
-    // Touch the return pipeline so the authoritative trigger set is initialized.
     const init = await api(cookie, `/api/transactions/${fx.sale.id}/returns`);
     expect(init.status).toBe(200);
     await ensureReady();
@@ -183,29 +161,63 @@ test.describe('Gate 1 deterministic currency and rounding invariants', () => {
     const tx = await db.transaction('write');
     let rolledBack = false;
     try {
-      const returnNumber = `RND-DB-${suffix}`;
       const inserted = await tx.execute({
         sql: `INSERT INTO returns(return_number,original_transaction_id,customer_id,employee_id,branch_id,resolution,subtotal,tax_amount,total,notes)
               VALUES(?,?,?,?,?,'refund',1,0,1,'Sub-cent adversarial probe')`,
-        args: [returnNumber, fx.sale.id, fx.customer.id, fx.sale.employee_id || 1, fx.branch.id],
+        args: [`RND-DB-${suffix}`, fx.sale.id, fx.customer.id, fx.sale.employee_id || 1, fx.branch.id],
       });
-      const returnId = Number(inserted.lastInsertRowid);
       let error = null;
       try {
         await tx.execute({
           sql: `INSERT INTO return_items(return_id,transaction_item_id,product_id,product_name,sku,quantity,unit_price,tax_amount,total)
                 VALUES(?,?,?,?,?,1,1,0,0.001)`,
-          args: [returnId, fx.item.id, fx.product.id, fx.item.product_name, fx.item.sku],
+          args: [Number(inserted.lastInsertRowid), fx.item.id, fx.product.id, fx.item.product_name, fx.item.sku],
         });
-      } catch (e) {
-        error = e;
-      }
+      } catch (e) { error = e; }
       expect(error).toBeTruthy();
       expect(String(error.message || error)).toMatch(/RETURN_VALUE_MUST_HAVE_CENT_PRECISION/);
-      await tx.rollback();
-      rolledBack = true;
-    } finally {
-      if (!rolledBack) await tx.rollback().catch(() => {});
-    }
+      await tx.rollback(); rolledBack = true;
+    } finally { if (!rolledBack) await tx.rollback().catch(() => {}); }
+  });
+
+  test('database return authority rejects cumulative tax above the original persisted line', async () => {
+    const cookie = await login();
+    const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
+    const fx = await fixture(cookie, suffix, { quantity: 2, price: 0.06, taxRate: 8.5 });
+    expect(cents(fx.item.tax_amount)).toBe(1);
+    const init = await api(cookie, `/api/transactions/${fx.sale.id}/returns`);
+    expect(init.status).toBe(200);
+    await ensureReady();
+
+    const tx = await db.transaction('write');
+    let rolledBack = false;
+    try {
+      const r1 = await tx.execute({
+        sql: `INSERT INTO returns(return_number,original_transaction_id,customer_id,employee_id,branch_id,resolution,subtotal,tax_amount,total,notes)
+              VALUES(?,?,?,?,?,'credit_note',0.06,0.01,0.07,'Tax ceiling probe 1')`,
+        args: [`RND-TAX-A-${suffix}`, fx.sale.id, fx.customer.id, fx.sale.employee_id || 1, fx.branch.id],
+      });
+      await tx.execute({
+        sql: `INSERT INTO return_items(return_id,transaction_item_id,product_id,product_name,sku,quantity,unit_price,tax_amount,total)
+              VALUES(?,?,?,?,?,1,0.06,0.01,0.06)`,
+        args: [Number(r1.lastInsertRowid), fx.item.id, fx.product.id, fx.item.product_name, fx.item.sku],
+      });
+      const r2 = await tx.execute({
+        sql: `INSERT INTO returns(return_number,original_transaction_id,customer_id,employee_id,branch_id,resolution,subtotal,tax_amount,total,notes)
+              VALUES(?,?,?,?,?,'credit_note',0.06,0.01,0.07,'Tax ceiling probe 2')`,
+        args: [`RND-TAX-B-${suffix}`, fx.sale.id, fx.customer.id, fx.sale.employee_id || 1, fx.branch.id],
+      });
+      let error = null;
+      try {
+        await tx.execute({
+          sql: `INSERT INTO return_items(return_id,transaction_item_id,product_id,product_name,sku,quantity,unit_price,tax_amount,total)
+                VALUES(?,?,?,?,?,1,0.06,0.01,0.06)`,
+          args: [Number(r2.lastInsertRowid), fx.item.id, fx.product.id, fx.item.product_name, fx.item.sku],
+        });
+      } catch (e) { error = e; }
+      expect(error).toBeTruthy();
+      expect(String(error.message || error)).toMatch(/RETURN_TAX_EXCEEDS_ORIGINAL_LINE/);
+      await tx.rollback(); rolledBack = true;
+    } finally { if (!rolledBack) await tx.rollback().catch(() => {}); }
   });
 });
