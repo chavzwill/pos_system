@@ -3,6 +3,18 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {ensureUomSchema,resolveProductUom,toBaseQuantity,snapshot}=require('../lib/unit-of-measure');
+const {ensureRetailReturnInvariants}=require('../lib/retail-return-invariants');
+const {ensureRetailRefundInvariants}=require('../lib/retail-refund-invariants');
+
+router.use(async(req,res,next)=>{
+  try{
+    await ensureRetailReturnInvariants();
+    await ensureRetailRefundInvariants();
+    next();
+  }catch(e){
+    res.status(500).json({error:'Retail money/inventory invariant initialization failed',detail:e.message});
+  }
+});
 
 // Expand a customer-facing bundle return into the exact component transaction lines
 // before UOM and serial/lot return controls run.
