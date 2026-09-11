@@ -48,10 +48,13 @@ router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.s
 router.post('/',async(req,res,next)=>{
   const key=operationKey(req);
   if(!key){
-    res.set('Idempotency-Protection','not-requested');
-    return next();
+    res.set('Idempotency-Protection','required');
+    return res.status(428).json({
+      error:'Idempotency-Key is required for sale settlement. Retry the same logical sale with one stable operation key.',
+      code:'IDEMPOTENCY_KEY_REQUIRED'
+    });
   }
-  if(key.length<12||key.length>200)return res.status(400).json({error:'Idempotency key must be between 12 and 200 characters'});
+  if(key.length<12||key.length>200)return res.status(400).json({error:'Idempotency key must be between 12 and 200 characters',code:'INVALID_IDEMPOTENCY_KEY'});
   const hash=fingerprint(req.body);
   const claim=await db.transaction('write');let committed=false;
   try{
