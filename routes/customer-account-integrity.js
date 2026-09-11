@@ -133,6 +133,8 @@ router.get('/aging',requirePermission('accounts'),async(req,res)=>{
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+router.use(require('./account-payment-settlement'));
+
 router.post('/payments',requirePermission('accounts_payments'),async(req,res,next)=>{
   try{
     const customerId=Number(req.body?.customer_id),amount=Number(req.body?.amount);

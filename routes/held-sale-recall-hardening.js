@@ -2,10 +2,16 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
+const { ensureSchema: ensureCustomerAccountIntegrity } = require('./customer-account-integrity');
 
 let schemaReady = false;
 async function ensureSchema() {
   if (schemaReady) return;
+  // Checkout and return paths can consult receivable adjustment evidence before
+  // the Accounts workspace has ever been opened. Bootstrap that authority on
+  // the earliest /api/transactions guard so a cold process cannot depend on UI
+  // navigation order for required financial tables/triggers.
+  await ensureCustomerAccountIntegrity();
   await db.batch([
     { sql: `CREATE TABLE IF NOT EXISTS held_sale_recall_links (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
