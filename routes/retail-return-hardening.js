@@ -62,11 +62,16 @@ router.post('/:id/return',requirePermission('transactions_returns'),async(req,re
     const requested=Array.isArray(req.body?.items)?req.body.items:[];
     if(!requested.length)return res.status(400).json({error:'No items selected for return'});
     const {rows:txItems}=await db.execute({sql:'SELECT * FROM transaction_items WHERE transaction_id=? ORDER BY id',args:[transactionId]});
-    const {rows:returned}=await db.execute({sql:`SELECT ri.transaction_item_id,COALESCE(SUM(ri.quantity),0) returned_qty
+    const {rows:returned}=await db.execute({sql:`SELECT ri.transaction_item_id,
+      COALESCE(SUM(ri.quantity),0) returned_qty,
+      COALESCE(SUM(ri.total),0) returned_gross,
+      COALESCE(SUM(ri.tax_amount),0) returned_tax
       FROM return_items ri JOIN returns r ON r.id=ri.return_id
       WHERE r.original_transaction_id=? AND COALESCE(r.status,'completed')!='cancelled'
       GROUP BY ri.transaction_item_id`,args:[transactionId]});
-    const returnedMap=new Map(returned.map(r=>[Number(r.transaction_item_id),Number(r.returned_qty||0)]));
+    const returnedMap=new Map(returned.map(r=>[Number(r.transaction_item_id),{
+      qty:Number(r.returned_qty||0),gross:money(r.returned_gross),tax:money(r.returned_tax)
+    }]));
 
     let gross=0,tax=0;const selected=[];
     for(const item of requested){
@@ -74,12 +79,17 @@ router.post('/:id/return',requirePermission('transactions_returns'),async(req,re
       if(!Number.isInteger(qty)||qty<=0)return res.status(400).json({error:'Return quantities must be positive whole numbers'});
       const line=txItems.find(x=>Number(x.id)===Number(item.transaction_item_id));
       if(!line)return res.status(400).json({error:`Item ${item.transaction_item_id} not found in transaction`});
-      const prior=returnedMap.get(Number(line.id))||0;
-      const max=Number(line.quantity||0)-prior;
+      const priorLine=returnedMap.get(Number(line.id))||{qty:0,gross:0,tax:0};
+      const max=Number(line.quantity||0)-priorLine.qty;
       if(qty-max>0.0001)return res.status(409).json({error:`Invalid quantity for "${line.product_name}". Max returnable: ${max}`});
       const ratio=qty/Number(line.quantity||1);
-      const lineGross=money(Number(line.total||0)*ratio);
-      const lineTax=money(Number(line.tax_amount||0)*ratio);
+      const finishesLine=Math.abs(qty-max)<=0.000000001;
+      const lineGross=finishesLine
+        ? money(Math.max(0,Number(line.total||0)-priorLine.gross))
+        : money(Number(line.total||0)*ratio);
+      const lineTax=finishesLine
+        ? money(Math.max(0,Number(line.tax_amount||0)-priorLine.tax))
+        : money(Number(line.tax_amount||0)*ratio);
       gross=money(gross+lineGross);tax=money(tax+lineTax);
       selected.push({line,qty,lineGross,lineTax});
     }
@@ -134,9 +144,9 @@ router.post('/:id/return',requirePermission('transactions_returns'),async(req,re
         const loyaltyReduction=Math.floor(spentReduction*0.5);
         await txn.execute({sql:'UPDATE customers SET loyalty_points=MAX(0,loyalty_points-?),total_spent=MAX(0,total_spent-?) WHERE id=?',args:[loyaltyReduction,spentReduction,tx.customer_id]});
         if(resolution==='credit_note'){
-          await txn.execute({sql:'UPDATE customers SET account_balance=account_balance-? WHERE id=?',args:[entitlement,tx.customer_id]});
+          await txn.execute({sql:'UPDATE customers SET account_balance=ROUND(COALESCE(account_balance,0)-?,2) WHERE id=?',args:[entitlement,tx.customer_id]});
         }else if(storeCreditRestored>0){
-          await txn.execute({sql:'UPDATE customers SET account_balance=account_balance-? WHERE id=?',args:[storeCreditRestored,tx.customer_id]});
+          await txn.execute({sql:'UPDATE customers SET account_balance=ROUND(COALESCE(account_balance,0)-?,2) WHERE id=?',args:[storeCreditRestored,tx.customer_id]});
         }
       }
 
