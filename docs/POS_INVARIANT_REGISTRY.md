@@ -1,6 +1,6 @@
 # POS Invariant Registry
 
-Last updated: 2026-09-10
+Last updated: 2026-09-11
 
 `UNVERIFIED` means enforcement has not yet been independently proven. It is not an assertion of safety.
 
@@ -8,8 +8,8 @@ Last updated: 2026-09-10
 |---|---|---|---|---|
 | I-IDENT-01 | An employee cannot alter another employee's credentials without explicit elevated authority. | Server: dedicated employee credential routes; `lib/sessionAuth.js`; `security_manage`; elevated reauthentication | Account takeover / privilege escalation | VERIFIED on merged integration SHA `43f9599` by post-merge Runtime Certification #77 |
 | I-IDENT-02 | Revoked/suspended employees cannot continue privileged sessions. | `lib/sessionAuth.js`; employee session revocation on credential/security/active changes | Unauthorized continued access | Credential-change revocation VERIFIED; full suspension/permission-revocation matrix remains Gate 1/2 review |
-| I-MONEY-01 | A sale cannot settle twice. | Checkout transaction boundary; inventory reservation exists but request-level settlement idempotency is still under audit | Duplicate revenue/payment | Gate 1 IN PROGRESS |
-| I-MONEY-02 | A refund cannot exceed eligible settled value, including the amount originally tendered by each payment method. | `retail_refund_settlements`; `lib/retail-refund-invariants.js` database tender-ceiling trigger; refund API validation | Financial loss/corruption | VALIDATING with `tests/gate1-refund-tender-concurrency.spec.js` |
+| I-MONEY-01 | A sale cannot settle twice. | `routes/retail-sale-idempotency.js` claims durable caller operation keys before reservation/mutation, fingerprints the request, fails closed on concurrent reuse, and replays completed transaction evidence | Duplicate revenue/payment | VALIDATING on PR #13 with `tests/gate1-sale-idempotency.spec.js`; protection currently applies to callers that provide a durable idempotency/operation key, so universal caller migration remains required before VERIFIED |
+| I-MONEY-02 | A refund cannot exceed eligible settled value, including the amount originally tendered by each payment method. | `retail_refund_settlements`; `lib/retail-refund-invariants.js` database tender-ceiling trigger; refund API validation | Financial loss/corruption | VERIFIED by PR #12 exact-head Runtime Certification #84 and merged integration SHA `22e3e95` |
 | I-MONEY-03 | A credit note cannot increase a receivable accidentally. | UNVERIFIED | Customer balance corruption | Gate 1 |
 | I-MONEY-04 | Currency and rounding are deterministic. | UNVERIFIED | Reconciliation drift | Gate 1 |
 | I-MONEY-05 | UOM price conversion preserves authoritative economics. | UOM/retail guards exist; full authority map pending | Under/overcharge | Gate 1 |
@@ -20,7 +20,7 @@ Last updated: 2026-09-10
 | I-PROC-01 | Receiving the same PO event twice cannot double inventory. | Purchase receiving controls exist; independent replay proof pending | Duplicate stock/cost | Gate 1 |
 | I-PROC-02 | Supplier invoice/payment duplication cannot silently create duplicate liability. | Loss-prevention routes exist; independent proof pending | Duplicate payable/payment | Gate 1 |
 | I-PROC-03 | Landed-cost allocation reconciles to authoritative cost. | Landed-cost module exists; independent proof pending | COGS/margin error | Gate 1 |
-| I-RET-01 | The same sold item quantity cannot be returned twice, including two simultaneous requests. | `lib/retail-return-invariants.js` database trigger validates original-sale lineage and aggregate returned quantity at authoritative insert | Over-refund / stock duplication | VALIDATING with `tests/gate1-return-concurrency.spec.js` |
+| I-RET-01 | The same sold item quantity cannot be returned twice, including two simultaneous requests. | `lib/retail-return-invariants.js` database trigger validates original-sale lineage and aggregate returned quantity at authoritative insert | Over-refund / stock duplication | VERIFIED by PR #12 exact-head Runtime Certification #84 and merged integration SHA `22e3e95` |
 | I-RET-02 | Restocking and financial resolution remain consistent. | Return/refund/stock guards + authoritative return allocation | Stock-money divergence | Gate 1 IN PROGRESS |
 | I-RENT-01 | One physical asset/unit cannot be simultaneously rented beyond availability. | Rental controls exist; authority proof pending | Double rental / custody loss | Gate 1 |
 | I-RENT-02 | Deposit/settlement replay cannot duplicate money movement. | Rental settlement controls exist; replay proof pending | Duplicate money movement | Gate 1 |
