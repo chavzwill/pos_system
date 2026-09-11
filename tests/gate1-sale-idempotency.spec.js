@@ -1,13 +1,35 @@
 import { test, expect } from '@playwright/test';
 
 const BASE='http://localhost:3001';
-async function login(username=process.env.POS_TEST_USER||'admin',password=process.env.POS_TEST_PASSWORD||'123456'){
+async function login(username=process.env.POS_TEST_USER,password=process.env.POS_TEST_PASSWORD){
+  expect(username,'POS_TEST_USER is required').toBeTruthy();
+  expect(password,'POS_TEST_PASSWORD is required').toBeTruthy();
   const r=await fetch(`${BASE}/api/employees/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
   expect(r.status).toBe(200);return {cookie:(r.headers.get('set-cookie')||'').split(';')[0],body:await r.json()};
 }
 async function api(cookie,path,options={}){const headers={Cookie:cookie,Accept:'application/json',...(options.headers||{})};if(options.body&&!headers['Content-Type'])headers['Content-Type']='application/json';const r=await fetch(`${BASE}${path}`,{...options,headers});return {status:r.status,headers:r.headers,body:await r.json().catch(()=>null)};}
 
 test.describe('Gate 1 sale settlement idempotency',()=>{
+  test('sale settlement requires a durable operation identity for employee sessions and API keys',async()=>{
+    const admin=await login();
+    const unkeyed=await api(admin.cookie,'/api/transactions',{method:'POST',headers:{'X-Test-No-Idempotency':'1'},body:JSON.stringify({items:[]})});
+    expect(unkeyed.status).toBe(428);
+    expect(unkeyed.headers.get('idempotency-protection')).toBe('required');
+    expect(unkeyed.body?.code).toBe('IDEMPOTENCY_KEY_REQUIRED');
+
+    const stamp=Date.now();
+    const key=await api(admin.cookie,'/api/api-keys',{method:'POST',body:JSON.stringify({name:`Gate 1 sale API ${stamp}`,scopes:['orders:write'],reason:'Gate 1 mandatory sale idempotency certification'})});
+    expect(key.status).toBe(201);
+    try{
+      const machine=await fetch(`${BASE}/api/transactions`,{method:'POST',headers:{'X-API-Key':key.body.key,'Content-Type':'application/json','X-Test-No-Idempotency':'1'},body:JSON.stringify({items:[]})});
+      const machineBody=await machine.json().catch(()=>null);
+      expect(machine.status).toBe(428);
+      expect(machineBody?.code).toBe('IDEMPOTENCY_KEY_REQUIRED');
+    }finally{
+      await api(admin.cookie,`/api/api-keys/${key.body.id}`,{method:'DELETE',body:JSON.stringify({reason:'Gate 1 mandatory sale idempotency cleanup'})}).catch(()=>{});
+    }
+  });
+
   test('same operation key cannot create a second sale, second tender, or second stock decrement',async()=>{
     const admin=await login();
     const branches=await api(admin.cookie,'/api/branches');expect(branches.status).toBe(200);
