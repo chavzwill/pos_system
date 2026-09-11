@@ -2,6 +2,7 @@ const { defineConfig, devices } = require('@playwright/test');
 const { execSync } = require('child_process');
 const { existsSync } = require('fs');
 const path = require('path');
+require('./tests/support/sale-operation-fetch');
 
 // Build the libasound stub if missing (needed on systems without libasound2 installed)
 if (!existsSync('/tmp/libasound.so.2')) {
