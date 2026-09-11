@@ -79,6 +79,7 @@ jobs:
           node --check lib/securityHardening.js
           node --check lib/securityAudit.js
           node --check lib/retail-return-invariants.js
+          node --check lib/retail-refund-invariants.js
           node --check routes/employees.js
           node --check routes/retail-return-uom-guard.js
 
@@ -105,7 +106,7 @@ jobs:
         run: npx playwright test tests/password-reset-security.spec.js tests/forced-password-change.spec.js tests/pin-security-runtime.spec.js tests/pin-credential-boundary.spec.js tests/document-number-concurrency.spec.js --workers=1
 
       - name: Run Gate 1 money and inventory concurrency certification
-        run: npx playwright test tests/pos-financial-runtime.js tests/gate1-return-concurrency.spec.js --workers=1
+        run: npx playwright test tests/pos-financial-runtime.js tests/gate1-return-concurrency.spec.js tests/gate1-refund-tender-concurrency.spec.js --workers=1
 
       - name: Run privileged security and secret governance certification
         run: npx playwright test tests/security-assignment-boundaries.spec.js tests/security-governance-atomicity.spec.js tests/api-key-governance.spec.js tests/settings-security-governance.spec.js tests/settings-secret-at-rest.spec.js tests/woocommerce-secret-governance.spec.js tests/request-abuse-security.spec.js --workers=1
