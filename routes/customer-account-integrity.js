@@ -19,13 +19,87 @@ async function ensureSchema(){
     )`},
     {sql:'CREATE INDEX IF NOT EXISTS idx_customer_account_adjustments_customer ON customer_account_adjustments(customer_id)'},
     {sql:'CREATE INDEX IF NOT EXISTS idx_customer_account_adjustments_transaction ON customer_account_adjustments(transaction_id)'},
-    {sql:`CREATE TRIGGER IF NOT EXISTS trg_credit_note_account_adjustment
+    {sql:`CREATE TABLE IF NOT EXISTS credit_note_receivable_guard (
+      return_id INTEGER PRIMARY KEY REFERENCES returns(id),
+      customer_id INTEGER NOT NULL REFERENCES customers(id),
+      expected_reduction REAL NOT NULL,
+      balance_before REAL NOT NULL,
+      balance_after REAL,
+      applied_at DATETIME,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )`},
+    {sql:'CREATE INDEX IF NOT EXISTS idx_credit_note_receivable_guard_pending ON credit_note_receivable_guard(customer_id,applied_at)'},
+    {sql:'DROP TRIGGER IF EXISTS trg_credit_note_validate'},
+    {sql:`CREATE TRIGGER trg_credit_note_validate
+      BEFORE INSERT ON returns
+      WHEN NEW.resolution='credit_note'
+      BEGIN
+        SELECT CASE WHEN NEW.customer_id IS NULL THEN RAISE(ABORT,'CREDIT_NOTE_CUSTOMER_REQUIRED') END;
+        SELECT CASE WHEN NEW.total<=0 THEN RAISE(ABORT,'CREDIT_NOTE_AMOUNT_MUST_BE_POSITIVE') END;
+        SELECT CASE WHEN (SELECT customer_id FROM transactions WHERE id=NEW.original_transaction_id) IS NULL THEN RAISE(ABORT,'CREDIT_NOTE_ORIGINAL_CUSTOMER_REQUIRED') END;
+        SELECT CASE WHEN NEW.customer_id!=(SELECT customer_id FROM transactions WHERE id=NEW.original_transaction_id) THEN RAISE(ABORT,'CREDIT_NOTE_CUSTOMER_LINEAGE_MISMATCH') END;
+      END`},
+    {sql:'DROP TRIGGER IF EXISTS trg_credit_note_guard_create'},
+    {sql:`CREATE TRIGGER trg_credit_note_guard_create
+      AFTER INSERT ON returns
+      WHEN NEW.resolution='credit_note'
+      BEGIN
+        INSERT INTO credit_note_receivable_guard(return_id,customer_id,expected_reduction,balance_before)
+        SELECT NEW.id,NEW.customer_id,NEW.total,COALESCE(account_balance,0) FROM customers WHERE id=NEW.customer_id;
+      END`},
+    {sql:'DROP TRIGGER IF EXISTS trg_credit_note_receivable_direction'},
+    {sql:`CREATE TRIGGER trg_credit_note_receivable_direction
+      BEFORE UPDATE OF account_balance ON customers
+      WHEN EXISTS(SELECT 1 FROM credit_note_receivable_guard g WHERE g.customer_id=OLD.id AND g.applied_at IS NULL)
+      BEGIN
+        SELECT CASE WHEN ABS((COALESCE(OLD.account_balance,0)-COALESCE(NEW.account_balance,0))-
+          (SELECT COALESCE(SUM(expected_reduction),0) FROM credit_note_receivable_guard g WHERE g.customer_id=OLD.id AND g.applied_at IS NULL))>0.01
+          THEN RAISE(ABORT,'CREDIT_NOTE_RECEIVABLE_DIRECTION_VIOLATION') END;
+      END`},
+    {sql:'DROP TRIGGER IF EXISTS trg_credit_note_receivable_applied'},
+    {sql:`CREATE TRIGGER trg_credit_note_receivable_applied
+      AFTER UPDATE OF account_balance ON customers
+      WHEN EXISTS(SELECT 1 FROM credit_note_receivable_guard g WHERE g.customer_id=NEW.id AND g.applied_at IS NULL)
+      BEGIN
+        UPDATE credit_note_receivable_guard
+        SET balance_after=COALESCE(NEW.account_balance,0),applied_at=CURRENT_TIMESTAMP
+        WHERE customer_id=NEW.id AND applied_at IS NULL;
+      END`},
+    {sql:'DROP TRIGGER IF EXISTS trg_credit_note_account_adjustment'},
+    {sql:`CREATE TRIGGER trg_credit_note_account_adjustment
       AFTER INSERT ON returns
       WHEN NEW.resolution='credit_note' AND NEW.customer_id IS NOT NULL AND NEW.total>0
       BEGIN
-        INSERT OR IGNORE INTO customer_account_adjustments(customer_id,transaction_id,return_id,adjustment_type,amount)
+        INSERT INTO customer_account_adjustments(customer_id,transaction_id,return_id,adjustment_type,amount)
         VALUES(NEW.customer_id,NEW.original_transaction_id,NEW.id,'credit_note',NEW.total);
-      END`}
+      END`},
+    {sql:'DROP TRIGGER IF EXISTS trg_credit_note_adjustment_validate'},
+    {sql:`CREATE TRIGGER trg_credit_note_adjustment_validate
+      BEFORE INSERT ON customer_account_adjustments
+      WHEN NEW.adjustment_type='credit_note'
+      BEGIN
+        SELECT CASE WHEN NEW.return_id IS NULL THEN RAISE(ABORT,'CREDIT_NOTE_RETURN_REQUIRED') END;
+        SELECT CASE WHEN NEW.amount<=0 THEN RAISE(ABORT,'CREDIT_NOTE_ADJUSTMENT_MUST_BE_POSITIVE') END;
+        SELECT CASE WHEN (SELECT resolution FROM returns WHERE id=NEW.return_id)!='credit_note' THEN RAISE(ABORT,'CREDIT_NOTE_ADJUSTMENT_RETURN_MISMATCH') END;
+        SELECT CASE WHEN ABS(NEW.amount-(SELECT total FROM returns WHERE id=NEW.return_id))>0.01 THEN RAISE(ABORT,'CREDIT_NOTE_ADJUSTMENT_AMOUNT_MISMATCH') END;
+        SELECT CASE WHEN NEW.customer_id!=(SELECT customer_id FROM returns WHERE id=NEW.return_id) THEN RAISE(ABORT,'CREDIT_NOTE_ADJUSTMENT_CUSTOMER_MISMATCH') END;
+        SELECT CASE WHEN NEW.transaction_id!=(SELECT original_transaction_id FROM returns WHERE id=NEW.return_id) THEN RAISE(ABORT,'CREDIT_NOTE_ADJUSTMENT_TRANSACTION_MISMATCH') END;
+      END`},
+    {sql:'DROP TRIGGER IF EXISTS trg_credit_note_adjustment_immutable_update'},
+    {sql:`CREATE TRIGGER trg_credit_note_adjustment_immutable_update
+      BEFORE UPDATE ON customer_account_adjustments
+      WHEN OLD.adjustment_type='credit_note'
+      BEGIN SELECT RAISE(ABORT,'CREDIT_NOTE_ADJUSTMENT_IMMUTABLE'); END`},
+    {sql:'DROP TRIGGER IF EXISTS trg_credit_note_adjustment_immutable_delete'},
+    {sql:`CREATE TRIGGER trg_credit_note_adjustment_immutable_delete
+      BEFORE DELETE ON customer_account_adjustments
+      WHEN OLD.adjustment_type='credit_note'
+      BEGIN SELECT RAISE(ABORT,'CREDIT_NOTE_ADJUSTMENT_IMMUTABLE'); END`},
+    {sql:'DROP TRIGGER IF EXISTS trg_credit_note_return_immutable_update'},
+    {sql:`CREATE TRIGGER trg_credit_note_return_immutable_update
+      BEFORE UPDATE OF original_transaction_id,customer_id,resolution,total ON returns
+      WHEN OLD.resolution='credit_note'
+      BEGIN SELECT RAISE(ABORT,'CREDIT_NOTE_RETURN_FINANCIAL_IDENTITY_IMMUTABLE'); END`}
   ],'write').catch(e=>{readyPromise=null;throw e;});
   return readyPromise;
 }
