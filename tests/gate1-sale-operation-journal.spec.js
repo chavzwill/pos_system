@@ -48,4 +48,30 @@ test.describe('Gate 1 browser sale operation journal',()=>{
     expect(keys[2]).toBeTruthy();
     expect(keys[2]).not.toBe(keys[0]);
   });
+
+  test('one concurrent success plus one timeout keeps the original key for reconciliation retry',async({page})=>{
+    const keys=[];let calls=0;
+    await page.route('**/api/transactions',async route=>{
+      calls+=1;keys.push(route.request().headers()['idempotency-key']||null);
+      if(calls===1){await new Promise(r=>setTimeout(r,20));return route.fulfill({status:201,contentType:'application/json',body:JSON.stringify({id:903,transaction_number:'TXN-MIXED'})});}
+      if(calls===2){await new Promise(r=>setTimeout(r,40));return route.abort('timedout');}
+      return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({id:903,transaction_number:'TXN-MIXED',replayed:true})});
+    });
+    await loadJournal(page);
+    const settled=await page.evaluate(async body=>Promise.allSettled([
+      fetch('/api/transactions',{method:'POST',headers:{'Content-Type':'application/json'},body}),
+      fetch('/api/transactions',{method:'POST',headers:{'Content-Type':'application/json'},body})
+    ]),body);
+    expect(settled).toHaveLength(2);
+    expect(keys[0]).toBeTruthy();
+    expect(keys[1]).toBe(keys[0]);
+    const pending=await page.evaluate(()=>window.TotalToolsSaleOperationJournal.peek());
+    expect(pending?.key).toBe(keys[0]);
+
+    const retry=await page.evaluate(async body=>{const r=await fetch('/api/transactions',{method:'POST',headers:{'Content-Type':'application/json'},body});return {status:r.status,body:await r.json()};},body);
+    expect(retry.status).toBe(200);
+    expect(retry.body.replayed).toBe(true);
+    expect(keys[2]).toBe(keys[0]);
+    expect(await page.evaluate(()=>window.TotalToolsSaleOperationJournal.peek())).toBeNull();
+  });
 });
