@@ -85,6 +85,7 @@ jobs:
           node --check routes/employees.js
           node --check routes/customer-account-integrity.js
           node --check routes/retail-return-uom-guard.js
+          node --check routes/retail-return-hardening.js
           node --check routes/retail-sale-idempotency.js
           node --check routes/retail-checkout-hardening.js
           node --check public/pos-sale-operation-journal.js
@@ -112,7 +113,7 @@ jobs:
         run: npx playwright test tests/password-reset-security.spec.js tests/forced-password-change.spec.js tests/pin-security-runtime.spec.js tests/pin-credential-boundary.spec.js tests/document-number-concurrency.spec.js --workers=1
 
       - name: Run Gate 1 money and inventory concurrency certification
-        run: npx playwright test tests/pos-financial-runtime.js tests/gate1-return-concurrency.spec.js tests/gate1-refund-tender-concurrency.spec.js tests/gate1-sale-idempotency.spec.js tests/gate1-sale-operation-journal.spec.js tests/gate1-credit-note-receivable.spec.js --workers=1
+        run: npx playwright test tests/pos-financial-runtime.js tests/gate1-return-concurrency.spec.js tests/gate1-refund-tender-concurrency.spec.js tests/gate1-sale-idempotency.spec.js tests/gate1-sale-operation-journal.spec.js tests/gate1-credit-note-receivable.spec.js tests/gate1-currency-rounding.spec.js --workers=1
 
       - name: Run privileged security and secret governance certification
         run: npx playwright test tests/security-assignment-boundaries.spec.js tests/security-governance-atomicity.spec.js tests/api-key-governance.spec.js tests/settings-security-governance.spec.js tests/settings-secret-at-rest.spec.js tests/woocommerce-secret-governance.spec.js tests/request-abuse-security.spec.js --workers=1
