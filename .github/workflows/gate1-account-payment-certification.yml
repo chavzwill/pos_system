@@ -43,3 +43,13 @@ jobs:
       - run: npx playwright install --with-deps chromium
       - run: rm -f pos.db pos.db-shm pos.db-wal && node scripts/ci-runtime-bootstrap.js
       - run: npx playwright test tests/gate1-account-payment-invariants.spec.js --workers=1
+      - name: Upload focused diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: account-payment-diagnostics-${{ github.run_id }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7
