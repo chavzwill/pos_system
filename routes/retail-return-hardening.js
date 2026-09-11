@@ -144,9 +144,9 @@ router.post('/:id/return',requirePermission('transactions_returns'),async(req,re
         const loyaltyReduction=Math.floor(spentReduction*0.5);
         await txn.execute({sql:'UPDATE customers SET loyalty_points=MAX(0,loyalty_points-?),total_spent=MAX(0,total_spent-?) WHERE id=?',args:[loyaltyReduction,spentReduction,tx.customer_id]});
         if(resolution==='credit_note'){
-          await txn.execute({sql:'UPDATE customers SET account_balance=account_balance-? WHERE id=?',args:[entitlement,tx.customer_id]});
+          await txn.execute({sql:'UPDATE customers SET account_balance=ROUND(COALESCE(account_balance,0)-?,2) WHERE id=?',args:[entitlement,tx.customer_id]});
         }else if(storeCreditRestored>0){
-          await txn.execute({sql:'UPDATE customers SET account_balance=account_balance-? WHERE id=?',args:[storeCreditRestored,tx.customer_id]});
+          await txn.execute({sql:'UPDATE customers SET account_balance=ROUND(COALESCE(account_balance,0)-?,2) WHERE id=?',args:[storeCreditRestored,tx.customer_id]});
         }
       }
 
