@@ -3,12 +3,14 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {ensureUomSchema,resolveProductUom,toBaseQuantity,snapshot}=require('../lib/unit-of-measure');
+const {ensureRetailReturnInvariants}=require('../lib/retail-return-invariants');
 
 // Expand a customer-facing bundle return into the exact component transaction lines
 // before UOM and serial/lot return controls run.
 router.use(require('./retail-virtual-bundle-lifecycle'));
 
 async function normalize(req){
+  await ensureRetailReturnInvariants();
   await ensureUomSchema();
   const transactionId=Number(req.params.id),items=Array.isArray(req.body?.items)?req.body.items:[];if(!transactionId||!items.length)return;
   const {rows:txItems}=await db.execute({sql:'SELECT id,product_id,quantity,unit_price FROM transaction_items WHERE transaction_id=? ORDER BY id',args:[transactionId]});
