@@ -4,6 +4,8 @@ const router=express.Router();
 const {db}=require('../database');
 const {requirePermission}=require('../lib/permissions');
 const {nextNumber}=require('../lib/nextNumber');
+const {runCreditCheck}=require('./customers');
+const {calcRentalCommission}=require('./commissions');
 const {ensureSchema:ensurePaymentInvariants}=require('../lib/account-payment-invariants');
 
 const money=v=>Number(Number(v||0).toFixed(2));
@@ -52,7 +54,20 @@ router.post('/payments',requirePermission('accounts_payments'),async(req,res)=>{
     const updated=await tx.execute({sql:'UPDATE customers SET account_balance=ROUND(account_balance-?,2) WHERE id=? AND ROUND(account_balance,2)>=?',args:[amount,customerId,amount]});
     if(Number(updated.rowsAffected||0)!==1)throw new Error('RECEIVABLE_CHANGED_CONCURRENTLY');
     await tx.commit();committed=true;
+
     const {rows:[saved]}=await db.execute({sql:'SELECT * FROM account_payments WHERE id=?',args:[paymentId]});
+    try{await runCreditCheck(customerId);}catch(e){console.error('Post-payment credit check failed:',e.message);}
+    try{
+      for(const allocation of allocations){
+        const {rows:[rental]}=await db.execute({sql:'SELECT * FROM rental_agreements WHERE checkout_transaction_id=?',args:[allocation.transaction_id]});
+        if(!rental)continue;
+        const {rows:[checkout]}=await db.execute({sql:'SELECT * FROM transactions WHERE id=?',args:[allocation.transaction_id]});
+        if(!checkout)continue;
+        const {rows:[paid]}=await db.execute({sql:'SELECT COALESCE(SUM(amount),0) amount FROM payment_allocations WHERE transaction_id=?',args:[allocation.transaction_id]});
+        if(money(checkout.total)-money(paid?.amount)>0.001)continue;
+        await calcRentalCommission(rental,checkout);
+      }
+    }catch(e){console.error('Post-payment rental commission check failed:',e.message);}
     return res.status(201).json({...saved,allocations});
   }catch(e){if(!committed)await tx.rollback().catch(()=>{});const status=e.message==='CUSTOMER_NOT_FOUND'?404:409;return res.status(status).json({error:e.message});}
 });
