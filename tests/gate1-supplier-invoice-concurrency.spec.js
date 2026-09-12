@@ -15,7 +15,7 @@ async function api(cookie,path,body){
 }
 const normalize=v=>String(v||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
 
-test('concurrent normalized-equivalent supplier invoices create at most one liability',async()=>{
+test('durable normalized supplier invoice identity permits exactly one liability',async()=>{
   const cookie=await login();
   const suppliers=await fetch(`${BASE}/api/suppliers`,{headers:{Cookie:cookie,Accept:'application/json'}});
   expect(suppliers.status).toBe(200);
@@ -25,7 +25,7 @@ test('concurrent normalized-equivalent supplier invoices create at most one liab
   const stamp=`G1PROC02${Date.now()}`;
   const invoiceNumbers=[`${stamp}-A`,`${stamp} A`,`${stamp}.A`,`${stamp}/A`];
   const invoiceDate=new Date().toISOString().slice(0,10);
-  const requests=invoiceNumbers.map(invoice_number=>api(cookie,'/api/supplier-ledger/invoices',{
+  const body=invoice_number=>({
     supplier_id:supplier.id,
     invoice_number,
     invoice_date:invoiceDate,
@@ -35,13 +35,17 @@ test('concurrent normalized-equivalent supplier invoices create at most one liab
     duty_amount:0,
     other_landed_cost_amount:0,
     total:10,
-    notes:'Gate 1 I-PROC-02 normalized invoice concurrency probe'
-  }));
+    notes:'Gate 1 I-PROC-02 normalized invoice identity probe'
+  });
 
-  const results=await Promise.all(requests);
+  const results=await Promise.all(invoiceNumbers.map(invoice_number=>api(cookie,'/api/supplier-ledger/invoices',body(invoice_number))));
   const successes=results.filter(x=>x.status===201);
   expect(successes,JSON.stringify(results)).toHaveLength(1);
+  expect(successes[0].body?.invoice_identity).toBe('durable');
   expect(results.filter(x=>x.status===409||x.status===400).length).toBe(3);
+
+  const retry=await api(cookie,'/api/supplier-ledger/invoices',body(`${stamp}_A`));
+  expect(retry.status,JSON.stringify(retry)).toBe(409);
 
   const listed=await fetch(`${BASE}/api/supplier-ledger/invoices?supplier_id=${supplier.id}&status=open&limit=500`,{headers:{Cookie:cookie,Accept:'application/json'}});
   expect(listed.status).toBe(200);
