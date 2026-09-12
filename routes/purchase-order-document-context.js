@@ -1,4 +1,4 @@
-const express=require('express');
+﻿const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {requirePermission}=require('../lib/permissions');
@@ -64,6 +64,7 @@ async function defaultSupplierLocation(supplier){
   return (await db.execute({sql:'SELECT * FROM supplier_locations WHERE id=?',args:[Number(r.lastInsertRowid)]})).rows[0];
 }
 router.use(requirePermission('purchasing'));
+router.use('/quote-imports',require('./purchase-quote-ocr'));
 router.use('/quote-imports',require('./purchase-quote-imports'));
 router.use(require('./purchase-uom-guard'));
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Purchase-order document context initialization failed',detail:e.message});}});
@@ -165,3 +166,4 @@ router.post('/',requirePermission('purchasing_create'),async(req,res,next)=>{
   }catch(e){res.status(400).json({error:e.message});}
 });
 module.exports=router;
+
