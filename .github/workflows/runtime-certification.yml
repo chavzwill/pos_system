@@ -90,6 +90,9 @@ jobs:
           node --check routes/retail-checkout-hardening.js
           node --check public/pos-sale-operation-journal.js
 
+      - name: Enforce Guide Me product terminology
+        run: node scripts/check-guide-me-brand-contract.js
+
       - name: Certify production credential bootstrap and recovery
         run: |
           node scripts/certify-production-credential-bootstrap.js
