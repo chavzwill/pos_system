@@ -153,5 +153,7 @@ router.patch('/:id/stock',requirePermission('inventory_adjust'),async(req,res)=>
   }catch(e){res.status(e.status||500).json({error:e.message});}
 });
 
+router.use(require('./product-stock-authority'));
+
 module.exports=router;
 module.exports.ensureAdjustmentControl=ensureAdjustmentControl;
