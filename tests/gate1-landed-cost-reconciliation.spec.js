@@ -74,7 +74,8 @@ test('I-PROC-03 allocates landed cost exactly once before supplier payment',asyn
   expect(Number(poolAfter.tracked_value)).toBeCloseTo(120,4);
 
   const replay=await request(admin.cookie,'POST','/api/supplier-ledger/payments',paymentBody,{'Idempotency-Key':`proc03-pay-${stamp}`});
-  expect(replay.status,JSON.stringify(replay)).toBe(200);
+  expect([200,201],JSON.stringify(replay)).toContain(replay.status);
+  expect(replay.body?.replayed).toBe(true);
   expect(Number(replay.body.id)).toBe(Number(payment.body.id));
   const {rows:[counts]}=await db.execute({sql:`SELECT
     (SELECT COUNT(*) FROM landed_cost_allocations WHERE supplier_invoice_id=?) allocation_count,
