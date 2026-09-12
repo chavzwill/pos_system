@@ -8,7 +8,6 @@ on:
   pull_request:
     paths:
       - 'routes/inventory-adjustment-hardening.js'
-      - 'routes/inventory-adjustment-hardening-base.js'
       - 'routes/product-stock-authority.js'
       - 'tests/gate1-stock-movement-authority.spec.js'
       - '.github/workflows/gate1-stock-movement-authority.yml'
@@ -46,7 +45,6 @@ jobs:
       - name: Validate stock authority syntax
         run: |
           node --check routes/inventory-adjustment-hardening.js
-          node --check routes/inventory-adjustment-hardening-base.js
           node --check routes/product-stock-authority.js
       - name: Run stock movement authority proof
         run: npx playwright test tests/gate1-stock-movement-authority.spec.js --workers=1
