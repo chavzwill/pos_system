@@ -1,8 +1,9 @@
 'use strict';
-const fs=require('fs');const path=require('path');const root=path.join(__dirname,'..');const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const server=read('server.js'),adj=read('routes/inventory-adjustment-hardening.js'),trf=read('routes/transfer-valuation-hardening.js'),val=read('lib/inventory-movement-valuation.js');
+const fs=require('fs');const path=require('path');const root=path.join(__dirname,'..');const read=p=>fs.readFileSync(path.join(root,p),'utf8'),exists=p=>fs.existsSync(path.join(root,p));
+const server=read('server.js'),adjEntry=read('routes/inventory-adjustment-hardening.js'),adjBase=exists('routes/inventory-adjustment-hardening-base.js')?read('routes/inventory-adjustment-hardening-base.js'):'',adj=adjEntry+adjBase,trf=read('routes/transfer-valuation-hardening.js'),val=read('lib/inventory-movement-valuation.js');
 const checks=[];const check=(n,p)=>checks.push({n,p:!!p});
 check('adjustment hardening mounted before products',server.indexOf("require('./routes/inventory-adjustment-hardening')")>=0&&server.indexOf("require('./routes/inventory-adjustment-hardening')")<server.indexOf("require('./routes/products')"));
+check('adjustment delegation preserves certified base authority',!adjBase||adjEntry.includes("require('./inventory-adjustment-hardening-base')"));
 check('transfer hardening mounted before legacy transfers',server.indexOf("require('./routes/transfer-valuation-hardening')")>=0&&server.indexOf("require('./routes/transfer-valuation-hardening')")<server.indexOf("require('./routes/transfers')"));
 check('adjustments reject negative physical stock',adj.includes('Adjustment would make branch stock negative')&&adj.includes('Adjustment would make global stock negative'));
 check('adjustments require reason evidence',adj.includes("if(reason.length<5)")&&adj.includes('A meaningful stock-adjustment reason is required')&&adj.includes('inventory_adjustment_control_events')&&adj.includes('reason,approval.approvalReason'));
