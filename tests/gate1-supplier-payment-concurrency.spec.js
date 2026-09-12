@@ -11,10 +11,10 @@ async function login(){
 }
 async function request(cookie,method,path,body,extraHeaders={}){
   const r=await fetch(`${BASE}${path}`,{method,headers:{Cookie:cookie,'Content-Type':'application/json',Accept:'application/json',...extraHeaders},body:body===undefined?undefined:JSON.stringify(body)});
-  return {status:r.status,body:await r.json().catch(()=>null)};
+  return {status:r.status,headers:r.headers,body:await r.json().catch(()=>null)};
 }
 
-test('concurrent same-reference partial supplier payments create at most one payment',async()=>{
+test('supplier payment operation identity prevents duplicate settlement and replays deterministically',async()=>{
   const admin=await login();
   const [branches,suppliers]=await Promise.all([
     request(admin.cookie,'GET','/api/branches'),
@@ -52,13 +52,31 @@ test('concurrent same-reference partial supplier payments create at most one pay
   expect(invoice.status).toBe(201);
 
   const paymentBody={supplier_id:supplier.id,branch_id:branch.id,payment_date:today,amount:50,payment_method:'bank_transfer',reference:`REF-${stamp}`,allocations:[{invoice_id:invoice.body.id,amount:50}],notes:'Gate 1 duplicate-payment concurrency probe'};
+  const operationKey=`supplier-payment-${stamp}`;
+  const headers={'Idempotency-Key':operationKey};
   const results=await Promise.all([
-    request(admin.cookie,'POST','/api/supplier-ledger/payments',paymentBody),
-    request(admin.cookie,'POST','/api/supplier-ledger/payments',paymentBody)
+    request(admin.cookie,'POST','/api/supplier-ledger/payments',paymentBody,headers),
+    request(admin.cookie,'POST','/api/supplier-ledger/payments',paymentBody,headers)
   ]);
   const successes=results.filter(x=>x.status===201);
   expect(successes,JSON.stringify(results)).toHaveLength(1);
-  expect(results.some(x=>x.status===409||x.status===400)).toBe(true);
+  expect(results.some(x=>x.status===409)).toBe(true);
+  const paymentId=successes[0].body.id;
+
+  const replay=await request(admin.cookie,'POST','/api/supplier-ledger/payments',paymentBody,headers);
+  expect(replay.status).toBe(201);
+  expect(replay.body.id).toBe(paymentId);
+  expect(replay.body.replayed).toBe(true);
+  expect(replay.headers.get('idempotency-replayed')).toBe('true');
+
+  const changed={...paymentBody,amount:40,allocations:[{invoice_id:invoice.body.id,amount:40}]};
+  const conflict=await request(admin.cookie,'POST','/api/supplier-ledger/payments',changed,headers);
+  expect(conflict.status).toBe(409);
+  expect(String(conflict.body?.error||'')).toMatch(/different supplier payment request/i);
+
+  const unkeyed=await request(admin.cookie,'POST','/api/supplier-ledger/payments',{...paymentBody,reference:`UNKEYED-${stamp}`});
+  expect(unkeyed.status).toBe(428);
+  expect(unkeyed.body?.code).toBe('IDEMPOTENCY_KEY_REQUIRED');
 
   const invoices=await request(admin.cookie,'GET',`/api/supplier-ledger/invoices?supplier_id=${supplier.id}&status=open&limit=500`);
   expect(invoices.status).toBe(200);
