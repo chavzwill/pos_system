@@ -1,6 +1,6 @@
 'use strict';
 const fs=require('fs'),path=require('path');const root=path.join(__dirname,'..');const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const lib=read('lib/unit-of-measure.js'),route=read('routes/unit-of-measure.js'),retail=read('routes/retail-uom-guard.js'),checkout=read('routes/retail-checkout-hardening.js'),transactions=read('routes/transactions.js'),quoteGuard=read('routes/quotation-uom-guard.js'),quoteFlow=read('routes/quotation-workflow-hardening.js'),returnGuard=read('routes/retail-return-uom-guard.js'),server=read('server.js'),sales=read('public/sales-workspace.js'),quotes=read('public/quotations-workspace.js'),scanner=read('public/pos-uom-barcode-scanner.js'),shell=read('public/app-shell.html');
+const lib=read('lib/unit-of-measure.js'),route=read('routes/unit-of-measure.js'),retail=read('routes/retail-uom-guard.js'),checkout=read('routes/retail-checkout-hardening.js'),transactions=read('routes/transactions.js'),quoteGuard=read('routes/quotation-uom-guard.js'),quoteFlow=read('routes/quotation-workflow-hardening.js'),returnGuard=read('routes/retail-return-uom-guard.js'),server=read('server.js'),sales=read('public/sales-workspace.js'),quotes=read('public/quotations-workspace.js'),scanner=read('public/pos-uom-barcode-scanner.js'),purchasingUom=read('public/purchasing-uom-enhancer.js'),shell=read('public/app-shell.html');
 const checks=[
  ['explicit package sell price is persisted',lib.includes('sell_price REAL')&&route.includes('sell_price=excluded.sell_price')],
  ['derived and explicit sell economics share one authoritative resolver',lib.includes('function resolveSellEconomics')&&lib.includes("pricing_mode:explicit==null?'derived':'explicit'")],
@@ -25,6 +25,10 @@ const checks=[
  ['POS totals use entered-unit price rather than base price',sales.includes('i.entered_unit_price??i.unit_price??0')],
  ['POS receipts recover transaction UOM evidence',sales.includes('source_type=transaction')&&sales.includes('entered_quantity')],
  ['quotation workspace recovers and displays UOM evidence',quotes.includes('source_type=quotation')&&quotes.includes('entered_unit_price')],
+ ['purchasing UI loads purchase-allowed product UOMs',purchasingUom.includes('/api/inventory-traceability/uom/commerce/products/')&&purchasingUom.includes('purchase_allowed')],
+ ['purchasing UI previews entered quantity in authoritative base units',purchasingUom.includes('enteredQty*factor')&&purchasingUom.includes('per base unit')],
+ ['purchase-order payload carries the operator selected UOM',purchasingUom.includes('uom_code:s.uom_code')&&purchasingUom.includes('purchase-orders')&&purchasingUom.includes('JSON.stringify(payload)')],
+ ['fast app shell loads purchasing UOM enhancer',shell.includes('/purchasing-uom-enhancer.js')],
  ['return UOM normalization runs before return identity traceability',server.indexOf("require('./routes/retail-return-uom-guard')")>=0&&server.indexOf("require('./routes/retail-return-uom-guard')")<server.indexOf("require('./routes/retail-return-traceability-guard')")],
  ['legacy return requests remain base-unit compatible',returnGuard.includes("const explicitUom=String(line.uom_code||line.unit||'').trim()")&&returnGuard.includes("saleSnap?.base_uom||null")],
  ['explicit return UOM converts to authoritative base quantity',returnGuard.includes("resolveProductUom(db,txItem.product_id,requestedUom,'movement')")&&returnGuard.includes('line.quantity=baseQuantity')],
