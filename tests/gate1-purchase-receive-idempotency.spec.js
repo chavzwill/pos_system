@@ -31,14 +31,14 @@ async function fixture(cookie,qty=2){
 }
 
 test.describe('Gate 1 purchase receiving replay/concurrency invariants',()=>{
-  test('requires operation identity and replays a completed receipt without double stock',async()=>{
-    const cookie=await loginCookie(),f=await fixture(cookie,2),key=op(),payload={items:[{item_id:f.item.id,quantity_received:1}]};
+  test('requires operation identity and replays a fully completed receipt without double stock',async()=>{
+    const cookie=await loginCookie(),f=await fixture(cookie,1),key=op(),payload={items:[{item_id:f.item.id,quantity_received:1}]};
     const missing=await api(cookie,'PATCH',`/api/purchase-orders/${f.po.id}/receive`,payload);
     expect(missing.status).toBe(428);
 
     const first=await api(cookie,'PATCH',`/api/purchase-orders/${f.po.id}/receive`,payload,{'Idempotency-Key':key});
     expect(first.status).toBe(200);
-    expect(first.body.status).toBe('partial');
+    expect(first.body.status).toBe('received');
 
     const replay=await api(cookie,'PATCH',`/api/purchase-orders/${f.po.id}/receive`,payload,{'Idempotency-Key':key});
     expect(replay.status).toBe(200);
@@ -47,6 +47,7 @@ test.describe('Gate 1 purchase receiving replay/concurrency invariants',()=>{
 
     const current=await api(cookie,'GET',`/api/purchase-orders/${f.po.id}`);
     expect(Number(current.body.items[0].quantity_received)).toBe(1);
+    expect(current.body.status).toBe('received');
     const operations=await api(cookie,'GET',`/api/purchase-orders/${f.po.id}/receive-operations`);
     expect(operations.status).toBe(200);
     expect(operations.body.filter(x=>x.operation_key===key&&x.state==='completed')).toHaveLength(1);
