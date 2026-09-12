@@ -13,8 +13,9 @@ async function loginCookie() {
   return (r.headers.get('set-cookie') || '').split(';')[0];
 }
 async function api(cookie, method, path, body) {
+  const receiveKey = method === 'PATCH' && /\/api\/purchase-orders\/\d+\/receive$/.test(path) ? `legacy-test-${Date.now()}-${Math.random().toString(36).slice(2)}` : null;
   const r = await fetch(`${BASE}${path}`, {
-    method, headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+    method, headers: { Cookie: cookie, 'Content-Type': 'application/json', ...(receiveKey ? {'Idempotency-Key':receiveKey} : {}) },
     body: body === undefined ? undefined : JSON.stringify(body),
   });
   return { status: r.status, body: await r.json().catch(() => null) };
