@@ -1,0 +1,53 @@
+name: Gate 1 I-PROC-02 Certification
+
+on:
+  workflow_dispatch:
+  push:
+    branches:
+      - 'gate1-proc02-duplicate-liability'
+    paths:
+      - 'routes/supplier-invoice-loss-prevention.js'
+      - 'routes/supplier-payment-loss-prevention.js'
+      - 'routes/supplier-ledger.js'
+      - 'tests/gate1-supplier-invoice-concurrency.spec.js'
+      - '.github/workflows/gate1-proc02-certification.yml'
+  pull_request:
+    paths:
+      - 'routes/supplier-invoice-loss-prevention.js'
+      - 'routes/supplier-payment-loss-prevention.js'
+      - 'routes/supplier-ledger.js'
+      - 'tests/gate1-supplier-invoice-concurrency.spec.js'
+      - '.github/workflows/gate1-proc02-certification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  proc02:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      POS_TEST_USER: admin
+      POS_TEST_PASSWORD: '123456'
+      TURSO_DATABASE_URL: ''
+      TURSO_AUTH_TOKEN: ''
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - name: Generate isolated CI encryption key
+        shell: bash
+        run: |
+          key="$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))")"
+          printf 'POS_SETTINGS_ENCRYPTION_KEY=%s\n' "$key" >> "$GITHUB_ENV"
+      - run: npx playwright install --with-deps chromium
+      - name: Bootstrap isolated runtime database
+        run: |
+          rm -f pos.db pos.db-shm pos.db-wal
+          node scripts/ci-runtime-bootstrap.js
+      - name: Run I-PROC-02 adversarial invoice concurrency proof
+        run: npx playwright test tests/gate1-supplier-invoice-concurrency.spec.js --workers=1
