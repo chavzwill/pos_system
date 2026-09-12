@@ -4,8 +4,10 @@ on:
   workflow_dispatch:
   push:
     branches:
-      - 'gate1-proc02-duplicate-liability'
+      - 'gate1-proc02-*'
     paths:
+      - 'lib/supplier-invoice-identity.js'
+      - 'lib/supplier-ledger-base-schema.js'
       - 'routes/supplier-invoice-loss-prevention.js'
       - 'routes/supplier-payment-loss-prevention.js'
       - 'routes/supplier-ledger.js'
@@ -13,6 +15,8 @@ on:
       - '.github/workflows/gate1-proc02-certification.yml'
   pull_request:
     paths:
+      - 'lib/supplier-invoice-identity.js'
+      - 'lib/supplier-ledger-base-schema.js'
       - 'routes/supplier-invoice-loss-prevention.js'
       - 'routes/supplier-payment-loss-prevention.js'
       - 'routes/supplier-ledger.js'
@@ -49,5 +53,5 @@ jobs:
         run: |
           rm -f pos.db pos.db-shm pos.db-wal
           node scripts/ci-runtime-bootstrap.js
-      - name: Run I-PROC-02 adversarial invoice concurrency proof
+      - name: Run I-PROC-02 durable supplier invoice identity proof
         run: npx playwright test tests/gate1-supplier-invoice-concurrency.spec.js --workers=1
