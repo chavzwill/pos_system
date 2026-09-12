@@ -1,4 +1,6 @@
 (()=>{'use strict';
+const nativeFetch=window.fetch.bind(window);
+window.fetch=function(input,init={}){const url=typeof input==='string'?input:(input&&input.url)||'',method=String(init?.method||'GET').toUpperCase();if(method==='POST'&&/\/api\/purchase-orders(?:\?|$)/.test(url)&&typeof init?.body==='string'){const form=document.querySelector('#tt-purch-compose-form'),sourceId=Number(form?.dataset?.sourceQuoteImport||0);if(sourceId){try{const payload=JSON.parse(init.body);payload.source_quote_import_id=sourceId;init={...init,body:JSON.stringify(payload)}}catch(_){}}}return nativeFetch(input,init)};
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));
 async function json(url){const r=await fetch(url,{credentials:'same-origin'}),d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d}
 async function waitForm(ms=3500){const end=Date.now()+ms;while(Date.now()<end){const f=document.querySelector('#tt-purch-compose-form');if(f)return f;await sleep(40)}throw new Error('Purchase Order composer did not open')}
