@@ -21,9 +21,9 @@ function filterSuggestions(){const g=guide();if(!g||g.querySelector('.tt-guide__
  for(const chip of chips){const title=chip.textContent.trim(),ok=allowedTitle(title);chip.hidden=!ok;chip.setAttribute('aria-hidden',ok?'false':'true');chip.dataset.guideDomain=TASK_DOMAIN[title]||'';}
  const visible=chips.filter(x=>!x.hidden);visible.sort((a,b)=>Number(b.dataset.guideDomain===d)-Number(a.dataset.guideDomain===d));const host=g.querySelector('.tt-guide__suggestions');visible.forEach(x=>host?.appendChild(x));
  let ctx=g.querySelector('.tt-guide__role-context');if(!ctx){ctx=document.createElement('div');ctx.className='tt-guide__role-context';const body=g.querySelector('.tt-guide__body');body?.insertBefore(ctx,body.querySelector('.tt-guide__suggestions'));}
- const label=DOMAIN_HINTS[d]||DOMAIN_HINTS[profile()?.primary_workspace]||'your permitted workspaces';ctx.innerHTML=`<strong>Relevant help first</strong><span>Showing tasks available to you, prioritizing ${label}. You can still use Guided Mode anytime for any other permitted area.</span>`;
+ const label=DOMAIN_HINTS[d]||DOMAIN_HINTS[profile()?.primary_workspace]||'your permitted workspaces';ctx.innerHTML=`<strong>Relevant help first</strong><span>Showing tasks available to you, prioritizing ${label}. You can still use Guide Me anytime for any other permitted area.</span>`;
 }
-function enforceTask(){const title=currentTask();if(!title||allowedTitle(title))return;if(lastBlocked===title)return;lastBlocked=title;goHome();toast(`That workflow is not available for your signed-in role. Guided Mode only shows tasks you are permitted to perform.`);}
+function enforceTask(){const title=currentTask();if(!title||allowedTitle(title))return;if(lastBlocked===title)return;lastBlocked=title;goHome();toast(`That workflow is not available for your signed-in role. Guide Me only shows tasks you are permitted to perform.`);}
 function enhance(){raf=0;if(!profile())return;filterSuggestions();enforceTask();}
 function schedule(){if(raf)return;raf=requestAnimationFrame(enhance);}
 const observer=new MutationObserver(schedule);observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','hidden','data-guide-context']});

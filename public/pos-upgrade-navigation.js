@@ -55,7 +55,7 @@ function sync(){
   addAfter(['reports','reporting'],'nav-financial-controls-intelligence','Cash & Commitments',()=>openWorkspace('financialControls'));
   addAfter(['reports','reporting'],'nav-accounting-intelligence','Accounting Intelligence',()=>openWorkspace('accountingIntelligence'));
   addAfter(['reports','reporting'],'nav-operational-reports','Operational Reports',()=>openWorkspace('operationalReports'));
-  addAfter(['dashboard'],'nav-guided-mode','Guided Mode',openGuided);
+  addAfter(['dashboard'],'nav-guided-mode','Guide Me',openGuided);
 }
 let queued=false;function queue(){if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;sync();});}
 if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>setTimeout(sync,60));else setTimeout(sync,60);

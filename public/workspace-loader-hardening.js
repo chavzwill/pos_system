@@ -38,7 +38,7 @@ function loadScript(src,global,force=false){if(window[global]?.open)return Promi
 async function openFeature(key,title='Workspace'){if(key==='legacy'){location.href='/legacy?from=shell&open='+encodeURIComponent(title);return true;}const a=assets[key];if(!a)throw new Error(`Unknown workspace module: ${key}`);const [css,js,global]=a;ensureCss(css);let api;try{api=await loadScript(js,global,false);}catch(first){api=await loadScript(js,global,true);}if(!api?.open)throw new Error(`${title} did not initialize after a clean reload.`);if(key==='customer-crm-workspace'&&/pipeline/i.test(title))await api.open({tab:'pipeline'});else await api.open();return true;}
 window.TotalToolsShellOpen=openFeature;
 window.TotalToolsWorkspaceLoader={open:openFeature,assets,version:VERSION};
-// This is the single capture-phase owner of shell workspace buttons. Guided Mode
+// This is the single capture-phase owner of shell workspace buttons. Guide Me
 // calls TotalToolsShellOpen directly and therefore cannot race this handler.
 document.addEventListener('click',e=>{const b=e.target.closest?.('#shell-root [data-open]');if(!b)return;e.preventDefault();e.stopImmediatePropagation();openFeature(b.dataset.open,b.dataset.title||'Workspace').catch(err=>alert(`${b.dataset.title||'Workspace'} could not open: ${err.message}`));},true);
 })();

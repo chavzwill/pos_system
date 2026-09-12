@@ -77,7 +77,7 @@ test.describe('Total Tools Operations acceptance', () => {
       'Operations shell runtime',
       'Role-aware permission navigation',
       'Operational workspace registry',
-      'Guided Mode runtime',
+      'Guide Me runtime',
       'Workspace profile & permissions',
       'ERP operational intelligence',
       'Accounting intelligence',
