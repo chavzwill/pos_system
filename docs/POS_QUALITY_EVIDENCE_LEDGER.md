@@ -1,6 +1,6 @@
 # POS Quality Evidence Ledger
 
-Last updated: 2026-09-10
+Last updated: 2026-09-12
 
 States: NOT STARTED / IN PROGRESS / BLOCKED / IMPLEMENTED / VALIDATING / VERIFIED / SURPASS VERIFIED / DEFERRED / RELEASED.
 
@@ -21,5 +21,6 @@ States: NOT STARTED / IN PROGRESS / BLOCKED / IMPLEMENTED / VALIDATING / VERIFIE
 | Refund tender ceiling | Refunds cannot exceed the amount originally tendered by each payment method, even across concurrent returns | VALIDATING | Database trigger in `lib/retail-refund-invariants.js`; `tests/gate1-refund-tender-concurrency.spec.js` | Exact-head Gate 1 runtime result pending | Gate 1 |
 | Sale settlement replay/idempotency | Retry/duplicate checkout cannot create duplicate sale, money movement or stock decrement | IN PROGRESS | Inventory reservations reduce oversell risk, but request-level sale idempotency is not yet proven | Requires explicit operation identity + replay proof | Gate 1 |
 | Money/inventory adversarial certification | No duplicate settlement, over-refund, stock corruption, stale overwrite or UOM drift under replay/concurrency/failure | IN PROGRESS | Gate 1 branch and dedicated concurrency suite established | Remaining checkout, credit note, void, receiving, reservations, transfer, UOM, COGS, rental/repair billing matrix | Gate 1 |
+| I-STOCK-01 stock movement authority | Physical stock cannot be created, destroyed, or silently relocated through catalog/variation/import metadata paths without attributable movement evidence | VERIFIED | PR #30; exact-head `fb34af2`; Gate 1 Stock Movement Authority #18 SUCCESS; Runtime Certification #239 SUCCESS; merged integration `4323f442`; post-merge Runtime Certification #240 SUCCESS; 16-check inventory-movement contract and adversarial Playwright coverage include catalog/variation opening stock, controlled movement IDs, edit/import bypasses, rental relocation, stocked-variation deletion, and negative rollback | I-STOCK-04 stale-event ordering remains separately unverified; I-STOCK-02 availability-state consistency remains in progress | Gate 1 next stock invariant |
 
 No row may be promoted to `SURPASS VERIFIED` solely because implementation or tests exist.
