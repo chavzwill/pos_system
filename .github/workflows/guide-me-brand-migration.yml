@@ -1,0 +1,63 @@
+name: Guide Me Brand Migration
+
+on:
+  push:
+    branches:
+      - ux/guide-me-brand-migration
+
+permissions:
+  contents: write
+
+jobs:
+  migrate:
+    if: ${{ !contains(github.event.head_commit.message, '[guide-me-migration]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Replace legacy user-facing Guide terminology
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const path=require('path');
+          const roots=['public','tests','scripts','docs'];
+          const allowed=new Set(['.js','.mjs','.cjs','.html','.css','.md','.json','.txt']);
+          const replacements=[
+            [/Guided Mode/g,'Guide Me'],
+            [/Guided Help/g,'Guide Me'],
+            [/Guided mode/g,'Guide Me'],
+            [/guided mode/g,'Guide Me']
+          ];
+          let changed=[];
+          function walk(dir){
+            if(!fs.existsSync(dir))return;
+            for(const name of fs.readdirSync(dir)){
+              const p=path.join(dir,name),st=fs.statSync(p);
+              if(st.isDirectory()){walk(p);continue;}
+              if(!allowed.has(path.extname(p)))continue;
+              let before=fs.readFileSync(p,'utf8'),after=before;
+              for(const [re,to] of replacements)after=after.replace(re,to);
+              if(after!==before){fs.writeFileSync(p,after);changed.push(p);}
+            }
+          }
+          roots.forEach(walk);
+          console.log(`Updated ${changed.length} files`);
+          for(const p of changed)console.log(p);
+          NODE
+      - name: Commit migration
+        shell: bash
+        run: |
+          if git diff --quiet; then
+            echo 'No legacy user-facing Guide terminology found.'
+            exit 0
+          fi
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add public tests scripts docs
+          git commit -m 'Rename Guided Mode to Guide Me [guide-me-migration]'
+          git push
