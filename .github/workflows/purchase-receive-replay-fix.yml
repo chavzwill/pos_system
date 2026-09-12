@@ -1,0 +1,67 @@
+name: Purchase Receive Replay Fix
+on:
+  push:
+    branches: [gate1/purchase-receive-idempotency]
+permissions:
+  contents: write
+jobs:
+  patch:
+    if: ${{ !contains(github.event.head_commit.message, '[receive-replay-fix]') }}
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - name: Apply replay fix
+        shell: bash
+        run: |
+          node <<'NODE'
+          const fs=require('fs');
+          const file='routes/purchase-receive-operation-guard.js';
+          let s=fs.readFileSync(file,'utf8');
+          const before=`    if(!po)return next();
+    if(!['approved','partial'].includes(String(po.status)))return next();
+
+    const key=keyOf(req);
+    if(!key)return res.status(428).json({error:'Idempotency-Key is required for purchase-order receiving'});
+    if(key.length<8||key.length>160)return res.status(400).json({error:'Idempotency-Key must be 8 to 160 characters'});
+    const requestHash=hashRequest(poId,req.body);
+
+    const tx=await db.transaction('write');`;
+          const after=`    if(!po)return next();
+    const key=keyOf(req);
+    const requestHash=hashRequest(poId,req.body);
+    if(key){
+      const {rows:[known]}=await db.execute({sql:'SELECT * FROM purchase_receive_operations WHERE po_id=? AND operation_key=?',args:[poId,key]});
+      if(known){
+        if(known.request_hash!==requestHash)return res.status(409).json({error:'Idempotency-Key was already used with a different receiving payload'});
+        if(known.state==='completed'){
+          res.set('Idempotency-Replayed','true');
+          res.status(Number(known.response_status)||200);
+          try{return res.json(JSON.parse(known.response_json||'{}'));}catch{return res.json({replayed:true,operation_key:key});}
+        }
+        return res.status(409).set('Retry-After','2').json({error:'This receiving operation is already in progress. Retry with the same Idempotency-Key.',operation_key:key});
+      }
+    }
+    if(!['approved','partial'].includes(String(po.status)))return next();
+    if(!key)return res.status(428).json({error:'Idempotency-Key is required for purchase-order receiving'});
+    if(key.length<8||key.length>160)return res.status(400).json({error:'Idempotency-Key must be 8 to 160 characters'});
+
+    const tx=await db.transaction('write');`;
+          if(!s.includes(before))throw new Error('guard anchor missing');
+          fs.writeFileSync(file,s.replace(before,after));
+
+          const test='tests/gate1-purchase-receive-idempotency.spec.js';
+          s=fs.readFileSync(test,'utf8');
+          s=s.replace("const cookie=await loginCookie(),f=await fixture(cookie,2),key=op(),payload={items:[{item_id:f.item.id,quantity_received:1}]};","const cookie=await loginCookie(),f=await fixture(cookie,1),key=op(),payload={items:[{item_id:f.item.id,quantity_received:1}]};");
+          s=s.replace("expect(first.body.status).toBe('partial');","expect(first.body.status).toBe('received');");
+          fs.writeFileSync(test,s);
+          NODE
+      - name: Validate syntax
+        run: node --check routes/purchase-receive-operation-guard.js
+      - name: Commit
+        shell: bash
+        run: |
+          git config user.name 'github-actions[bot]'
+          git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
+          git add routes/purchase-receive-operation-guard.js tests/gate1-purchase-receive-idempotency.spec.js
+          git commit -m 'Replay completed purchase receipts after lifecycle closure [receive-replay-fix]'
+          git push
