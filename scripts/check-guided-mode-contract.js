@@ -53,6 +53,6 @@ check('integrity recognizes transfer workspace',integrity.includes("'#tt-transfe
 check('integrity recognizes reports workspace',integrity.includes("'#tt-operational-reports'"));
 check('integrity recognizes inventory intelligence',integrity.includes("'#tt-inventory-intelligence'"));
 check('final CSS is served by shell',shell.includes('/guided-mode-final-pass.css'));
-for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} Guided Mode: ${c.name}${c.detail?' — '+c.detail:''}`);
+for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} Guide Me: ${c.name}${c.detail?' — '+c.detail:''}`);
 if(checks.some(c=>!c.pass))process.exit(1);
-console.log(`Guided Mode contract OK (${checks.length} checks).`);
+console.log(`Guide Me contract OK (${checks.length} checks).`);

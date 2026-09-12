@@ -8,8 +8,8 @@ async function login(page) {
   await expect(page.locator('.stat-card').first()).toBeVisible({ timeout: 8_000 });
 }
 
-test.describe('Total Tools Guided Mode', () => {
-  test('native theme and Guided Mode assets load', async ({ page }) => {
+test.describe('Total Tools Guide Me', () => {
+  test('native theme and Guide Me assets load', async ({ page }) => {
     await login(page);
     await expect(page.locator('#tt-guide-launcher')).toBeVisible();
     await expect(page.locator('link[href="/total-tools-pos.css"]')).toHaveCount(1);

@@ -19,7 +19,7 @@ input,select,textarea{border-color:var(--tt-line-strong)!important;border-radius
 .tt-integrated-nav-item:hover,.tt-integrated-nav-item:focus-visible{color:#fff!important;background:rgba(255,255,255,.08)!important}
 .tt-integrated-nav-icon{width:14px;flex:0 0 14px;color:var(--brand-yellow,#ffd800);font-weight:900;text-align:center}
 
-/* Guided Mode lives in navigation. The legacy floating launcher remains only as an invisible programmatic trigger. */
+/* Guide Me lives in navigation. The legacy floating launcher remains only as an invisible programmatic trigger. */
 .tt-guide-launcher{display:none!important}
 .tt-guide-backdrop{display:none!important}
 body:has(#tt-guided-mode) #sidebar{width:360px!important}

@@ -16,7 +16,7 @@ function runtimeChecks(){const domainCount=document.querySelectorAll('.shell-nav
  {name:'Operations shell runtime',ok:!!document.querySelector('.shell-app'),critical:true,detail:document.querySelector('.shell-app')?'Application shell mounted':'Application shell did not mount'},
  {name:'Role-aware permission navigation',ok:domainCount>0,critical:true,detail:`${domainCount} permitted operational domain(s) available`},
  {name:'Operational workspace registry',ok:cardCount>0,critical:true,detail:`${cardCount} authorized tool(s) currently available`},
- {name:'Guided Mode runtime',ok:scripts.some(s=>/guided-mode\.js/.test(s.src))&&scripts.some(s=>/guided-mode-orchestrator\.js/.test(s.src)),critical:true,detail:'Guidance engine and orchestrator loaded'},
+ {name:'Guide Me runtime',ok:scripts.some(s=>/guided-mode\.js/.test(s.src))&&scripts.some(s=>/guided-mode-orchestrator\.js/.test(s.src)),critical:true,detail:'Guidance engine and orchestrator loaded'},
  {name:'Cross-domain intelligence integration',ok:!!window.TotalToolsOperationsAttentionCenter||scripts.some(s=>/operations-attention-center\.js/.test(s.src)),critical:false,detail:'Operational Attention Center integration available'}
  ];}
 async function run(){if(state.running)return;state.running=true;state.started=Date.now();state.ended=null;state.checks=[];render();const [endpointChecks,assetChecks]=await Promise.all([Promise.all(ENDPOINTS.map(endpointCheck)),assetCheck()]);state.checks=[...runtimeChecks(),...assetChecks,...endpointChecks];state.running=false;state.ended=Date.now();render();return summary();}

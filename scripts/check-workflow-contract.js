@@ -41,7 +41,7 @@ const workflows=[
 for(const w of workflows){
  check(`${w.name}: route file exists`,exists(w.routeFile));
  check(`${w.name}: route mounted`,server.includes(`app.use('${w.route}'`)||server.includes(`app.use(\"${w.route}\"`));
- check(`${w.name}: Guided Mode task covered`,guide.includes(`'${w.guide}'`));
+ check(`${w.name}: Guide Me task covered`,guide.includes(`'${w.guide}'`));
  if(w.workspace){
    check(`${w.name}: workspace registered`,loader.includes(`'${w.workspace}'`));
    check(`${w.name}: workspace global registered`,loader.includes(w.global));
