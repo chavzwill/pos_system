@@ -41,7 +41,19 @@ test('supplier quote requires confirmed matches and can create at most one linke
   template=await api(admin.cookie,'GET',`/api/purchase-orders/quote-imports/${staged.body.id}/po-template`);
   expect(template.status).toBe(200);
   expect(template.body.source_quote_import_id).toBe(staged.body.id);
-  const poBody={supplier_id:supplier.id,branch_id:branch.id,employee_id:admin.body.id,source_quote_import_id:staged.body.id,items:template.body.items};
+  const poBody={
+    supplier_id:supplier.id,
+    branch_id:branch.id,
+    ship_to_branch_id:branch.id,
+    ship_to_name:branch.name||'CI receiving branch',
+    ship_to_address:branch.address||'1 CI Receiving Road',
+    ship_to_city:branch.city||'Kingston',
+    ship_to_state:branch.state||'Kingston',
+    ship_to_country:'Jamaica',
+    employee_id:admin.body.id,
+    source_quote_import_id:staged.body.id,
+    items:template.body.items
+  };
   const [a,b]=await Promise.all([
     api(admin.cookie,'POST','/api/purchase-orders',poBody),
     api(admin.cookie,'POST','/api/purchase-orders',poBody)
