@@ -1,12 +1,16 @@
 'use strict';
 const fs=require('fs');const path=require('path');const root=path.join(__dirname,'..');const read=p=>fs.readFileSync(path.join(root,p),'utf8'),exists=p=>fs.existsSync(path.join(root,p));
-const server=read('server.js'),adjEntry=read('routes/inventory-adjustment-hardening.js'),adjBase=exists('routes/inventory-adjustment-hardening-base.js')?read('routes/inventory-adjustment-hardening-base.js'):'',adj=adjEntry+adjBase,trf=read('routes/transfer-valuation-hardening.js'),val=read('lib/inventory-movement-valuation.js');
+const server=read('server.js'),adjEntry=read('routes/inventory-adjustment-hardening.js'),adjBase=exists('routes/inventory-adjustment-hardening-base.js')?read('routes/inventory-adjustment-hardening-base.js'):'',stockAuthority=read('routes/product-stock-authority.js'),adj=adjEntry+adjBase+stockAuthority,trf=read('routes/transfer-valuation-hardening.js'),val=read('lib/inventory-movement-valuation.js');
 const checks=[];const check=(n,p)=>checks.push({n,p:!!p});
 check('adjustment hardening mounted before products',server.indexOf("require('./routes/inventory-adjustment-hardening')")>=0&&server.indexOf("require('./routes/inventory-adjustment-hardening')")<server.indexOf("require('./routes/products')"));
 check('adjustment delegation preserves certified base authority',!adjBase||adjEntry.includes("require('./inventory-adjustment-hardening-base')"));
 check('transfer hardening mounted before legacy transfers',server.indexOf("require('./routes/transfer-valuation-hardening')")>=0&&server.indexOf("require('./routes/transfer-valuation-hardening')")<server.indexOf("require('./routes/transfers')"));
 check('adjustments reject negative physical stock',adj.includes('Adjustment would make branch stock negative')&&adj.includes('Adjustment would make global stock negative'));
 check('adjustments require reason evidence',adj.includes("if(reason.length<5)")&&adj.includes('A meaningful stock-adjustment reason is required')&&adj.includes('inventory_adjustment_control_events')&&adj.includes('reason,approval.approvalReason'));
+check('bulk product imports cannot alter physical stock silently',stockAuthority.includes("router.post('/import'")&&stockAuthority.includes('Bulk import cannot change physical stock')&&stockAuthority.includes('Bulk import cannot create opening stock'));
+check('bulk rental imports cannot relocate physical stock silently',stockAuthority.includes("router.post('/import/rentals'")&&stockAuthority.includes('Bulk rental import cannot relocate physical stock'));
+check('stocked variations cannot be deleted silently',stockAuthority.includes("router.delete('/:id/variations/:vid'")&&stockAuthority.includes('A stocked variation cannot be deleted'));
+check('stocked rental items cannot be relocated through metadata editing',stockAuthority.includes('Product editing cannot relocate physical rental stock'));
 check('positive adjustments remain unknown-cost legacy',val.includes('positive_adjustment_cost_unknown')&&val.includes('legacy-unlayered'));
 check('negative adjustments consume valuation pool',val.includes('removeFromPool')&&val.includes('inventory_adjustment_valuations'));
 check('transfer valuation preserves in-transit composition',val.includes('inventory_transfer_valuations')&&val.includes('tracked_value')&&val.includes('legacy_quantity'));

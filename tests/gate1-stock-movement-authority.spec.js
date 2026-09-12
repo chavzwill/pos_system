@@ -26,6 +26,12 @@ test('catalog edits cannot create or destroy physical stock without movement evi
   expect(Number(adjusted.body.movement_id)).toBeGreaterThan(0);
   const edited=await api(cookie,'PUT',`/api/products/${productId}`,{...created.body,stock_qty:8,branch_id:branch.id});
   expect(edited.status).toBe(409);
+  const importedChange=await api(cookie,'POST','/api/products/import',{rows:[{sku:`${stamp}-P`,name:`Stock ${stamp}`,stock_qty:8}]});
+  expect(importedChange.status).toBe(409);
+  const importedOpening=await api(cookie,'POST','/api/products/import',{rows:[{sku:`${stamp}-I`,name:`Imported ${stamp}`,stock_qty:4}]});
+  expect(importedOpening.status).toBe(409);
+  const rentalImportChange=await api(cookie,'POST','/api/products/import/rentals',{rows:[{sku:`${stamp}-P`,name:`Stock ${stamp}`,branch_name:branch.name,stock_qty:7}]});
+  expect(rentalImportChange.status).toBe(409);
 
   const badVariation=await api(cookie,'POST',`/api/products/${productId}/variations`,{name:'Box',sku:`${stamp}-V`,attributes:{pack:'box'},stock_qty:2,active:1});
   expect(badVariation.status).toBe(409);
@@ -37,6 +43,8 @@ test('catalog edits cannot create or destroy physical stock without movement evi
   expect(Number(vAdj.body.movement_id)).toBeGreaterThan(0);
   const vEdit=await api(cookie,'PUT',`/api/products/${productId}/variations/${variation.body.id}`,{...variation.body,stock_qty:4});
   expect(vEdit.status).toBe(409);
+  const vDelete=await api(cookie,'DELETE',`/api/products/${productId}/variations/${variation.body.id}`);
+  expect(vDelete.status).toBe(409);
   const overReduce=await api(cookie,'PATCH',`/api/products/${productId}/variations/${variation.body.id}/stock`,{adjustment:-4,reason:'Attempt invalid reduction'});
   expect(overReduce.status).toBe(409);
   const after=await api(cookie,'GET',`/api/products/${productId}/variations`);
