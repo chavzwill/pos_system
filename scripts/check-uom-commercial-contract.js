@@ -27,7 +27,7 @@ const checks=[
  ['quotation workspace recovers and displays UOM evidence',quotes.includes('source_type=quotation')&&quotes.includes('entered_unit_price')],
  ['purchasing UI loads purchase-allowed product UOMs',purchasingUom.includes('/api/inventory-traceability/uom/commerce/products/')&&purchasingUom.includes('purchase_allowed')],
  ['purchasing UI previews entered quantity in authoritative base units',purchasingUom.includes('enteredQty*factor')&&purchasingUom.includes('per base unit')],
- ['purchase-order payload carries the operator selected UOM',purchasingUom.includes('uom_code:s.uom_code')&&purchasingUom.includes('/api/purchase-orders')],
+ ['purchase-order payload carries the operator selected UOM',purchasingUom.includes('uom_code:s.uom_code')&&purchasingUom.includes('purchase-orders')&&purchasingUom.includes('JSON.stringify(payload)')],
  ['fast app shell loads purchasing UOM enhancer',shell.includes('/purchasing-uom-enhancer.js')],
  ['return UOM normalization runs before return identity traceability',server.indexOf("require('./routes/retail-return-uom-guard')")>=0&&server.indexOf("require('./routes/retail-return-uom-guard')")<server.indexOf("require('./routes/retail-return-traceability-guard')")],
  ['legacy return requests remain base-unit compatible',returnGuard.includes("const explicitUom=String(line.uom_code||line.unit||'').trim()")&&returnGuard.includes("saleSnap?.base_uom||null")],
