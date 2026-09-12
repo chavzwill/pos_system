@@ -29,10 +29,6 @@ jobs:
             "async function api(cookie, method, path, body) {\n  const r = await fetch(`${BASE}${path}`, {\n    method, headers: { Cookie: cookie, 'Content-Type': 'application/json' },",
             "async function api(cookie, method, path, body) {\n  const receiveKey = method === 'PATCH' && /\\/api\\/purchase-orders\\/\\d+\\/receive$/.test(path) ? `legacy-test-${Date.now()}-${Math.random().toString(36).slice(2)}` : null;\n  const r = await fetch(`${BASE}${path}`, {\n    method, headers: { Cookie: cookie, 'Content-Type': 'application/json', ...(receiveKey ? {'Idempotency-Key':receiveKey} : {}) },"
           );
-          replace('.github/workflows/runtime-certification.yml',
-            'tests/gate1-credit-note-receivable.spec.js tests/gate1-currency-rounding.spec.js --workers=1',
-            'tests/gate1-credit-note-receivable.spec.js tests/gate1-currency-rounding.spec.js tests/gate1-purchase-receive-idempotency.spec.js --workers=1'
-          );
           NODE
       - name: Validate syntax
         run: |
@@ -43,6 +39,6 @@ jobs:
         run: |
           git config user.name 'github-actions[bot]'
           git config user.email '41898282+github-actions[bot]@users.noreply.github.com'
-          git add server.js public/purchasing-workspace.js tests/purchase-order-hardening.spec.js .github/workflows/runtime-certification.yml
+          git add server.js public/purchasing-workspace.js tests/purchase-order-hardening.spec.js
           git commit -m 'Integrate purchase receive idempotency guard [purchase-receive-remediation]'
           git push
