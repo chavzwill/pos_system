@@ -63,10 +63,10 @@ test('I-PROC-03 allocates landed cost exactly once before supplier payment',asyn
   expect(round2(recon.expected_amount)).toBe(20);expect(round2(recon.allocated_amount)).toBe(20);
   const {rows:[allocation]}=await db.execute({sql:'SELECT * FROM landed_cost_allocations WHERE supplier_invoice_id=?',args:[invoice.body.id]});
   expect(allocation).toBeTruthy();expect(round2(allocation.capitalizable_amount)).toBe(20);
-  const {rows:[items]}=await db.execute({sql:'SELECT * FROM landed_cost_allocation_items WHERE allocation_id=? ORDER BY id',args:[allocation.id]});
+  const {rows:items}=await db.execute({sql:'SELECT * FROM landed_cost_allocation_items WHERE allocation_id=? ORDER BY id',args:[allocation.id]});
   expect(items.length).toBeGreaterThan(0);
   expect(round2(items.reduce((s,x)=>s+Number(x.allocated_amount||0),0))).toBe(20);
-  const {rows:[revalues]}=await db.execute({sql:'SELECT * FROM landed_cost_revaluations WHERE allocation_id=? ORDER BY id',args:[allocation.id]});
+  const {rows:revalues}=await db.execute({sql:'SELECT * FROM landed_cost_revaluations WHERE allocation_id=? ORDER BY id',args:[allocation.id]});
   expect(revalues.length).toBe(items.length);
   expect(round2(revalues.reduce((s,x)=>s+Number(x.inventory_adjustment||0)+Number(x.cogs_adjustment||0),0))).toBe(20);
   const {rows:[poolAfter]}=await db.execute({sql:'SELECT tracked_qty,tracked_value FROM inventory_cost_pools WHERE product_id=? AND branch_key=?',args:[product.body.id,branch.id]});
