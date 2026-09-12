@@ -4,10 +4,11 @@ const router=express.Router();
 const {db}=require('../database');
 const {can}=require('../lib/permissions');
 const {findEmployeeByPin}=require('../lib/pinAuth');
+const {ensureLandedCostReconciliationSchema,reconcileSupplierInvoiceLandedCosts,capitalizableAmount}=require('../lib/landed-cost-reconciliation');
 const normalize=v=>String(v||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
 const money=v=>Number(Number(v||0).toFixed(2));
 let readyPromise=null;
-async function ensureSchema(){if(readyPromise)return readyPromise;readyPromise=db.batch([
+async function ensureSchema(){if(readyPromise)return readyPromise;readyPromise=(async()=>{await db.batch([
   {sql:`CREATE TABLE IF NOT EXISTS supplier_payment_override_events(
     id INTEGER PRIMARY KEY AUTOINCREMENT,
     payment_id INTEGER NOT NULL UNIQUE REFERENCES supplier_payments(id),
@@ -33,7 +34,7 @@ async function ensureSchema(){if(readyPromise)return readyPromise;readyPromise=d
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`},
   {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_payment_similarity ON supplier_payment_similarity_override_events(supplier_id,payment_date,amount,created_at)'}
-],'write').catch(e=>{readyPromise=null;throw e;});return readyPromise;}
+],'write');await ensureLandedCostReconciliationSchema();})().catch(e=>{readyPromise=null;throw e;});return readyPromise;}
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Supplier-payment loss-prevention initialization failed',detail:e.message});}});
 router.use(require('./supplier-payment-operation-guard'));
 async function settingNumber(key,fallback){const {rows:[r]}=await db.execute({sql:'SELECT value FROM settings WHERE key=?',args:[key]});const n=Number(r?.value);return Number.isFinite(n)?n:fallback;}
@@ -49,10 +50,26 @@ async function authorize(req,message){
   if(req.employee&&String(req.employee.id)===String(authorizer.id))throw Object.assign(new Error('Independent supervisor authorization is required for a suspicious supplier payment.'),{status:403});
   return {authorizer,reason};
 }
+async function ensurePaymentLandedCosts(req,supplierId){
+  const allocations=Array.isArray(req.body?.allocations)?req.body.allocations.filter(x=>Number(x.invoice_id)>0&&Number(x.amount)>0):[];
+  for(const allocation of allocations){
+    const invoiceId=Number(allocation.invoice_id);
+    const {rows:[invoice]}=await db.execute({sql:`SELECT id,supplier_id,tax_amount,freight_amount,duty_amount,other_landed_cost_amount,tax_treatment FROM supplier_invoices WHERE id=? AND status!='void'`,args:[invoiceId]});
+    if(!invoice||Number(invoice.supplier_id)!==supplierId)continue;
+    if(capitalizableAmount(invoice)<=0)continue;
+    const tx=await db.transaction('write');
+    try{
+      const result=await reconcileSupplierInvoiceLandedCosts(tx,invoiceId,{actorId:req.employee?.id||null});
+      await tx.commit();
+      if(result.status!=='allocated')throw Object.assign(new Error(`Supplier invoice ${invoiceId} has unresolved landed cost (${result.expected_amount.toFixed(2)}). ${result.reason||'Receipt-line reconciliation is required before payment.'}`),{status:409});
+    }catch(e){try{await tx.rollback();}catch{}throw e;}
+  }
+}
 router.post('/payments',async(req,res,next)=>{
   try{
     const supplierId=Number(req.body?.supplier_id),normalized=normalize(req.body?.reference),amount=money(req.body?.amount),paymentDate=String(req.body?.payment_date||'').trim();
     if(!supplierId||!(amount>0)||!paymentDate)return next();
+    await ensurePaymentLandedCosts(req,supplierId);
     const [windowDays,pctTolerance,absoluteTolerance]=await Promise.all([
       settingNumber('loss_control_supplier_payment_similarity_days',2),
       settingNumber('loss_control_supplier_payment_similarity_amount_pct',0.25),
