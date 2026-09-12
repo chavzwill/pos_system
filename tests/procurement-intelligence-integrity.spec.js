@@ -4,7 +4,7 @@ const BASE='http://localhost:3001';
 const TEST_USER=process.env.POS_TEST_USER||'admin';
 const TEST_PASSWORD=process.env.POS_TEST_PASSWORD||'CI-Test-Auth!2026';
 async function loginCookie(){const r=await fetch(`${BASE}/api/employees/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:TEST_USER,password:TEST_PASSWORD})});expect(r.status).toBe(200);return (r.headers.get('set-cookie')||'').split(';')[0];}
-async function api(cookie,method,path,body){const r=await fetch(`${BASE}${path}`,{method,headers:{Cookie:cookie,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,body:await r.json().catch(()=>null)};}
+async function api(cookie,method,path,body){const receiveMutation=String(method||'GET').toUpperCase()==='PATCH'&&/\/api\/purchase-orders\/\d+\/receive$/.test(path);const r=await fetch(`${BASE}${path}`,{method,headers:{Cookie:cookie,'Content-Type':'application/json',...(receiveMutation?{'Idempotency-Key':`procurement-receive-${Date.now()}-${Math.random().toString(36).slice(2)}`}:{})},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,body:await r.json().catch(()=>null)};}
 
 test.describe('Procurement intelligence, governance, and outcome integrity',()=>{
   test('recommendation stays human-controlled and reconciles to actual receipt outcome',async()=>{
