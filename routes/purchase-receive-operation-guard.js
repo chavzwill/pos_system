@@ -46,12 +46,24 @@ router.patch('/:id/receive',async(req,res,next)=>{
     if(!Number.isInteger(poId)||poId<=0)return res.status(400).json({error:'Valid purchase order id required'});
     const {rows:[po]}=await db.execute({sql:'SELECT id,status FROM purchase_orders WHERE id=?',args:[poId]});
     if(!po)return next();
-    if(!['approved','partial'].includes(String(po.status)))return next();
 
     const key=keyOf(req);
+    const requestHash=hashRequest(poId,req.body);
+    if(key){
+      const {rows:[known]}=await db.execute({sql:'SELECT * FROM purchase_receive_operations WHERE po_id=? AND operation_key=?',args:[poId,key]});
+      if(known){
+        if(known.request_hash!==requestHash)return res.status(409).json({error:'Idempotency-Key was already used with a different receiving payload'});
+        if(known.state==='completed'){
+          res.set('Idempotency-Replayed','true');
+          res.status(Number(known.response_status)||200);
+          try{return res.json(JSON.parse(known.response_json||'{}'));}catch{return res.json({replayed:true,operation_key:key});}
+        }
+        return res.status(409).set('Retry-After','2').json({error:'This receiving operation is already in progress. Retry with the same Idempotency-Key.',operation_key:key});
+      }
+    }
+    if(!['approved','partial'].includes(String(po.status)))return next();
     if(!key)return res.status(428).json({error:'Idempotency-Key is required for purchase-order receiving'});
     if(key.length<8||key.length>160)return res.status(400).json({error:'Idempotency-Key must be 8 to 160 characters'});
-    const requestHash=hashRequest(poId,req.body);
 
     const tx=await db.transaction('write');let committed=false;
     try{
