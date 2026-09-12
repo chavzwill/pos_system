@@ -1,6 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const exists=p=>fs.existsSync(path.join(root,p));
 const server=read('server.js');
 const guard=read('routes/multi-branch-integrity-guard.js');
 const checkout=read('routes/retail-checkout-hardening.js');
@@ -8,11 +9,14 @@ const drawers=read('routes/drawer-session-hardening.js');
 const po=read('routes/purchase-order-hardening.js');
 const rentals=read('routes/rental-loss-prevention.js');
 const workOrders=read('routes/work-orders.js');
-const adjustment=read('routes/inventory-adjustment-hardening.js');
+const adjustmentEntry=read('routes/inventory-adjustment-hardening.js');
+const adjustmentBase=exists('routes/inventory-adjustment-hardening-base.js')?read('routes/inventory-adjustment-hardening-base.js'):'';
+const adjustment=adjustmentEntry+adjustmentBase;
 const writeoffs=read('routes/inventory-writeoffs.js');
 const transfer=read('routes/transfer-traceability-hardening.js');
 const accounting=read('lib/accounting-posting.js');
-for(const [name,src] of Object.entries({server,guard,checkout,drawers,po,rentals,workOrders,adjustment,writeoffs,transfer,accounting}))new vm.Script(src,{filename:name});
+for(const [name,src] of Object.entries({server,guard,checkout,drawers,po,rentals,workOrders,adjustmentEntry,adjustmentBase,writeoffs,transfer,accounting}))if(src)new vm.Script(src,{filename:name});
+const delegatedAdjustmentOk=!adjustmentBase||adjustmentEntry.includes("require('./inventory-adjustment-hardening-base')");
 const checks=[
  ['branch guard mounts immediately after session authentication',server.indexOf("app.use('/api', require('./routes/multi-branch-integrity-guard'))")>server.indexOf("app.use('/api', sessionAuth)")&&server.indexOf("app.use('/api', require('./routes/multi-branch-integrity-guard'))")<server.indexOf("/api/inventory-writeoffs")],
  ['ordinary branch users are compared to default_branch_id',guard.includes('default_branch_id')&&guard.includes("control:'multi_branch_integrity'")],
@@ -22,6 +26,7 @@ const checks=[
  ['POS forces authenticated employee identity',checkout.includes('body.employee_id = req.employee.id')],
  ['POS drawer session must match employee',checkout.includes('This cash drawer session belongs to another employee')],
  ['POS drawer session must match selling branch',checkout.includes('Cash drawer session does not belong to the selling branch')],
+ ['inventory adjustment delegation preserves certified authority',delegatedAdjustmentOk],
  ['direct inventory adjustment is branch-bound',guard.includes('/products\\/\\d+\\/stock')&&adjustment.includes('global stock cannot be edited independently of branch inventory')],
  ['inventory adjustment reconciles global stock from branch totals',adjustment.includes("SELECT COALESCE(SUM(stock_qty),0) qty FROM branch_inventory")&&adjustment.includes("UPDATE products SET stock_qty=?")],
  ['repair intake is branch-bound',guard.includes("p==='/work-orders'")&&guard.includes('req.body.employee_id=req.employee.id')],
