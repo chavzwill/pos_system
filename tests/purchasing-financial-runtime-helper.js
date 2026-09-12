@@ -7,7 +7,8 @@ async function login(username=process.env.POS_TEST_USER||'admin',password=proces
   expect(r.status).toBe(200);return {cookie:(r.headers.get('set-cookie')||'').split(';')[0],body:await r.json()};
 }
 async function api(cookie,path,options={}){
-  const headers={Cookie:cookie,Accept:'application/json',...(options.headers||{})};
+  const receiveMutation=String(options.method||'GET').toUpperCase()==='PATCH'&&/\/api\/purchase-orders\/\d+\/receive$/.test(path);
+  const headers={Cookie:cookie,Accept:'application/json',...(receiveMutation?{'Idempotency-Key':`runtime-receive-${Date.now()}-${Math.random().toString(36).slice(2)}`} : {}),...(options.headers||{})};
   if(options.body&&!headers['Content-Type'])headers['Content-Type']='application/json';
   const r=await fetch(`${BASE}${path}`,{...options,headers});
   return {status:r.status,body:await r.json().catch(()=>null)};
