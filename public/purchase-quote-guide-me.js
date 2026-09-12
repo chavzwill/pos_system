@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const q=(s,r=document)=>r.querySelector(s),norm=s=>String(s||'').trim().toLowerCase();let last=null;
+const q=(s,r=document)=>r?.querySelector?.(s)||null,norm=s=>String(s||'').trim().toLowerCase();let last=null;
 function guide(){return document.getElementById('tt-guided-mode')}
 function active(){const g=guide(),w=q('#tt-quote-import-workspace');if(!g||!w)return null;const task=g.querySelector('.tt-guide__head p')?.textContent?.trim();return task==='Create, edit, copy, cancel or receive a PO'?w:null}
 function target(w){const review=q('[data-line]',w);if(review){const bad=[...w.querySelectorAll('[data-line]')].find(r=>{const b=r.querySelector('.tt-qi__badge');return b&&!b.classList.contains('ok')});if(bad){const input=q('[data-product]',bad),confirm=q('[data-confirm]',bad);if(input&&!input.value.trim())return{el:input,label:'Match inventory item',why:'Choose the exact inventory item for this supplier quote line.'};if(confirm)return{el:confirm,label:'Confirm inventory match',why:'Confirm the suggested or selected inventory item before PO handoff.'}}const hand=q('#tt-qi-handoff',w);if(hand&&!hand.disabled)return{el:hand,label:'Continue to Purchase Order',why:'All quote lines are confirmed. Continue into the normal PO composer.'};return null}
