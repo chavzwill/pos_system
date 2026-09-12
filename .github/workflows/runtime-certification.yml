@@ -91,7 +91,6 @@ jobs:
           node --check routes/purchase-receive-operation-guard.js
           node --check routes/purchase-receipt-uom-guard.js
           node --check routes/inventory-adjustment-hardening.js
-          node --check routes/inventory-adjustment-hardening-base.js
           node --check routes/product-stock-authority.js
           node --check routes/supplier-payment-operation-guard.js
           node --check routes/supplier-payment-loss-prevention.js
