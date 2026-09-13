@@ -27,6 +27,7 @@ const checks=[
  ['End shift blocks sign-out readiness on an open drawer',endShift.includes("severity:'blocking'")&&endShift.includes('ready_to_sign_out:openDrawers.length===0')],
  ['End shift does not auto-close operational records',!endShift.includes("UPDATE drawer_sessions SET status='closed'")&&!endShift.includes("UPDATE dispatch_jobs SET status='completed'")],
  ['End shift creates attributable handover evidence',endShift.includes('INSERT INTO shift_handovers')&&endShift.includes('req.employee.id')],
+ ['End shift handover is idempotent while still open',endShift.includes("record_type='end_shift' AND status='open'")&&endShift.includes('UPDATE shift_handovers SET priority=')],
  ['End shift UI is available from employee tools',assist.includes('data-ea-end-shift')&&assist.includes('async function openEndShift()')],
  ['Sign out is only rendered when server says ready',assist.includes("d.ready_to_sign_out?'<button id=\"tt-ea-signout\"")]
 ];
