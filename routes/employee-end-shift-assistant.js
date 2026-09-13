@@ -31,16 +31,12 @@ router.post('/end-shift/handover',async(req,res)=>{
   const title=`End-of-shift handover — ${req.employee.first_name||'Employee'}`;
   const existing=await rows(`SELECT id FROM shift_handovers WHERE created_by=? AND record_type='end_shift' AND status='open' AND (? IS NULL OR branch_id=?) ORDER BY created_at DESC LIMIT 1`,[req.employee.id,snap.branch_id,snap.branch_id]);
   let id,created=false;
-  if(existing[0]){
-   id=existing[0].id;
-   await db.execute({sql:`UPDATE shift_handovers SET priority=?,title=?,note=?,workspace='my-day' WHERE id=? AND created_by=? AND status='open'`,args:[priority,title,body,id,req.employee.id]});
-  }else{
-   const r=await db.execute({sql:`INSERT INTO shift_handovers(branch_id,workspace,priority,title,note,record_type,record_id,created_by) VALUES(?,?,?,?,?,?,?,?) RETURNING id`,args:[snap.branch_id,'my-day',priority,title,body,'end_shift',null,req.employee.id]});
-   id=r.rows?.[0]?.id;created=true;
-  }
+  if(existing[0]){id=existing[0].id;await db.execute({sql:`UPDATE shift_handovers SET priority=?,title=?,note=?,workspace='my-day' WHERE id=? AND created_by=? AND status='open'`,args:[priority,title,body,id,req.employee.id]});}
+  else{const r=await db.execute({sql:`INSERT INTO shift_handovers(branch_id,workspace,priority,title,note,record_type,record_id,created_by) VALUES(?,?,?,?,?,?,?,?) RETURNING id`,args:[snap.branch_id,'my-day',priority,title,body,'end_shift',null,req.employee.id]});id=r.rows?.[0]?.id;created=true;}
   res.status(created?201:200).json({id,created,ready_to_sign_out:snap.ready_to_sign_out,summary:snap.summary});
  }catch(e){res.status(500).json({error:e.message});}
 });
+router.use(require('./employee-customer-pickup-desk'));
 router.use(require('./employee-stock-finder'));
 router.use(require('./warehouse-fulfillment-assistant'));
 module.exports=router;

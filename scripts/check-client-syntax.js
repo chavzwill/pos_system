@@ -48,3 +48,4 @@ require('./check-warehouse-effort-contract');
 require('./check-fast-receiving-contract');
 require('./check-put-away-contract');
 require('./check-stock-finder-contract');
+require('./check-customer-pickup-desk-contract');
