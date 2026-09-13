@@ -44,3 +44,4 @@ require('./check-repair-financial-runtime-prerequisites');
 require('./check-dispatch-field-runtime-prerequisites');
 require('./check-human-language-contract');
 require('./check-employee-assist-contract');
+require('./check-warehouse-effort-contract');
