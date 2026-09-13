@@ -62,6 +62,7 @@ function getEnhancedIndex() {
     '<link rel="stylesheet" href="' + versioned('/total-tools-pos.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/pos-experience.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/employee-workspace-home.css') + '">',
+'<link rel="stylesheet" href="' + versioned('/employee-assist-ui.css') + '">',
   ];
   const bodyAssets = [
     '<script src="' + versioned('/pos-guide-map.js') + '" defer></script>',
@@ -70,6 +71,7 @@ function getEnhancedIndex() {
     '<script src="' + versioned('/navigation-shell.js') + '" defer></script>',
     '<script src="' + versioned('/role-workspace.js') + '" defer></script>',
     '<script src="' + versioned('/employee-workspace-home.js') + '" defer></script>',
+'<script src="' + versioned('/employee-assist-ui.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
   ];
   let html = source.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '" defer></script>' + source.slice(legacy.end);

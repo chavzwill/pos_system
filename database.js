@@ -453,6 +453,22 @@ async function _init() {
       outcome TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS shift_handovers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      branch_id INTEGER REFERENCES branches(id),
+      workspace TEXT NOT NULL,
+      priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('normal','important','urgent')),
+      title TEXT NOT NULL,
+      note TEXT NOT NULL,
+      record_type TEXT,
+      record_id INTEGER,
+      created_by INTEGER NOT NULL REFERENCES employees(id),
+      acknowledged_by INTEGER REFERENCES employees(id),
+      acknowledged_at DATETIME,
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','acknowledged','resolved')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      resolved_at DATETIME
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS commission_plans (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
