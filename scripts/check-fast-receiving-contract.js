@@ -1,0 +1,25 @@
+'use strict';
+const fs=require('fs');
+const path=require('path');
+const root=path.join(__dirname,'..');
+const route=fs.readFileSync(path.join(root,'routes','purchase-fast-receiving-assistant.js'),'utf8');
+const controls=fs.readFileSync(path.join(root,'routes','purchase-receiving-controls.js'),'utf8');
+const ui=fs.readFileSync(path.join(root,'public','purchase-fast-receiving.js'),'utf8');
+const deferred=fs.readFileSync(path.join(root,'public','shell-deferred.js'),'utf8');
+const checks=[];
+function check(name,ok){checks.push([name,!!ok]);if(!ok)process.exitCode=1;}
+check('assistant requires purchasing_receive permission',route.includes("requirePermission('purchasing_receive')"));
+check('assistant scopes purchase orders to employee branch',route.includes("default_branch_id")&&route.includes("po.branch_id=?"));
+check('assistant is read-only coordination and does not mutate physical stock',!/(UPDATE\s+products\s+SET\s+stock_qty|UPDATE\s+branch_inventory|INSERT\s+INTO\s+stock_movements)/i.test(route));
+check('assistant exposes only GET preparation endpoints',!/(router\.(post|patch|put|delete)\s*\()/i.test(route));
+check('assistant returns authoritative receiving controls',route.includes('getReceivingControl'));
+check('assistant suggests the same primary bin used by stock sync',route.includes('product_bin_assignments')&&route.includes('ORDER BY pba.is_primary DESC'));
+check('receiving controls mount the assistant under purchase-order authority',controls.includes("router.use('/fast-receiving',require('./purchase-fast-receiving-assistant'))"));
+check('UI submits to authoritative purchase-order receive endpoint',ui.includes('`/api/purchase-orders/${state.po.id}/receive`'));
+check('UI sends an idempotency key for safe retries',ui.includes("'Idempotency-Key':state.operation.key"));
+check('UI supports scanner matching by SKU or barcode',ui.includes('[i.sku,i.barcode]'));
+check('UI preserves inspection and shortage exception fields',ui.includes('receiving_status')&&ui.includes('inspection_reason')&&ui.includes('close_short')&&ui.includes('exception_reason'));
+check('authenticated shell loads fast receiving',deferred.includes("'/purchase-fast-receiving.js'"));
+for(const [name,ok] of checks)console.log(`${ok?'PASS':'FAIL'} fast-receiving: ${name}`);
+if(process.exitCode)throw new Error('Fast receiving contract failed');
+console.log(`Fast receiving contract: ${checks.length}/${checks.length} checks passed`);
