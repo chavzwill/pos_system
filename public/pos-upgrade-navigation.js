@@ -41,20 +41,20 @@ function sync(){
   if(!nav())return;
   addAfter(['work orders','repairs','service'],'nav-repair-equipment','Equipment & Repair History',()=>openWorkspace('repairEquipment'));
   addAfter(['work orders','repairs','service'],'nav-repair-communications','Customer Communication Timeline',()=>openWorkspace('repairCommunications'));
-  addAfter(['work orders','repairs','service'],'nav-repair-notifications','Customer Notification Orchestration',()=>openWorkspace('repairNotifications'));
+  addAfter(['work orders','repairs','service'],'nav-repair-notifications','Customer Notifications',()=>openWorkspace('repairNotifications'));
   addAfter(['work orders','repairs','service'],'nav-repair-authorizations','Diagnostics & Authorizations',()=>openWorkspace('repairAuthorizations'));
   addAfter(['work orders','repairs','service'],'nav-repair-parts-integrity','Parts Control & Availability',()=>openWorkspace('repairParts'));
-  addAfter(['work orders','repairs','service'],'nav-scheduling-intelligence','Scheduling & Capacity Intelligence',()=>openWorkspace('scheduling'));
+  addAfter(['work orders','repairs','service'],'nav-scheduling-intelligence','Technician Schedule & Workload',()=>openWorkspace('scheduling'));
   addAfter(['work orders','repairs','service'],'nav-technician-compensation','Technician Compensation',()=>openWorkspace('technicianCompensation'));
-  addAfter(['inventory','stock'],'nav-inventory-intelligence','Inventory Intelligence',()=>openWorkspace('inventoryIntelligence'));
-  addAfter(['transfers','branch transfers'],'nav-logistics-intelligence','Dispatch & Logistics Intelligence',()=>openWorkspace('logistics'));
-  addAfter(['transfers','branch transfers'],'nav-smart-transfers','Smart Transfer Recommendations',()=>openWorkspace('smartTransfers'));
+  addAfter(['inventory','stock'],'nav-inventory-intelligence','Stock Health & Reordering',()=>openWorkspace('inventoryIntelligence'));
+  addAfter(['transfers','branch transfers'],'nav-logistics-intelligence','Dispatch & Deliveries',()=>openWorkspace('logistics'));
+  addAfter(['transfers','branch transfers'],'nav-smart-transfers','Suggested Stock Transfers',()=>openWorkspace('smartTransfers'));
   addAfter(['reports','reporting'],'nav-accounting-ledger','Accounting Ledger',()=>openWorkspace('accountingLedger'));
-  addAfter(['reports','reporting'],'nav-settlement-reconciliation','Settlement Reconciliation',()=>openWorkspace('settlement'));
+  addAfter(['reports','reporting'],'nav-settlement-reconciliation','Card & Bank Settlement Checks',()=>openWorkspace('settlement'));
   addAfter(['reports','reporting'],'nav-supplier-ledger','Supplier Ledger & Payables',()=>openWorkspace('supplierLedger'));
   addAfter(['reports','reporting'],'nav-financial-controls-intelligence','Cash & Commitments',()=>openWorkspace('financialControls'));
-  addAfter(['reports','reporting'],'nav-accounting-intelligence','Accounting Intelligence',()=>openWorkspace('accountingIntelligence'));
-  addAfter(['reports','reporting'],'nav-operational-reports','Operational Reports',()=>openWorkspace('operationalReports'));
+  addAfter(['reports','reporting'],'nav-accounting-intelligence','Financial Overview',()=>openWorkspace('accountingIntelligence'));
+  addAfter(['reports','reporting'],'nav-operational-reports','Reports',()=>openWorkspace('operationalReports'));
   addAfter(['dashboard'],'nav-guided-mode','Guide Me',openGuided);
 }
 let queued=false;function queue(){if(queued)return;queued=true;requestAnimationFrame(()=>{queued=false;sync();});}
