@@ -41,4 +41,5 @@ router.post('/end-shift/handover',async(req,res)=>{
   res.status(created?201:200).json({id,created,ready_to_sign_out:snap.ready_to_sign_out,summary:snap.summary});
  }catch(e){res.status(500).json({error:e.message});}
 });
+router.use(require('./warehouse-fulfillment-assistant'));
 module.exports=router;
