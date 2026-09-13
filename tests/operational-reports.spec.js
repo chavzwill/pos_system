@@ -37,9 +37,12 @@ test.describe('Operational reports', () => {
     expect(r.status).toBe(200);
     const body = await r.json();
     expect(body.map(x => x.id)).toEqual(expect.arrayContaining([
+      'sales-summary', 'payments', 'employee-sales',
       'inventory-movements', 'non-sale-reductions', 'damage-writeoff', 'stock-aging',
-      'transfers', 'purchasing', 'vendor-items', 'rentals', 'repairs', 'returns',
+      'transfers', 'purchasing', 'supplier-performance', 'supplier-items', 'vendor-items', 'rentals', 'repairs', 'returns',
     ]));
+    expect(body.every(x => x.group && x.label && x.description)).toBe(true);
+    expect(body.find(x => x.id === 'inventory-movements')?.label).toBe('Stock Movement History');
   });
 
   test('native Operational Reports workspace assets load through the fast shell', async ({ page }) => {
@@ -61,5 +64,40 @@ test.describe('Operational reports', () => {
     const body = await r.json();
     expect(body).toHaveProperty('totals');
     expect(Array.isArray(body.rows)).toBe(true);
+  });
+
+  test('core staff reports return structured results', async () => {
+    const cookie = await loginCookie();
+    for (const report of ['sales-summary','payments','employee-sales']) {
+      const r = await fetch(`${BASE}/api/operational-reports/${report}?start=2026-01-01&end=2026-12-31`, { headers: { Cookie: cookie } });
+      expect(r.status, report).toBe(200);
+      const body = await r.json();
+      expect(body, report).toHaveProperty('summary');
+      expect(Array.isArray(body.rows), report).toBe(true);
+    }
+  });
+
+  test('supplier reporting exposes commercial and service performance', async () => {
+    const cookie = await loginCookie();
+    const performance = await fetch(`${BASE}/api/operational-reports/supplier-performance?start=2026-01-01&end=2026-12-31`, { headers: { Cookie: cookie } });
+    expect(performance.status).toBe(200);
+    const pbody = await performance.json();
+    expect(Array.isArray(pbody.rows)).toBe(true);
+    for (const row of pbody.rows) {
+      for (const field of ['on_time_rate','fill_rate','quality_acceptance_rate','customer_return_rate','overall_rating_score','supplier_rating','sales_value','estimated_gross_profit']) expect(row).toHaveProperty(field);
+    }
+    const items = await fetch(`${BASE}/api/operational-reports/supplier-items?start=2026-01-01&end=2026-12-31`, { headers: { Cookie: cookie } });
+    expect(items.status).toBe(200);
+    expect(Array.isArray((await items.json()).rows)).toBe(true);
+  });
+
+  test('reports open as a human-readable report center', async ({ page }) => {
+    await loginShell(page);
+    await page.evaluate(async()=>window.TotalToolsShellOpen('operational-reports','Reports'));
+    await expect(page.locator('#tt-op-reports-title')).toHaveText('Reports');
+    await expect(page.getByRole('button',{name:/Sales Summary/i})).toBeVisible();
+    await expect(page.getByRole('button',{name:/Payments by Method/i})).toBeVisible();
+    await expect(page.getByRole('button',{name:/Sales by Employee/i})).toBeVisible();
+    await expect(page.locator('#tt-op-reports-root')).not.toContainText('Inventory Intelligence');
   });
 });
