@@ -18,13 +18,14 @@ router.get('/stock-finder',async(req,res)=>{
  try{
   const q=norm(req.query.q);if(q.length<2)return res.json({query:q,results:[]});
   if(!['inventory','warehouse','pos','purchasing','transfers'].some(k=>allowed(req,k)))return res.status(403).json({error:'Your role does not have stock lookup access'});
-  const home=branchId(req),products=await productMatches(q),results=[];
+  const home=branchId(req),canSeeOtherBranches=allowed(req,'multi_branch_access')||allowed(req,'transfers'),products=await productMatches(q),results=[];
   for(const product of products){
    let availability=await branchAvailability(product.id);
    availability=availability.map(x=>{const on_hand=Number(x.on_hand||0),reserved=Number(x.reserved||0),restricted=Number(x.restricted||0);return{...x,on_hand,reserved,restricted,available:Math.max(0,on_hand-restricted-reserved),is_home_branch:Number(x.branch_id)===Number(home)};});
-   if(!allowed(req,'multi_branch_access')&&!allowed(req,'transfers'))availability=availability.filter(x=>x.is_home_branch);
-   const purchase_orders=(await incoming(product.id)).map(x=>({...x,incoming_qty:Number(x.incoming_qty||0)}));
-   const transferRows=(await transfers(product.id)).filter(x=>allowed(req,'multi_branch_access')||allowed(req,'transfers')||Number(x.to_branch_id)===Number(home)||Number(x.from_branch_id)===Number(home));
+   if(!canSeeOtherBranches)availability=availability.filter(x=>x.is_home_branch);
+   let purchase_orders=(await incoming(product.id)).map(x=>({...x,incoming_qty:Number(x.incoming_qty||0)}));
+   if(!canSeeOtherBranches)purchase_orders=purchase_orders.filter(x=>Number(x.branch_id)===Number(home));
+   const transferRows=(await transfers(product.id)).filter(x=>canSeeOtherBranches||Number(x.to_branch_id)===Number(home)||Number(x.from_branch_id)===Number(home));
    const approved=await explicitSubstitutes(product.id),approvedIds=new Set(approved.map(x=>Number(x.id)));
    const structured=(await structuredAlternatives(product)).filter(x=>!approvedIds.has(Number(x.id)));
    results.push({product,home_branch_id:home,availability,purchase_orders,transfers:transferRows,alternatives:[...approved,...structured].slice(0,10)});
