@@ -46,3 +46,4 @@ require('./check-human-language-contract');
 require('./check-employee-assist-contract');
 require('./check-warehouse-effort-contract');
 require('./check-fast-receiving-contract');
+require('./check-put-away-contract');
