@@ -36,9 +36,9 @@
       { find:['return rental','check in','return'], text:'At return, record condition, damage/fees where applicable, and complete the rental lifecycle.' }
     ]},
     { id:'dispatch', title:'Dispatch, route or complete a delivery', keywords:['dispatch','route','routing','delivery','driver','logistics','vehicle','in transit','pickup'], steps:[
-      { find:['dispatch & logistics intelligence','dispatch','logistics'], text:'Open Dispatch & Logistics Intelligence.' },
+      { find:['dispatch & logistics intelligence','dispatch','logistics'], text:'Open Dispatch & Deliveries.' },
       { find:['unassigned','dispatch queue','jobs'], text:'Review the dispatch queue, priority, promised time, assignment state and operational risk before choosing work.' },
-      { find:['schedule','assignee','vehicle'], text:'Assign the authorized employee and vehicle, then schedule the movement using verified capacity and timing.' },
+      { find:['schedule','assignee','vehicle'], text:'Assign the authorized employee and vehicle, then schedule the movement using the available vehicle capacity and schedule.' },
       { find:['ready','in transit','delayed','completed'], text:'Move the dispatch through its real lifecycle. Record delays rather than hiding them, and mark completed only after the movement is actually finished.' }
     ]},
     { id:'inventory-adjust', title:'Adjust inventory', keywords:['adjust inventory','stock adjustment','damage stock','write off','inventory correction'], steps:[
@@ -54,7 +54,7 @@
     { id:'pr', title:'Create or approve a purchase request', keywords:['purchase request','pr','request purchase','replenish'], steps:[
       { find:['purchase requests','purchasing'], text:'Open Purchase Requests.' },
       { find:['new purchase request','create request'], text:'Create the request with the correct branch, products, quantities and business reason.' },
-      { find:['approve','reject'], text:'Authorized approvers should review demand and sourcing evidence before approving or rejecting.' },
+      { find:['approve','reject'], text:'Authorized approvers should review demand, supplier options and supporting details before approving or rejecting.' },
       { find:['convert to po','create po'], text:'When approved, convert through the controlled PO flow rather than creating unrelated duplicate purchasing records.' }
     ]},
     { id:'po', title:'Create, edit, copy, cancel or receive a PO', keywords:['purchase order','po','receive po','copy po','cancel po','edit po'], steps:[
@@ -84,12 +84,12 @@
       { find:['technician','repairs','work orders'], text:'Open the technician/service management area.' },
       { find:['compensation','pay period','performance'], text:'Open Technician Compensation / Performance.' },
       { find:['rate','plan','metrics'], text:'Review the admin-configured rate and compensation plan that applies to the pay period.' },
-      { find:['finalize','approve payroll','payroll'], text:'Verify evidence before finalizing. Missing QC, rework, attendance or other evidence should remain unavailable rather than being invented.' }
+      { find:['finalize','approve payroll','payroll'], text:'Check QC, rework and attendance records before finalizing. If required information is missing, the system should show that clearly instead of guessing.' }
     ]},
-    { id:'erp', title:'Use ERP / inventory intelligence', keywords:['erp','intelligence','smart transfer','recommendation','slow moving','stockout','supplier performance'], steps:[
-      { find:['erp','intelligence','analytics'], text:'Open ERP Intelligence / Analytics.' },
-      { find:['recommend','transfer','replenish','supplier'], text:'Review the recommendation and the evidence behind it: branch stock, demand, supplier performance or movement history.' },
-      { find:['create transfer','purchase request','apply'], text:'When action is justified, use the normal controlled transfer/purchasing workflow. Intelligence should recommend; it should not silently mutate inventory.' }
+    { id:'erp', title:'Review stock and replenishment', keywords:['erp','intelligence','smart transfer','recommendation','slow moving','stockout','supplier performance'], steps:[
+      { find:['erp','intelligence','analytics'], text:'Open Stock Health & Reordering.' },
+      { find:['recommend','transfer','replenish','supplier'], text:'Review why the system is suggesting the action: branch stock, demand, supplier performance or stock history.' },
+      { find:['create transfer','purchase request','apply'], text:'If the action makes sense, use the normal transfer or purchasing process. Suggestions must never change stock automatically.' }
     ]}
   ];
 
