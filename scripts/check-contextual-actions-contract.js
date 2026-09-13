@@ -35,7 +35,7 @@ const checks=[
  ['Approval inbox is permission aware',employeeAssistRoute.includes("router.get('/approvals'")&&employeeAssistRoute.includes("allowed(req,['purchase_requests','purchasing'])")],
  ['Approval inbox is branch scoped and submitted only',employeeAssistRoute.includes("pr.status='submitted'")&&employeeAssistRoute.includes("(? IS NULL OR pr.branch_id=?)")],
  ['Approval inbox does not bypass purchasing decision authority',!employeeAssistRoute.includes('UPDATE purchase_requests SET status')],
- ['Approval UI opens exact request for review',assist.includes('data-ea-approvals')&&assist.includes('async function openApprovals()')&&assist.includes("type:'Purchase request'"))
+ ['Approval UI opens exact request for review',assist.includes('data-ea-approvals')&&assist.includes('async function openApprovals()')&&assist.includes("type:'Purchase request'")]
 ];
 let failed=0;
 for(const [name,ok] of checks){if(ok)console.log(`PASS Contextual actions: ${name}`);else{console.error(`FAIL Contextual actions: ${name}`);failed++;}}
