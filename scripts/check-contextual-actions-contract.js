@@ -9,6 +9,7 @@ const loader=read('workspace-loader-hardening.js'),shell=read('app-shell.js');
 const endShift=fs.readFileSync(path.join(repo,'routes','employee-end-shift-assistant.js'),'utf8');
 new vm.Script(endShift,{filename:'employee-end-shift-assistant.js'});
 const employeeAssistRoute=fs.readFileSync(path.join(repo,'routes','employee-assist.js'),'utf8');
+new vm.Script(employeeAssistRoute,{filename:'employee-assist.js'});
 const checks=[
  ['My Day preserves record identity',home.includes('data-record-id')&&home.includes('data-record-type')],
  ['My Day delegates contextual opening',home.includes('TotalToolsEmployeeAssist?.openContext')],
@@ -29,7 +30,12 @@ const checks=[
  ['End shift creates attributable handover evidence',endShift.includes('INSERT INTO shift_handovers')&&endShift.includes('req.employee.id')],
  ['End shift handover is idempotent while still open',endShift.includes("record_type='end_shift' AND status='open'")&&endShift.includes('UPDATE shift_handovers SET priority=')],
  ['End shift UI is available from employee tools',assist.includes('data-ea-end-shift')&&assist.includes('async function openEndShift()')],
- ['Sign out is only rendered when server says ready',assist.includes("d.ready_to_sign_out?'<button id=\"tt-ea-signout\"")]
+ ['Sign out is only rendered when server says ready',assist.includes("d.ready_to_sign_out?'<button id=\"tt-ea-signout\"")],
+ ['Purchase requests waiting for review use authoritative submitted state',employeeAssistRoute.includes("status IN ('submitted','approved')")&&!employeeAssistRoute.includes("status IN ('pending','approved')")],
+ ['Approval inbox is permission aware',employeeAssistRoute.includes("router.get('/approvals'")&&employeeAssistRoute.includes("allowed(req,['purchase_requests','purchasing'])")],
+ ['Approval inbox is branch scoped and submitted only',employeeAssistRoute.includes("pr.status='submitted'")&&employeeAssistRoute.includes("(? IS NULL OR pr.branch_id=?)")],
+ ['Approval inbox does not bypass purchasing decision authority',!employeeAssistRoute.includes('UPDATE purchase_requests SET status')],
+ ['Approval UI opens exact request for review',assist.includes('data-ea-approvals')&&assist.includes('async function openApprovals()')&&assist.includes("type:'Purchase request'")]
 ];
 let failed=0;
 for(const [name,ok] of checks){if(ok)console.log(`PASS Contextual actions: ${name}`);else{console.error(`FAIL Contextual actions: ${name}`);failed++;}}
