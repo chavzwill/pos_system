@@ -8,6 +8,7 @@ const allowed=(req,keys)=>keys.some(k=>can(req.employee?.permissions||{},k));
 const branchId=req=>req.employee?.default_branch_id||null;
 async function rows(sql,args=[]){try{return (await db.execute({sql,args})).rows||[];}catch{return[];}}
 function task(type,title,detail,priority,action,record_id){return{type,title,detail,priority,action,record_id};}
+router.use(require('./employee-end-shift-assistant'));
 router.get('/my-day',async(req,res)=>{
  try{
   const branch=branchId(req),tasks=[];
