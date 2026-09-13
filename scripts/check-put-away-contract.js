@@ -21,6 +21,8 @@ const checks=[
 ['receiving evidence initialized',core.includes('ensurePurchaseReceivingControls')],
 ['postcondition protects located totals',core.includes('after.located>after.available')],
 ['generic create blocked',guard.includes('Bin quantity must be changed through Put Away')],
+['generic create resolves actual bin branch',guard.includes('binBranch')&&guard.includes('req.body.branch_id=resolvedBranch')],
+['legacy null-branch assignment resolves physical bin branch',guard.includes('resolved_branch_id')&&guard.includes('assignmentRecord')],
 ['generic edit blocked',guard.includes('Use Put Away to change bin quantity')],
 ['occupied assignment deletion blocked',guard.includes('Cannot delete a bin assignment that still contains stock')],
 ['authority mounted first',guard.includes("router.use('/warehouse/put-away',require('./warehouse-put-away'))")],
