@@ -1,0 +1,4 @@
+(()=>{'use strict';
+function install(){const modal=document.getElementById('tt-stock-finder-modal');if(!modal)return;modal.querySelectorAll('[data-sf-action="Inventory"]').forEach(view=>{const row=view.parentElement;if(!row||row.querySelector('[data-sf-sell]'))return;const b=document.createElement('button');b.dataset.sfSell='';b.textContent='Sell item';b.onclick=()=>{const id=view.dataset.sfId;document.getElementById('tt-stock-finder-modal')?.remove();window.TotalToolsEmployeeAssist?.openContext?.({action:'Sales',record_id:id,type:'Item'});};row.prepend(b);});}
+new MutationObserver(install).observe(document.documentElement,{subtree:true,childList:true});install();
+})();
