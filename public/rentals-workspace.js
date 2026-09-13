@@ -32,6 +32,6 @@ function bind(){root().querySelectorAll('[data-close]').forEach(x=>x.addEventLis
 async function resume(){const a=state.detail;if(!a||!a.is_paused)return;if(!confirm(`Resume ${a.agreement_number}? Its due date will be extended for the paused time.`))return;try{await api(`/api/rentals/agreements/${a.id}/resume`,{method:'PATCH',body:JSON.stringify({employee_id:employeeId()})});await refresh();}catch(e){alert(e.message);}}
 function dispatch(){close();if(window.TotalToolsShellOpen)window.TotalToolsShellOpen('logistics-intelligence','Dispatch Command Center');}
 async function refresh(){busy('Refreshing live rental operations…');try{await loadRows();render();}catch(e){alert(e.message);render();}}
-async function open(){if(state.open)return;state.open=true;busy('Loading rental operations…');try{await loadProfile();await loadRows();render();}catch(e){root().querySelector('.tt-rent__state').innerHTML=`<span class="tt-rent__error">${esc(e.message)}</span>`;}}
-window.TotalToolsRentalsWorkspace={open,close,refresh};
+async function open(opts={}){if(!state.open){state.open=true;busy('Loading rental operations…');try{await loadProfile();await loadRows();render();}catch(e){root().querySelector('.tt-rent__state').innerHTML=`<span class="tt-rent__error">${esc(e.message)}</span>`;return;}}if(opts.recordId){const row=state.rows.find(r=>String(r.id)===String(opts.recordId));if(row){state.selected=row;await loadDetail();render();}}}
+window.TotalToolsRentalsWorkspace={open,close,refresh,openRecord:(id)=>open({recordId:id})};
 })();
