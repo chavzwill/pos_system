@@ -1,0 +1,22 @@
+'use strict';
+const express=require('express');
+const router=express.Router();
+const {db}=require('../database');
+const {requireAuth,requirePermission}=require('../lib/permissions');
+const {ensureApprovalRoutingSchema}=require('../lib/approval-routing');
+router.use(requireAuth);
+router.use((req,res,next)=>req.apiKey?res.status(403).json({error:'API keys cannot administer departments'}):next());
+router.use(requirePermission('security_assign'));
+router.use(async(req,res,next)=>{try{await ensureApprovalRoutingSchema();next();}catch(e){res.status(500).json({error:e.message});}});
+const norm=v=>String(v||'').trim();
+router.get('/departments',async(req,res)=>{try{const {rows}=await db.execute({sql:'SELECT * FROM departments ORDER BY active DESC,name',args:[]});res.json({rows});}catch(e){res.status(500).json({error:e.message});}});
+router.post('/departments',async(req,res)=>{try{const code=norm(req.body?.code).toLowerCase(),name=norm(req.body?.name);if(!code||!name)return res.status(400).json({error:'Department code and name are required'});const r=await db.execute({sql:'INSERT INTO departments(code,name) VALUES(?,?) RETURNING *',args:[code,name]});res.status(201).json(r.rows[0]);}catch(e){res.status(409).json({error:e.message});}});
+router.post('/departments/:id/members',async(req,res)=>{try{
+ const departmentId=Number(req.params.id),employeeId=Number(req.body?.employee_id),branchId=req.body?.branch_id==null?null:Number(req.body.branch_id),isManager=req.body?.is_manager?1:0;
+ const {rows:[employee]}=await db.execute({sql:'SELECT id,active FROM employees WHERE id=?',args:[employeeId]});if(!employee||!employee.active)return res.status(400).json({error:'Active employee is required'});
+ const {rows:[department]}=await db.execute({sql:'SELECT id,active FROM departments WHERE id=?',args:[departmentId]});if(!department||!department.active)return res.status(400).json({error:'Active department is required'});
+ await db.execute({sql:`INSERT INTO employee_department_memberships(employee_id,department_id,branch_id,is_manager,active,created_by) VALUES(?,?,?,?,1,?) ON CONFLICT(employee_id,department_id,COALESCE(branch_id,-1)) DO UPDATE SET is_manager=excluded.is_manager,active=1,updated_at=CURRENT_TIMESTAMP`,args:[employeeId,departmentId,branchId,isManager,req.employee.id]});
+ res.status(201).json({employee_id:employeeId,department_id:departmentId,branch_id:branchId,is_manager:!!isManager,active:true});
+}catch(e){res.status(400).json({error:e.message});}});
+router.get('/departments/:id/members',async(req,res)=>{try{const {rows}=await db.execute({sql:`SELECT edm.*,e.first_name,e.last_name,e.active employee_active FROM employee_department_memberships edm JOIN employees e ON e.id=edm.employee_id WHERE edm.department_id=? ORDER BY edm.is_manager DESC,e.first_name,e.last_name`,args:[Number(req.params.id)]});res.json({rows});}catch(e){res.status(500).json({error:e.message});}});
+module.exports=router;

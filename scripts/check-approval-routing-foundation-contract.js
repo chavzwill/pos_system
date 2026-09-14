@@ -1,0 +1,27 @@
+'use strict';
+const fs=require('fs');
+const path=require('path');
+const root=path.join(__dirname,'..');
+const read=(p)=>fs.existsSync(path.join(root,p))?fs.readFileSync(path.join(root,p),'utf8'):'';
+const lib=read('lib/approval-routing.js');
+const route=read('routes/approval-routing.js');
+const admin=read('routes/department-approval-admin.js');
+const ui=read('public/department-approvals-ui.js');
+const deferred=read('public/shell-deferred.js');
+const mount=read('routes/employee-end-shift-assistant.js');
+const checks=[];
+checks.push(['normalized departments exist',lib.includes('CREATE TABLE IF NOT EXISTS departments')]);
+checks.push(['manager membership is explicit',lib.includes('employee_department_memberships')&&lib.includes('is_manager')]);
+checks.push(['approval envelopes are durable',lib.includes('approval_requests')&&lib.includes('approval_events')]);
+checks.push(['events are append only',lib.includes('approval_events')&&!lib.includes('UPDATE approval_events')]);
+checks.push(['manager authority checks branch and membership',lib.includes('isAuthorizedDepartmentManager')&&lib.includes('branch_id')]);
+checks.push(['decision actor comes from session',route.includes('req.employee.id')&&!route.includes('approved_by = req.body')]);
+checks.push(['API keys cannot decide',route.includes('API keys cannot operate internal approval workflows')]);
+checks.push(['department administration is security controlled',admin.includes("requirePermission('security_assign')")]);
+checks.push(['approval routes are mounted',mount.includes("require('./approval-routing')")]);
+checks.push(['manager queue uses human language',ui.includes('My Department Approvals')&&ui.includes('Waiting for')]);
+checks.push(['shell deferred-loads approval UI',deferred.includes("'/department-approvals-ui.js'" )]);
+let failed=0;
+for(const [name,ok] of checks){if(ok)console.log(`PASS Approval routing: ${name}`);else{console.error(`FAIL Approval routing: ${name}`);failed++;}}
+if(failed)process.exit(1);
+console.log(`Approval routing foundation contract OK (${checks.length} checks).`);
