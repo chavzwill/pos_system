@@ -72,6 +72,45 @@ test.describe('Approval routing foundation',()=>{
   expect(q.body.rows.some(r=>r.owning_record_id===`H-${fx.suffix}`)).toBe(false);
  });
 
+
+ test('manager queue follows explicit multi-branch authority instead of the employee default branch',async()=>{
+  const fx=await fixture();
+  const second=await db.execute({sql:`INSERT INTO branches(branch_code,name,active) VALUES(?,?,1)`,args:[`MB-${fx.suffix}`,`Multi Branch ${fx.suffix}`]});
+  const secondBranchId=Number(second.lastInsertRowid);
+  await db.execute({sql:`INSERT INTO employee_department_memberships(employee_id,department_id,branch_id,is_manager,active,created_by) VALUES(?,?,?,?,1,?)`,args:[fx.admin.body.id,fx.department.id,secondBranchId,1,fx.admin.body.id]});
+  const secondBranchApproval=await createApprovalRequest({requestType:'test_multibranch_visible',owningModule:'test',owningRecordId:`MBV-${fx.suffix}`,departmentId:fx.department.id,branchId:secondBranchId,requesterEmployeeId:fx.admin.body.id,requestedAction:'Review second branch request',requiredPermission:'purchasing_approve',payload:{v:21}});
+  const q=await api(fx.admin.cookie,'GET','/api/employee-assist/department-approvals');
+  expect(q.status,JSON.stringify(q.body)).toBe(200);
+  expect(q.body.rows.some(r=>Number(r.id)===Number(secondBranchApproval.id))).toBe(true);
+  const detail=await api(fx.admin.cookie,'GET',`/api/employee-assist/department-approvals/${secondBranchApproval.id}`);
+  expect(detail.status,JSON.stringify(detail.body)).toBe(200);
+ });
+
+ test('department-wide manager authority spans branches without duplicating approvals',async()=>{
+  const fx=await fixture();
+  const other=await db.execute({sql:`INSERT INTO branches(branch_code,name,active) VALUES(?,?,1)`,args:[`GB-${fx.suffix}`,`Global Branch ${fx.suffix}`]});
+  const otherBranchId=Number(other.lastInsertRowid);
+  await db.execute({sql:`INSERT INTO employee_department_memberships(employee_id,department_id,branch_id,is_manager,active,created_by) VALUES(?,?,NULL,1,1,?)`,args:[fx.admin.body.id,fx.department.id,fx.admin.body.id]});
+  const approval=await createApprovalRequest({requestType:'test_global_manager_scope',owningModule:'test',owningRecordId:`GMS-${fx.suffix}`,departmentId:fx.department.id,branchId:otherBranchId,requesterEmployeeId:fx.admin.body.id,requestedAction:'Review globally managed branch request',requiredPermission:'purchasing_approve',payload:{v:23}});
+  const q=await api(fx.admin.cookie,'GET','/api/employee-assist/department-approvals');
+  expect(q.status,JSON.stringify(q.body)).toBe(200);
+  expect(q.body.rows.filter(r=>Number(r.id)===Number(approval.id))).toHaveLength(1);
+  const detail=await api(fx.admin.cookie,'GET',`/api/employee-assist/department-approvals/${approval.id}`);
+  expect(detail.status,JSON.stringify(detail.body)).toBe(200);
+ });
+
+ test('branch-specific authority does not leak approvals from an unassigned branch',async()=>{
+  const fx=await fixture();
+  const other=await db.execute({sql:`INSERT INTO branches(branch_code,name,active) VALUES(?,?,1)`,args:[`WB-${fx.suffix}`,`Wrong Branch ${fx.suffix}`]});
+  const hidden=await createApprovalRequest({requestType:'test_wrong_branch_hidden',owningModule:'test',owningRecordId:`WBH-${fx.suffix}`,departmentId:fx.department.id,branchId:Number(other.lastInsertRowid),requesterEmployeeId:fx.admin.body.id,requestedAction:'Review wrong branch request',requiredPermission:'purchasing_approve',payload:{v:22}});
+  const q=await api(fx.admin.cookie,'GET','/api/employee-assist/department-approvals');
+  expect(q.status,JSON.stringify(q.body)).toBe(200);
+  expect(q.body.rows.some(r=>Number(r.id)===Number(hidden.id))).toBe(false);
+  const detail=await api(fx.admin.cookie,'GET',`/api/employee-assist/department-approvals/${hidden.id}`);
+  expect(detail.status).toBe(404);
+  expect(detail.body.code).toBe('APPROVAL_NOT_FOUND');
+ });
+
  test('two managers cannot both win the same approval version',async()=>{
   const fx=await fixture();
   const row=await createApprovalRequest({requestType:'test_race',owningModule:'test',owningRecordId:`C-${fx.suffix}`,departmentId:fx.department.id,branchId:fx.branchId,requesterEmployeeId:fx.admin.body.id,requestedAction:'Review race',requiredPermission:'purchasing_approve',payload:{v:3}});

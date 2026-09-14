@@ -21,6 +21,7 @@ checks.push(['database rejects approval event deletes',lib.includes('trg_approva
 checks.push(['database protects approval parents with evidence',lib.includes('trg_approval_requests_no_evidence_delete')&&lib.includes('BEFORE DELETE ON approval_requests')&&lib.includes('approval_request_id=OLD.id')]);
 checks.push(['fresh approval event schema does not cascade-delete evidence',!/CREATE TABLE IF NOT EXISTS approval_events[^`]*ON DELETE CASCADE/.test(lib)]);
 checks.push(['manager authority checks branch and membership',lib.includes('isAuthorizedDepartmentManager')&&lib.includes('branch_id')]);
+checks.push(['manager queue derives branch authority from explicit memberships only',/async function listManagerApprovals\(employee\)\{[\s\S]*?EXISTS \(SELECT 1 FROM employee_department_memberships/.test(lib)&&!/async function listManagerApprovals\(employee\)\{[\s\S]*?default_branch_id/.test(lib)]);
 checks.push(['concurrent external replay handles storage contention',lib.includes('waitForExternalReplay')&&lib.includes('isStorageBusy')]);
 checks.push(['decision actor comes from session',route.includes('req.employee.id')&&!route.includes('approved_by = req.body')]);
 checks.push(['API keys cannot decide',route.includes('APPROVAL_API_KEY_FORBIDDEN')]);
