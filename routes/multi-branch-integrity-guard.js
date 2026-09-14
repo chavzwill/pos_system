@@ -15,6 +15,7 @@ function numericId(path,re){const m=path.match(re);return m?Number(m[1]):null;}
 
 router.use('/logistics-intelligence',require('./logistics-runtime-integrity-guard'));
 router.use('/warehouse/put-away',require('./warehouse-put-away'));
+router.use('/purchase-requests',require('./purchase-request-approval-guard'));
 
 router.use(async(req,res,next)=>{
   try{
