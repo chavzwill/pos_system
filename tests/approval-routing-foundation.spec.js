@@ -56,6 +56,7 @@ test.describe('Approval routing foundation',()=>{
   expect(q.body.rows.some(r=>Number(r.id)===Number(visible.id))).toBe(true);
   expect(q.body.rows.some(r=>r.owning_record_id===`H-${fx.suffix}`)).toBe(false);
  });
+
  test('two managers cannot both win the same approval version',async()=>{
   const fx=await fixture();
   const row=await createApprovalRequest({requestType:'test_race',owningModule:'test',owningRecordId:`C-${fx.suffix}`,departmentId:fx.department.id,branchId:fx.branchId,requesterEmployeeId:fx.admin.body.id,requestedAction:'Review race',requiredPermission:'purchasing_approve',payload:{v:3}});
@@ -66,27 +67,42 @@ test.describe('Approval routing foundation',()=>{
   ]);
   expect([a.status,b.status].filter(x=>x===200)).toHaveLength(1);
   expect([a.status,b.status].filter(x=>x===409)).toHaveLength(1);
+  const conflict=[a,b].find(x=>x.status===409);
+  expect(['APPROVAL_VERSION_CONFLICT','APPROVAL_NOT_PENDING']).toContain(conflict.body.code);
   const {rows:events}=await db.execute({sql:`SELECT * FROM approval_events WHERE approval_request_id=? AND event_type='claim'`,args:[row.id]});
   expect(events).toHaveLength(1);
  });
 
- test('approve and reject fail closed until an authoritative module adapter exists',async()=>{
+ test('approve and reject fail closed with safe stable errors until an authoritative module adapter exists',async()=>{
   const fx=await fixture();
   const row=await createApprovalRequest({requestType:'test_no_adapter',owningModule:'test',owningRecordId:`N-${fx.suffix}`,departmentId:fx.department.id,branchId:fx.branchId,requesterEmployeeId:fx.admin.body.id,requestedAction:'Review no adapter',requiredPermission:'purchasing_approve',payload:{v:4}});
   for(const decision of ['approved','rejected']){
    const r=await api(fx.admin.cookie,'POST',`/api/employee-assist/department-approvals/${row.id}/${decision}`,{version:row.version});
    expect(r.status).toBe(409);
-   expect(r.body.error).toMatch(/authoritative decision handler/i);
+   expect(r.body.code).toBe('APPROVAL_HANDLER_UNAVAILABLE');
+   expect(r.body.error).toMatch(/owning module/i);
+   expect(r.body.error).not.toMatch(/SQL|constraint|stack/i);
   }
   const {rows:[stored]}=await db.execute({sql:'SELECT status,version FROM approval_requests WHERE id=?',args:[row.id]});
   expect(stored.status).toBe('submitted');expect(Number(stored.version)).toBe(Number(row.version));
  });
+
+ test('department uniqueness failures return human-safe codes instead of database errors',async()=>{
+  const fx=await fixture();
+  const duplicate=await api(fx.admin.cookie,'POST','/api/department-approvals/departments',{code:fx.department.code,name:'Duplicate department'});
+  expect(duplicate.status).toBe(409);
+  expect(duplicate.body.code).toBe('DEPARTMENT_CODE_CONFLICT');
+  expect(duplicate.body.error).toMatch(/already in use/i);
+  expect(duplicate.body.error).not.toMatch(/UNIQUE|constraint|departments\.code|SQL/i);
+ });
+
  test('API keys cannot operate internal approval workflows',async()=>{
   const fx=await fixture();
   const created=await api(fx.admin.cookie,'POST','/api/api-keys',{name:`Approval key ${fx.suffix}`,scopes:['products:read'],reason:'Certify approval API-key boundary'});
   expect(created.status,JSON.stringify(created.body)).toBe(201);
   const r=await fetch(`${BASE}/api/employee-assist/department-approvals`,{headers:{'X-API-Key':created.body.key}});
   expect(r.status).toBe(403);
+  const body=await r.json();expect(body.code).toBe('APPROVAL_API_KEY_FORBIDDEN');
  });
 
  test('ordinary department manager cannot grant manager authority',async()=>{
@@ -99,5 +115,20 @@ test.describe('Approval routing foundation',()=>{
   const manager=await login(`approval_mgr_${fx.suffix}`,password);expect(manager.status).toBe(200);
   const denied=await api(manager.cookie,'POST',`/api/department-approvals/departments/${fx.department.id}/members`,{employee_id:employee.body.id,branch_id:fx.branchId,is_manager:true});
   expect(denied.status).toBe(403);
+ });
+
+ test('Guide Me exposes department approval review and protected setup guidance',async({page})=>{
+  const admin=await login();expect(admin.status).toBe(200);
+  const split=admin.cookie.indexOf('=');
+  await page.context().addCookies([{name:admin.cookie.slice(0,split),value:admin.cookie.slice(split+1),url:BASE}]);
+  await page.goto(BASE,{waitUntil:'domcontentloaded'});
+  await expect(page.locator('#tt-guide-launcher')).toBeVisible({timeout:15000});
+  await page.locator('#tt-guide-launcher').click();
+  await expect(page.getByRole('button',{name:'Review department approvals'})).toBeVisible({timeout:5000});
+  await expect(page.getByRole('button',{name:'Set up approval departments'})).toBeVisible();
+  await page.getByRole('button',{name:'Review department approvals'}).click();
+  await expect(page.locator('#tt-guided-mode .tt-guide__head p')).toHaveText('Review department approvals');
+  await expect(page.locator('[data-approval-guide-panel]')).toContainText('owning module');
+  await expect(page.locator('[data-approval-guide-panel]')).toContainText('will not approve or reject anything on your behalf');
  });
 });
