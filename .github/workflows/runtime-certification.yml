@@ -102,6 +102,9 @@ jobs:
       - name: Enforce Guide Me product terminology
         run: node scripts/check-guide-me-brand-contract.js
 
+      - name: Certify customer credit governance contract
+        run: node scripts/check-customer-credit-governance-contract.js
+
       - name: Certify production credential bootstrap and recovery
         run: |
           node scripts/certify-production-credential-bootstrap.js
