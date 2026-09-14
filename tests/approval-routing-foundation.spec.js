@@ -35,6 +35,17 @@ test.describe('Approval routing foundation',()=>{
   expect(events).toHaveLength(1);
  });
 
+ test('concurrent identical external requests collapse to one durable approval',async()=>{
+  const fx=await fixture();await ensureApprovalRoutingSchema();
+  const input={requestType:'test_concurrent_replay',sourceSystem:'smartcommerce',externalRequestId:`ext-race-${fx.suffix}`,owningModule:'test',owningRecordId:`ER-${fx.suffix}`,departmentId:fx.department.id,branchId:fx.branchId,requesterEmployeeId:fx.admin.body.id,requestedAction:'Review concurrent replay',requiredPermission:'purchasing_approve',payload:{amount:25}};
+  const [a,b]=await Promise.all([createApprovalRequest(input),createApprovalRequest(input)]);
+  expect(Number(a.id)).toBe(Number(b.id));
+  const {rows:requests}=await db.execute({sql:'SELECT * FROM approval_requests WHERE source_system=? AND external_request_id=?',args:[input.sourceSystem,input.externalRequestId]});
+  expect(requests).toHaveLength(1);
+  const {rows:events}=await db.execute({sql:'SELECT * FROM approval_events WHERE approval_request_id=?',args:[a.id]});
+  expect(events).toHaveLength(1);
+ });
+
  test('manager queue is department, branch, and permission scoped',async()=>{
   const fx=await fixture();
   const visible=await createApprovalRequest({requestType:'test_visible',owningModule:'test',owningRecordId:`V-${fx.suffix}`,departmentId:fx.department.id,branchId:fx.branchId,requesterEmployeeId:fx.admin.body.id,requestedAction:'Review visible',requiredPermission:'purchasing_approve',payload:{v:1}});
