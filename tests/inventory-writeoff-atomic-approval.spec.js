@@ -164,6 +164,7 @@ test.describe('Atomic inventory write-off approval',()=>{
     const admin=await login();await initializeWriteoffSchema(admin.cookie);
     const suffix=`${Date.now()}-${Math.random().toString(36).slice(2,7)}`;
     const {branch,product}=await createProductWithStock(admin,{suffix,cost:30,quantity:1});
+    await db.execute({sql:'UPDATE inventory_cost_pools SET legacy_unlayered_qty=0,tracked_qty=1,tracked_value=30 WHERE product_id=? AND branch_key=?',args:[product.id,branch.id]});
     const writeoff=await createWriteoff(admin,{product,branch});
     const before=await snapshot({writeoffId:writeoff.id,productId:product.id,branchId:branch.id});
     await installJournalFault();
