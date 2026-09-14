@@ -121,6 +121,9 @@ jobs:
           rm -f pos.db pos.db-shm pos.db-wal
           node scripts/ci-runtime-bootstrap.js
 
+      - name: Certify atomic inventory write-off approval
+        run: npx playwright test tests/inventory-writeoff-atomic-approval.spec.js --workers=1
+
       - name: Certify purchasing approval adapter
         run: npx playwright test tests/purchasing-approval-adapter.spec.js --workers=1
 
