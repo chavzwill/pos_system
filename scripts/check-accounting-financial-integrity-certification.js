@@ -33,7 +33,7 @@ const checks=[
  ['repair accounting is separated into assessment deposit service final and parts sources',sync.includes("sourceType:'repair_assessment'")&&sync.includes("sourceType:'repair_deposit'")&&sync.includes("sourceType:'repair_service'")&&sync.includes("sourceType:'repair_final_payment'")&&sync.includes("sourceType:'repair_part_usage'")],
  ['inventory writeoff posts tracked value only',writeoffs.includes('trackedValue')&&writeoffs.includes("sourceType:'inventory_writeoff'")],
  ['inventory writeoff never substitutes catalog cost into its journal',writeoffs.includes('valuationStatus')&&writeoffs.includes("trackedValue>0.0001")],
- ['inventory writeoff has independent financial authorization controls committed with the writeoff',writeoffGuard.includes('second, independent financial authorizer')&&writeoffs.includes('financial_authorizer_employee_id')&&writeoffs.includes('executor:tx')],
+ ['inventory writeoff has independent financial authorization controls committed with the writeoff',writeoffGuard.includes('WRITEOFF_FINANCIAL_AUTH_FORBIDDEN')&&writeoffs.includes('financial_authorizer_employee_id')&&writeoffs.includes('executor:tx')],
  ['settlement financial guard is mounted before legacy reconciliation',server.indexOf("require('./routes/settlement-reconciliation-financial-guard')")<server.indexOf("require('./routes/settlement-reconciliation')")],
  ['settlement matching uses gross electronic tender not net bank deposit',settlementGuard.includes("matching_basis:'gross_electronic_tender'")&&settlementGuard.includes('const remainingBatch=gross-')],
  ['settlement components enforce gross minus fees equals net',settlementGuard.includes('gross-fees-net')&&settlementGuard.includes('Settlement batch gross, fees and net do not reconcile')],
