@@ -19,12 +19,13 @@ router.use(async(req,res,next)=>{try{
  const p=path(req);
  const directAccount=req.method==='PATCH'&&/^\/api\/accounts\/customer\/\d+$/.test(p)&&(req.body?.credit_enabled!==undefined||req.body?.credit_limit!==undefined||req.body?.credit_terms_days!==undefined);
  const directCreate=req.method==='POST'&&p==='/api/customers'&&requestedCredit(req.body);
- const directEdit=req.method==='PUT'&&/^\/api\/customers\/\d+$/.test(p);
+ const editMatch=req.method==='PUT'?p.match(/^\/api\/customers\/(\d+)$/):null;
+ const directEdit=!!editMatch;
  if(!directAccount&&!directCreate&&!directEdit)return next();
  if(req.apiKey)return sendApprovalError(req,res,approvalError('APPROVAL_API_KEY_FORBIDDEN'),{operation:'customer_credit_api_key_boundary'});
  if(!req.employee)return next();
  if(directAccount||directCreate)return sendApprovalError(req,res,approvalError('CREDIT_CHANGE_APPROVAL_REQUIRED'),{operation:directAccount?'block_direct_account_credit_change':'block_direct_credit_customer_create'});
- const {rows:[current]}=await db.execute({sql:'SELECT customer_type,credit_enabled,credit_limit,credit_terms_days FROM customers WHERE id=?',args:[Number(req.params.id)]});
+ const {rows:[current]}=await db.execute({sql:'SELECT customer_type,credit_enabled,credit_limit,credit_terms_days FROM customers WHERE id=?',args:[Number(editMatch[1])]});
  if(!current)return next();
  const proposedEnabled=req.body?.customer_type!==undefined?req.body.customer_type==='credit':req.body?.credit_enabled!==undefined?!!req.body.credit_enabled:!!Number(current.credit_enabled);
  const proposedLimit=req.body?.credit_limit!==undefined?Number(req.body.credit_limit):Number(current.credit_limit||0);
