@@ -2,7 +2,7 @@
 const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
-const {requireAuth}=require('../lib/permissions');
+const {requireAuth,requirePermission}=require('../lib/permissions');
 const {approvalError,sendApprovalError}=require('../lib/approval-routing-errors');
 const credit=require('../lib/customer-credit-approval-adapter');
 
@@ -11,7 +11,11 @@ function requestedCredit(body={}){
  return body.customer_type==='credit'||body.credit_enabled===true||body.credit_enabled===1||body.credit_enabled==='1'||(body.credit_limit!==undefined&&Number(body.credit_limit)>0);
 }
 function creditApiKeyBoundary(req,res,next){return req.apiKey?sendApprovalError(req,res,approvalError('APPROVAL_API_KEY_FORBIDDEN'),{operation:'customer_credit_api_key_boundary'}):next();}
-router.post('/accounts/customer/:id/credit-change-requests',requireAuth,creditApiKeyBoundary,async(req,res)=>{try{
+router.get('/accounts/credit-approval-departments',requireAuth,creditApiKeyBoundary,requirePermission('accounts'),async(req,res)=>{try{
+ const {rows}=await db.execute({sql:'SELECT id,code,name FROM departments WHERE active=1 ORDER BY name,id',args:[]});
+ res.json(rows);
+}catch(error){sendApprovalError(req,res,error,{operation:'list_credit_approval_departments'});}});
+router.post('/accounts/customer/:id/credit-change-requests',requireAuth,creditApiKeyBoundary,requirePermission('accounts'),async(req,res)=>{try{
  const result=await credit.submitCustomerCreditChange({customerId:req.params.id,employeeId:req.employee.id,branchId:req.employee.default_branch_id||null,departmentId:req.body?.department_id,proposal:req.body||{}});
  res.status(result.replayed?200:201).json({approval:result.approval,replayed:result.replayed});
 }catch(error){sendApprovalError(req,res,error,{operation:'submit_customer_credit_change'});}});
