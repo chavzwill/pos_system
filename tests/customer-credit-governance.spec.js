@@ -1,6 +1,7 @@
 'use strict';
 const {test,expect}=require('@playwright/test');
 const {db}=require('../database');
+const {can}=require('../lib/permissions');
 const BASE='http://localhost:3001';
 const ADMIN_USER=process.env.POS_TEST_USER||'admin';
 const ADMIN_PASSWORD=process.env.POS_TEST_PASSWORD||'CI-Test-Auth!2026';
@@ -38,7 +39,14 @@ async function envelope(customerId){
  return rows;
 }
 
+const proposal=(fx,overrides={})=>({credit_enabled:true,credit_limit:75000,credit_terms_days:30,department_id:fx.department.id,reason:'Trade account approved after review',...overrides});
+
 test.describe('Customer credit governance',()=>{
+ test('credit approval authority is explicit-only and does not inherit from broad Accounts access',async()=>{
+  expect(can({accounts:true},'accounts_credit_approve')).toBe(false);
+  expect(can({accounts:true,accounts_credit_approve:true},'accounts_credit_approve')).toBe(true);
+ });
+
  test('direct credit changes through Accounts and Customers are blocked',async()=>{
   const fx=await fixture();
   const direct=await api(fx.admin.cookie,'PATCH',`/api/accounts/customer/${fx.customerId}`,{credit_enabled:true,credit_limit:50000});
@@ -52,13 +60,14 @@ test.describe('Customer credit governance',()=>{
   expect(createCredit.body.code).toBe('CREDIT_CHANGE_APPROVAL_REQUIRED');
  });
 
- test('proposal creates one durable approval and replay does not duplicate evidence',async()=>{
+ test('concurrent identical proposals collapse to one durable approval and one submitted event',async()=>{
   const fx=await fixture();
-  const payload={credit_enabled:true,credit_limit:75000,credit_terms_days:30,department_id:fx.department.id,reason:'Trade account approved after review'};
-  const first=await api(fx.admin.cookie,'POST',`/api/accounts/customer/${fx.customerId}/credit-change-requests`,payload);
-  expect(first.status,JSON.stringify(first.body)).toBe(201);
-  const second=await api(fx.admin.cookie,'POST',`/api/accounts/customer/${fx.customerId}/credit-change-requests`,payload);
-  expect([200,201]).toContain(second.status);
+  const body=proposal(fx);
+  const [first,second]=await Promise.all([
+   api(fx.admin.cookie,'POST',`/api/accounts/customer/${fx.customerId}/credit-change-requests`,body),
+   api(fx.admin.cookie,'POST',`/api/accounts/customer/${fx.customerId}/credit-change-requests`,body)
+  ]);
+  expect([first.status,second.status].every(status=>status===200||status===201),JSON.stringify([first,second])).toBe(true);
   const approvals=await envelope(fx.customerId);
   expect(approvals).toHaveLength(1);
   expect(approvals[0].required_permission).toBe('accounts_credit_approve');
@@ -70,9 +79,9 @@ test.describe('Customer credit governance',()=>{
   expect(customer.customer_type).toBe('cash');
  });
 
- test('authorized Accounts manager decision atomically applies customer credit and evidence',async()=>{
+ test('authorized Accounts manager approval atomically applies customer credit and evidence',async()=>{
   const fx=await fixture();
-  const proposed=await api(fx.admin.cookie,'POST',`/api/accounts/customer/${fx.customerId}/credit-change-requests`,{credit_enabled:true,credit_limit:90000,credit_terms_days:45,department_id:fx.department.id,reason:'Approved trade terms'});
+  const proposed=await api(fx.admin.cookie,'POST',`/api/accounts/customer/${fx.customerId}/credit-change-requests`,proposal(fx,{credit_limit:90000,credit_terms_days:45,reason:'Approved trade terms'}));
   expect(proposed.status,JSON.stringify(proposed.body)).toBe(201);
   const [approval]=await envelope(fx.customerId);expect(approval).toBeTruthy();
   const decided=await api(fx.admin.cookie,'POST',`/api/employee-assist/department-approvals/${approval.id}/approved`,{version:Number(approval.version),notes:'Credit review complete'});
@@ -90,5 +99,35 @@ test.describe('Customer credit governance',()=>{
   const {rows:terminal}=await db.execute({sql:"SELECT * FROM approval_events WHERE approval_request_id=? AND event_type='approved'",args:[approval.id]});
   expect(terminal).toHaveLength(1);
   expect(terminal[0].authoritative_result).toMatch(/customer_credit/);
+ });
+
+ test('rejection leaves customer credit unchanged while recording the decision',async()=>{
+  const fx=await fixture();
+  expect((await api(fx.admin.cookie,'POST',`/api/accounts/customer/${fx.customerId}/credit-change-requests`,proposal(fx,{credit_limit:60000}))).status).toBe(201);
+  const [approval]=await envelope(fx.customerId);
+  const rejected=await api(fx.admin.cookie,'POST',`/api/employee-assist/department-approvals/${approval.id}/rejected`,{version:Number(approval.version),notes:'Insufficient account history'});
+  expect(rejected.status,JSON.stringify(rejected.body)).toBe(200);
+  const {rows:[customer]}=await db.execute({sql:'SELECT credit_enabled,credit_limit,customer_type FROM customers WHERE id=?',args:[fx.customerId]});
+  expect(Number(customer.credit_enabled)).toBe(0);expect(Number(customer.credit_limit)).toBe(0);expect(customer.customer_type).toBe('cash');
+  const {rows:[stored]}=await db.execute({sql:'SELECT status FROM approval_requests WHERE id=?',args:[approval.id]});
+  expect(stored.status).toBe('rejected');
+ });
+
+ test('concurrent approve and reject cannot split customer credit from approval state',async()=>{
+  const fx=await fixture();
+  expect((await api(fx.admin.cookie,'POST',`/api/accounts/customer/${fx.customerId}/credit-change-requests`,proposal(fx,{credit_limit:110000}))).status).toBe(201);
+  const [approval]=await envelope(fx.customerId);const body={version:Number(approval.version),notes:'Concurrent credit decision'};
+  const [approve,reject]=await Promise.all([
+   api(fx.admin.cookie,'POST',`/api/employee-assist/department-approvals/${approval.id}/approved`,body),
+   api(fx.admin.cookie,'POST',`/api/employee-assist/department-approvals/${approval.id}/rejected`,body)
+  ]);
+  expect([approve.status,reject.status].filter(x=>x===200)).toHaveLength(1);
+  expect([approve.status,reject.status].filter(x=>x===409)).toHaveLength(1);
+  const {rows:[stored]}=await db.execute({sql:'SELECT status FROM approval_requests WHERE id=?',args:[approval.id]});
+  const {rows:[customer]}=await db.execute({sql:'SELECT credit_enabled,credit_limit,customer_type FROM customers WHERE id=?',args:[fx.customerId]});
+  if(stored.status==='approved'){expect(Number(customer.credit_enabled)).toBe(1);expect(Number(customer.credit_limit)).toBe(110000);expect(customer.customer_type).toBe('credit');}
+  else{expect(stored.status).toBe('rejected');expect(Number(customer.credit_enabled)).toBe(0);expect(Number(customer.credit_limit)).toBe(0);expect(customer.customer_type).toBe('cash');}
+  const {rows:terminal}=await db.execute({sql:"SELECT * FROM approval_events WHERE approval_request_id=? AND event_type IN ('approved','rejected')",args:[approval.id]});
+  expect(terminal).toHaveLength(1);
  });
 });
