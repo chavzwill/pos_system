@@ -14,15 +14,16 @@ async function api(cookie,method,path,body){
  const r=await fetch(`${BASE}${path}`,{method,headers:{Cookie:cookie,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});
  return {status:r.status,body:await r.json().catch(()=>null)};
 }
-async function grantCreditAuthority(admin){
+async function setCreditAuthority(admin,enabled){
  const {rows:[employee]}=await db.execute({sql:'SELECT security_group_id FROM employees WHERE id=?',args:[admin.body.id]});
  const {rows:[group]}=await db.execute({sql:'SELECT permissions FROM security_groups WHERE id=?',args:[employee.security_group_id]});
  const permissions=JSON.parse(group.permissions||'{}');
  permissions.accounts=true;
- permissions.accounts_credit_approve=true;
+ permissions.accounts_credit_approve=!!enabled;
  await db.execute({sql:'UPDATE security_groups SET permissions=? WHERE id=?',args:[JSON.stringify(permissions),employee.security_group_id]});
  return login();
 }
+async function grantCreditAuthority(admin){return setCreditAuthority(admin,true);}
 async function fixture(){
  let admin=await login();expect(admin.status,JSON.stringify(admin.body)).toBe(200);
  admin=await grantCreditAuthority(admin);expect(admin.status).toBe(200);
@@ -45,6 +46,18 @@ test.describe('Customer credit governance',()=>{
  test('credit approval authority is explicit-only and does not inherit from broad Accounts access',async()=>{
   expect(can({accounts:true},'accounts_credit_approve')).toBe(false);
   expect(can({accounts:true,accounts_credit_approve:true},'accounts_credit_approve')).toBe(true);
+ });
+
+ test('broad Accounts manager without explicit credit authority cannot receive or decide credit approval',async()=>{
+  const fx=await fixture();
+  expect((await api(fx.admin.cookie,'POST',`/api/accounts/customer/${fx.customerId}/credit-change-requests`,proposal(fx,{credit_limit:80000}))).status).toBe(201);
+  const [approval]=await envelope(fx.customerId);expect(approval).toBeTruthy();
+  const broadOnly=await setCreditAuthority(fx.admin,false);expect(broadOnly.status).toBe(200);
+  const queue=await api(broadOnly.cookie,'GET','/api/employee-assist/department-approvals');
+  expect(queue.status,JSON.stringify(queue.body)).toBe(200);
+  expect((queue.body.rows||[]).some(row=>Number(row.id)===Number(approval.id))).toBe(false);
+  const detail=await api(broadOnly.cookie,'GET',`/api/employee-assist/department-approvals/${approval.id}`);
+  expect(detail.status).toBe(404);
  });
 
  test('direct credit changes through Accounts and Customers are blocked',async()=>{
