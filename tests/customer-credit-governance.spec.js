@@ -14,11 +14,12 @@ async function api(cookie,method,path,body){
  return {status:r.status,body:await r.json().catch(()=>null)};
 }
 async function grantCreditAuthority(admin){
- const {rows:[employee]}=await db.execute({sql:'SELECT permissions FROM employees WHERE id=?',args:[admin.body.id]});
- const permissions=JSON.parse(employee.permissions||'{}');
+ const {rows:[employee]}=await db.execute({sql:'SELECT security_group_id FROM employees WHERE id=?',args:[admin.body.id]});
+ const {rows:[group]}=await db.execute({sql:'SELECT permissions FROM security_groups WHERE id=?',args:[employee.security_group_id]});
+ const permissions=JSON.parse(group.permissions||'{}');
  permissions.accounts=true;
  permissions.accounts_credit_approve=true;
- await db.execute({sql:'UPDATE employees SET permissions=? WHERE id=?',args:[JSON.stringify(permissions),admin.body.id]});
+ await db.execute({sql:'UPDATE security_groups SET permissions=? WHERE id=?',args:[JSON.stringify(permissions),employee.security_group_id]});
  return login();
 }
 async function fixture(){
