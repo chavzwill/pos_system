@@ -46,6 +46,21 @@ test.describe('Approval routing foundation',()=>{
   expect(events).toHaveLength(1);
  });
 
+ test('approval evidence cannot be updated, deleted, or erased through parent deletion',async()=>{
+  const fx=await fixture();await ensureApprovalRoutingSchema();
+  const row=await createApprovalRequest({requestType:'test_immutable_evidence',owningModule:'test',owningRecordId:`I-${fx.suffix}`,departmentId:fx.department.id,branchId:fx.branchId,requesterEmployeeId:fx.admin.body.id,requestedAction:'Preserve approval evidence',requiredPermission:'purchasing_approve',notes:'Original immutable evidence',payload:{v:99}});
+  const {rows:[event]}=await db.execute({sql:'SELECT * FROM approval_events WHERE approval_request_id=? ORDER BY id DESC',args:[row.id]});
+  expect(event).toBeTruthy();
+  await expect(db.execute({sql:'UPDATE approval_events SET notes=? WHERE id=?',args:['tampered',event.id]})).rejects.toBeTruthy();
+  await expect(db.execute({sql:'DELETE FROM approval_events WHERE id=?',args:[event.id]})).rejects.toBeTruthy();
+  await expect(db.execute({sql:'DELETE FROM approval_requests WHERE id=?',args:[row.id]})).rejects.toBeTruthy();
+  const {rows:[storedEvent]}=await db.execute({sql:'SELECT * FROM approval_events WHERE id=?',args:[event.id]});
+  const {rows:[storedRequest]}=await db.execute({sql:'SELECT * FROM approval_requests WHERE id=?',args:[row.id]});
+  expect(storedEvent).toBeTruthy();
+  expect(storedRequest).toBeTruthy();
+  expect(storedEvent.notes).toBe('Original immutable evidence');
+ });
+
  test('manager queue is department, branch, and permission scoped',async()=>{
   const fx=await fixture();
   const visible=await createApprovalRequest({requestType:'test_visible',owningModule:'test',owningRecordId:`V-${fx.suffix}`,departmentId:fx.department.id,branchId:fx.branchId,requesterEmployeeId:fx.admin.body.id,requestedAction:'Review visible',requiredPermission:'purchasing_approve',payload:{v:1}});
