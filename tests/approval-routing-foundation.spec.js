@@ -80,7 +80,7 @@ test.describe('Approval routing foundation',()=>{
    const r=await api(fx.admin.cookie,'POST',`/api/employee-assist/department-approvals/${row.id}/${decision}`,{version:row.version});
    expect(r.status).toBe(409);
    expect(r.body.code).toBe('APPROVAL_HANDLER_UNAVAILABLE');
-   expect(r.body.error).toMatch(/owning module/i);
+   expect(r.body.error).toMatch(/original request/i);
    expect(r.body.error).not.toMatch(/SQL|constraint|stack/i);
   }
   const {rows:[stored]}=await db.execute({sql:'SELECT status,version FROM approval_requests WHERE id=?',args:[row.id]});
@@ -130,7 +130,7 @@ test.describe('Approval routing foundation',()=>{
   await expect(page.getByRole('button',{name:'Set up approval departments'})).toBeVisible();
   await page.getByRole('button',{name:'Review department approvals'}).click();
   await expect(page.locator('#tt-guided-mode .tt-guide__head p')).toHaveText('Review department approvals');
-  await expect(page.locator('[data-approval-guide-panel]')).toContainText('owning module');
-  await expect(page.locator('[data-approval-guide-panel]')).toContainText('will not approve or reject anything on your behalf');
+  await expect(page.locator('[data-approval-guide-panel]')).toContainText('original business record');
+  await expect(page.locator('[data-approval-guide-panel]')).toContainText('will never approve or reject anything for you');
  });
 });

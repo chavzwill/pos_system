@@ -24,8 +24,8 @@ checks.push(['department administration is security controlled',admin.includes("
 checks.push(['approval routes are mounted',mount.includes("require('./approval-routing')")]);
 checks.push(['manager queue uses human language',ui.includes('My Department Approvals')&&ui.includes('Waiting for')]);
 checks.push(['Guide Me exposes approval review and setup tasks',guide.includes("REVIEW_TITLE='Review department approvals'")&&guide.includes("SETUP_TITLE='Set up approval departments'" )]);
-checks.push(['approval Guide Me handles queue review and authoritative-module boundary',guide.includes('Review the oldest waiting request')&&guide.includes('owning module')&&guide.includes('security-assignment authority')]);
-checks.push(['Guide Me never performs final decisions',guide.includes('will not approve or reject anything on your behalf')]);
+checks.push(['approval Guide Me handles queue review and original-record authority',guide.includes('Review the oldest waiting request')&&guide.includes('original business record')&&guide.includes('security-assignment authority')&&!guide.toLowerCase().includes('owning module')]);
+checks.push(['Guide Me never performs final decisions',guide.includes('will never approve or reject anything for you')||guide.includes('will not approve or reject anything on your behalf')]);
 checks.push(['shell deferred-loads approval UI and Guide Me',deferred.includes("'/department-approvals-ui.js'")&&deferred.includes("'/department-approvals-guide-me.js'" )]);
 checks.push(['approval routes use centralized safe error responder',route.includes('sendApprovalError')&&admin.includes('sendApprovalError')]);
 checks.push(['approval error layer exposes stable codes without raw database errors',errors.includes('APPROVAL_INTERNAL_ERROR')&&errors.includes('DEPARTMENT_CODE_CONFLICT')&&errors.includes('safeApprovalError')]);
