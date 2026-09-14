@@ -5,8 +5,8 @@ const BASE='http://localhost:3001';
 const ADMIN_USER=process.env.POS_TEST_USER||'admin';
 const ADMIN_PASSWORD=process.env.POS_TEST_PASSWORD||'CI-Test-Auth!2026';
 
-async function login(){
- const r=await fetch(`${BASE}/api/employees/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:ADMIN_USER,password:ADMIN_PASSWORD})});
+async function login(username=ADMIN_USER,password=ADMIN_PASSWORD){
+ const r=await fetch(`${BASE}/api/employees/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
  return {status:r.status,body:await r.json().catch(()=>null),cookie:(r.headers.get('set-cookie')||'').split(';')[0]};
 }
 async function api(cookie,method,path,body){
@@ -25,8 +25,8 @@ async function fixture(){
  expect(pr.status,JSON.stringify(pr.body)).toBe(201);
  return {admin,suffix,branchId,department:department.body,pr:pr.body};
 }
-async function submit(fx){
- return api(fx.admin.cookie,'PATCH',`/api/purchase-requests/${fx.pr.id}/status`,{status:'submitted',department_id:fx.department.id});
+async function submit(fx,cookie=fx.admin.cookie){
+ return api(cookie,'PATCH',`/api/purchase-requests/${fx.pr.id}/status`,{status:'submitted',department_id:fx.department.id});
 }
 async function envelope(prId){
  const {rows}=await db.execute({sql:"SELECT * FROM approval_requests WHERE owning_module='purchase_requests' AND owning_record_id=? AND request_type='purchase_request' ORDER BY id DESC",args:[String(prId)]});
@@ -43,6 +43,7 @@ test.describe('Purchasing approval adapter',()=>{
   expect(approvals).toHaveLength(1);
   expect(Number(approvals[0].department_id)).toBe(Number(fx.department.id));
   expect(approvals[0].required_permission).toBe('purchasing_approve');
+  expect(Number(approvals[0].requester_employee_id)).toBe(Number(fx.admin.body.id));
 
   const bypass=await api(fx.admin.cookie,'PATCH',`/api/purchase-requests/${fx.pr.id}/status`,{status:'approved',approved_by:999999});
   expect(bypass.status).toBe(409);
@@ -53,6 +54,44 @@ test.describe('Purchasing approval adapter',()=>{
   const {rows:[stored]}=await db.execute({sql:'SELECT status,approved_by FROM purchase_requests WHERE id=?',args:[fx.pr.id]});
   expect(stored.status).toBe('submitted');
   expect(stored.approved_by).toBeNull();
+ });
+
+ test('replayed and concurrent submissions keep one approval envelope and one submitted event',async()=>{
+  const fx=await fixture();
+  const [a,b]=await Promise.all([submit(fx),submit(fx)]);
+  expect([a.status,b.status].filter(status=>status===200).length).toBeGreaterThanOrEqual(1);
+  expect([a.status,b.status].every(status=>[200,409,503].includes(status))).toBe(true);
+  const replay=await submit(fx);
+  expect(replay.status,JSON.stringify(replay.body)).toBe(200);
+  const approvals=await envelope(fx.pr.id);
+  expect(approvals).toHaveLength(1);
+  const {rows:events}=await db.execute({sql:"SELECT * FROM approval_events WHERE approval_request_id=? AND event_type='submitted'",args:[approvals[0].id]});
+  expect(events).toHaveLength(1);
+  const {rows:[stored]}=await db.execute({sql:'SELECT status FROM purchase_requests WHERE id=?',args:[fx.pr.id]});
+  expect(stored.status).toBe('submitted');
+ });
+
+ test('ordinary branch staff cannot submit a purchase request owned by another branch',async()=>{
+  const fx=await fixture();
+  const otherBranch=await db.execute({sql:'INSERT INTO branches(branch_code,name,active) VALUES(?,?,1)',args:[`PB-${fx.suffix}`,`Purchasing Branch ${fx.suffix}`]});
+  const otherBranchId=Number(otherBranch.lastInsertRowid);
+  const foreignPr=await api(fx.admin.cookie,'POST','/api/purchase-requests',{branch_id:otherBranchId,employee_id:fx.admin.body.id,department:fx.department.name,request_type:'sale_items',notes:'Cross branch approval certification',items:[{product_name:`Foreign item ${fx.suffix}`,sku:`PBF-${fx.suffix}`,quantity:1,unit_cost:10}]});
+  expect(foreignPr.status,JSON.stringify(foreignPr.body)).toBe(201);
+
+  const group=await api(fx.admin.cookie,'POST','/api/security-groups',{name:`Purchasing branch user ${fx.suffix}`,description:'Purchase request access without cross-branch administration',permissions:{purchase_requests:true,purchasing_approve:true},reason:'Certify purchasing approval branch scope'});
+  expect(group.status,JSON.stringify(group.body)).toBe(201);
+  const password=`PBranch-${fx.suffix}-A9!`;
+  const employee=await api(fx.admin.cookie,'POST','/api/employees',{first_name:'Purchasing',last_name:'BranchUser',username:`pbranch_${fx.suffix}`,pin:String(100000+(Date.now()%899999)).slice(0,6),password,security_group_id:group.body.id,default_branch_id:fx.branchId});
+  expect(employee.status,JSON.stringify(employee.body)).toBe(201);
+  const staff=await login(`pbranch_${fx.suffix}`,password);expect(staff.status).toBe(200);
+
+  const denied=await api(staff.cookie,'PATCH',`/api/purchase-requests/${foreignPr.body.id}/status`,{status:'submitted',department_id:fx.department.id});
+  expect(denied.status).toBe(403);
+  expect(denied.body.code).toBe('PURCHASE_REQUEST_BRANCH_FORBIDDEN');
+  expect(denied.body.error).not.toMatch(/SQL|constraint|stack/i);
+  expect(await envelope(foreignPr.body.id)).toHaveLength(0);
+  const {rows:[stored]}=await db.execute({sql:'SELECT status FROM purchase_requests WHERE id=?',args:[foreignPr.body.id]});
+  expect(stored.status).toBe('draft');
  });
 
  test('authorized manager approval updates the purchase request and approval evidence atomically',async()=>{
