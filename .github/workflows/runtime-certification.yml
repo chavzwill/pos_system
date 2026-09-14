@@ -118,6 +118,9 @@ jobs:
           rm -f pos.db pos.db-shm pos.db-wal
           node scripts/ci-runtime-bootstrap.js
 
+      - name: Certify purchasing approval adapter
+        run: npx playwright test tests/purchasing-approval-adapter.spec.js --workers=1
+
       - name: Run full application release gate
         run: npm run test:release-gate -- --workers=1
 
