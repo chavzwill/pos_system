@@ -17,7 +17,7 @@ const checks=[
  ['purchase and approval terminal state commit in one transaction',adapter.includes("db.transaction('write')")&&adapter.includes('approval_requests SET status=')&&adapter.includes('purchase_requests SET status=')],
  ['legacy terminal status mutation is intercepted',guard.includes("['approved','rejected'].includes(status)")&&guard.includes("PURCHASE_REQUEST_APPROVAL_REQUIRED")],
  ['purchase request approval guard runs before legacy routes',globalGuard.includes("router.use('/purchase-requests',require('./purchase-request-approval-guard'))")],
- ['shared manager route dispatches only supported purchasing approvals',approvalRoute.includes('purchasing.canHandle(row)')&&approvalRoute.includes('purchasing.decidePurchaseRequest')],
+ ['shared manager route keeps purchasing in fail-closed adapter registry',approvalRoute.includes('const adapters=[purchasing')&&approvalRoute.includes('adapterFor(row)')&&approvalRoute.includes('decidePurchaseRequest')&&approvalRoute.includes("APPROVAL_HANDLER_UNAVAILABLE")],
  ['submitted purchasing UI routes managers to Department Approvals',ui.includes('Review in Department Approvals')&&ui.includes('[data-action="approve"],[data-action="reject"]')],
  ['purchasing approval UI guard is deferred-loaded',deferred.includes("'/purchasing-approval-ui-guard.js'")],
  ['Guide Me uses staff language rather than architecture jargon',guide.includes('original business record')&&!guide.toLowerCase().includes('owning module')]
