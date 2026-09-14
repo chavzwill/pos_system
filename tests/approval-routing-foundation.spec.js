@@ -125,7 +125,7 @@ test.describe('Approval routing foundation',()=>{
   const guideAccess=page.locator('#tt-guide-access');
   await expect(guideAccess).toBeVisible({timeout:15000});
   await guideAccess.click();
-  await expect(page.locator('#tt-guided-mode')).toBeVisible({timeout:5000});
+  await expect(page.getByRole('dialog',{name:'Guide Me'})).toBeVisible({timeout:5000});
   await expect(page.getByRole('button',{name:'Review department approvals'})).toBeVisible({timeout:5000});
   await expect(page.getByRole('button',{name:'Set up approval departments'})).toBeVisible();
   await page.getByRole('button',{name:'Review department approvals'}).click();
