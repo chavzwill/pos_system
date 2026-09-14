@@ -28,18 +28,18 @@ async function fixture(cookie, suffix, quantity = 2, price = 50) {
   const branch = branches.body.find(row => row.active !== 0);
   test.skip(!branch, 'Gate 1 credit-note certification requires an active branch');
 
-  const customerResponse = await api(cookie, '/api/customers', {
-    method: 'POST',
-    body: JSON.stringify({
-      first_name: 'Gate1',
-      last_name: `CreditNote${suffix}`,
-      customer_type: 'credit',
-      credit_limit: 10000,
-      credit_terms_days: 30,
-    }),
+  // Credit state is a prerequisite for this accounting-invariant test, not the
+  // behavior under test. Production credit creation is governed through
+  // Department Approvals, so establish the prerequisite directly at fixture
+  // level rather than reintroducing a public API bypass.
+  const customerNumber = `G1-CN-CUST-${suffix}`;
+  const createdCustomer = await db.execute({
+    sql: `INSERT INTO customers(customer_number,first_name,last_name,customer_type,credit_terms_days,credit_limit,credit_enabled,account_balance,active)
+          VALUES(?,?,?,?,?,?,?,?,?) RETURNING *`,
+    args: [customerNumber, 'Gate1', `CreditNote${suffix}`, 'credit', 30, 10000, 1, 0, 1],
   });
-  expect(customerResponse.status, JSON.stringify(customerResponse.body)).toBe(201);
-  const customer = customerResponse.body;
+  const customer = createdCustomer.rows[0];
+  expect(customer?.id).toBeTruthy();
 
   const productResponse = await api(cookie, '/api/products', {
     method: 'POST',
