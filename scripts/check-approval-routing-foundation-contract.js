@@ -6,7 +6,11 @@ const read=(p)=>fs.existsSync(path.join(root,p))?fs.readFileSync(path.join(root,
 const lib=read('lib/approval-routing.js');
 const route=read('routes/approval-routing.js');
 const admin=read('routes/department-approval-admin.js');
+const errors=read('lib/approval-routing-errors.js');
 const ui=read('public/department-approvals-ui.js');
+const guide=read('public/department-approvals-guide-me.js');
+const guidedMode=read('public/guided-mode.js');
+const orchestrator=read('public/guided-mode-orchestrator.js');
 const deferred=read('public/shell-deferred.js');
 const mount=read('routes/employee-end-shift-assistant.js');
 const checks=[];
@@ -20,7 +24,13 @@ checks.push(['API keys cannot decide',route.includes('API keys cannot operate in
 checks.push(['department administration is security controlled',admin.includes("requirePermission('security_assign')")]);
 checks.push(['approval routes are mounted',mount.includes("require('./approval-routing')")]);
 checks.push(['manager queue uses human language',ui.includes('My Department Approvals')&&ui.includes('Waiting for')]);
-checks.push(['shell deferred-loads approval UI',deferred.includes("'/department-approvals-ui.js'" )]);
+checks.push(['Guide Me includes department approvals task',guidedMode.includes("title:'Review department approvals'")]);
+checks.push(['Guide Me orchestrates approval workspace',orchestrator.includes("'Review department approvals'")&&orchestrator.includes('TotalToolsDepartmentApprovals')]);
+checks.push(['approval Guide Me handles queue review and blocked decisions',guide.includes('Review the oldest waiting request')&&guide.includes('owning module')]);
+checks.push(['shell deferred-loads approval UI and Guide Me',deferred.includes("'/department-approvals-ui.js'")&&deferred.includes("'/department-approvals-guide-me.js'" )]);
+checks.push(['approval routes use centralized safe error responder',route.includes('sendApprovalError')&&admin.includes('sendApprovalError')]);
+checks.push(['approval error layer exposes stable codes without raw database errors',errors.includes('APPROVAL_INTERNAL_ERROR')&&errors.includes('DEPARTMENT_CODE_CONFLICT')&&errors.includes('safeApprovalError')]);
+checks.push(['approval UI consumes stable error codes',ui.includes('error.code')&&ui.includes('friendlyError')]);
 let failed=0;
 for(const [name,ok] of checks){if(ok)console.log(`PASS Approval routing: ${name}`);else{console.error(`FAIL Approval routing: ${name}`);failed++;}}
 if(failed)process.exit(1);
