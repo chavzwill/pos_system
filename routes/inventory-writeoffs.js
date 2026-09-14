@@ -2,11 +2,13 @@
 const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
-const {requirePermission}=require('../lib/permissions');
+const {requirePermission,can}=require('../lib/permissions');
 const {nextNumber}=require('../lib/nextNumber');
 const {ensureInventoryMovementValuation,valueStockAdjustment}=require('../lib/inventory-movement-valuation');
 const {ensureInventoryStockStatus,getAvailableQty}=require('../lib/inventory-stock-status');
 const {ensureLedger,postSourceJournal}=require('../lib/accounting-posting');
+const {ensureInventoryTraceability,getTrackingProfile}=require('../lib/inventory-traceability');
+const {writeoffError,sendWriteoffError,rollbackWriteoffQuietly}=require('../lib/inventory-writeoff-errors');
 
 const REASONS=new Set(['damage','theft','shrinkage','expiration','obsolescence','destruction','other']);
 const RESTRICTED=new Set(['inspection','blocked','quarantine','damaged','expired']);
@@ -64,12 +66,31 @@ async function ensureSchema(){
 }
 
 function actor(req){return req.employee?.id||null;}
-async function selfApprovalAllowed(){
-  const {rows:[row]}=await db.execute({sql:"SELECT value FROM settings WHERE key='inventory_writeoff_allow_self_approval'",args:[]});
+async function selfApprovalAllowed(executor=db){
+  const {rows:[row]}=await executor.execute({sql:"SELECT value FROM settings WHERE key='inventory_writeoff_allow_self_approval'",args:[]});
   return row&&['1','true','yes','on'].includes(String(row.value||'').trim().toLowerCase());
 }
 
-router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Inventory write-off controls failed to initialize',detail:e.message});}});
+async function settingNumber(executor,key,fallback){const {rows:[row]}=await executor.execute({sql:'SELECT value FROM settings WHERE key=?',args:[key]});const n=Number(row?.value);return Number.isFinite(n)?n:fallback;}
+function meaningfulEvidence(value){const s=String(value||'').trim();return s.length>=3&&!new Set(['NA','N/A','NONE','UNKNOWN','NO','NIL','TBD','NOT AVAILABLE']).has(s.toUpperCase());}
+async function financialRequirement(executor,w){
+  const {rows:[product]}=await executor.execute({sql:'SELECT cost FROM products WHERE id=?',args:[w.product_id]});
+  let unitCost=Number(product?.cost||0),basis='catalog_cost_fallback';
+  const {rows:[pool]}=await executor.execute({sql:'SELECT tracked_qty,tracked_value,legacy_unlayered_qty FROM inventory_cost_pools WHERE product_id=? AND branch_key=?',args:[w.product_id,w.branch_id]});
+  if(pool&&Number(pool.tracked_qty||0)>0&&Number(pool.tracked_value||0)>=0&&Number(pool.legacy_unlayered_qty||0)<=1e-9){unitCost=Number(pool.tracked_value)/Number(pool.tracked_qty);basis='current_tracked_inventory_pool';}
+  const estimatedValue=Number((unitCost*Number(w.quantity||0)).toFixed(2));
+  const threshold=Math.max(0,await settingNumber(executor,'loss_control_high_value_writeoff_threshold',100000));
+  const evidenceThreshold=Math.max(threshold,await settingNumber(executor,'loss_control_writeoff_evidence_threshold',250000));
+  const highRiskReason=['theft','destruction','shrinkage'].includes(String(w.reason_code||'').toLowerCase());
+  return {required:estimatedValue+0.009>=threshold||highRiskReason,evidenceRequired:highRiskReason||estimatedValue+0.009>=evidenceThreshold,estimatedValue,basis,threshold,evidenceThreshold};
+}
+async function revalidateOperationalApprover(executor,employeeId){
+  const {rows:[row]}=await executor.execute({sql:'SELECT e.id,e.active,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.id=?',args:[employeeId]});
+  let permissions={};try{permissions=JSON.parse(row?.permissions||'{}')}catch{}
+  return !!(row&&Number(row.active)!==0&&can(permissions,'inventory_writeoff_approve'));
+}
+
+router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){return sendWriteoffError(res,e,{operation:'writeoff_controls_initialize'});}});
 
 router.get('/',requirePermission('inventory'),async(req,res)=>{
   try{
@@ -82,7 +103,7 @@ router.get('/',requirePermission('inventory'),async(req,res)=>{
     if(req.query.branch_id){sql+=' AND w.branch_id=?';args.push(req.query.branch_id);}
     sql+=' ORDER BY w.created_at DESC,w.id DESC LIMIT 250';
     const {rows}=await db.execute({sql,args});res.json(rows);
-  }catch(e){res.status(500).json({error:e.message});}
+  }catch(e){return sendWriteoffError(res,e,{operation:'list_writeoffs',employee_id:actor(req)});}
 });
 
 router.get('/:id',requirePermission('inventory'),async(req,res)=>{
@@ -93,7 +114,7 @@ router.get('/:id',requirePermission('inventory'),async(req,res)=>{
     if(!row)return res.status(404).json({error:'Write-off not found'});
     const {rows:events}=await db.execute({sql:'SELECT * FROM inventory_writeoff_events WHERE writeoff_id=? ORDER BY id',args:[row.id]});
     row.events=events;res.json(row);
-  }catch(e){res.status(500).json({error:e.message});}
+  }catch(e){return sendWriteoffError(res,e,{operation:'get_writeoff',writeoff_id:req.params.id,employee_id:actor(req)});}
 });
 
 router.post('/',requirePermission('inventory_writeoff_create'),async(req,res)=>{
@@ -134,7 +155,7 @@ router.post('/',requirePermission('inventory_writeoff_create'),async(req,res)=>{
       await tx.commit();committed=true;
       const {rows:[row]}=await db.execute({sql:'SELECT * FROM inventory_writeoffs WHERE id=?',args:[id]});res.status(201).json(row);
     }catch(e){if(!committed)await tx.rollback();throw e;}
-  }catch(e){res.status(500).json({error:e.message});}
+  }catch(e){return sendWriteoffError(res,e,{operation:'create_writeoff',employee_id:actor(req)});}
 });
 
 router.post('/:id/reject',requirePermission('inventory_writeoff_approve'),async(req,res)=>{
@@ -144,53 +165,94 @@ router.post('/:id/reject',requirePermission('inventory_writeoff_approve'),async(
     if(!Number(r.rowsAffected||0))return res.status(409).json({error:'Write-off is not pending approval'});
     await db.execute({sql:'INSERT INTO inventory_writeoff_events(writeoff_id,event_type,employee_id,details) VALUES(?,?,?,?)',args:[req.params.id,'rejected',actor(req),reason]});
     res.json({success:true,status:'rejected'});
-  }catch(e){res.status(500).json({error:e.message});}
+  }catch(e){return sendWriteoffError(res,e,{operation:'reject_writeoff',writeoff_id:req.params.id,employee_id:actor(req)});}
 });
 
 router.post('/:id/approve',requirePermission('inventory_writeoff_approve'),async(req,res)=>{
+  const tx=await db.transaction('write');let committed=false;
   try{
-    const tx=await db.transaction('write');let committed=false;
-    try{
-      const {rows:[w]}=await tx.execute({sql:'SELECT * FROM inventory_writeoffs WHERE id=?',args:[req.params.id]});
-      if(!w)throw Object.assign(new Error('Write-off not found'),{status:404});
-      if(w.status!=='pending_approval')throw Object.assign(new Error('Write-off is not pending approval'),{status:409});
-      if(!await selfApprovalAllowed()&&w.created_by_employee_id&&String(w.created_by_employee_id)===String(actor(req)))throw Object.assign(new Error('Independent approval is required for inventory write-offs'),{status:403});
-      const {rows:[inv]}=await tx.execute({sql:'SELECT stock_qty FROM branch_inventory WHERE product_id=? AND branch_id=?',args:[w.product_id,w.branch_id]});
-      const physicalBefore=Number(inv?.stock_qty||0);if(physicalBefore<Number(w.quantity))throw Object.assign(new Error('Branch inventory changed and no longer contains enough stock for this write-off'),{status:409});
-      if(w.source_status==='available'){
-        const state=await getAvailableQty(tx,w.product_id,w.branch_id);if(state.available<Number(w.quantity))throw Object.assign(new Error('Available stock changed; reload and review this write-off before approval'),{status:409});
-      }else{
-        const {rows:[bal]}=await tx.execute({sql:'SELECT quantity FROM inventory_stock_status_balances WHERE product_id=? AND branch_id=? AND status=?',args:[w.product_id,w.branch_id,w.source_status]});
-        if(Number(bal?.quantity||0)<Number(w.quantity))throw Object.assign(new Error(`${w.source_status} stock changed; reload and review before approval`),{status:409});
-        await tx.execute({sql:'UPDATE inventory_stock_status_balances SET quantity=quantity-?,updated_at=CURRENT_TIMESTAMP WHERE product_id=? AND branch_id=? AND status=?',args:[w.quantity,w.product_id,w.branch_id,w.source_status]});
-      }
-      if(w.bin_id){
-        const {rows:[bin]}=await tx.execute({sql:'SELECT * FROM product_bin_assignments WHERE product_id=? AND branch_id=? AND bin_id=?',args:[w.product_id,w.branch_id,w.bin_id]});
-        if(!bin||Number(bin.quantity||0)<Number(w.quantity))throw Object.assign(new Error('Exact-bin quantity changed; write-off approval has been stopped'),{status:409});
-        await tx.execute({sql:'UPDATE product_bin_assignments SET quantity=quantity-?,updated_at=CURRENT_TIMESTAMP WHERE id=?',args:[w.quantity,bin.id]});
-      }else{
-        const {rows:[anyBin]}=await tx.execute({sql:'SELECT id FROM product_bin_assignments WHERE product_id=? AND branch_id=? LIMIT 1',args:[w.product_id,w.branch_id]});
-        if(anyBin)throw Object.assign(new Error('Bin-controlled inventory requires exact-bin evidence before write-off approval'),{status:409});
-      }
-      await tx.execute({sql:'UPDATE branch_inventory SET stock_qty=stock_qty-?,updated_at=CURRENT_TIMESTAMP WHERE product_id=? AND branch_id=?',args:[w.quantity,w.product_id,w.branch_id]});
-      await tx.execute({sql:'UPDATE products SET stock_qty=(SELECT COALESCE(SUM(stock_qty),0) FROM branch_inventory WHERE product_id=?) WHERE id=?',args:[w.product_id,w.product_id]});
-      const mov=await tx.execute({sql:`INSERT INTO stock_movements(product_id,branch_id,quantity_change,type,reference,reason) VALUES(?,?,?,?,?,?)`,args:[w.product_id,w.branch_id,-Number(w.quantity),'writeoff',w.writeoff_number,`${w.reason_code}: ${w.reason_detail}`]});
-      const movementId=Number(mov.lastInsertRowid);
-      await valueStockAdjustment(tx,{stockMovementId:movementId,productId:w.product_id,branchKey:w.branch_id,quantityChange:-Number(w.quantity),reason:`${w.reason_code}: ${w.reason_detail}`,physicalBefore});
-      const {rows:[val]}=await tx.execute({sql:'SELECT * FROM inventory_adjustment_valuations WHERE stock_movement_id=?',args:[movementId]});
-      const trackedValue=Number(val?.tracked_value||0),legacyQty=Number(val?.legacy_quantity||0),untrackedQty=Number(val?.untracked_quantity||0),trackedQty=Number(val?.tracked_quantity||0);
-      let journal=null;
-      if(trackedValue>0.0001){
-        journal=await postSourceJournal({sourceType:'inventory_writeoff',sourceId:w.id,sourceReference:w.writeoff_number,entryDate:new Date().toISOString().slice(0,10),description:`Inventory write-off ${w.writeoff_number}`,branchId:w.branch_id,actorId:actor(req),executor:tx,lines:[{code:'5500',debit:trackedValue,credit:0,description:'Inventory loss / write-off expense'},{code:'1200',debit:0,credit:trackedValue,description:'Reduce inventory asset for written-off stock'}]});
-      }
-      const valuationStatus=(legacyQty+untrackedQty)>0?(trackedValue>0?'partial':'unvalued'):'fully_valued';
-      await tx.execute({sql:`UPDATE inventory_writeoffs SET status='approved',approved_by_employee_id=?,approved_at=CURRENT_TIMESTAMP,stock_movement_id=?,tracked_quantity=?,tracked_value=?,legacy_quantity=?,untracked_quantity=?,valuation_status=?,journal_entry_id=? WHERE id=? AND status='pending_approval'`,args:[actor(req),movementId,trackedQty,trackedValue,legacyQty,untrackedQty,valuationStatus,journal?.id||null,w.id]});
-      await tx.execute({sql:`INSERT INTO inventory_stock_status_events(product_id,branch_id,from_status,to_status,quantity,reason,employee_id,reference) VALUES(?,?,?,?,?,?,?,?)`,args:[w.product_id,w.branch_id,w.source_status,'written_off',w.quantity,`${w.reason_code}: ${w.reason_detail}`,actor(req),w.writeoff_number]});
-      await tx.execute({sql:'INSERT INTO inventory_writeoff_events(writeoff_id,event_type,employee_id,details) VALUES(?,?,?,?)',args:[w.id,'approved',actor(req),`Physical stock removed; valuation=${valuationStatus}; tracked value=${trackedValue.toFixed(2)}`]});
-      await tx.commit();committed=true;
-      const {rows:[row]}=await db.execute({sql:'SELECT * FROM inventory_writeoffs WHERE id=?',args:[w.id]});res.json(row);
-    }catch(e){if(!committed)await tx.rollback();res.status(e.status||400).json({error:e.message});}
-  }catch(e){res.status(500).json({error:e.message});}
-});
+    const approverId=actor(req);
+    const {rows:[w]}=await tx.execute({sql:'SELECT * FROM inventory_writeoffs WHERE id=?',args:[req.params.id]});
+    if(!w)throw writeoffError('WRITEOFF_NOT_FOUND');
+    if(w.status!=='pending_approval')throw writeoffError('WRITEOFF_NOT_PENDING');
+    if(!approverId||!await revalidateOperationalApprover(tx,approverId))throw writeoffError('WRITEOFF_SELF_APPROVAL_FORBIDDEN');
+    if(!await selfApprovalAllowed(tx)&&w.created_by_employee_id&&String(w.created_by_employee_id)===String(approverId))throw writeoffError('WRITEOFF_SELF_APPROVAL_FORBIDDEN');
 
+    const financial=await financialRequirement(tx,w);
+    let financialRecorded=false;
+    if(financial.required){
+      const prepared=req.writeoffFinancialAuthorization;
+      if(!prepared?.required||!prepared.authorizerEmployeeId)throw writeoffError('WRITEOFF_FINANCIAL_AUTH_REQUIRED');
+      const {rows:[auth]}=await tx.execute({sql:'SELECT e.id,e.active,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.id=?',args:[prepared.authorizerEmployeeId]});
+      let permissions={};try{permissions=JSON.parse(auth?.permissions||'{}')}catch{}
+      if(!auth||Number(auth.active)===0||!(can(permissions,'reports_financial')||can(permissions,'security_manage')))throw writeoffError('WRITEOFF_FINANCIAL_AUTH_FORBIDDEN');
+      if(String(auth.id)===String(approverId)||(w.created_by_employee_id&&String(auth.id)===String(w.created_by_employee_id)))throw writeoffError('WRITEOFF_FINANCIAL_AUTH_FORBIDDEN');
+      if(String(prepared.reason||'').trim().length<5)throw writeoffError('WRITEOFF_FINANCIAL_AUTH_REQUIRED');
+      if(financial.evidenceRequired&&!meaningfulEvidence(prepared.evidenceReference))throw writeoffError('WRITEOFF_FINANCIAL_AUTH_REQUIRED');
+      await tx.execute({sql:`INSERT INTO inventory_writeoff_financial_approvals(writeoff_id,estimated_value,valuation_basis,threshold_value,approving_employee_id,financial_authorizer_employee_id,reason,evidence_reference,reason_code) VALUES(?,?,?,?,?,?,?,?,?)`,args:[w.id,financial.estimatedValue,financial.basis,financial.threshold,approverId,auth.id,String(prepared.reason).trim(),prepared.evidenceReference||null,w.reason_code||null]});
+      financialRecorded=true;
+    }
+
+    const profile=await getTrackingProfile(tx,w.product_id);
+    const {rows:alloc}=profile.tracking_mode==='none'?{rows:[]}:await tx.execute({sql:`SELECT * FROM inventory_writeoff_identity_allocations WHERE writeoff_id=? AND status='pending_approval' ORDER BY id`,args:[w.id]});
+    if(profile.tracking_mode!=='none'){
+      const total=alloc.reduce((sum,row)=>sum+Number(row.quantity||0),0);
+      if(total!==Number(w.quantity))throw writeoffError('WRITEOFF_IDENTITY_CHANGED');
+      if(profile.tracking_mode==='serial'){
+        if(alloc.length!==Number(w.quantity)||alloc.some(row=>!row.serial_id||row.lot_id||Number(row.quantity)!==1))throw writeoffError('WRITEOFF_IDENTITY_CHANGED');
+        for(const a of alloc){
+          const u=await tx.execute({sql:`UPDATE inventory_serials SET status='written_off',updated_at=CURRENT_TIMESTAMP WHERE id=? AND product_id=? AND branch_id=? AND status='available'`,args:[a.serial_id,w.product_id,w.branch_id]});
+          if(Number(u.rowsAffected||0)!==1)throw writeoffError('WRITEOFF_IDENTITY_CHANGED');
+          await tx.execute({sql:`INSERT INTO inventory_identity_events(product_id,branch_id,serial_id,event_type,quantity,reference_type,reference_id,employee_id,details) VALUES(?,?,?,?,1,'inventory_writeoff',?,?,?)`,args:[w.product_id,w.branch_id,a.serial_id,'written_off',String(w.id),approverId,`${w.reason_code}: ${w.reason_detail}`]});
+        }
+      }else if(profile.tracking_mode==='lot'){
+        if(alloc.some(row=>!row.lot_id||row.serial_id||Number(row.quantity)<=0))throw writeoffError('WRITEOFF_IDENTITY_CHANGED');
+        for(const a of alloc){
+          const u=await tx.execute({sql:`UPDATE inventory_lots SET available_quantity=available_quantity-? WHERE id=? AND product_id=? AND branch_id=? AND status='available' AND available_quantity>=?`,args:[a.quantity,a.lot_id,w.product_id,w.branch_id,a.quantity]});
+          if(Number(u.rowsAffected||0)!==1)throw writeoffError('WRITEOFF_IDENTITY_CHANGED');
+          await tx.execute({sql:`INSERT INTO inventory_identity_events(product_id,branch_id,lot_id,event_type,quantity,reference_type,reference_id,employee_id,details) VALUES(?,?,?,?,?,'inventory_writeoff',?,?,?)`,args:[w.product_id,w.branch_id,a.lot_id,'written_off',a.quantity,String(w.id),approverId,`${w.reason_code}: ${w.reason_detail}`]});
+        }
+      }else throw writeoffError('WRITEOFF_IDENTITY_CHANGED');
+      const finalized=await tx.execute({sql:`UPDATE inventory_writeoff_identity_allocations SET status='finalized',finalized_at=CURRENT_TIMESTAMP WHERE writeoff_id=? AND status='pending_approval'`,args:[w.id]});
+      if(Number(finalized.rowsAffected||0)!==alloc.length)throw writeoffError('WRITEOFF_IDENTITY_CHANGED');
+    }
+
+    const {rows:[inv]}=await tx.execute({sql:'SELECT stock_qty FROM branch_inventory WHERE product_id=? AND branch_id=?',args:[w.product_id,w.branch_id]});
+    const physicalBefore=Number(inv?.stock_qty||0);if(physicalBefore<Number(w.quantity))throw writeoffError('WRITEOFF_STOCK_CHANGED');
+    if(w.source_status==='available'){
+      const state=await getAvailableQty(tx,w.product_id,w.branch_id);if(state.available<Number(w.quantity))throw writeoffError('WRITEOFF_STOCK_CHANGED');
+    }else{
+      const restricted=await tx.execute({sql:'UPDATE inventory_stock_status_balances SET quantity=quantity-?,updated_at=CURRENT_TIMESTAMP WHERE product_id=? AND branch_id=? AND status=? AND quantity>=?',args:[w.quantity,w.product_id,w.branch_id,w.source_status,w.quantity]});
+      if(Number(restricted.rowsAffected||0)!==1)throw writeoffError('WRITEOFF_STOCK_CHANGED');
+    }
+    if(w.bin_id){
+      const bin=await tx.execute({sql:'UPDATE product_bin_assignments SET quantity=quantity-?,updated_at=CURRENT_TIMESTAMP WHERE product_id=? AND branch_id=? AND bin_id=? AND quantity>=?',args:[w.quantity,w.product_id,w.branch_id,w.bin_id,w.quantity]});
+      if(Number(bin.rowsAffected||0)!==1)throw writeoffError('WRITEOFF_STOCK_CHANGED');
+    }else{
+      const {rows:[anyBin]}=await tx.execute({sql:'SELECT id FROM product_bin_assignments WHERE product_id=? AND branch_id=? LIMIT 1',args:[w.product_id,w.branch_id]});
+      if(anyBin)throw writeoffError('WRITEOFF_STOCK_CHANGED');
+    }
+    const branch=await tx.execute({sql:'UPDATE branch_inventory SET stock_qty=stock_qty-?,updated_at=CURRENT_TIMESTAMP WHERE product_id=? AND branch_id=? AND stock_qty>=?',args:[w.quantity,w.product_id,w.branch_id,w.quantity]});
+    if(Number(branch.rowsAffected||0)!==1)throw writeoffError('WRITEOFF_STOCK_CHANGED');
+    await tx.execute({sql:'UPDATE products SET stock_qty=(SELECT COALESCE(SUM(stock_qty),0) FROM branch_inventory WHERE product_id=?) WHERE id=?',args:[w.product_id,w.product_id]});
+    const mov=await tx.execute({sql:`INSERT INTO stock_movements(product_id,branch_id,quantity_change,type,reference,reason) VALUES(?,?,?,?,?,?)`,args:[w.product_id,w.branch_id,-Number(w.quantity),'writeoff',w.writeoff_number,`${w.reason_code}: ${w.reason_detail}`]});
+    const movementId=Number(mov.lastInsertRowid);
+    await valueStockAdjustment(tx,{stockMovementId:movementId,productId:w.product_id,branchKey:w.branch_id,quantityChange:-Number(w.quantity),reason:`${w.reason_code}: ${w.reason_detail}`,physicalBefore});
+    const {rows:[val]}=await tx.execute({sql:'SELECT * FROM inventory_adjustment_valuations WHERE stock_movement_id=?',args:[movementId]});
+    const trackedValue=Number(val?.tracked_value||0),legacyQty=Number(val?.legacy_quantity||0),untrackedQty=Number(val?.untracked_quantity||0),trackedQty=Number(val?.tracked_quantity||0);
+    let journal=null;
+    if(trackedValue>0.0001)journal=await postSourceJournal({sourceType:'inventory_writeoff',sourceId:w.id,sourceReference:w.writeoff_number,entryDate:new Date().toISOString().slice(0,10),description:`Inventory write-off ${w.writeoff_number}`,branchId:w.branch_id,actorId:approverId,executor:tx,lines:[{code:'5500',debit:trackedValue,credit:0,description:'Inventory loss / write-off expense'},{code:'1200',debit:0,credit:trackedValue,description:'Reduce inventory asset for written-off stock'}]});
+    const valuationStatus=(legacyQty+untrackedQty)>0?(trackedValue>0?'partial':'unvalued'):'fully_valued';
+    const approved=await tx.execute({sql:`UPDATE inventory_writeoffs SET status='approved',approved_by_employee_id=?,approved_at=CURRENT_TIMESTAMP,stock_movement_id=?,tracked_quantity=?,tracked_value=?,legacy_quantity=?,untracked_quantity=?,valuation_status=?,journal_entry_id=? WHERE id=? AND status='pending_approval' RETURNING *`,args:[approverId,movementId,trackedQty,trackedValue,legacyQty,untrackedQty,valuationStatus,journal?.id||null,w.id]});
+    if(Number(approved.rowsAffected||0)!==1)throw writeoffError('WRITEOFF_CONCURRENT_DECISION');
+    await tx.execute({sql:`INSERT INTO inventory_stock_status_events(product_id,branch_id,from_status,to_status,quantity,reason,employee_id,reference) VALUES(?,?,?,?,?,?,?,?)`,args:[w.product_id,w.branch_id,w.source_status,'written_off',w.quantity,`${w.reason_code}: ${w.reason_detail}`,approverId,w.writeoff_number]});
+    await tx.execute({sql:'INSERT INTO inventory_writeoff_events(writeoff_id,event_type,employee_id,details) VALUES(?,?,?,?)',args:[w.id,'approved',approverId,`Physical stock removed; valuation=${valuationStatus}; tracked value=${trackedValue.toFixed(2)}`]});
+    await tx.commit();committed=true;
+    const {rows:[row]}=await db.execute({sql:'SELECT * FROM inventory_writeoffs WHERE id=?',args:[w.id]});
+    return res.json({...row,financial_approval_recorded:financialRecorded,estimated_writeoff_value:financial.estimatedValue,writeoff_evidence_required:financial.evidenceRequired});
+  }catch(e){
+    if(!committed)await rollbackWriteoffQuietly(tx,{operation:'approve_rollback',writeoff_id:req.params.id,employee_id:actor(req)},e);
+    return sendWriteoffError(res,e,{operation:'approve',writeoff_id:req.params.id,employee_id:actor(req)});
+  }
+});
 module.exports=router;
