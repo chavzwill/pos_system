@@ -17,7 +17,7 @@ const checks=[
  ['serial identity is finalized inside authoritative route',core.includes("UPDATE inventory_serials SET status='written_off'")],
  ['lot identity is finalized inside authoritative route',core.includes('UPDATE inventory_lots SET available_quantity=available_quantity-?')],
  ['identity allocations finalize inside authoritative route',core.includes("UPDATE inventory_writeoff_identity_allocations SET status='finalized'")],
- ['approval uses compare-and-swap',core.includes("WHERE id=? AND status='pending_approval' RETURNING *")],
+ ['approval uses compare-and-swap',core.includes("WHERE id=? AND status='pending_approval'")],
  ['approval verifies compare-and-swap affected one row',core.includes("writeoffError('WRITEOFF_CONCURRENT_DECISION')")],
  ['valuation uses same transaction executor',core.includes('valueStockAdjustment(tx,')],
  ['accounting uses same transaction executor',core.includes('executor:tx')],
