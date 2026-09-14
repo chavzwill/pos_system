@@ -122,8 +122,10 @@ test.describe('Approval routing foundation',()=>{
   const split=admin.cookie.indexOf('=');
   await page.context().addCookies([{name:admin.cookie.slice(0,split),value:admin.cookie.slice(split+1),url:BASE}]);
   await page.goto(BASE,{waitUntil:'domcontentloaded'});
-  await expect(page.locator('#tt-guide-launcher')).toBeVisible({timeout:15000});
-  await page.locator('#tt-guide-launcher').click();
+  const guideAccess=page.locator('#tt-guide-access');
+  await expect(guideAccess).toBeVisible({timeout:15000});
+  await guideAccess.click();
+  await expect(page.locator('#tt-guided-mode')).toBeVisible({timeout:5000});
   await expect(page.getByRole('button',{name:'Review department approvals'})).toBeVisible({timeout:5000});
   await expect(page.getByRole('button',{name:'Set up approval departments'})).toBeVisible();
   await page.getByRole('button',{name:'Review department approvals'}).click();
