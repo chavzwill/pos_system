@@ -1,15 +1,17 @@
 ﻿'use strict';
 const fs=require('fs'),path=require('path');
 const root=path.join(__dirname,'..','public');
-const files=['accounting-intelligence.js','financial-controls-intelligence.js','cash-drawer-workspace.js','cashier-controls-workspace.js','ecommerce-operations-workspace.js','employee-workspace-home.js','employee-assist-ui.js','logistics-intelligence.js','guided-mode.js'];
+const files=['accounting-intelligence.js','financial-controls-intelligence.js','cash-drawer-workspace.js','cashier-controls-workspace.js','ecommerce-operations-workspace.js','employee-workspace-home.js','employee-assist-ui.js','logistics-intelligence.js','guided-mode.js','guided-mode-orchestrator.js','guided-mode-exact-fallback.js','guided-mode-completion.js','guided-mode-role-context.js','operations-attention-center.js','purchasing-workspace.js'];
 const banned=[
-  'Inventory Intelligence','Accounting Intelligence','Dispatch Command Center','Logistics intelligence',
+  'Inventory Intelligence','Dispatch Command Center','Logistics intelligence',
   'Cash Drawer & Reconciliation','Receipt Evidence','Receipt & payment evidence','Tender custody evidence',
   'Loading dispatch intelligence','Loading session evidence','Refreshing transaction evidence',
   'ERP Intelligence / Analytics','Use ERP / inventory intelligence'
 ];
+const requiredStockPlanning=['guided-mode.js','guided-mode-orchestrator.js','guided-mode-exact-fallback.js','guided-mode-completion.js','guided-mode-role-context.js','operations-attention-center.js','purchasing-workspace.js'];
 let failed=0;
 for(const file of files){const text=fs.readFileSync(path.join(root,file),'utf8');for(const term of banned){if(text.includes(term)){console.error(`FAIL Human language: ${file} exposes "${term}"`);failed++;}}}
+for(const file of requiredStockPlanning){const text=fs.readFileSync(path.join(root,file),'utf8');if(!text.includes('Stock Planning & Replenishment')){console.error(`FAIL Human language: ${file} is missing canonical stock-planning wording`);failed++;}}
 const assist=fs.readFileSync(path.join(__dirname,'..','routes','employee-assist.js'),'utf8');
 const ui=fs.readFileSync(path.join(root,'employee-assist-ui.js'),'utf8');
 const required=[

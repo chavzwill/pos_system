@@ -8,6 +8,7 @@ function check(name,pass){console.log(`${pass?'PASS':'FAIL'} Stock Planning: ${n
 const inventory=read('public/inventory-intelligence.js');
 const staffFiles=[
   ['inventory workspace',inventory],
+  ['Guide Me catalog',read('public/guided-mode.js')],
   ['Guide Me orchestrator',read('public/guided-mode-orchestrator.js')],
   ['Guide Me fallback',read('public/guided-mode-exact-fallback.js')],
   ['Guide Me completion',read('public/guided-mode-completion.js')],

@@ -36,7 +36,7 @@ const workflows=[
  {name:'Quotation',route:'/api/quotations',routeFile:'routes/quotations.js',workspace:'quotations-workspace',global:'TotalToolsQuotationsWorkspace',guide:'Create or manage a quotation'},
  {name:'Operational report',route:'/api/operational-reports',routeFile:'routes/operational-reports.js',workspace:'operational-reports',global:'TotalToolsOperationalReports',guide:'Run, export or print a report'},
  {name:'Technician compensation',route:'/api/technician-compensation',routeFile:'routes/technician-compensation.js',workspace:null,global:null,guide:'Review technician compensation'},
- {name:'ERP / inventory intelligence',route:'/api/erp-intelligence',routeFile:'routes/erp-intelligence.js',workspace:'inventory-intelligence',global:'TotalToolsInventoryIntelligence',guide:'Use ERP / inventory intelligence'}
+ {name:'Stock Planning & Replenishment',route:'/api/erp-intelligence',routeFile:'routes/erp-intelligence.js',workspace:'inventory-intelligence',global:'TotalToolsInventoryIntelligence',guide:'Stock Planning & Replenishment'}
 ];
 for(const w of workflows){
  check(`${w.name}: route file exists`,exists(w.routeFile));
