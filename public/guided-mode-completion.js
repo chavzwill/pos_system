@@ -37,7 +37,7 @@ function networkRule(url,method,status){if(status<200||status>=300)return'';cons
  if(t==='Dispatch, route or complete a delivery'&&s>=3&&/\/api\/.*(?:dispatch|logistics)/.test(url)&&writeMethod(method))return'Dispatch workflow updated.';
  if(t==='Run, export or print a report'&&s===3&&method==='GET'&&/\/api\/.*(?:reports?|analytics)/.test(url))return'Report refreshed with the selected filters.';
  if(t==='Run, export or print a report'&&s===4&&method==='GET'&&/\/api\/.*(?:export|csv|xlsx|pdf|reports?)/.test(url)&&/(?:export|format=|csv|xlsx|pdf)/i.test(url))return'Report export started.';
- if(t==='Use ERP / inventory intelligence'&&s===3&&writeMethod(method)&&/\/api\/.*(?:transfers?|purchase-requests?|replenish|recommendations?)/.test(url))return'Controlled action was created from the intelligence recommendation.';
+ if(t==='Stock Planning & Replenishment'&&s===3&&writeMethod(method)&&/\/api\/.*(?:transfers?|purchase-requests?|replenish|recommendations?)/.test(url))return'Controlled transfer or purchase request was created from the stock recommendation.';
  return'';}
 const nativeFetch=window.fetch.bind(window);window.fetch=async function(input,init){const response=await nativeFetch(input,init);try{const reason=networkRule(urlOf(input),methodOf(init,input),response.status);if(reason)setTimeout(()=>advance(reason),80);}catch(_){}return response;};
 function hasValue(el){return !!el&&String(el.value||'').trim().length>0;}
@@ -63,7 +63,7 @@ function domCompletion(){if(advancing||!root())return;const t=task(),s=step();
  if(t==='Hold or recall a sale'&&s===3&&document.querySelector('#tt-sales-workspace [data-tx],#tt-held-sales-workspace [data-hold]'))successCue('Held transactions are available');
  if(t==='Return or refund a transaction'&&s===2&&document.querySelector('#tt-cashier-controls [data-selected],#tt-sales-workspace [data-tx].is-selected'))successCue('Original transaction selected');
  if(t==='Run, export or print a report'&&s===2){const area=document.querySelector('#tt-operational-reports');if(area&&[...area.querySelectorAll('input,select')].some(hasValue))successCue('Report filters selected');}
- if(t==='Use ERP / inventory intelligence'&&s===2&&document.querySelector('#tt-inventory-intelligence [data-recommendation],#tt-inventory-intelligence .recommendation,#tt-inventory-intelligence article'))successCue('Recommendation evidence is visible');
+ if(t==='Stock Planning & Replenishment'&&s===2&&document.querySelector('#tt-inventory-intelligence [data-recommendation],#tt-inventory-intelligence .recommendation,#tt-inventory-intelligence article'))successCue('Stock recommendation evidence is visible');
 }
 let raf=0;const observer=new MutationObserver(()=>{if(raf)return;raf=requestAnimationFrame(()=>{raf=0;domCompletion();});});observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','hidden','aria-selected','data-selected','value']});
 document.addEventListener('input',()=>setTimeout(domCompletion,0),true);document.addEventListener('change',()=>setTimeout(domCompletion,0),true);document.addEventListener('click',()=>setTimeout(domCompletion,100),true);

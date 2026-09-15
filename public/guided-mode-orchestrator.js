@@ -15,7 +15,7 @@ const TASK_CONTEXT={
  'Create or manage a quotation':{domain:'sales',feature:'quotations-workspace',selector:'#tt-quotes'},
  'Run, export or print a report':{domain:'finance',feature:'operational-reports',selector:'#tt-operational-reports'},
  'Review technician compensation':{domain:'service'},
- 'Use ERP / inventory intelligence':{domain:'purchasing',feature:'inventory-intelligence',selector:'#tt-inventory-intelligence'}
+ 'Stock Planning & Replenishment':{domain:'purchasing',feature:'inventory-intelligence',selector:'#tt-inventory-intelligence'}
 };
 const API={
  'sales-workspace':'TotalToolsSalesWorkspace','cashier-controls-workspace':'TotalToolsCashierControls','work-orders-workspace':'TotalToolsWorkOrdersWorkspace','rentals-workspace':'TotalToolsRentalsWorkspace','logistics-intelligence':'TotalToolsLogisticsIntelligence','inventory-workspace':'TotalToolsInventoryWorkspace','purchasing-workspace':'TotalToolsPurchasingWorkspace','transfers-workspace':'TotalToolsTransfersWorkspace','quotations-workspace':'TotalToolsQuotationsWorkspace','operational-reports':'TotalToolsOperationalReports','inventory-intelligence':'TotalToolsInventoryIntelligence'

@@ -36,7 +36,7 @@
       { find:['return rental','check in','return'], text:'At return, record condition, damage/fees where applicable, and complete the rental lifecycle.' }
     ]},
     { id:'dispatch', title:'Dispatch, route or complete a delivery', keywords:['dispatch','route','routing','delivery','driver','logistics','vehicle','in transit','pickup'], steps:[
-      { find:['dispatch & logistics intelligence','dispatch','logistics'], text:'Open Dispatch & Deliveries.' },
+      { find:['dispatch & deliveries','dispatch','logistics'], text:'Open Dispatch & Deliveries.' },
       { find:['unassigned','dispatch queue','jobs'], text:'Review the dispatch queue, priority, promised time, assignment state and operational risk before choosing work.' },
       { find:['schedule','assignee','vehicle'], text:'Assign the authorized employee and vehicle, then schedule the movement using the available vehicle capacity and schedule.' },
       { find:['ready','in transit','delayed','completed'], text:'Move the dispatch through its real lifecycle. Record delays rather than hiding them, and mark completed only after the movement is actually finished.' }
@@ -86,10 +86,10 @@
       { find:['rate','plan','metrics'], text:'Review the admin-configured rate and compensation plan that applies to the pay period.' },
       { find:['finalize','approve payroll','payroll'], text:'Check QC, rework and attendance records before finalizing. If required information is missing, the system should show that clearly instead of guessing.' }
     ]},
-    { id:'erp', title:'Review stock and replenishment', keywords:['erp','intelligence','smart transfer','recommendation','slow moving','stockout','supplier performance'], steps:[
-      { find:['erp','intelligence','analytics'], text:'Open Stock Health & Reordering.' },
-      { find:['recommend','transfer','replenish','supplier'], text:'Review why the system is suggesting the action: branch stock, demand, supplier performance or stock history.' },
-      { find:['create transfer','purchase request','apply'], text:'If the action makes sense, use the normal transfer or purchasing process. Suggestions must never change stock automatically.' }
+    { id:'erp', title:'Stock Planning & Replenishment', keywords:['stock planning','replenishment','reordering','smart transfer','recommendation','slow moving','stockout','supplier performance','what to order'], steps:[
+      { find:['stock planning','stock health','reordering'], text:'Open Stock Planning & Replenishment.' },
+      { find:['low stock','move between branches','what to order','supplier choice'], text:'Review why the system is suggesting the action: branch stock, demand, supplier performance or stock history.' },
+      { find:['create transfer','purchase request'], text:'If the action makes sense, use the normal transfer or purchasing process. Suggestions must never change stock automatically.' }
     ]}
   ];
 

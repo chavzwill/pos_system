@@ -21,7 +21,7 @@ const map={
  'Create or manage a quotation':{1:['quotations','quotes'],2:['new quotation','create quote'],3:['send','approve','accept']},
  'Run, export or print a report':{1:['reports','reporting'],2:['date','branch','filter'],3:['run report','apply','refresh'],4:['export','csv','excel','print','pdf']},
  'Review technician compensation':{1:['technician','repairs','work orders'],2:['compensation','pay period','performance'],3:['rate','plan','metrics'],4:['finalize','approve payroll','payroll']},
- 'Use ERP / inventory intelligence':{1:['erp','intelligence','analytics'],2:['recommend','transfer','replenish','supplier'],3:['create transfer','purchase request','apply']}
+ 'Stock Planning & Replenishment':{1:['stock planning','stock health','reordering'],2:['low stock','move between branches','what to order','supplier choice'],3:['create transfer','purchase request']}
 };
 function candidates(){return [...document.querySelectorAll('button,a,[role="button"],[role="tab"],input,select,textarea,label')].filter(el=>visible(el)&&!el.closest('#tt-guided-mode'));}
 function labelFor(el){return norm(el.getAttribute('aria-label')||el.getAttribute('placeholder')||el.name||el.id||el.textContent||'');}

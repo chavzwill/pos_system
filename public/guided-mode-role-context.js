@@ -4,7 +4,7 @@ const TASK_DOMAIN={
  'Create or work a repair':'service','Review technician compensation':'service','Create or manage a rental':'rentals',
  'Dispatch, route or complete a delivery':'dispatch','Adjust inventory':'inventory','Run a stock or cycle count':'inventory',
  'Create, dispatch or receive a branch transfer':'inventory','Create or approve a purchase request':'purchasing',
- 'Create, edit, copy, cancel or receive a PO':'purchasing','Use ERP / inventory intelligence':'purchasing',
+ 'Create, edit, copy, cancel or receive a PO':'purchasing','Stock Planning & Replenishment':'purchasing',
  'Create or manage a quotation':'sales','Run, export or print a report':'finance'
 };
 const DOMAIN_HINTS={sales:'Sales & checkout',service:'Repairs & service',rentals:'Rentals',dispatch:'Dispatch & logistics',inventory:'Inventory & warehouse',purchasing:'Purchasing',finance:'Finance & accounting',crm:'Customers & CRM',administration:'Administration',marketing:'Marketing'};
