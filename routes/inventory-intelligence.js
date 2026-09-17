@@ -1,7 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
-const { requirePermission } = require('../lib/permissions');
+const { requirePermission, can } = require('../lib/permissions');
 
 function num(v) { return Number(v || 0); }
 
@@ -73,6 +73,29 @@ router.get('/overview', requirePermission('inventory'), async (req, res) => {
       });
     }
 
+    let supplierChoice = [];
+    const maySeeSupplierPerformance = !req.apiKey && can(req.employee?.permissions, 'reports');
+    if (maySeeSupplierPerformance) {
+      const supplierIds = [...new Set([...out, ...low].map(r => Number(r.supplier_id)).filter(Boolean))];
+      if (supplierIds.length) {
+        const placeholders = supplierIds.map(() => '?').join(',');
+        const { rows: supplierRows } = await db.execute({
+          sql: `SELECT s.id supplier_id,s.name supplier_name,COUNT(DISTINCT po.id) purchase_orders,
+            COALESCE(SUM(poi.quantity_ordered),0) units_ordered,COALESCE(SUM(poi.quantity_received),0) units_received,
+            COALESCE(AVG(CASE WHEN po.received_at IS NOT NULL THEN julianday(po.received_at)-julianday(po.created_at) END),0) average_lead_days
+            FROM suppliers s LEFT JOIN purchase_orders po ON po.supplier_id=s.id
+            LEFT JOIN purchase_order_items poi ON poi.po_id=po.id
+            WHERE s.active=1 AND s.id IN (${placeholders}) GROUP BY s.id,s.name`, args:supplierIds
+        });
+        const supplierMap = new Map(supplierRows.map(r => [Number(r.supplier_id), r]));
+        supplierChoice = [...out, ...low].filter(r => r.supplier_id).map(r => {
+          const sp=supplierMap.get(Number(r.supplier_id));
+          const enough=sp&&Number(sp.purchase_orders||0)>0&&Number(sp.units_ordered||0)>0;
+          return { product_id:r.product_id,sku:r.sku,product_name:r.name,branch_id:r.branch_id,branch_name:r.branch_name,supplier_id:r.supplier_id,supplier_name:sp?.supplier_name||'Assigned supplier',purchase_orders:Number(sp?.purchase_orders||0),average_lead_days:enough?Number(Number(sp.average_lead_days||0).toFixed(1)):null,fill_rate:enough?Number((100*Math.min(Number(sp.units_received||0),Number(sp.units_ordered||0))/Number(sp.units_ordered)).toFixed(1)):null,evidence:enough?'Current assigned supplier shown with recorded purchase-order history. This is evidence for review, not an automatic supplier ranking.':'Not enough supplier performance history to assess the assigned supplier.'};
+        }).slice(0,75);
+      }
+    }
+
     const totalValue = enriched.reduce((s,r) => s + r.inventory_value, 0);
     const atRiskValue = stale.reduce((s,r) => s + r.inventory_value, 0);
     const recommendations = [
@@ -99,6 +122,14 @@ router.get('/overview', requirePermission('inventory'), async (req, res) => {
       },
       branch_imbalances: imbalances.slice(0,50),
       recommendations: recommendations.slice(0,75),
+      planning: {
+        low_stock: [...out, ...low].slice(0,75),
+        excess_slow_moving: [...new Map([...overstock, ...stale].map(r => [`${r.product_id}:${r.branch_id}`, r])).values()].slice(0,75),
+        what_to_order: [...out, ...low].map(r => ({ ...r, suggested_quantity: Math.max(0, Math.ceil(Math.max(r.min_stock, 1) - r.stock_qty)), evidence: 'Quantity only restores the configured minimum. Demand forecast and open-order evidence are not inferred here.' })).slice(0,75),
+        supplier_choice: supplierChoice,
+        stock_value_at_risk: stale.slice(0,75),
+        supplier_choice_note: maySeeSupplierPerformance ? 'Assigned suppliers are shown only with recorded purchasing evidence. No supplier is automatically ranked or selected.' : 'Supplier performance is available only to staff who already have reporting access.',
+      },
       exceptions: {
         negative_stock: negative.slice(0,50),
         master_data: masterData.slice(0,50),
@@ -106,7 +137,10 @@ router.get('/overview', requirePermission('inventory'), async (req, res) => {
         stale: stale.slice(0,50),
       }
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    console.error('Stock planning overview failed', e);
+    res.status(500).json({ error: 'Unable to load stock planning right now.', code: 'STOCK_PLANNING_UNAVAILABLE' });
+  }
 });
 
 module.exports = router;
