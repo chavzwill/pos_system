@@ -62,6 +62,7 @@ function getEnhancedIndex() {
     '<link rel="stylesheet" href="' + versioned('/total-tools-pos.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/pos-experience.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/employee-workspace-home.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/predictive-lookup.css') + '">',
 '<link rel="stylesheet" href="' + versioned('/employee-assist-ui.css') + '">',
   ];
   const bodyAssets = [
@@ -71,6 +72,7 @@ function getEnhancedIndex() {
     '<script src="' + versioned('/navigation-shell.js') + '" defer></script>',
     '<script src="' + versioned('/role-workspace.js') + '" defer></script>',
     '<script src="' + versioned('/employee-workspace-home.js') + '" defer></script>',
+    '<script src="' + versioned('/predictive-lookup.js') + '" defer></script>',
 '<script src="' + versioned('/employee-assist-ui.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
   ];
@@ -132,6 +134,7 @@ app.use('/api/department-approvals', require('./routes/department-approval-admin
 app.use('/api/workspace-profile', require('./routes/workspace-profile'));
 app.use('/api/employee-workspace-intelligence', require('./routes/employee-workspace-intelligence'));
 app.use('/api/employee-assist', require('./routes/employee-assist'));
+app.use('/api/predictive-lookup', require('./routes/predictive-lookup'));
 app.use('/api/technician-management-intelligence', require('./routes/technician-management-intelligence'));
 app.use('/api/inventory-stock-status', require('./routes/inventory-stock-status'));
 app.use('/api/inventory-traceability', require('./routes/inventory-traceability'));

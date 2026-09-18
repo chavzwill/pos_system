@@ -31,9 +31,18 @@ check('browser suppresses stale responses',/request|sequence|token/i.test(ui));
 check('browser exposes accessible combobox/listbox semantics',ui.includes('aria-autocomplete')&&ui.includes('listbox'));
 check('browser handles keyboard selection',ui.includes('ArrowDown')&&ui.includes('ArrowUp')&&ui.includes('Enter')&&ui.includes('Escape'));
 check('shell loads predictive lookup client',shell.includes('predictive-lookup.js')&&shell.includes('predictive-lookup.css'));
+check('legacy enhanced shell loads predictive lookup client',server.includes("versioned('/predictive-lookup.js')")&&server.includes("versioned('/predictive-lookup.css')"));
+check('alias schema is initialized centrally, not created by search requests',read('database.js').includes('CREATE TABLE IF NOT EXISTS lookup_aliases')&&!engine.includes('CREATE TABLE IF NOT EXISTS lookup_aliases'));
 check('catalog picker consumes shared predictive lookup',read('public/catalog-picker.js').includes('TotalToolsPredictiveLookup'));
 check('sales customer lookup consumes shared predictive lookup',read('public/sales-workspace.js').includes('TotalToolsPredictiveLookup'));
 check('quote customer lookup consumes shared predictive lookup',read('public/catalog-workflow-enhancer.js').includes('TotalToolsPredictiveLookup'));
+const purchasing=read('public/purchasing-workspace.js');
+const sales=read('public/sales-workspace.js');
+check('purchasing supplier and item fields consume shared predictive lookup',purchasing.includes('TotalToolsPredictiveLookup')&&purchasing.includes("domain:'supplier'")&&purchasing.includes("domain:'product'"));
+check('purchasing no longer preloads full supplier and product catalogs',!purchasing.includes("suppliers?active=true")&&!purchasing.includes("products?active=true"));
+check('purchasing predictive fields preserve canonical selected IDs',purchasing.includes('data-selected-id')&&purchasing.includes('data-product-id'));
+check('sales product search consumes shared predictive lookup',sales.includes('bindSalesProductPredictive')&&sales.includes("domain:'product'"));
+check('migrated transactional product fields exclude variations until owning workflows persist variation identity',purchasing.includes('includeVariations:false')&&sales.includes('includeVariations:false')&&read('public/catalog-picker.js').includes('includeVariations:false'));
 if(exists(enginePath)){
   try{
     const mod=require(path.join(root,enginePath));
