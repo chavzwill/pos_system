@@ -7,6 +7,7 @@ const path = require('path');
 const fs = require('fs');
 const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
 const { requireAuth, requirePermission, can } = require('../lib/permissions');
+const { archiveProduct } = require('../lib/catalog-integrity');
 
 // CSV cells for money/quantity fields often carry currency symbols, thousands
 // separators, or stray whitespace (e.g. "$15.00", "1,000") — bare parseFloat/
@@ -532,20 +533,26 @@ router.put('/:id', async (req, res, next) => {
   // is_rental from the request body.
   if (req.apiKey) return next();
   if (!req.employee) return res.status(401).json({ error: 'Authentication required' });
-  const { rows: [existing] } = await db.execute({ sql: 'SELECT is_rental, is_service FROM products WHERE id = ?', args: [req.params.id] });
+  const { rows: [existing] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [req.params.id] });
   if (!existing) return res.status(404).json({ error: 'Product not found' });
   const key = requiredProductPermission(!!existing.is_rental || !!req.body.is_rental, !!existing.is_service || !!req.body.is_service);
   if (!can(req.employee.permissions, key)) return res.status(403).json({ error: `Missing permission: ${key}` });
+  req.catalogExistingProduct = existing;
   next();
 }, async (req, res) => {
   const { sku, barcode, name, description, category_id, price, cost, tax_rate, stock_qty, min_stock, active, branch_id, supplier_id, is_service, unit, online_available, web_allotment, is_rental, rental_rate_type, rental_rate, rental_deposit, rental_late_fee_rate, replacement_value, rental_classification, rental_weekly_rate, rental_monthly_rate, rental_hourly_rate, is_accessory, is_layaway_eligible, model_number, size, taxable } = req.body;
   try {
-    const svc = is_service ? 1 : 0;
-    const rnt = is_rental ? 1 : 0;
-    const acc = is_accessory ? 1 : 0;
-    const lay = is_layaway_eligible ? 1 : 0;
-    const tax = taxable === undefined ? 1 : (taxable ? 1 : 0);
-    await db.execute({ sql: `UPDATE products SET sku=?,barcode=?,name=?,description=?,category_id=?,price=?,cost=?,tax_rate=?,stock_qty=?,min_stock=?,active=?,supplier_id=?,is_service=?,unit=?,online_available=?,web_allotment=?,is_rental=?,rental_rate_type=?,rental_rate=?,rental_deposit=?,rental_late_fee_rate=?,replacement_value=?,rental_classification=?,rental_weekly_rate=?,rental_monthly_rate=?,rental_hourly_rate=?,is_accessory=?,is_layaway_eligible=?,model_number=?,size=?,taxable=? WHERE id=?`, args: [sku, barcode||null, name, description||null, category_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : (stock_qty||0), svc ? 0 : (min_stock||5), active??1, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax, req.params.id] });
+    const current = req.catalogExistingProduct || {};
+    const svc = is_service === undefined ? Number(current.is_service || 0) : (is_service ? 1 : 0);
+    const rnt = is_rental === undefined ? Number(current.is_rental || 0) : (is_rental ? 1 : 0);
+    const acc = is_accessory === undefined ? Number(current.is_accessory || 0) : (is_accessory ? 1 : 0);
+    const lay = is_layaway_eligible === undefined ? Number(current.is_layaway_eligible || 0) : (is_layaway_eligible ? 1 : 0);
+    const tax = taxable === undefined ? Number(current.taxable ?? 1) : (taxable ? 1 : 0);
+    const targetActive = active === undefined ? Number(current.active ?? 1) : (Number(active) ? 1 : 0);
+    if(Number(current.active)!==0&&targetActive===0){const error=new Error('Use the Retire product action so stock and history can be checked safely.');error.code='CATALOG_RETIREMENT_ROUTE_REQUIRED';error.status=409;throw error;}
+    const safeStock = stock_qty === undefined ? Number(current.stock_qty || 0) : Number(stock_qty || 0);
+    const safeMinStock = min_stock === undefined ? Number(current.min_stock || 0) : Number(min_stock || 0);
+    await db.execute({ sql: `UPDATE products SET sku=?,barcode=?,name=?,description=?,category_id=?,price=?,cost=?,tax_rate=?,stock_qty=?,min_stock=?,active=?,supplier_id=?,is_service=?,unit=?,online_available=?,web_allotment=?,is_rental=?,rental_rate_type=?,rental_rate=?,rental_deposit=?,rental_late_fee_rate=?,replacement_value=?,rental_classification=?,rental_weekly_rate=?,rental_monthly_rate=?,rental_hourly_rate=?,is_accessory=?,is_layaway_eligible=?,model_number=?,size=?,taxable=? WHERE id=?`, args: [sku, barcode||null, name, description||null, category_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : safeStock, svc ? 0 : safeMinStock, targetActive, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax, req.params.id] });
     // Rental items live at a single branch — reassigning the dropdown moves
     // the stock there; clearing it drops back to unassigned/global-only
     // (matches the "Unassigned (global stock only)" option in the form).
@@ -555,14 +562,15 @@ router.put('/:id', async (req, res, next) => {
         await db.execute({
           sql: `INSERT INTO branch_inventory (product_id, branch_id, stock_qty, min_stock) VALUES (?, ?, ?, ?)
                 ON CONFLICT(product_id, branch_id) DO UPDATE SET stock_qty = ?, min_stock = ?, updated_at = CURRENT_TIMESTAMP`,
-          args: [req.params.id, branch_id, stock_qty||0, min_stock||5, stock_qty||0, min_stock||5],
+          args: [req.params.id, branch_id, safeStock, safeMinStock, safeStock, safeMinStock],
         });
       }
     }
     const { rows: [prod] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [req.params.id] });
     res.json(prod);
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    const status=Number(e?.status)||400;
+    res.status(status).json({ error: e?.message||'Unable to update product', code:e?.code||'PRODUCT_UPDATE_FAILED' });
   }
 });
 
@@ -610,16 +618,23 @@ router.patch('/:id/promote-to-inventory', requirePermission('inventory'), async 
 router.delete('/:id', async (req, res, next) => {
   if (req.apiKey) return next();
   if (!req.employee) return res.status(401).json({ error: 'Authentication required' });
-  const { rows: [existing] } = await db.execute({ sql: 'SELECT is_rental, is_service FROM products WHERE id = ?', args: [req.params.id] });
+  const { rows: [existing] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [req.params.id] });
   if (!existing) return res.status(404).json({ error: 'Product not found' });
   const key = requiredProductPermission(!!existing.is_rental, !!existing.is_service);
   if (!can(req.employee.permissions, key)) return res.status(403).json({ error: `Missing permission: ${key}` });
   next();
 }, async (req, res) => {
   try {
-    await db.execute({ sql: 'UPDATE products SET active = 0 WHERE id = ?', args: [req.params.id] });
-    res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+    const result = await archiveProduct(req.params.id,{actorEmployeeId:req.employee?.id||null,requestId:req.requestId||null,method:req.method||null,path:req.originalUrl||req.path||null});
+    res.json({ success: true, product: result.product, historical_references_preserved: result.historical_references_preserved });
+  } catch(e) {
+    const status = Number(e?.status) || 500;
+    if (status >= 500) console.error('catalog_product_archive_error', { code: e?.code || 'unknown', message: e?.message || 'unknown' });
+    res.status(status).json({
+      error: status >= 500 ? 'Unable to retire this product right now.' : e.message,
+      code: e?.code || 'CATALOG_PRODUCT_ARCHIVE_UNAVAILABLE'
+    });
+  }
 });
 
 // POST upload product image
