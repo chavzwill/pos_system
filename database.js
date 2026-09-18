@@ -101,6 +101,20 @@ async function _init() {
       active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS lookup_aliases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      alias TEXT NOT NULL,
+      alias_normalized TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+      evidence_source TEXT,
+      created_by INTEGER REFERENCES employees(id),
+      reviewed_by INTEGER REFERENCES employees(id),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      reviewed_at DATETIME,
+      UNIQUE(entity_type, entity_id, alias_normalized)
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       transaction_number TEXT UNIQUE NOT NULL,
@@ -1807,6 +1821,7 @@ async function _init() {
     'CREATE INDEX IF NOT EXISTS idx_return_items_return_id ON return_items(return_id)',
     'CREATE INDEX IF NOT EXISTS idx_employee_branches_employee_id ON employee_branches(employee_id)',
     'CREATE INDEX IF NOT EXISTS idx_employee_branches_branch_id ON employee_branches(branch_id)',
+    'CREATE INDEX IF NOT EXISTS idx_lookup_aliases_match ON lookup_aliases(entity_type,status,alias_normalized)',
     'CREATE INDEX IF NOT EXISTS idx_product_variations_product_id ON product_variations(product_id)',
     'CREATE INDEX IF NOT EXISTS idx_stock_movements_product_id ON stock_movements(product_id)',
     'CREATE INDEX IF NOT EXISTS idx_crm_activities_lead_id ON crm_activities(lead_id)',
