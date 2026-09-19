@@ -1,0 +1,13 @@
+'use strict';
+const fs=require('fs'),path=require('path');const root=path.join(__dirname,'..');const read=f=>fs.readFileSync(path.join(root,f),'utf8');
+let failed=0;const check=(n,o)=>o?console.log('PASS Catalog Duplicate:',n):(failed++,console.error('FAIL Catalog Duplicate:',n));
+const lib=read('lib/catalog-integrity.js'),ui=read('public/catalog-admin-workspace.js');
+check('duplicate product-name detector exists',lib.includes('duplicate_product_name'));
+check('probable duplicate SKU detector exists',lib.includes('probable_duplicate_sku'));
+check('name normalization collapses whitespace',lib.includes('replace(/\\s+/g'));
+check('SKU normalization strips common separators',lib.includes("replace(/[\\s._\\-/]+/g"));
+check('candidate groups preserve multiple product ids',lib.includes('product_ids'));
+check('detection remains advisory only',lib.includes('Review the products side by side')&&!lib.includes('auto_merge_duplicate'));
+check('UI names possible duplicate products',ui.includes('Possible duplicate products'));
+check('UI supports grouped product evidence',ui.includes('product_group'));
+if(failed){console.error('Catalog Duplicate contract failed: '+failed);process.exit(1)}console.log('Catalog Duplicate contract passed.');
