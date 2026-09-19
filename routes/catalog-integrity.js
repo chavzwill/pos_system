@@ -2,7 +2,7 @@
 const express=require('express');
 const router=express.Router();
 const {requirePermission}=require('../lib/permissions');
-const {catalogHealth,inspectProductCleanup,setProductLifecycle,reviewDuplicateCandidate,planDuplicateConsolidation}=require('../lib/catalog-integrity');
+const {catalogHealth,inspectProductCleanup,setProductLifecycle,reviewDuplicateCandidate,planDuplicateConsolidation,inspectDuplicateConsolidation}=require('../lib/catalog-integrity');
 
 router.use(requirePermission('inventory'));
 function safe(res,error){
@@ -15,6 +15,9 @@ router.get('/health',async(req,res)=>{
   try{return res.json(await catalogHealth({limit:req.query.limit}));}catch(e){return safe(res,e);}
 });
 router.get('/duplicate-consolidation-plan',async(req,res)=>{try{return res.json(await planDuplicateConsolidation(req.query.candidate_key));}catch(e){return safe(res,e);}});
+router.get('/duplicate-review/:candidateKey/consolidation-preview',async(req,res)=>{
+  try{return res.json(await inspectDuplicateConsolidation(req.params.candidateKey));}catch(e){return safe(res,e);}
+});
 router.patch('/duplicate-review',async(req,res)=>{
   try{
     const result=await reviewDuplicateCandidate({
