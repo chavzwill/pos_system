@@ -79,10 +79,10 @@ router.get('/', requireAuth, async (req, res) => {
         p.tax_rate, p.active, p.image_path, p.is_service, p.unit,
         p.online_available, p.web_allotment, p.stock_qty as global_stock_qty,
         ${stockExpr} as stock_qty,
-        c.name as category_name,
+        c.name as category_name, br.name as brand_name,
         (SELECT COUNT(*) FROM product_variations WHERE product_id = p.id AND active = 1) as has_variations
         FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id${joinClause}
+        LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN brands br ON p.brand_id = br.id${joinClause}
         WHERE p.active = 1 AND p.online_available = 1`;
       if (search) { onlineSql += ` AND (p.name LIKE ? OR p.sku LIKE ?)`; onlineParams.push(`%${search}%`, `%${search}%`); }
       if (category) { onlineSql += ` AND p.category_id = ?`; onlineParams.push(category); }
@@ -104,7 +104,7 @@ router.get('/', requireAuth, async (req, res) => {
       // branch-scoped query (POS cart, quote line default, etc.) reads
       // `price` as-is and gets the tiered value automatically. list_price is
       // the untouched base price, kept for anywhere that wants it.
-      sql = `SELECT p.id, p.sku, p.barcode, p.name, p.description, p.category_id, p.price as list_price,
+      sql = `SELECT p.id, p.sku, p.barcode, p.name, p.description, p.category_id, p.brand_id, p.price as list_price,
         MAX(0, ROUND(p.price * (1 + COALESCE(b.price_tier_percent,0)/100.0), 2)) as price,
         p.cost, p.tax_rate, p.active, p.created_at, p.supplier_id, p.image_path, p.is_service, p.unit,
         p.is_rental, p.rental_rate_type, p.rental_rate, p.rental_deposit, p.rental_late_fee_rate, p.replacement_value,
@@ -112,11 +112,12 @@ router.get('/', requireAuth, async (req, res) => {
         COALESCE(bi.stock_qty, 0) as stock_qty,
         COALESCE(bi.min_stock, p.min_stock) as min_stock,
         p.stock_qty as global_stock_qty,
-        c.name as category_name,
+        c.name as category_name, br.name as brand_name,
         (SELECT COUNT(*) FROM product_variations WHERE product_id = p.id AND active = 1) as has_variations,
         ${rentalOutstandingExpr(true)}
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN brands br ON p.brand_id = br.id
         LEFT JOIN branch_inventory bi ON p.id = bi.product_id AND bi.branch_id = ?
         LEFT JOIN branches b ON b.id = ?
         WHERE 1=1`;
@@ -124,10 +125,10 @@ router.get('/', requireAuth, async (req, res) => {
       params.push(branch_id); // for the branch_inventory JOIN's bi.branch_id = ?
       params.push(branch_id); // for the branches JOIN's b.id = ? (price tier)
     } else {
-      sql = `SELECT p.*, c.name as category_name, (SELECT COUNT(*) FROM product_variations WHERE product_id = p.id AND active = 1) as has_variations, ${rentalOutstandingExpr(false)},
+      sql = `SELECT p.*, c.name as category_name, br.name as brand_name, (SELECT COUNT(*) FROM product_variations WHERE product_id = p.id AND active = 1) as has_variations, ${rentalOutstandingExpr(false)},
         (SELECT bi.branch_id FROM branch_inventory bi WHERE bi.product_id = p.id LIMIT 1) as assigned_branch_id,
         (SELECT b.name FROM branch_inventory bi JOIN branches b ON bi.branch_id = b.id WHERE bi.product_id = p.id LIMIT 1) as assigned_branch_name
-        FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE 1=1`;
+        FROM products p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN brands br ON p.brand_id=br.id WHERE 1=1`;
     }
 
     if (search) {
@@ -474,19 +475,19 @@ router.get('/:id', requireAuth, async (req, res) => {
         stockExpr = `CASE WHEN p.web_allotment IS NOT NULL THEN MIN(COALESCE(p.stock_qty, 0), p.web_allotment) ELSE COALESCE(p.stock_qty, 0) END`;
       }
       const { rows: [product] } = await db.execute({
-        sql: `SELECT p.id, p.sku, p.name, p.description, p.category_id, p.price, p.cost, p.tax_rate,
+        sql: `SELECT p.id, p.sku, p.name, p.description, p.category_id, p.brand_id, p.price, p.cost, p.tax_rate,
           p.active, p.image_path, p.is_service, p.unit,
           p.online_available, p.web_allotment, p.stock_qty as global_stock_qty,
-          ${stockExpr} as stock_qty, c.name as category_name
-          FROM products p LEFT JOIN categories c ON p.category_id = c.id${joinClause} WHERE p.id = ?`,
+          ${stockExpr} as stock_qty, c.name as category_name, br.name as brand_name
+          FROM products p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN brands br ON p.brand_id = br.id${joinClause} WHERE p.id = ?`,
         args: onlineParams
       });
       if (!product) return res.status(404).json({ error: 'Product not found' });
       return res.json(product);
     }
-    const { rows: [product] } = await db.execute({ sql: `SELECT p.*, c.name as category_name,
+    const { rows: [product] } = await db.execute({ sql: `SELECT p.*, c.name as category_name, br.name as brand_name,
       (SELECT branch_id FROM branch_inventory WHERE product_id = p.id LIMIT 1) as assigned_branch_id
-      FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`, args: [req.params.id] });
+      FROM products p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN brands br ON p.brand_id = br.id WHERE p.id = ?`, args: [req.params.id] });
     if (!product) return res.status(404).json({ error: 'Product not found' });
     // Additive fields only — used by the product form's Bin Locations panel to show
     // the branch-scoped stock figure that bin quantities must split accurately against.
@@ -505,7 +506,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 // permission required is chosen per-request based on the product's own type
 // (see requireProductPermission above), not any-of-the-three statically.
 router.post('/', (req, res, next) => requireProductPermission(!!req.body.is_rental, !!req.body.is_service)(req, res, next), async (req, res) => {
-  const { sku, barcode, name, description, category_id, price, cost, tax_rate, stock_qty, min_stock, active, branch_id, supplier_id, is_service, unit, online_available, web_allotment, is_rental, rental_rate_type, rental_rate, rental_deposit, rental_late_fee_rate, replacement_value, rental_classification, rental_weekly_rate, rental_monthly_rate, rental_hourly_rate, is_accessory, is_layaway_eligible, model_number, size, taxable } = req.body;
+  const { sku, barcode, name, description, category_id, brand_id, price, cost, tax_rate, stock_qty, min_stock, active, branch_id, supplier_id, is_service, unit, online_available, web_allotment, is_rental, rental_rate_type, rental_rate, rental_deposit, rental_late_fee_rate, replacement_value, rental_classification, rental_weekly_rate, rental_monthly_rate, rental_hourly_rate, is_accessory, is_layaway_eligible, model_number, size, taxable } = req.body;
   if (!sku || !name) return res.status(400).json({ error: 'SKU and name are required' });
   try {
     const svc = is_service ? 1 : 0;
@@ -513,7 +514,7 @@ router.post('/', (req, res, next) => requireProductPermission(!!req.body.is_rent
     const acc = is_accessory ? 1 : 0;
     const lay = is_layaway_eligible ? 1 : 0;
     const tax = taxable === undefined ? 1 : (taxable ? 1 : 0);
-    const result = await db.execute({ sql: `INSERT INTO products (sku,barcode,name,description,category_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,is_service,unit,online_available,web_allotment,is_rental,rental_rate_type,rental_rate,rental_deposit,rental_late_fee_rate,replacement_value,rental_classification,rental_weekly_rate,rental_monthly_rate,rental_hourly_rate,is_accessory,is_layaway_eligible,model_number,size,taxable) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [sku, barcode||null, name, description||null, category_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : (stock_qty||0), svc ? 0 : (min_stock||5), active??1, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax] });
+    const result = await db.execute({ sql: `INSERT INTO products (sku,barcode,name,description,category_id,brand_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,is_service,unit,online_available,web_allotment,is_rental,rental_rate_type,rental_rate,rental_deposit,rental_late_fee_rate,replacement_value,rental_classification,rental_weekly_rate,rental_monthly_rate,rental_hourly_rate,is_accessory,is_layaway_eligible,model_number,size,taxable) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [sku, barcode||null, name, description||null, category_id||null, brand_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : (stock_qty||0), svc ? 0 : (min_stock||5), active??1, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax] });
     const productId = Number(result.lastInsertRowid);
     if (!svc && branch_id && (parseInt(stock_qty) || 0) > 0) {
       await db.execute({ sql: 'INSERT OR IGNORE INTO branch_inventory (product_id, branch_id, stock_qty, min_stock) VALUES (?, ?, ?, ?)', args: [productId, branch_id, parseInt(stock_qty) || 0, parseInt(min_stock) || 5] });
@@ -540,7 +541,7 @@ router.put('/:id', async (req, res, next) => {
   req.catalogExistingProduct = existing;
   next();
 }, async (req, res) => {
-  const { sku, barcode, name, description, category_id, price, cost, tax_rate, stock_qty, min_stock, active, branch_id, supplier_id, is_service, unit, online_available, web_allotment, is_rental, rental_rate_type, rental_rate, rental_deposit, rental_late_fee_rate, replacement_value, rental_classification, rental_weekly_rate, rental_monthly_rate, rental_hourly_rate, is_accessory, is_layaway_eligible, model_number, size, taxable } = req.body;
+  const { sku, barcode, name, description, category_id, brand_id, price, cost, tax_rate, stock_qty, min_stock, active, branch_id, supplier_id, is_service, unit, online_available, web_allotment, is_rental, rental_rate_type, rental_rate, rental_deposit, rental_late_fee_rate, replacement_value, rental_classification, rental_weekly_rate, rental_monthly_rate, rental_hourly_rate, is_accessory, is_layaway_eligible, model_number, size, taxable } = req.body;
   try {
     const current = req.catalogExistingProduct || {};
     const svc = is_service === undefined ? Number(current.is_service || 0) : (is_service ? 1 : 0);
@@ -552,7 +553,7 @@ router.put('/:id', async (req, res, next) => {
     if(Number(current.active)!==0&&targetActive===0){const error=new Error('Use the Retire product action so stock and history can be checked safely.');error.code='CATALOG_RETIREMENT_ROUTE_REQUIRED';error.status=409;throw error;}
     const safeStock = stock_qty === undefined ? Number(current.stock_qty || 0) : Number(stock_qty || 0);
     const safeMinStock = min_stock === undefined ? Number(current.min_stock || 0) : Number(min_stock || 0);
-    await db.execute({ sql: `UPDATE products SET sku=?,barcode=?,name=?,description=?,category_id=?,price=?,cost=?,tax_rate=?,stock_qty=?,min_stock=?,active=?,supplier_id=?,is_service=?,unit=?,online_available=?,web_allotment=?,is_rental=?,rental_rate_type=?,rental_rate=?,rental_deposit=?,rental_late_fee_rate=?,replacement_value=?,rental_classification=?,rental_weekly_rate=?,rental_monthly_rate=?,rental_hourly_rate=?,is_accessory=?,is_layaway_eligible=?,model_number=?,size=?,taxable=? WHERE id=?`, args: [sku, barcode||null, name, description||null, category_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : safeStock, svc ? 0 : safeMinStock, targetActive, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax, req.params.id] });
+    await db.execute({ sql: `UPDATE products SET sku=?,barcode=?,name=?,description=?,category_id=?,brand_id=?,price=?,cost=?,tax_rate=?,stock_qty=?,min_stock=?,active=?,supplier_id=?,is_service=?,unit=?,online_available=?,web_allotment=?,is_rental=?,rental_rate_type=?,rental_rate=?,rental_deposit=?,rental_late_fee_rate=?,replacement_value=?,rental_classification=?,rental_weekly_rate=?,rental_monthly_rate=?,rental_hourly_rate=?,is_accessory=?,is_layaway_eligible=?,model_number=?,size=?,taxable=? WHERE id=?`, args: [sku, barcode||null, name, description||null, category_id||null, brand_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : safeStock, svc ? 0 : safeMinStock, targetActive, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax, req.params.id] });
     // Rental items live at a single branch — reassigning the dropdown moves
     // the stock there; clearing it drops back to unassigned/global-only
     // (matches the "Unassigned (global stock only)" option in the form).

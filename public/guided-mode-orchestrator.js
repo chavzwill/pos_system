@@ -8,6 +8,7 @@ const TASK_CONTEXT={
  'Create or manage a rental':{domain:'rentals',feature:'rentals-workspace',selector:'#tt-rentals-workspace'},
  'Dispatch, route or complete a delivery':{domain:'dispatch',feature:'logistics-intelligence',selector:'#tt-logistics-intelligence'},
  'Adjust inventory':{domain:'inventory',feature:'inventory-workspace',selector:'#tt-inventory-workspace'},
+ 'Manage product brands':{domain:'inventory',feature:'catalog-admin-workspace',selector:'.catalog-admin-overlay'},
  'Run a stock or cycle count':{domain:'inventory'},
  'Create or approve a purchase request':{domain:'purchasing',feature:'purchasing-workspace',selector:'#tt-purchasing-workspace',tab:'pr'},
  'Create, edit, copy, cancel or receive a PO':{domain:'purchasing',feature:'purchasing-workspace',selector:'#tt-purchasing-workspace',tab:'po'},
@@ -18,7 +19,7 @@ const TASK_CONTEXT={
  'Stock Planning & Replenishment':{domain:'purchasing',feature:'inventory-intelligence',selector:'#tt-inventory-intelligence'}
 };
 const API={
- 'sales-workspace':'TotalToolsSalesWorkspace','cashier-controls-workspace':'TotalToolsCashierControls','work-orders-workspace':'TotalToolsWorkOrdersWorkspace','rentals-workspace':'TotalToolsRentalsWorkspace','logistics-intelligence':'TotalToolsLogisticsIntelligence','inventory-workspace':'TotalToolsInventoryWorkspace','purchasing-workspace':'TotalToolsPurchasingWorkspace','transfers-workspace':'TotalToolsTransfersWorkspace','quotations-workspace':'TotalToolsQuotationsWorkspace','operational-reports':'TotalToolsOperationalReports','inventory-intelligence':'TotalToolsInventoryIntelligence'
+ 'sales-workspace':'TotalToolsSalesWorkspace','cashier-controls-workspace':'TotalToolsCashierControls','work-orders-workspace':'TotalToolsWorkOrdersWorkspace','rentals-workspace':'TotalToolsRentalsWorkspace','logistics-intelligence':'TotalToolsLogisticsIntelligence','inventory-workspace':'TotalToolsInventoryWorkspace','catalog-admin-workspace':'TotalToolsCatalogAdmin','purchasing-workspace':'TotalToolsPurchasingWorkspace','transfers-workspace':'TotalToolsTransfersWorkspace','quotations-workspace':'TotalToolsQuotationsWorkspace','operational-reports':'TotalToolsOperationalReports','inventory-intelligence':'TotalToolsInventoryIntelligence'
 };
 let running=false,lastKey='',advancedSetup='';
 const sleep=ms=>new Promise(r=>setTimeout(r,ms));

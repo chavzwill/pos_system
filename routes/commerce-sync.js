@@ -14,6 +14,7 @@ function publicProduct(p) {
   return {
     id: p.id, sku: p.sku, barcode: p.barcode, name: p.name, description: p.description,
     category_id: p.category_id, category_name: p.category_name || null,
+    brand_id: p.brand_id || null, brand_name: p.brand_name || null,
     price: Number(p.price) || 0, tax_rate: Number(p.tax_rate) || 0, taxable: Number(p.taxable ?? 1) !== 0,
     stock_qty: Number(p.stock_qty) || 0, min_stock: Number(p.min_stock) || 0,
     active: Number(p.active) !== 0, online_available: Number(p.online_available || 0) !== 0,
@@ -40,9 +41,11 @@ router.get('/catalog', async (req, res) => {
   try {
     const includeInactive = String(req.query.include_inactive || '') === '1';
     const { rows: products } = await db.execute({
-      sql: `SELECT p.*, c.name category_name FROM products p LEFT JOIN categories c ON c.id=p.category_id
+      sql: `SELECT p.*, c.name category_name, br.name brand_name FROM products p LEFT JOIN categories c ON c.id=p.category_id LEFT JOIN brands br ON br.id=p.brand_id
             ${includeInactive ? '' : 'WHERE p.active=1'} ORDER BY p.id`, args: []
     });
+    const { rows: categories } = await db.execute({sql:'SELECT id,name,description FROM categories ORDER BY name',args:[]});
+    const { rows: brands } = await db.execute({sql:'SELECT id,name,description,logo_path,active FROM brands ORDER BY name',args:[]});
     const ids = products.map(p => Number(p.id));
     let inventory = [], variations = [];
     if (ids.length) {
@@ -75,9 +78,14 @@ router.get('/catalog', async (req, res) => {
     }
     res.json({
       contract_version: CONTRACT_VERSION, generated_at: new Date().toISOString(),
+      categories: categories.map(c=>({id:c.id,name:c.name,description:c.description||null})),
+      brands: brands.map(b=>({id:b.id,name:b.name,description:b.description||null,logo_path:b.logo_path||null,active:Number(b.active)!==0})),
       products: products.map(p => ({ ...publicProduct(p), branches: invMap.get(Number(p.id)) || [], variations: varMap.get(Number(p.id)) || [] })),
     });
-  } catch (e) { res.status(500).json({ error: e.message }); }
+  } catch (e) {
+    console.error('commerce_sync_catalog_error',{code:e?.code||'unknown'});
+    res.status(500).json({error:'Unable to prepare the website catalog right now.',code:'COMMERCE_SYNC_CATALOG_UNAVAILABLE'});
+  }
 });
 
 router.get('/availability/:sku', async (req, res) => {

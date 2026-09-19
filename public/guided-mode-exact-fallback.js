@@ -14,6 +14,7 @@ const map={
  'Create or manage a rental':{1:['rentals','rental'],2:['new rental','create rental','rental agreement'],3:['issue','activate','checkout rental'],4:['return rental','check in','return']},
  'Dispatch, route or complete a delivery':{1:['dispatch','logistics'],2:['dispatch queue','jobs','unassigned'],3:['schedule','assignee','vehicle'],4:['in transit','completed','complete']},
  'Adjust inventory':{1:['inventory','products'],2:['adjust','stock adjustment','inventory adjustment'],3:['reason','adjustment reason','apply adjustment']},
+ 'Manage product brands':{1:['products & categories','inventory','catalog'],2:['brands','manage brands','brand maintenance'],3:['new brand','edit brand','brand name'],4:['logo image','brand logo','save brand']},
  'Run a stock or cycle count':{1:['warehouse','inventory','cycle count'],2:['new count','start count','cycle count'],3:['commit','finalize','complete count']},
  'Create or approve a purchase request':{1:['purchase requests','purchasing'],2:['new purchase request','create request'],3:['approve','reject'],4:['convert to po','create po']},
  'Create, edit, copy, cancel or receive a PO':{1:['purchase orders','purchasing'],2:['new purchase order','create po'],3:['edit','revise','copy','duplicate','cancel','approve po','mark sent'],4:['receive','receive items','goods received']},
