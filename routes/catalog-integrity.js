@@ -2,7 +2,7 @@
 const express=require('express');
 const router=express.Router();
 const {requirePermission}=require('../lib/permissions');
-const {catalogHealth,inspectProductCleanup,setProductLifecycle}=require('../lib/catalog-integrity');
+const {catalogHealth,inspectProductCleanup,setProductLifecycle,reviewDuplicateCandidate}=require('../lib/catalog-integrity');
 
 router.use(requirePermission('inventory'));
 function safe(res,error){
@@ -13,6 +13,21 @@ function safe(res,error){
 }
 router.get('/health',async(req,res)=>{
   try{return res.json(await catalogHealth({limit:req.query.limit}));}catch(e){return safe(res,e);}
+});
+router.patch('/duplicate-review',async(req,res)=>{
+  try{
+    const result=await reviewDuplicateCandidate({
+      candidateKey:req.body?.candidate_key,
+      decision:req.body?.decision,
+      reason:req.body?.reason,
+      expectedVersion:req.body?.expected_version??0,
+      actorEmployeeId:req.employee?.id||null,
+      requestId:req.requestId||null,
+      method:req.method||null,
+      path:req.originalUrl||req.path||null
+    });
+    return res.json({review:result.review,changed:result.changed});
+  }catch(e){return safe(res,e);}
 });
 router.patch('/products/:id/lifecycle',async(req,res)=>{
   try{
