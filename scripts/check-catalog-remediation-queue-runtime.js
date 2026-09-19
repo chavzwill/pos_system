@@ -28,5 +28,6 @@ assert.equal(queue.by_severity.low,0);
 assert.equal(recordKey(group),'product_group:10,11');
 assert.equal(JSON.stringify(issues),before,'queue construction must not mutate issue evidence');
 const again=buildRemediationQueue([...issues].reverse());
-assert.deepEqual(again.items.map(x=>x.key),queue.items.map(x=>x.key),'ordering must be deterministic regardless of input order');
+assert.deepEqual(again.items.map(x=>x.key),queue.items.map(x=>x.key),'record ordering must be deterministic regardless of input order');
+assert.deepEqual(again.items.find(x=>x.key==='product:7').issues.map(x=>x.code),productItem.issues.map(x=>x.code),'issue ordering inside a record must be deterministic');
 console.log('Catalog remediation queue runtime certification passed.');
