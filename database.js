@@ -95,6 +95,26 @@ async function _init() {
     )` },
     { sql: `CREATE TRIGGER IF NOT EXISTS catalog_product_lifecycle_events_no_update BEFORE UPDATE ON catalog_product_lifecycle_events BEGIN SELECT RAISE(ABORT,'catalog lifecycle events are append-only'); END` },
     { sql: `CREATE TRIGGER IF NOT EXISTS catalog_product_lifecycle_events_no_delete BEFORE DELETE ON catalog_product_lifecycle_events BEGIN SELECT RAISE(ABORT,'catalog lifecycle events are append-only'); END` },
+    { sql: `CREATE TABLE IF NOT EXISTS catalog_duplicate_reviews (
+      candidate_key TEXT PRIMARY KEY,
+      decision TEXT NOT NULL CHECK(decision IN ('confirmed_duplicate','not_duplicate','needs_more_info')),
+      reason TEXT NOT NULL,
+      reviewed_by INTEGER REFERENCES employees(id),
+      version INTEGER NOT NULL DEFAULT 1,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )` },
+    { sql: `CREATE TABLE IF NOT EXISTS catalog_duplicate_review_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      candidate_key TEXT NOT NULL,
+      from_decision TEXT,
+      to_decision TEXT NOT NULL CHECK(to_decision IN ('confirmed_duplicate','not_duplicate','needs_more_info')),
+      reason TEXT NOT NULL,
+      reviewed_by INTEGER REFERENCES employees(id),
+      version INTEGER NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_duplicate_review_events_no_update BEFORE UPDATE ON catalog_duplicate_review_events BEGIN SELECT RAISE(ABORT,'catalog duplicate review events are append-only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_duplicate_review_events_no_delete BEFORE DELETE ON catalog_duplicate_review_events BEGIN SELECT RAISE(ABORT,'catalog duplicate review events are append-only'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS customers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       customer_number TEXT UNIQUE,
