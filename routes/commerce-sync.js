@@ -17,7 +17,7 @@ function publicProduct(p) {
     brand_id: p.brand_id || null, brand_name: p.brand_name || null,
     price: Number(p.price) || 0, tax_rate: Number(p.tax_rate) || 0, taxable: Number(p.taxable ?? 1) !== 0,
     stock_qty: Number(p.stock_qty) || 0, min_stock: Number(p.min_stock) || 0,
-    active: Number(p.active) !== 0, online_available: Number(p.online_available || 0) !== 0,
+    active: Number(p.active) !== 0, catalog_status: p.catalog_status || 'active', online_available: Number(p.online_available || 0) !== 0,
     web_allotment: p.web_allotment == null ? null : Number(p.web_allotment), image_path: p.image_path || null,
     model_number: p.model_number || null, size: p.size || null, unit: p.unit || null,
     is_service: Number(p.is_service || 0) !== 0, is_rental: Number(p.is_rental || 0) !== 0,

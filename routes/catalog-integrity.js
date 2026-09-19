@@ -2,7 +2,7 @@
 const express=require('express');
 const router=express.Router();
 const {requirePermission}=require('../lib/permissions');
-const {catalogHealth,inspectProductCleanup}=require('../lib/catalog-integrity');
+const {catalogHealth,inspectProductCleanup,setProductLifecycle}=require('../lib/catalog-integrity');
 
 router.use(requirePermission('inventory'));
 function safe(res,error){
@@ -13,6 +13,19 @@ function safe(res,error){
 }
 router.get('/health',async(req,res)=>{
   try{return res.json(await catalogHealth({limit:req.query.limit}));}catch(e){return safe(res,e);}
+});
+router.patch('/products/:id/lifecycle',async(req,res)=>{
+  try{
+    const result=await setProductLifecycle(req.params.id,{
+      status:req.body?.status,
+      reason:req.body?.reason,
+      actorEmployeeId:req.employee?.id||null,
+      requestId:req.requestId||null,
+      method:req.method||null,
+      path:req.originalUrl||req.path||null
+    });
+    return res.json({product:result.product,changed:result.changed});
+  }catch(e){return safe(res,e);}
 });
 router.get('/products/:id/cleanup',async(req,res)=>{
   try{
