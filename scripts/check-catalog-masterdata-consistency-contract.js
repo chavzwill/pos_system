@@ -1,0 +1,16 @@
+'use strict';
+const fs=require('fs'),path=require('path');
+const root=path.join(__dirname,'..');
+const read=f=>{try{return fs.readFileSync(path.join(root,f),'utf8')}catch(_){return''}};
+let failed=0;
+const check=(n,o)=>o?console.log('PASS Catalog Master Data:',n):(failed++,console.error('FAIL Catalog Master Data:',n));
+const lib=read('lib/catalog-integrity.js'),pkg=read('package.json');
+check('catalog health reports inconsistent product naming',lib.includes('inconsistent_product_name'));
+check('catalog health reports SKU whitespace',lib.includes('sku_whitespace'));
+check('catalog health reports explicit UOM mismatch',lib.includes('uom_profile_mismatch'));
+check('UOM mismatch depends on explicit profile evidence',lib.includes('product_uom_profiles'));
+check('catalog health reports stock without valid sell price',lib.includes('stock_without_sell_price'));
+check('catalog health reports broken master data with sales history',lib.includes('sold_with_broken_master_data'));
+check('master-data checks remain diagnostic only',!lib.includes('UPDATE products SET name')&&!lib.includes('UPDATE products SET sku'));
+check('full syntax wall includes catalog master data contract',pkg.includes('check:catalog-masterdata-consistency'));
+if(failed){console.error('Catalog Master Data contract failed: '+failed);process.exit(1)}console.log('Catalog Master Data contract passed.');
