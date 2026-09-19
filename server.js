@@ -145,6 +145,7 @@ app.use('/api/inventory-writeoffs', require('./routes/inventory-writeoffs'));
 app.use('/api/products', require('./routes/inventory-adjustment-hardening'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
+app.use('/api/brands', require('./routes/brands'));
 app.use('/api/commerce-sync', require('./routes/commerce-sync'));
 app.use('/api/smartcommerce-orders', require('./routes/smartcommerce-orders'));
 app.use('/api/customer-repair-portal', require('./routes/customer-repair-portal'));

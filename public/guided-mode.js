@@ -46,6 +46,12 @@
       { find:['adjust','stock adjustment','inventory adjustment'], text:'Choose the controlled stock-adjustment action for the exact item and branch.' },
       { find:['reason','adjustment reason'], text:'Enter the verified quantity change and a real reason. Do not disguise sales, transfers or cycle-count variance as manual adjustments.' }
     ]},
+    { id:'brands', title:'Manage product brands', keywords:['brand','brands','brand logo','product brand','manage brands'], steps:[
+      { find:['products & categories','inventory','catalog'], text:'Open Products & Categories.' },
+      { find:['brands','manage brands','brand maintenance'], text:'Open Brands to review the current brand list.' },
+      { find:['new brand','edit brand','brand name'], text:'Add or edit the brand using its correct name and description. Avoid creating spelling variants of an existing brand.' },
+      { find:['logo image','brand logo','save brand'], text:'Add the approved brand logo when available, then save. Product assignment remains a separate deliberate catalog edit.' }
+    ]},
     { id:'count', title:'Run a stock or cycle count', keywords:['cycle count','stock count','physical count','inventory count'], steps:[
       { find:['warehouse','inventory','cycle count'], text:'Open Warehouse / Inventory Counts.' },
       { find:['new count','start count','cycle count'], text:'Start a count for the correct branch/location and scope.' },

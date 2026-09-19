@@ -56,6 +56,14 @@ async function _init() {
       description TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS brands (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      logo_path TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS products (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       sku TEXT UNIQUE NOT NULL,
@@ -63,6 +71,7 @@ async function _init() {
       name TEXT NOT NULL,
       description TEXT,
       category_id INTEGER REFERENCES categories(id),
+      brand_id INTEGER REFERENCES brands(id),
       price REAL NOT NULL DEFAULT 0,
       cost REAL NOT NULL DEFAULT 0,
       tax_rate REAL NOT NULL DEFAULT 8.5,
@@ -954,6 +963,7 @@ async function _init() {
     'ALTER TABLE employees ADD COLUMN password TEXT',
     'ALTER TABLE employees ADD COLUMN must_change_password INTEGER DEFAULT 0',
     'ALTER TABLE products ADD COLUMN supplier_id INTEGER REFERENCES suppliers(id)',
+    'ALTER TABLE products ADD COLUMN brand_id INTEGER REFERENCES brands(id)',
     'ALTER TABLE branches ADD COLUMN currency TEXT',
     'ALTER TABLE branches ADD COLUMN is_warehouse INTEGER DEFAULT 0',
     'ALTER TABLE transactions ADD COLUMN drawer_session_id INTEGER REFERENCES drawer_sessions(id)',
@@ -1822,6 +1832,7 @@ async function _init() {
     'CREATE INDEX IF NOT EXISTS idx_employee_branches_employee_id ON employee_branches(employee_id)',
     'CREATE INDEX IF NOT EXISTS idx_employee_branches_branch_id ON employee_branches(branch_id)',
     'CREATE INDEX IF NOT EXISTS idx_lookup_aliases_match ON lookup_aliases(entity_type,status,alias_normalized)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_brands_name_normalized ON brands(lower(trim(name)))',
     'CREATE INDEX IF NOT EXISTS idx_product_variations_product_id ON product_variations(product_id)',
     'CREATE INDEX IF NOT EXISTS idx_stock_movements_product_id ON stock_movements(product_id)',
     'CREATE INDEX IF NOT EXISTS idx_crm_activities_lead_id ON crm_activities(lead_id)',

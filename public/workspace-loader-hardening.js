@@ -15,6 +15,7 @@ const assets={
 'transfers-workspace':['/transfers-workspace.css','/transfers-workspace.js','TotalToolsTransfersWorkspace'],
 'work-orders-workspace':['/work-orders-workspace.css','/work-orders-workspace.js','TotalToolsWorkOrdersWorkspace'],
 'inventory-workspace':['/inventory-workspace.css','/inventory-workspace.js','TotalToolsInventoryWorkspace'],
+'catalog-admin-workspace':['/catalog-admin-workspace.css','/catalog-admin-workspace.js','TotalToolsCatalogAdmin'],
 'purchasing-workspace':['/purchasing-workspace.css','/purchasing-workspace.js','TotalToolsPurchasingWorkspace'],
 'rentals-workspace':['/rentals-workspace.css','/rentals-workspace.js','TotalToolsRentalsWorkspace'],
 'repair-operations':['/repair-operations.css','/repair-operations.js','TotalToolsRepairOperations'],
