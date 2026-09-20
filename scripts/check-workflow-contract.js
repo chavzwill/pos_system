@@ -18,6 +18,7 @@ const retailReturn=read('routes/retail-return-hardening.js');
 const refund=read('routes/retail-refund-settlement.js');
 const retailCost=read('routes/retail-cost-integrity.js');
 const returnAccounting=read('lib/accounting-retail-returns.js');
+const legacyUi=read('public/index.html');
 const checks=[];
 const check=(name,pass)=>checks.push({name,pass:!!pass});
 const workflows=[
@@ -88,6 +89,13 @@ check('Retail cost integrity mounted before legacy transaction route',server.ind
 check('Replacement return hardening mounted before legacy transaction route',server.indexOf("require('./routes/replacement-return-hardening')")<server.indexOf("require('./routes/transactions')"));
 check('Quotation hardening mounted before legacy quotation route',server.indexOf("require('./routes/quotation-workflow-hardening')")>=0&&server.indexOf("require('./routes/quotation-workflow-hardening')")<server.indexOf("require('./routes/quotations')"));
 check('Quotation sale filter matches persisted retail type',quotes.includes('<option value="retail"')&&!quotes.includes('<option value="sale"'));
+check('Immediate retail checkout marks receipt as just completed',legacyUi.includes('showReceipt(tx, changeAmount, cashResult, splitForeignCash, true)'));
+check('Receipt completion state is explicit and excludes rental-linked transactions',legacyUi.includes('completedNow = false')&&legacyUi.includes('const justCompleted = completedNow && !tx.rental_agreement_number'));
+check('Immediate sale handoff clearly confirms payment and transaction evidence',legacyUi.includes('Sale completed successfully')&&legacyUi.includes('Payment recorded')&&legacyUi.includes('tx.transaction_number'));
+check('Immediate sale handoff keeps change due visible when applicable',legacyUi.includes("change > 0 ? ` · Change ${this.fmt(change)}`"));
+check('Immediate sale handoff offers next sale and returns focus to product search',legacyUi.includes('Next Sale')&&legacyUi.includes("document.getElementById('pos-search')?.focus()"));
+check('Historical receipt default remains document-only',legacyUi.includes("${justCompleted ? 'Sale complete' : 'Receipt'}"));
+check('Sale completion handoff has responsive styling',legacyUi.includes('.sale-complete-handoff__mark')&&legacyUi.includes('@media (max-width:480px)'));
 for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} Workflow: ${c.name}`);
 if(checks.some(c=>!c.pass))process.exit(1);
 console.log(`Workflow contract OK (${checks.length} checks across ${workflows.length} workflows).`);
