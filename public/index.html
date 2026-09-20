@@ -8872,10 +8872,11 @@ const App = {
   },
 
   async showCustomerForm(id) {
-    const [c, cardTypes, cashBackCardTypes] = await Promise.all([
+    const [c, cardTypes, cashBackCardTypes, rentalCompliance] = await Promise.all([
       id ? this.api('GET', `/customers/${id}`) : Promise.resolve({}),
       this.api('GET', '/discount-cards'),
       this.api('GET', '/cash-back-cards'),
+      id && this.can('rentals') ? this.api('GET', `/rentals/customers/${id}/rental-compliance`).catch(()=>null) : Promise.resolve(null),
     ]);
     const isCredit = (c.customer_type || 'cash') === 'credit';
     const isTaxExempt = c.tax_exempt ? true : false;
@@ -8888,6 +8889,14 @@ const App = {
     const cashBackCardTypeOptions = c.cash_back_card_type_id && !cashBackCardTypes.some(t => t.id === c.cash_back_card_type_id)
       ? [...cashBackCardTypes, { id: c.cash_back_card_type_id, name: `${c.cash_back_card_type_name} (inactive)` }]
       : cashBackCardTypes;
+    const canGrantRentalException = this.currentUser?.permissions?.rentals_compliance_exception === true;
+    const activeRentalException = rentalCompliance?.via_exception ? rentalCompliance.exception : null;
+    const rentalMissing = rentalCompliance?.missing || [];
+    const rentalComplianceHtml = id && rentalCompliance ? `<div style="margin-top:10px;padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary)">
+      <div style="display:flex;justify-content:space-between;gap:12px;align-items:flex-start"><div><strong style="font-size:12px">Rental compliance</strong><div style="font-size:11px;color:var(--text-muted);margin-top:3px">${rentalCompliance.eligible&&!rentalCompliance.via_exception?'Complete':activeRentalException?'Temporary exception active':'Requirements still outstanding'}</div></div>${activeRentalException?`<span class="badge-pill badge-warning">Expires ${new Date(activeRentalException.expires_at).toLocaleString()}</span>`:''}</div>
+      ${rentalMissing.length?`<div style="font-size:11px;margin-top:8px;color:var(--text-muted)">Still needed: ${rentalMissing.map(x=>this.escapeHtml?this.escapeHtml(x):x).join(', ')}</div>`:''}
+      ${activeRentalException?`<div style="font-size:11px;margin-top:6px">Approved by ${activeRentalException.approved_by_name||'authorized manager'} · ${activeRentalException.reason}</div>${canGrantRentalException?`<button type="button" class="btn btn-danger btn-sm" style="margin-top:8px" onclick="App.revokeRentalComplianceException(${activeRentalException.id},${id})">Revoke exception</button>`:''}`:(!rentalCompliance.eligible&&canGrantRentalException?`<button type="button" class="btn btn-secondary btn-sm" style="margin-top:8px" onclick="App.grantRentalComplianceException(${id})">Grant temporary exception</button>`:'')}
+    </div>` : '';
     this.showModal(`
       <div class="modal">
         <div class="modal-header"><span class="modal-title">${id ? 'Edit Customer' : 'Add Customer'}</span><button class="modal-close">✕</button></div>
@@ -8975,6 +8984,7 @@ const App = {
               </div>
               <div class="form-group"><label>Relationship</label><input id="cf-ref-relationship" value="${c.rental_reference_relationship||''}" placeholder="e.g. Employer, Family, Friend"></div>
             </div>
+            ${rentalComplianceHtml}
           </div>
           <div style="border-top:1px solid var(--border);margin-top:12px;padding-top:12px">
             <strong style="font-size:12px;color:var(--text-muted);text-transform:uppercase">Discount Card</strong>
@@ -9027,6 +9037,31 @@ const App = {
     const checked = document.getElementById('cf-rental-customer')?.checked;
     const panel = document.getElementById('cf-rental-customer-fields');
     if (panel) panel.style.display = checked ? 'block' : 'none';
+  },
+
+  async grantRentalComplianceException(customerId) {
+    const reason = prompt('Why is a temporary rental compliance exception necessary?\n\nThis does not remove the missing-document requirements. They remain visible until completed.');
+    if (!reason) return;
+    const daysRaw = prompt('How many days should the exception remain valid? (Maximum 30)', '1');
+    if (daysRaw == null) return;
+    const days = Number(daysRaw);
+    if (!Number.isFinite(days) || days <= 0 || days > 30) { this.alert('Enter a duration between 1 and 30 days', 'error'); return; }
+    const expires_at = new Date(Date.now() + days * 86400000).toISOString();
+    try {
+      await this.api('POST', `/rentals/customers/${customerId}/rental-compliance-exceptions`, { reason: reason.trim(), expires_at });
+      this.alert('Temporary rental compliance exception granted');
+      this.showCustomerForm(customerId);
+    } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  async revokeRentalComplianceException(exceptionId, customerId) {
+    const reason = prompt('Why is this temporary rental compliance exception being revoked?');
+    if (!reason) return;
+    try {
+      await this.api('POST', `/rentals/rental-compliance-exceptions/${exceptionId}/revoke`, { reason: reason.trim() });
+      this.alert('Rental compliance exception revoked');
+      this.showCustomerForm(customerId);
+    } catch(e) { this.alert(e.message, 'error'); }
   },
 
   async uploadCustomerIdScan(customerId, input) {
@@ -13960,6 +13995,7 @@ const App = {
       { key: 'rentals_returns', label: 'Process Returns & Cancellations' },
       { key: 'rentals_issue', label: 'Issue / Dispatch Rentals' },
       { key: 'rentals_pause', label: 'Authorize Rental Pauses' },
+      { key: 'rentals_compliance_exception', label: 'Grant Temporary Rental Compliance Exceptions' },
     ]},
     { key: 'work_orders', label: 'Work Orders', subs: [
       { key: 'wo_intake', label: 'Open Work Orders' },

@@ -700,6 +700,27 @@ async function _init() {
       damage_fee REAL DEFAULT 0,
       returned_at DATETIME
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS rental_compliance_exceptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL REFERENCES customers(id),
+      approved_by INTEGER NOT NULL REFERENCES employees(id),
+      reason TEXT NOT NULL,
+      missing_requirements_json TEXT NOT NULL,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )` },
+    { sql: `CREATE INDEX IF NOT EXISTS rental_compliance_exception_customer_idx ON rental_compliance_exceptions(customer_id, expires_at)` },
+    { sql: `CREATE TABLE IF NOT EXISTS rental_compliance_exception_revocations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      exception_id INTEGER NOT NULL UNIQUE REFERENCES rental_compliance_exceptions(id),
+      revoked_by INTEGER NOT NULL REFERENCES employees(id),
+      reason TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS rental_compliance_exception_no_update BEFORE UPDATE ON rental_compliance_exceptions BEGIN SELECT RAISE(ABORT,'rental compliance exception evidence is append only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS rental_compliance_exception_no_delete BEFORE DELETE ON rental_compliance_exceptions BEGIN SELECT RAISE(ABORT,'rental compliance exception evidence is append only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS rental_compliance_revocation_no_update BEFORE UPDATE ON rental_compliance_exception_revocations BEGIN SELECT RAISE(ABORT,'rental compliance revocation evidence is append only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS rental_compliance_revocation_no_delete BEFORE DELETE ON rental_compliance_exception_revocations BEGIN SELECT RAISE(ABORT,'rental compliance revocation evidence is append only'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS rental_agreement_pauses (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       agreement_id INTEGER NOT NULL REFERENCES rental_agreements(id),

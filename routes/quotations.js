@@ -500,8 +500,8 @@ router.post('/:id/convert', async (req, res) => {
       // already-converted agreement) is untouched by this rule.
       try {
         const { rows: [customer] } = await db.execute({ sql: 'SELECT * FROM customers WHERE id = ?', args: [quote.customer_id] });
-        assertRentalCustomerEligible(customer);
-      } catch(e) { return res.status(400).json({ error: e.message }); }
+        await assertRentalCustomerEligible(db, customer);
+      } catch(e) { return res.status(Number(e?.status)||400).json({ error: e.message, code: e?.code||'RENTAL_CUSTOMER_COMPLIANCE_REQUIRED', ...(e?.details||{}) }); }
 
       // Stock may have shifted since the quote was drafted — re-check now.
       // Unlike retail, rentals have no PR/purchase fallback for an

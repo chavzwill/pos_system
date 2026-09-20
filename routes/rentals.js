@@ -220,8 +220,8 @@ router.post('/agreements', requirePermission('rentals_checkout'), async (req, re
     // Only gates the creation of NEW agreements — existing ones are untouched.
     try {
       const { rows: [customer] } = await db.execute({ sql: 'SELECT * FROM customers WHERE id = ?', args: [customer_id] });
-      assertRentalCustomerEligible(customer);
-    } catch(e) { return res.status(400).json({ error: e.message }); }
+      await assertRentalCustomerEligible(db, customer);
+    } catch(e) { return res.status(Number(e?.status)||400).json({ error: e.message, code: e?.code||'RENTAL_CUSTOMER_COMPLIANCE_REQUIRED', ...(e?.details||{}) }); }
 
     let lines;
     try {
