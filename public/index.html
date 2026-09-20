@@ -5626,7 +5626,7 @@ const App = {
             </div>
           </div>
           <p style="font-size:11px;color:var(--text-muted);margin-top:-6px">Item availability below reflects stock at the selected location.</p>
-          <div class="form-group"><label>Due Date *</label><input type="date" id="rc-duedate" value="${tomorrow}" oninput="App._recalcRentalCheckoutEstimate()"></div>
+          <div class="form-group"><label>Rental Length</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button type="button" class="btn btn-secondary btn-sm" onclick="App.setRentalDurationDays(1)">1 day</button><button type="button" class="btn btn-secondary btn-sm" onclick="App.setRentalDurationDays(2)">2 days</button><button type="button" class="btn btn-secondary btn-sm" onclick="App.setRentalDurationPreset('weekend')">Weekend</button><button type="button" class="btn btn-secondary btn-sm" onclick="App.setRentalDurationDays(7)">1 week</button><button type="button" class="btn btn-secondary btn-sm" onclick="App.setRentalDurationDays(30)">30 days</button></div><div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap"><label style="flex:1;min-width:180px">Due Date *<input type="date" id="rc-duedate" value="${tomorrow}" oninput="App.syncRentalDurationFromDueDate();App._recalcRentalCheckoutEstimate()"></label><label style="width:120px">Days<input type="number" id="rc-duration-days" min="1" max="365" value="1" oninput="App.syncRentalDueDateFromDays();App._recalcRentalCheckoutEstimate()"></label></div><p id="rc-duration-summary" style="font-size:11px;color:var(--text-muted);margin:4px 0 0">1 rental day</p></div>
           <hr style="margin:12px 0">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <strong>Items</strong>
@@ -5958,6 +5958,52 @@ const App = {
   // every existing line's availability numbers in place (keeping whatever
   // item/qty the user already picked). A line's item is cleared if it isn't
   // available at the newly-selected branch.
+  setRentalDurationDays(days) {
+    const n=Math.max(1,Math.min(365,Number(days)||1));
+    const input=document.getElementById('rc-duration-days');
+    if(input)input.value=String(n);
+    this.syncRentalDueDateFromDays();
+    this._recalcRentalCheckoutEstimate();
+  },
+
+  setRentalDurationPreset(preset) {
+    if(preset!=='weekend') return;
+    const now=new Date();
+    const day=now.getDay();
+    // Weekend preset means due Monday. From Friday/Saturday/Sunday that is
+    // the next Monday; earlier in the week it is the coming Monday.
+    const delta=(8-day)%7||7;
+    const due=new Date(now);
+    due.setDate(now.getDate()+delta);
+    const input=document.getElementById('rc-duedate');
+    if(input)input.value=due.toISOString().slice(0,10);
+    this.syncRentalDurationFromDueDate();
+    this._recalcRentalCheckoutEstimate();
+  },
+
+  syncRentalDueDateFromDays() {
+    const days=Math.max(1,Math.min(365,Number(document.getElementById('rc-duration-days')?.value)||1));
+    const due=new Date();
+    due.setHours(12,0,0,0);
+    due.setDate(due.getDate()+days);
+    const input=document.getElementById('rc-duedate');
+    if(input)input.value=due.toISOString().slice(0,10);
+    const summary=document.getElementById('rc-duration-summary');
+    if(summary)summary.textContent=`${days} rental day${days===1?'':'s'} · due ${due.toLocaleDateString()}`;
+  },
+
+  syncRentalDurationFromDueDate() {
+    const raw=document.getElementById('rc-duedate')?.value;
+    if(!raw)return;
+    const today=new Date();today.setHours(0,0,0,0);
+    const due=new Date(raw+'T12:00:00');due.setHours(0,0,0,0);
+    const days=Math.max(1,Math.round((due-today)/86400000));
+    const input=document.getElementById('rc-duration-days');
+    if(input)input.value=String(days);
+    const summary=document.getElementById('rc-duration-summary');
+    if(summary)summary.textContent=`${days} rental day${days===1?'':'s'} · due ${due.toLocaleDateString()}`;
+  },
+
   async _refreshRentalCheckoutBranch() {
     const branchId = document.getElementById('rc-branch')?.value;
     const all = branchId ? await this.api('GET', `/products?is_rental=1&active=1&branch_id=${branchId}`) : [];
