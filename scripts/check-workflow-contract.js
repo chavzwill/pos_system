@@ -103,6 +103,13 @@ check('Held order closes only after completed-sale linkage',recall.includes("UPD
 check('Completed transaction preserves cashier and sales agent separately',transactions.includes('employee_id,sales_agent_id,branch_id,drawer_session_id'));
 check('Sales commission follows sales agent not cashier',transactions.includes('calcCommission(savedTx.sales_agent_id || savedTx.employee_id'));
 check('Cashier order queue is POS-authorized while hold remains sales permission',legacyUi.includes("this.can('pos') ? `<button class=\"pos-grid-btn hold\" onclick=\"App.recallOrder()\">Customer Orders")&&legacyUi.includes("this.can('pos_hold') ? `<button class=\"pos-grid-btn hold\" onclick=\"App.holdOrder()\">Hold"));
+check('Immediate retail checkout marks receipt as just completed',legacyUi.includes('showReceipt(tx, changeAmount, cashResult, splitForeignCash, true)'));
+check('Receipt completion state is explicit and excludes rental-linked transactions',legacyUi.includes('completedNow = false')&&legacyUi.includes('const justCompleted = completedNow && !tx.rental_agreement_number'));
+check('Immediate sale handoff clearly confirms payment and transaction evidence',legacyUi.includes('Sale completed successfully')&&legacyUi.includes('Payment recorded')&&legacyUi.includes('tx.transaction_number'));
+check('Immediate sale handoff keeps change due visible when applicable',legacyUi.includes("change > 0 ? ` · Change ${this.fmt(change)}`"));
+check('Immediate sale handoff offers next sale and returns focus to product search',legacyUi.includes('Next Sale')&&legacyUi.includes("document.getElementById('pos-search')?.focus()"));
+check('Historical receipt default remains document-only',legacyUi.includes("${justCompleted ? 'Sale complete' : 'Receipt'}"));
+check('Sale completion handoff has responsive styling',legacyUi.includes('.sale-complete-handoff__mark')&&legacyUi.includes('@media (max-width:480px)'));
 for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} Workflow: ${c.name}`);
 if(checks.some(c=>!c.pass))process.exit(1);
 console.log(`Workflow contract OK (${checks.length} checks across ${workflows.length} workflows).`);
