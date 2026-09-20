@@ -123,7 +123,9 @@ async function syncRepairFinancials(req,stats){
     const assessmentPaid=money(wo.assessment_paid);
     const depositPaid=money(wo.deposit_paid);
     const finalPaid=money(wo.final_paid);
-    const assessmentExpected=money(wo.assessment_fee);
+    const assessmentSubtotal=money(wo.assessment_fee);
+    const assessmentTax=money(assessmentSubtotal*(Number(wo.assessment_fee_tax_rate)||0)/100);
+    const assessmentExpected=money(assessmentSubtotal+assessmentTax);
     const depositExpected=money(wo.deposit_amount);
     const serviceValue=money(money(wo.estimate_labor)+money(wo.estimate_consumables)+money(wo.parts_total));
     const depositApplied=money(Math.min(Math.max(depositPaid,0),Math.max(serviceValue,0)));
@@ -136,7 +138,10 @@ async function syncRepairFinancials(req,stats){
         stats.reconciliation_issues.push({work_order_id:wo.id,wo_number:ref,type:'deposit_payment_mismatch',expected:depositExpected,actual:depositPaid});
       }
       if(wo.assessment_transaction_id&&wo.assessment_tx_status!=='voided'&&assessmentPaid>0){
-        const j=await postSourceJournal({sourceType:'repair_assessment',sourceId:wo.assessment_transaction_id,sourceReference:ref,entryDate:String(wo.assessment_paid_at||wo.created_at).slice(0,10),description:`Assessment fee ${ref}`,branchId,actorId:actor(req),lines:[{code:paymentDebitCode(wo.assessment_method),debit:assessmentPaid,credit:0,description:'Assessment fee collected'},{code:'4100',debit:0,credit:assessmentPaid,description:'Assessment service revenue'}]});
+        const lines=[{code:paymentDebitCode(wo.assessment_method),debit:assessmentPaid,credit:0,description:'Assessment fee collected'}];
+        if(assessmentSubtotal>0)lines.push({code:'4100',debit:0,credit:assessmentSubtotal,description:'Assessment service revenue'});
+        if(assessmentTax>0)lines.push({code:'2100',debit:0,credit:assessmentTax,description:'Sales tax payable on assessment'});
+        const j=await postSourceJournal({sourceType:'repair_assessment',sourceId:wo.assessment_transaction_id,sourceReference:ref,entryDate:String(wo.assessment_paid_at||wo.created_at).slice(0,10),description:`Assessment fee ${ref}`,branchId,actorId:actor(req),lines});
         stats.repair_assessments[j.existing?'existing':'posted']++;
       }
       if(wo.deposit_transaction_id&&wo.deposit_tx_status!=='voided'&&depositPaid>0){

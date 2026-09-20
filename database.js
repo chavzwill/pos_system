@@ -335,6 +335,9 @@ async function _init() {
       description TEXT NOT NULL,
       item_label TEXT,
       assessment_fee REAL NOT NULL DEFAULT 0,
+      assessment_fee_product_id INTEGER REFERENCES products(id),
+      assessment_fee_name TEXT,
+      assessment_fee_tax_rate REAL NOT NULL DEFAULT 0,
       assessment_transaction_id INTEGER REFERENCES transactions(id),
       estimate_labor REAL NOT NULL DEFAULT 0,
       estimate_consumables REAL NOT NULL DEFAULT 0,
@@ -1272,6 +1275,9 @@ async function _init() {
     // The balance collected when the customer picks up the item — labor +
     // consumables + parts, less the deposit already paid. Mirrors
     // assessment_transaction_id / deposit_transaction_id above.
+    'ALTER TABLE work_orders ADD COLUMN assessment_fee_product_id INTEGER REFERENCES products(id)',
+    'ALTER TABLE work_orders ADD COLUMN assessment_fee_name TEXT',
+    'ALTER TABLE work_orders ADD COLUMN assessment_fee_tax_rate REAL NOT NULL DEFAULT 0',
     'ALTER TABLE work_orders ADD COLUMN final_transaction_id INTEGER REFERENCES transactions(id)',
     // A "Q" line — a part the WO needs that isn't in the catalog yet — mirrors
     // quotation_items.is_temp_item exactly: no product_id, flows through the
