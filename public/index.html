@@ -2095,7 +2095,7 @@ const App = {
       this.can('quotations') ? `<button class="pos-grid-btn" onclick="App.posCreateQuoteFromCart()">Create Quote</button>` : '',
       this.can('quotations') ? `<button class="pos-grid-btn" onclick="App.showQuoteSearch()">Quote Recall</button>` : '',
       this.can('pos_hold') ? `<button class="pos-grid-btn hold" onclick="App.holdOrder()">Hold</button>` : '',
-      this.can('pos_hold') ? `<button class="pos-grid-btn hold" onclick="App.recallOrder()">Hold Recall <span id="hold-count-badge" style="display:none;background:rgba(0,0,0,0.15);border-radius:10px;padding:0 5px;font-size:10px;margin-left:2px"></span></button>` : '',
+      this.can('pos') ? `<button class="pos-grid-btn hold" onclick="App.recallOrder()">Customer Orders <span id="hold-count-badge" style="display:none;background:rgba(0,0,0,0.15);border-radius:10px;padding:0 5px;font-size:10px;margin-left:2px"></span></button>` : '',
       `<button class="pos-grid-btn" onclick="App.posReprintTicket()">Reprint Ticket</button>`,
       this.can('transactions') ? `<button class="pos-grid-btn" onclick="App.showSection('transactions')">Returns</button>` : '',
       `<button class="pos-grid-btn pay-acct" onclick="App.processPayment('credit')">Pay On Acct</button>`,
@@ -2689,7 +2689,7 @@ const App = {
   },
 
   clearCart() {
-    this.cart = []; this.cartCustomer = null; this.cartDiscount = 0; this._storeCreditApplied = 0; this._cashBackApplied = 0; this.appliedPromoCode = null; this.autoAppliedPromo = null; this._availablePromos = []; this._returnCredit = null; this._activeQuoteId = null; this.appliedDiscountCard = null; this._manualTaxExempt = null;
+    this.cart = []; this.cartCustomer = null; this.cartDiscount = 0; this._storeCreditApplied = 0; this._cashBackApplied = 0; this.appliedPromoCode = null; this.autoAppliedPromo = null; this._availablePromos = []; this._returnCredit = null; this._activeQuoteId = null; this._activeHeldOrderId = null; this.appliedDiscountCard = null; this._manualTaxExempt = null;
     this.renderCart();
     const aqBar = document.getElementById('active-quote-bar');
     if (aqBar) aqBar.style.display = 'none';
@@ -2836,6 +2836,7 @@ const App = {
         tax_exemption_number: isTaxExempt ? this.cartTaxExemptionNumber() : null,
         approval_code: approvalCode || null,
         tenders: splitTenders,
+        source_hold_id: this._activeHeldOrderId || null,
       });
 
       // Record promo code usage
@@ -2868,6 +2869,7 @@ const App = {
 
   async holdOrder() {
     if (!this.cart.length) { this.alert('Cart is empty', 'warning'); return; }
+    if (!this.cartCustomer?.id) { this.alert('Find or add the customer before placing this sales order on hold', 'warning'); return; }
     try {
       const cartItems = this.cart.map(i => {
         const product = this.allProducts?.find(p => p.id === i.product_id);
@@ -2943,7 +2945,7 @@ const App = {
                     <span style="font-size:12px;color:var(--text-muted);font-family:monospace">${h.source_quote_number || h.transaction_number}</span>
                   </div>
                   <div style="font-size:13px;color:var(--text-muted);margin-top:3px">
-                    Total: <strong>${this.fmt(h.total)}</strong> &bull; ${new Date(h.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
+                    Total: <strong>${this.fmt(h.total)}</strong> &bull; Sales agent: <strong>${h.employee_name || '—'}</strong> &bull; ${new Date(h.created_at).toLocaleTimeString([], {hour:'2-digit',minute:'2-digit'})}
                     ${h.notes ? `&bull; ${h.notes}` : ''}
                   </div>
                 </div>`)(entry.data) : entry.type === 'rental' ? (r => `
@@ -3040,7 +3042,7 @@ const App = {
           aqBar.style.display = 'none';
         }
       }
-      await this.api('DELETE', `/transactions/${id}/hold`);
+      this._activeHeldOrderId = held.id;
       this.closeModal();
       this.renderCart();
       this.updateHoldBadge();

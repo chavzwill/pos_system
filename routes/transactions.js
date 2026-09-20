@@ -34,7 +34,7 @@ router.post('/hold', requirePermission('pos_hold'), async (req, res) => {
     const disc = parseFloat(discount_amount || 0); const total = parseFloat((subtotal + tax_amount - disc).toFixed(2));
     const txn = await db.transaction('write'); let committed = false;
     try {
-      const result = await txn.execute({sql:`INSERT INTO transactions (transaction_number,customer_id,employee_id,branch_id,subtotal,tax_amount,discount_amount,total,payment_method,status,notes,amount_tendered,change_amount) VALUES (?,?,?,?,?,?,?,?,?,?,?,0,0)`,args:[hold_number, customer_id || null, employee_id || 1, branch_id || null, subtotal, tax_amount, disc, total, 'hold', 'hold', notes || null]});
+      const result = await txn.execute({sql:`INSERT INTO transactions (transaction_number,customer_id,employee_id,sales_agent_id,branch_id,subtotal,tax_amount,discount_amount,total,payment_method,status,notes,amount_tendered,change_amount) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,0,0)`,args:[hold_number, customer_id || null, employee_id || 1, employee_id || 1, branch_id || null, subtotal, tax_amount, disc, total, 'hold', 'hold', notes || null]});
       const txId = Number(result.lastInsertRowid);
       for (const item of items) {
         const lineTotal = parseFloat((parseFloat(item.unit_price) * item.quantity).toFixed(2));
@@ -61,10 +61,10 @@ router.delete('/:id/hold', requirePermission('pos_hold'), async (req, res) => {
 router.get('/', requirePermission('transactions'), async (req, res) => {
   try {
     const { start, end, customer_id, customer_name, status, branch_id, payment_method, transaction_number, source, fulfillment_status, limit = 100 } = req.query;
-    let sql = `SELECT t.*, c.first_name || ' ' || c.last_name as customer_name, e.first_name || ' ' || e.last_name as employee_name, b.name as branch_name,
+    let sql = `SELECT t.*, c.first_name || ' ' || c.last_name as customer_name, e.first_name || ' ' || e.last_name as employee_name, sa.first_name || ' ' || sa.last_name as sales_agent_name, b.name as branch_name,
       ra.agreement_number as rental_agreement_number, q.quote_number as source_quote_number,
       CASE WHEN ra.checkout_transaction_id = t.id THEN 'checkout' WHEN ra.settlement_transaction_id = t.id THEN 'settlement' END as rental_role
-      FROM transactions t LEFT JOIN customers c ON t.customer_id = c.id LEFT JOIN employees e ON t.employee_id = e.id LEFT JOIN branches b ON t.branch_id = b.id
+      FROM transactions t LEFT JOIN customers c ON t.customer_id = c.id LEFT JOIN employees e ON t.employee_id = e.id LEFT JOIN employees sa ON t.sales_agent_id = sa.id LEFT JOIN branches b ON t.branch_id = b.id
       LEFT JOIN rental_agreements ra ON ra.checkout_transaction_id = t.id OR ra.settlement_transaction_id = t.id
       LEFT JOIN quotations q ON q.converted_to_tx = t.id WHERE 1=1`;
     const params = [];
@@ -85,7 +85,7 @@ router.get('/', requirePermission('transactions'), async (req, res) => {
 
 router.get('/:id', requireAuth, async (req, res) => {
   try {
-    const { rows: [tx] } = await db.execute({ sql: `SELECT t.*, c.first_name || ' ' || c.last_name as customer_name, c.customer_number, c.email as customer_email, c.phone as customer_phone, c.address as customer_address, c.city as customer_city, c.state as customer_state, c.zip as customer_zip, e.first_name || ' ' || e.last_name as employee_name, b.name as branch_name, b.address as branch_address, b.city as branch_city, b.state as branch_state, b.zip as branch_zip, b.phone as branch_phone, q.id as source_quote_id, q.quote_number as source_quote_number, qe.first_name || ' ' || qe.last_name as quote_created_by, r.return_number as source_return_number, sh.carrier as shipment_carrier, sh.tracking_number as shipment_tracking_number, sh.status as shipment_status, sh.ship_date as shipment_ship_date, sh.estimated_delivery as shipment_estimated_delivery,
+    const { rows: [tx] } = await db.execute({ sql: `SELECT t.*, c.first_name || ' ' || c.last_name as customer_name, c.customer_number, c.email as customer_email, c.phone as customer_phone, c.address as customer_address, c.city as customer_city, c.state as customer_state, c.zip as customer_zip, e.first_name || ' ' || e.last_name as employee_name, sa.first_name || ' ' || sa.last_name as sales_agent_name, b.name as branch_name, b.address as branch_address, b.city as branch_city, b.state as branch_state, b.zip as branch_zip, b.phone as branch_phone, q.id as source_quote_id, q.quote_number as source_quote_number, qe.first_name || ' ' || qe.last_name as quote_created_by, r.return_number as source_return_number, sh.carrier as shipment_carrier, sh.tracking_number as shipment_tracking_number, sh.status as shipment_status, sh.ship_date as shipment_ship_date, sh.estimated_delivery as shipment_estimated_delivery,
       ve.first_name || ' ' || ve.last_name as voided_by_name,
       ra.id as rental_agreement_id, ra.agreement_number as rental_agreement_number, ra.status as rental_status,
       ra.checkout_datetime as rental_checkout_datetime, ra.due_date as rental_due_date, ra.returned_at as rental_returned_at,
@@ -93,7 +93,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       ra.duration_adjustment_total as rental_duration_adjustment_total, ra.damage_fee_total as rental_damage_fee_total,
       ra.customer_po_number as rental_po_number,
       CASE WHEN ra.checkout_transaction_id = t.id THEN 'checkout' WHEN ra.settlement_transaction_id = t.id THEN 'settlement' END as rental_role
-      FROM transactions t LEFT JOIN customers c ON t.customer_id = c.id LEFT JOIN employees e ON t.employee_id = e.id LEFT JOIN branches b ON t.branch_id = b.id LEFT JOIN quotations q ON q.converted_to_tx = t.id LEFT JOIN employees qe ON q.employee_id = qe.id LEFT JOIN returns r ON t.source_return_id = r.id LEFT JOIN shipments sh ON sh.transaction_id = t.id
+      FROM transactions t LEFT JOIN customers c ON t.customer_id = c.id LEFT JOIN employees e ON t.employee_id = e.id LEFT JOIN employees sa ON t.sales_agent_id = sa.id LEFT JOIN branches b ON t.branch_id = b.id LEFT JOIN quotations q ON q.converted_to_tx = t.id LEFT JOIN employees qe ON q.employee_id = qe.id LEFT JOIN returns r ON t.source_return_id = r.id LEFT JOIN shipments sh ON sh.transaction_id = t.id
       LEFT JOIN employees ve ON t.voided_by = ve.id LEFT JOIN rental_agreements ra ON ra.checkout_transaction_id = t.id OR ra.settlement_transaction_id = t.id WHERE t.id = ?`, args: [req.params.id] });
     if (!tx) return res.status(404).json({ error: 'Transaction not found' });
     const { rows: items } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ?', args: [req.params.id] }); tx.items = items;
@@ -105,7 +105,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 
 router.post('/', requirePermission('pos'), async (req, res) => {
   try {
-    const { customer_id, employee_id, drawer_session_id, items, discount_amount, promotion_code, promotion_name, payment_method, amount_tendered, notes, source_return_id, store_credit_applied, cash_back_applied, quote_id, tax_exempt, tax_exemption_number, approval_code, tenders } = req.body;
+    const { customer_id, employee_id, sales_agent_id, drawer_session_id, items, discount_amount, promotion_code, promotion_name, payment_method, amount_tendered, notes, source_return_id, store_credit_applied, cash_back_applied, quote_id, tax_exempt, tax_exemption_number, approval_code, tenders } = req.body;
     let { branch_id } = req.body;
     if (!items || items.length === 0) return res.status(400).json({ error: 'No items in transaction' });
     if (!branch_id && req.apiKey) { const { rows: [setting] } = await db.execute({ sql: "SELECT value FROM settings WHERE key='woo_sync_branch_id'", args: [] }); if (setting?.value) branch_id = setting.value; }
@@ -153,7 +153,7 @@ router.post('/', requirePermission('pos'), async (req, res) => {
     const tx = await db.transaction('write'); let committed = false;
     try {
       const txSource = req.apiKey ? 'online' : 'pos';
-      const txResult = await tx.execute({ sql: `INSERT INTO transactions (transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,discount_amount,promotion_code,promotion_name,total,payment_method,amount_tendered,change_amount,is_credit,notes,source_return_id,store_credit_applied,cash_back_applied,tax_exempt,tax_exemption_number,approval_code,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [transaction_number, customer_id || null, employee_id || 1, branch_id || null, drawer_session_id || null, subtotal, tax_amount, disc, promotion_code || null, promotion_name || null, total, method, tendered, change > 0 ? change : 0, isCredit ? 1 : 0, notes || null, source_return_id || null, storeCredit > 0 ? storeCredit : 0, cashBack > 0 ? cashBack : 0, isTaxExempt, tax_exemption_number || null, finalApprovalCode, txSource] });
+      const txResult = await tx.execute({ sql: `INSERT INTO transactions (transaction_number,customer_id,employee_id,sales_agent_id,branch_id,drawer_session_id,subtotal,tax_amount,discount_amount,promotion_code,promotion_name,total,payment_method,amount_tendered,change_amount,is_credit,notes,source_return_id,store_credit_applied,cash_back_applied,tax_exempt,tax_exemption_number,approval_code,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [transaction_number, customer_id || null, employee_id || 1, sales_agent_id || employee_id || 1, branch_id || null, drawer_session_id || null, subtotal, tax_amount, disc, promotion_code || null, promotion_name || null, total, method, tendered, change > 0 ? change : 0, isCredit ? 1 : 0, notes || null, source_return_id || null, storeCredit > 0 ? storeCredit : 0, cashBack > 0 ? cashBack : 0, isTaxExempt, tax_exemption_number || null, finalApprovalCode, txSource] });
       const txId = Number(txResult.lastInsertRowid);
       const paymentLegs = tenderLegs || [{ payment_method: method, amount: total, approval_code: finalApprovalCode }];
       for (const leg of paymentLegs) await tx.execute({ sql: 'INSERT INTO transaction_payments (transaction_id, payment_method, amount, approval_code) VALUES (?,?,?,?)', args: [txId, leg.payment_method, leg.amount, leg.approval_code || null] });
@@ -178,7 +178,7 @@ router.post('/', requirePermission('pos'), async (req, res) => {
       const { rows: [savedTx] } = await db.execute({ sql: `SELECT t.*, c.first_name || ' ' || c.last_name as customer_name, b.name as branch_name, b.address as branch_address, b.city as branch_city, b.state as branch_state, b.zip as branch_zip, b.phone as branch_phone FROM transactions t LEFT JOIN customers c ON t.customer_id = c.id LEFT JOIN branches b ON t.branch_id = b.id WHERE t.id = ?`, args: [txId] });
       const { rows: txItems } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ?', args: [txId] }); savedTx.items = txItems;
       const { rows: txPayments } = await db.execute({ sql: 'SELECT * FROM transaction_payments WHERE transaction_id = ? ORDER BY id', args: [txId] }); savedTx.payments = txPayments;
-      try { await calcCommission(savedTx.employee_id, savedTx.total, 'transaction', txId, savedTx.transaction_number); } catch(e) {}
+      try { await calcCommission(savedTx.sales_agent_id || savedTx.employee_id, savedTx.total, 'transaction', txId, savedTx.transaction_number); } catch(e) {}
       res.status(201).json(savedTx);
     } catch(e) { if (!committed) await tx.rollback(); res.status(committed ? 500 : 400).json({ error: e.message }); }
   } catch(e) { res.status(500).json({ error: e.message }); }

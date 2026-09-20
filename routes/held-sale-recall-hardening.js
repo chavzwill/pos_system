@@ -38,6 +38,13 @@ router.post('/hold', requirePermission('pos_hold'), async (req, res, next) => {
   try {
     const items = Array.isArray(req.body?.items) ? req.body.items : [];
     if (!items.length) return next();
+    if (!req.employee?.id) return res.status(403).json({ error: 'A signed-in sales employee is required to place an order on hold' });
+    const customerId = Number(req.body?.customer_id || 0);
+    if (!customerId) return res.status(400).json({ error: 'Select or add the customer before placing this sales order on hold' });
+    const { rows: [customer] } = await db.execute({ sql: 'SELECT id,active FROM customers WHERE id=?', args: [customerId] });
+    if (!customer || !customer.active) return res.status(400).json({ error: 'Selected customer is unavailable' });
+    req.body.customer_id = customer.id;
+    req.body.employee_id = req.employee.id;
     const authoritative = [];
     for (const line of items) {
       const productId = Number(line.product_id);
@@ -71,7 +78,7 @@ router.post('/', requirePermission('pos'), async (req, res, next) => {
     const heldId = Number(req.body?.source_hold_id || 0);
     if (!heldId) return next();
 
-    const { rows: [held] } = await db.execute({ sql: `SELECT id,transaction_number,status,branch_id,customer_id FROM transactions WHERE id=?`, args: [heldId] });
+    const { rows: [held] } = await db.execute({ sql: `SELECT id,transaction_number,status,branch_id,customer_id,employee_id FROM transactions WHERE id=?`, args: [heldId] });
     if (!held) return res.status(404).json({ error: 'Source held sale was not found' });
 
     const { rows: [link] } = await db.execute({ sql: 'SELECT * FROM held_sale_recall_links WHERE held_transaction_id=?', args: [heldId] });
@@ -90,16 +97,30 @@ router.post('/', requirePermission('pos'), async (req, res, next) => {
     if (req.body.customer_id && String(req.body.customer_id) !== String(held.customer_id || '')) {
       return res.status(409).json({ error: 'A recalled sale cannot silently change the held-sale customer' });
     }
+    req.body.customer_id = held.customer_id;
+    req.body.branch_id = held.branch_id;
+    req.body.sales_agent_id = held.employee_id;
 
     const originalJson = res.json.bind(res);
     res.json = function(payload) {
       if (res.statusCode >= 200 && res.statusCode < 300 && payload?.id && payload?.transaction_number) {
         Promise.resolve().then(async () => {
-          await db.execute({
-            sql: `INSERT OR IGNORE INTO held_sale_recall_links(held_transaction_id,held_transaction_number,completed_transaction_id,completed_transaction_number) VALUES(?,?,?,?)`,
-            args: [heldId, held.transaction_number || null, payload.id, payload.transaction_number || null],
-          });
+          const handoffTx = await db.transaction('write');
+          let committed = false;
+          try {
+            await handoffTx.execute({
+              sql: `INSERT OR IGNORE INTO held_sale_recall_links(held_transaction_id,held_transaction_number,completed_transaction_id,completed_transaction_number) VALUES(?,?,?,?)`,
+              args: [heldId, held.transaction_number || null, payload.id, payload.transaction_number || null],
+            });
+            const closed = await handoffTx.execute({ sql: `UPDATE transactions SET status='converted' WHERE id=? AND status='hold'`, args: [heldId] });
+            if (Number(closed.rowsAffected || 0) !== 1) throw new Error('HELD_ORDER_CLOSE_CONFLICT');
+            await handoffTx.commit(); committed = true;
+          } catch (error) {
+            if (!committed) await handoffTx.rollback();
+            throw error;
+          }
           payload.source_hold_id = heldId;
+          payload.sales_agent_id = held.employee_id;
           originalJson(payload);
         }).catch(error => {
           console.error('Held-sale recall link preservation failed:', error);
