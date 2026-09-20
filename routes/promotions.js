@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
+const { resolveCanonicalProduct } = require('../lib/catalog-integrity');
 
 // List all promotions with code count
 router.get('/', requirePermission('promotions'), async (req, res) => {
@@ -82,17 +83,32 @@ router.delete('/:id', requirePermission('promotions'), async (req, res) => {
 router.post('/:id/items', requirePermission('promotions'), async (req, res) => {
   try {
     const { item_type, item_id } = req.body;
-    if (!['product', 'category'].includes(item_type)) return res.status(400).json({ error: 'item_type must be product or category' });
+    if (!['product', 'category'].includes(item_type)) return res.status(400).json({ error:'Choose a product or category.',code:'PROMOTION_SCOPE_TYPE_INVALID' });
+    let targetId=Number(item_id),canonicalized=false;
+    if(!Number.isInteger(targetId)||targetId<=0)return res.status(400).json({error:'Choose a valid product or category.',code:'PROMOTION_SCOPE_ID_INVALID'});
+    if(item_type==='product'){
+      const resolved=await resolveCanonicalProduct(targetId);
+      targetId=Number(resolved.canonical_product_id);
+      canonicalized=Boolean(resolved.is_consolidated);
+      if(!resolved.canonical_active)return res.status(409).json({error:'The surviving product is not active and cannot be added to a promotion.',code:'PROMOTION_PRODUCT_NOT_ACTIVE'});
+    }else{
+      const {rows:[category]}=await db.execute({sql:'SELECT id FROM categories WHERE id=?',args:[targetId]});
+      if(!category)return res.status(404).json({error:'Category not found.',code:'PROMOTION_CATEGORY_NOT_FOUND'});
+    }
     const { rows: conflicts } = await db.execute({
       sql: `SELECT p.name FROM promotion_items pi
             JOIN promotions p ON pi.promotion_id = p.id
             WHERE pi.item_type = ? AND pi.item_id = ? AND pi.promotion_id != ? AND p.active = 1`,
-      args: [item_type, item_id, req.params.id]
+      args: [item_type, targetId, req.params.id]
     });
-    if (conflicts.length) return res.status(400).json({ error: `Already assigned to active promotion "${conflicts[0].name}"` });
-    await db.execute({ sql: 'INSERT OR IGNORE INTO promotion_items (promotion_id, item_type, item_id) VALUES (?, ?, ?)', args: [req.params.id, item_type, item_id] });
-    res.json({ success: true });
-  } catch (e) { res.status(400).json({ error: e.message }); }
+    if (conflicts.length) return res.status(409).json({ error: `Already assigned to active promotion "${conflicts[0].name}"`,code:'PROMOTION_SCOPE_CONFLICT' });
+    await db.execute({ sql: 'INSERT OR IGNORE INTO promotion_items (promotion_id, item_type, item_id) VALUES (?, ?, ?)', args: [req.params.id, item_type, targetId] });
+    res.json({ success:true,item_id:targetId,canonicalized });
+  } catch (e) {
+    if(e?.status&&e?.code)return res.status(Number(e.status)).json({error:e.message,code:e.code});
+    console.error('promotion_scope_add_error',{code:e?.code||'unknown'});
+    res.status(500).json({error:'Unable to add this promotion scope right now.',code:'PROMOTION_SCOPE_ADD_UNAVAILABLE'});
+  }
 });
 
 // Remove item from promotion
