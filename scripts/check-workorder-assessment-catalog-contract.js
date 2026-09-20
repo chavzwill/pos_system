@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path');const root=path.join(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
 let failed=0;const check=(n,o)=>o?console.log('PASS Work Order Assessment:',n):(failed++,console.error('FAIL Work Order Assessment:',n));
-const db=read('database.js'),lib=read('lib/work-order-assessment.js'),route=read('routes/work-orders.js'),acct=read('routes/accounting-source-sync.js'),ui=read('public/index.html'),modern=read('public/work-orders-workspace.js'),pkg=read('package.json');
+const db=read('database.js'),lib=read('lib/work-order-assessment.js'),route=read('routes/work-orders.js'),acct=read('routes/accounting-source-sync.js'),ui=read('public/index.html'),modern=read('public/work-orders-workspace.js'),runtime=read('tests/repair-financial-runtime-helper.js'),pkg=read('package.json');
 check('work order stores selected assessment service identity',db.includes('assessment_fee_product_id INTEGER REFERENCES products(id)'));
 check('work order snapshots service name',db.includes('assessment_fee_name TEXT'));
 check('work order snapshots tax rate',db.includes('assessment_fee_tax_rate REAL NOT NULL DEFAULT 0'));
@@ -16,5 +16,6 @@ check('intake UI loads active service products',ui.includes("'/products?is_servi
 check('intake UI requires assessment service selection',ui.includes('wo-assessment-service')&&ui.includes('assessment_fee_product_id'));
 check('staff UI explains assessment economics are frozen',ui.includes('price and tax rate are frozen onto this work order'));
 check('modern repair workspace displays selected assessment name',modern.includes("w.assessment_fee_name?'Assessment · '"));
+check('release-gate repair fixture selects a real assessment service',runtime.includes('assessment_fee_product_id:assessmentService.id')&&runtime.includes('is_service:true'));
 check('full syntax wall includes assessment contract',pkg.includes('check:workorder-assessment-catalog'));
 if(failed){console.error('Work Order Assessment contract failed: '+failed);process.exit(1)}console.log('Work Order Assessment contract passed.');
