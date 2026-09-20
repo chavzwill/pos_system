@@ -136,6 +136,7 @@ app.use('/api/employee-workspace-intelligence', require('./routes/employee-works
 app.use('/api/employee-assist', require('./routes/employee-assist'));
 app.use('/api/predictive-lookup', require('./routes/predictive-lookup'));
 app.use('/api/catalog-integrity', require('./routes/catalog-integrity'));
+app.use('/api/category-corrections', require('./routes/category-corrections'));
 app.use('/api/technician-management-intelligence', require('./routes/technician-management-intelligence'));
 app.use('/api/inventory-stock-status', require('./routes/inventory-stock-status'));
 app.use('/api/inventory-traceability', require('./routes/inventory-traceability'));
