@@ -16,12 +16,13 @@ export function registerRepairFinancialRuntimeCertification(){
     const branch=branches.body.find(b=>b.active!==0);test.skip(!branch,'Repair runtime certification requires an active branch');
     const suffix=`${Date.now()}${Math.random().toString(36).slice(2,6)}`;
     const username=`wrt_${suffix.slice(-12)}`,password=`Wr!${suffix}Aa1`,pin=String(Date.now()).slice(-6);
-    let customer=null,equipment=null,drawer=null,group=null,employee=null,session=null,wo=null,priorAssessmentFee='';
+    let customer=null,equipment=null,drawer=null,group=null,employee=null,session=null,wo=null,assessmentService=null,priorAssessmentFee='';
     try{
       const settings=await api(admin.cookie,'/api/settings');expect(settings.status).toBe(200);priorAssessmentFee=String(settings.body?.wo_assessment_fee||'');
       let x=await api(admin.cookie,'/api/settings',{method:'PUT',body:JSON.stringify({wo_assessment_fee:'50'})});expect(x.status,JSON.stringify(x.body)).toBe(200);
       x=await api(admin.cookie,'/api/customers',{method:'POST',body:JSON.stringify({first_name:'Runtime',last_name:`Repair ${suffix}`,phone:'8765550201',address:'2 Runtime Repair Road',city:'Kingston',state:'Kingston',customer_type:'cash'})});
       expect(x.status).toBe(201);customer=x.body;
+      x=await api(admin.cookie,'/api/products',{method:'POST',body:JSON.stringify({sku:`WO-ASSESS-${suffix}`,name:`Runtime Assessment ${suffix}`,price:50,cost:0,tax_rate:0,is_service:true,active:1,unit:'service'})});expect(x.status,JSON.stringify(x.body)).toBe(201);assessmentService=x.body;
       x=await api(admin.cookie,'/api/repair-operations/equipment',{method:'POST',body:JSON.stringify({customer_id:customer.id,branch_id:branch.id,equipment_type:'Runtime Test Tool',brand:'Runtime',model:'Certification',serial_number:`RTWO-${suffix}`,notes:'Repair runtime certification asset'})});
       expect(x.status).toBe(201);equipment=x.body;
 
@@ -31,7 +32,7 @@ export function registerRepairFinancialRuntimeCertification(){
       const operator=await login(username,password);
       x=await api(operator.cookie,'/api/drawers/sessions',{method:'POST',body:JSON.stringify({drawer_id:drawer.id,opening_float:100})});expect([200,201]).toContain(x.status);session=x.body;
 
-      x=await api(operator.cookie,'/api/work-orders',{method:'POST',body:JSON.stringify({customer_id:customer.id,employee_id:employee.id,branch_id:branch.id,description:'Runtime repair certification issue',item_label:'Runtime Test Tool'})});
+      x=await api(operator.cookie,'/api/work-orders',{method:'POST',body:JSON.stringify({customer_id:customer.id,employee_id:employee.id,branch_id:branch.id,description:'Runtime repair certification issue',item_label:'Runtime Test Tool',assessment_fee_product_id:assessmentService.id})});
       expect(x.status).toBe(201);wo=x.body;expect(wo.status).toBe('intake');
       x=await api(operator.cookie,`/api/repair-operations/work-orders/${wo.id}/equipment`,{method:'PUT',body:JSON.stringify({equipment_id:equipment.id,intake_condition:'good',reported_issue:'Runtime certification fault',warranty_claim:false})});expect(x.status).toBe(200);expect(Number(x.body.equipment_id)).toBe(Number(equipment.id));
 
@@ -76,6 +77,7 @@ export function registerRepairFinancialRuntimeCertification(){
       if(group)await api(admin.cookie,`/api/security-groups/${group.id}?reason=Repair%20runtime%20cleanup`,{method:'DELETE'}).catch(()=>{});
       if(drawer)await api(admin.cookie,`/api/drawers/${drawer.id}`,{method:'DELETE'}).catch(()=>{});
       if(equipment)await api(admin.cookie,`/api/repair-operations/equipment/${equipment.id}`,{method:'PATCH',body:JSON.stringify({active:0})}).catch(()=>{});
+      if(assessmentService)await api(admin.cookie,`/api/products/${assessmentService.id}`,{method:'DELETE',body:JSON.stringify({reason:'Repair runtime cleanup'})}).catch(()=>{});
       if(customer)await api(admin.cookie,`/api/customers/${customer.id}`,{method:'DELETE'}).catch(()=>{});
     }
   });

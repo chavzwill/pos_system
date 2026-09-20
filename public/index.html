@@ -6627,7 +6627,11 @@ const App = {
   },
 
   async showWOIntakeModal() {
-    const customers = await this.api('GET', '/customers?active=1');
+    const [customers, assessmentServices] = await Promise.all([
+      this.api('GET', '/customers?active=1'),
+      this.api('GET', '/products?is_service=1&active=1')
+    ]);
+    this._woAssessmentServices = (assessmentServices || []).filter(p => Number(p.active)!==0 && Number(p.is_service)===1);
     const branches = this.currentUser.branches || [];
     const isMultiBranch = this.currentUser.permissions?.multi_branch_access && branches.length > 1;
     const defaultBranch = branches.find(b => b.is_default) || branches[0] || null;
@@ -6646,6 +6650,13 @@ const App = {
               : `<input type="text" value="${defaultBranch?.name||'No branch assigned'}" disabled style="background:var(--bg-secondary)"><input type="hidden" id="wo-branch" value="${defaultBranch?.id||''}">`}
           </div>
           <div class="form-group"><label>Item / Tag Label</label><input id="wo-item-label" placeholder="e.g. Red mountain bike, serial #12345"></div>
+          <div class="form-group"><label>Assessment service *</label>
+            <select id="wo-assessment-service">
+              <option value="">-- Choose the matching diagnostic / assessment service --</option>
+              ${this._woAssessmentServices.map(p => `<option value="${p.id}">${this.escapeAttr(p.name)} — ${this.fmt(p.price)}${Number(p.tax_rate||0)?` + ${Number(p.tax_rate)}% tax`:''}</option>`).join('')}
+            </select>
+            <p style="font-size:11px;color:var(--text-muted);margin:4px 0 0">The selected service, price and tax rate are frozen onto this work order so later catalog changes do not rewrite repair history.</p>
+          </div>
           <div class="form-group"><label>Description *</label><textarea id="wo-description" rows="3" placeholder="What the customer reported / what's being brought in for"></textarea></div>
           <p style="font-size:11px;color:var(--text-muted);margin-top:-4px">The description stays editable after intake, once the item's been assessed.</p>
         </div>
@@ -6660,11 +6671,13 @@ const App = {
     const customer_id = document.getElementById('wo-customer').value;
     const branch_id = document.getElementById('wo-branch')?.value || null;
     const item_label = document.getElementById('wo-item-label').value.trim();
+    const assessment_fee_product_id = Number(document.getElementById('wo-assessment-service')?.value||0);
     const description = document.getElementById('wo-description').value.trim();
     if (!customer_id) { this.alert('Please select a customer', 'error'); return; }
+    if (!assessment_fee_product_id) { this.alert('Choose the assessment service that matches this repair', 'error'); return; }
     if (!description) { this.alert('A description is required', 'error'); return; }
     try {
-      const wo = await this.api('POST', '/work-orders', { customer_id, branch_id, item_label, description, employee_id: this.currentUser.id });
+      const wo = await this.api('POST', '/work-orders', { customer_id, branch_id, item_label, description, assessment_fee_product_id, employee_id: this.currentUser.id });
       this.closeModal();
       this.alert(`Work order ${wo.wo_number} opened`);
       this.printWOLabel(wo.id);
