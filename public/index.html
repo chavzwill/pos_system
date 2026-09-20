@@ -5298,6 +5298,7 @@ const App = {
           ${a.status==='pending' && this.can('pos') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showFinalizeRentalModal(${a.id})">Process Payment</button>` : ''}
           ${a.status==='awaiting_issue' && this.can('rentals_issue') ? `<button class="btn btn-primary" onclick="App.closeModal();App.showIssueRentalModal(${a.id})">Issue Rental</button>` : ''}
           ${a.checkout_transaction_id ? `<button class="btn btn-secondary" onclick="App.printRentalInvoice(${a.id})">🖨️ Tax Invoice</button>` : ''}
+          ${a.checkout_transaction_id ? `<button class="btn btn-secondary" onclick="App.printRentalAgreementSummary(${a.id})">🖨️ Agreement Summary</button><button class="btn btn-secondary" onclick="App.emailRentalAgreementSummary(${a.id},'${(a.customer_email||'').replace(/'/g,"\\'")}')">✉️ Email Summary</button>` : ''}
           ${a.status==='active' ? `<button class="btn btn-secondary" onclick="App.printRentalDeliveryNote(${a.id})">🖨️ Delivery Note</button>` : ''}
           ${a.status==='active' && !a.is_paused ? `<button class="btn btn-secondary" onclick="App.closeModal();App.showPauseRentalModal(${a.id})">⏸ Pause Rental</button>` : ''}
           ${a.status==='active' && a.is_paused ? `<button class="btn btn-primary" onclick="App.resumeRentalAgreement(${a.id})">▶ Resume Rental</button>` : ''}
@@ -5411,6 +5412,20 @@ const App = {
     if (!a.due_date) return null;
     const timePart = a.checkout_datetime ? new Date(a.checkout_datetime).toISOString().slice(11, 19) : '00:00:00';
     return new Date(`${a.due_date}T${timePart}.000Z`);
+  },
+
+  printRentalAgreementSummary(id) {
+    window.open(`/api/email/rental-agreement-summary/${id}/preview`, '_blank', 'noopener');
+  },
+
+  emailRentalAgreementSummary(id, customerEmail) {
+    this.showEmailModal('Email Rental Agreement Summary', customerEmail || '', async (to) => {
+      this.closeModal();
+      try {
+        await this.api('POST', `/email/send-rental-agreement-summary/${id}`, { to });
+        this.alert(`Rental agreement summary sent to ${to}`);
+      } catch(e) { this.alert(e.message, 'error'); }
+    });
   },
 
   async printRentalDeliveryNote(id) {
