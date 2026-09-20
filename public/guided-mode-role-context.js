@@ -2,7 +2,7 @@
 const TASK_DOMAIN={
  'Complete a sale':'sales','Hold or recall a sale':'sales','Return or refund a transaction':'sales','Open or close a cash drawer':'sales',
  'Create or work a repair':'service','Review technician compensation':'service','Create or manage a rental':'rentals',
- 'Dispatch, route or complete a delivery':'dispatch','Adjust inventory':'inventory','Manage product brands':'inventory','Run a stock or cycle count':'inventory',
+ 'Dispatch, route or complete a delivery':'dispatch','Adjust inventory':'inventory','Manage product brands':'inventory','Review duplicate catalog products':'inventory','Run a stock or cycle count':'inventory',
  'Create, dispatch or receive a branch transfer':'inventory','Create or approve a purchase request':'purchasing',
  'Create, edit, copy, cancel or receive a PO':'purchasing','Stock Planning & Replenishment':'purchasing',
  'Create or manage a quotation':'sales','Run, export or print a report':'finance'

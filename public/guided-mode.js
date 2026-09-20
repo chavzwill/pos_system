@@ -52,6 +52,13 @@
       { find:['new brand','edit brand','brand name'], text:'Add or edit the brand using its correct name and description. Avoid creating spelling variants of an existing brand.' },
       { find:['logo image','brand logo','save brand'], text:'Add the approved brand logo when available, then save. Product assignment remains a separate deliberate catalog edit.' }
     ]},
+    { id:'catalog-duplicates', title:'Review duplicate catalog products', keywords:['duplicate products','duplicate sku','catalog duplicates','merge products','consolidate products'], steps:[
+      { find:['catalog management','products & categories','catalog'], text:'Open Catalog Management.' },
+      { find:['catalog health','work queue'], text:'Open Catalog Health and review the work queue. Duplicate candidates are evidence for review, not an automatic merge.' },
+      { find:['confirm same item','not a duplicate','needs more info'], text:'Compare the exact records. Record whether they are the same item, not duplicates, or need more information, and enter the real reason.' },
+      { find:['review consolidation','plan consolidation','consolidation impact review'], text:'If the records are confirmed duplicates, review stock, units, history and the proposed surviving product before any consolidation.' },
+      { find:['consolidate records','surviving product'], text:'Choose the surviving product only after the review is complete. Consolidation preserves historical records, retires duplicates and leaves consolidated records read-only.' }
+    ]},
     { id:'count', title:'Run a stock or cycle count', keywords:['cycle count','stock count','physical count','inventory count'], steps:[
       { find:['warehouse','inventory','cycle count'], text:'Open Warehouse / Inventory Counts.' },
       { find:['new count','start count','cycle count'], text:'Start a count for the correct branch/location and scope.' },
