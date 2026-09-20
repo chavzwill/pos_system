@@ -3611,6 +3611,7 @@ const App = {
         <button class="btn btn-secondary btn-sm" onclick="App.exportInventoryCsv()" title="Export filtered products to CSV">&#8659; Export CSV</button>
         <a class="btn btn-secondary btn-sm" href="/api/products/export/template" download title="Download import template">&#8659; Template</a>
         <label class="btn btn-secondary btn-sm" style="cursor:pointer;margin:0" title="Import products from CSV">&#8657; Import<input type="file" accept=".csv" style="display:none" onchange="App.importProductsCsv(this)"></label>
+        ${this.currentUser?.permissions?.inventory_media_bulk === true ? `<button class="btn btn-secondary btn-sm" onclick="App.showBulkProductImages()" title="Match multiple product images by SKU filename">Product Images</button>` : ''}
         <button class="btn btn-secondary btn-sm" onclick="App.showCategoriesManager()">Categories</button>
       </div>
       <div class="card">
@@ -3976,6 +3977,90 @@ const App = {
       this.alert('Image removed');
       this.showProductForm(productId);
     } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  showBulkProductImages() {
+    this.showModal(`
+      <div class="modal" style="max-width:760px">
+        <div class="modal-header"><span class="modal-title">Bulk Product Images</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <p style="font-size:13px;color:var(--text-muted);margin-top:0">Name each image file after the product SKU, for example <strong>DRILL-18V.jpg</strong>. The POS matches filenames to SKUs automatically. JPEG, PNG and WebP are supported.</p>
+          <div style="padding:10px 12px;border:1px solid var(--border);border-radius:8px;background:var(--bg-secondary);font-size:12px;margin-bottom:12px">
+            Images that do not match a SKU are reported and left untouched. Existing product images are preserved unless you explicitly allow replacement.
+          </div>
+          <div class="form-group"><label>Select product images</label><input id="bulk-product-images-input" type="file" accept=".jpg,.jpeg,.png,.webp,image/jpeg,image/png,image/webp" multiple onchange="App.previewBulkProductImages(this)"></div>
+          <label style="display:flex;gap:8px;align-items:flex-start;font-size:13px"><input id="bulk-product-images-replace" type="checkbox" style="margin-top:3px" onchange="App.previewBulkProductImages(document.getElementById('bulk-product-images-input'))"><span><strong>Replace existing images</strong><br><span style="color:var(--text-muted)">Leave this off for the safest first pass.</span></span></label>
+          <div id="bulk-product-images-result" style="margin-top:14px"></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Close</button><button class="btn btn-primary" id="bulk-product-images-run" onclick="App.runBulkProductImages()">Match & Upload</button></div>
+      </div>`);
+  },
+
+  async previewBulkProductImages(input) {
+    const files=[...(input?.files||[])],wrap=document.getElementById('bulk-product-images-result');
+    if(!files.length){if(wrap)wrap.innerHTML='';this._bulkProductMediaPreview=null;return;}
+    try{
+      const products=await this.api('GET','/products?active=1');
+      const bySlug=new Map(),slug=s=>String(s||'').trim().replace(/[^A-Za-z0-9_.-]/g,'_').toLowerCase();
+      for(const product of products){const key=slug(product.sku);if(!key)continue;if(!bySlug.has(key))bySlug.set(key,[]);bySlug.get(key).push(product);}
+      const replace=document.getElementById('bulk-product-images-replace')?.checked===true;
+      const preview={add:[],replace:[],preserved:[],unmatched:[],ambiguous:[],consolidated:[]};
+      for(const file of files){
+        const base=String(file.name||'').replace(/\.[^.]+$/,'').toLowerCase(),matches=bySlug.get(base)||[];
+        if(!matches.length){preview.unmatched.push(file.name);continue;}
+        if(matches.length>1){preview.ambiguous.push({file:file.name,skus:matches.map(x=>x.sku)});continue;}
+        const product=matches[0];
+        if(product.consolidated_into_product_id){preview.consolidated.push({file:file.name,sku:product.sku});continue;}
+        if(product.image_path&&!replace)preview.preserved.push({file:file.name,sku:product.sku});
+        else if(product.image_path)preview.replace.push({file:file.name,sku:product.sku});
+        else preview.add.push({file:file.name,sku:product.sku});
+      }
+      this._bulkProductMediaPreview=preview;
+      if(wrap)wrap.innerHTML=`
+        <div style="font-size:12px;font-weight:600;margin-bottom:7px">Review before upload</div>
+        <div style="display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:8px">
+          <div class="metric-card"><div class="metric-value">${preview.add.length}</div><div class="metric-label">New images</div></div>
+          <div class="metric-card"><div class="metric-value">${preview.replace.length}</div><div class="metric-label">Will replace</div></div>
+          <div class="metric-card"><div class="metric-value">${preview.preserved.length}</div><div class="metric-label">Existing preserved</div></div>
+          <div class="metric-card"><div class="metric-value">${preview.unmatched.length+preview.ambiguous.length+preview.consolidated.length}</div><div class="metric-label">Needs attention</div></div>
+        </div>
+        ${preview.unmatched.length?`<div style="margin-top:9px;font-size:12px"><strong>No matching SKU:</strong> ${preview.unmatched.join(', ')}</div>`:''}
+        ${preview.ambiguous.length?`<div style="margin-top:7px;font-size:12px"><strong>Ambiguous filename:</strong> ${preview.ambiguous.map(x=>`${x.file} (${x.skus.join(' / ')})`).join('; ')}</div>`:''}
+        ${preview.consolidated.length?`<div style="margin-top:7px;font-size:12px"><strong>Consolidated records skipped:</strong> ${preview.consolidated.map(x=>x.sku).join(', ')}</div>`:''}
+      `;
+    }catch(e){if(wrap)wrap.innerHTML=`<div style="color:var(--danger);font-size:12px">${e.message}</div>`;}
+  },
+
+  async runBulkProductImages() {
+    const input=document.getElementById('bulk-product-images-input');
+    const files=[...(input?.files||[])];
+    if(!files.length){this.alert('Choose at least one product image','error');return;}
+    const fd=new FormData();
+    for(const file of files)fd.append('images',file);
+    fd.append('replace_existing',document.getElementById('bulk-product-images-replace')?.checked?'true':'false');
+    const btn=document.getElementById('bulk-product-images-run');
+    if(btn){btn.disabled=true;btn.textContent='Uploading…';}
+    try{
+      const res=await fetch('/api/products/images/bulk',{method:'POST',body:fd});
+      const result=await res.json().catch(()=>({}));
+      if(!res.ok)throw new Error(result.error||'Bulk image upload failed');
+      const wrap=document.getElementById('bulk-product-images-result');
+      const unmatched=result.unmatched||[],invalid=result.invalid||[],ambiguous=result.ambiguous||[],consolidated=result.consolidated||[];
+      if(wrap)wrap.innerHTML=`
+        <div style="display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:8px">
+          <div class="metric-card"><div class="metric-value">${result.uploaded||0}</div><div class="metric-label">Uploaded</div></div>
+          <div class="metric-card"><div class="metric-value">${result.skipped_existing||0}</div><div class="metric-label">Existing preserved</div></div>
+          <div class="metric-card"><div class="metric-value">${unmatched.length+invalid.length+ambiguous.length+consolidated.length}</div><div class="metric-label">Needs attention</div></div>
+        </div>
+        ${unmatched.length?`<div style="margin-top:10px;font-size:12px"><strong>No matching SKU:</strong> ${unmatched.map(x=>this.escapeHtml?this.escapeHtml(x):x).join(', ')}</div>`:''}
+        ${invalid.length?`<div style="margin-top:8px;font-size:12px"><strong>Invalid image files:</strong> ${invalid.map(x=>`${x.file} — ${x.error}`).join('; ')}</div>`:''}
+        ${ambiguous.length?`<div style="margin-top:8px;font-size:12px"><strong>Ambiguous SKU filenames:</strong> ${ambiguous.map(x=>`${x.file} (${(x.skus||[]).join(' / ')})`).join('; ')}</div>`:''}
+        ${consolidated.length?`<div style="margin-top:8px;font-size:12px"><strong>Consolidated products skipped:</strong> ${consolidated.map(x=>x.sku).join(', ')}</div>`:''}
+      `;
+      this.alert(`${result.uploaded||0} product image${Number(result.uploaded||0)===1?'':'s'} updated`);
+      await this.renderInventory('all');
+    }catch(e){this.alert(e.message,'error');}
+    finally{if(btn){btn.disabled=false;btn.textContent='Match & Upload';}}
   },
 
   async saveProduct(id) {
@@ -13840,6 +13925,7 @@ const App = {
       { key: 'inventory_edit', label: 'Edit Products' },
       { key: 'inventory_delete', label: 'Delete Products' },
       { key: 'inventory_adjust', label: 'Manual Stock Adjustments' },
+      { key: 'inventory_media_bulk', label: 'Bulk Product Image Management' },
     ]},
     { key: 'customers', label: 'Customers', subs: [
       { key: 'customers_add', label: 'Add Customers' },

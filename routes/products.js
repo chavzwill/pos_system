@@ -8,6 +8,9 @@ const fs = require('fs');
 const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
 const { requireAuth, requirePermission, can } = require('../lib/permissions');
 const { archiveProduct, assertProductNotConsolidated, resolveCanonicalProduct } = require('../lib/catalog-integrity');
+const { validateMemoryUpload, imageMulterFilter } = require('../lib/uploadSecurity');
+const { recordSecurityAudit } = require('../lib/securityAudit');
+const { sanitizeSkuForFilename, planBulkImages } = require('../lib/product-media');
 
 // CSV cells for money/quantity fields often carry currency symbols, thousands
 // separators, or stray whitespace (e.g. "$15.00", "1,000") — bare parseFloat/
@@ -58,11 +61,53 @@ function requireProductPermission(isRental, isService) {
   };
 }
 
+async function requireImagePermission(req,res,next){
+  if(req.apiKey)return res.status(403).json({error:'API keys cannot manage product images',code:'PRODUCT_MEDIA_INTERNAL_ONLY'});
+  if(!req.employee)return res.status(401).json({error:'Authentication required'});
+  try{
+    const {rows:[product]}=await db.execute({sql:'SELECT id,is_rental,is_service FROM products WHERE id=?',args:[req.params.id]});
+    if(!product)return res.status(404).json({error:'Product not found'});
+    const key=requiredProductPermission(!!product.is_rental,!!product.is_service);
+    if(!can(req.employee.permissions,key))return res.status(403).json({error:`Missing permission: ${key}`});
+    next();
+  }catch(e){res.status(500).json({error:'Unable to verify product image permission right now.'});}
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => cb(null, /^image\//.test(file.mimetype)),
+  limits: { fileSize: 5 * 1024 * 1024, files: 100 },
+  fileFilter: imageMulterFilter,
 });
+
+async function storeProductImage(product,file,validation){
+  const skuSlug=sanitizeSkuForFilename(product.sku);
+  const result=await cloudUpload(file.buffer,{folder:'pos-system/products',public_id:skuSlug,overwrite:true,resource_type:'image'});
+  let imagePath;
+  if(result){
+    imagePath=result.secure_url;
+  }else{
+    const dir=path.join(__dirname,'../uploads/products');
+    fs.mkdirSync(dir,{recursive:true});
+    const ext=validation.extension||path.extname(file.originalname).toLowerCase();
+    const filename=`${skuSlug}${ext}`;
+    fs.writeFileSync(path.join(dir,filename),file.buffer);
+    imagePath=`/uploads/products/${filename}`;
+  }
+  if(product.image_path&&product.image_path!==imagePath){
+    if(product.image_path.startsWith('https://')){
+      // Cloudinary overwrite is keyed by the canonical SKU public_id. Do not
+      // destroy the prior URL after a successful overwrite because versioned
+      // URLs can differ while still pointing at the same underlying asset.
+      if(!result)await cloudDestroy(product.image_path).catch(()=>{});
+    }else{
+      const old=path.join(__dirname,'..',product.image_path);
+      const next=imagePath.startsWith('/uploads/')?path.join(__dirname,'..',imagePath):null;
+      if(fs.existsSync(old)&&(!next||path.resolve(old)!==path.resolve(next)))fs.unlinkSync(old);
+    }
+  }
+  await db.execute({sql:'UPDATE products SET image_path=? WHERE id=?',args:[imagePath,product.id]});
+  return imagePath;
+}
 
 // requireAuth only — the product catalog is used everywhere (POS, inventory,
 // services, rentals, PO/transfer forms, ecommerce API key), not just the
@@ -661,48 +706,71 @@ router.delete('/:id', async (req, res, next) => {
   }
 });
 
+// POST bulk product images named after SKU (for example DRILL-18V.jpg).
+// Nothing with an existing image is replaced unless replace_existing=true.
+router.post('/images/bulk', requirePermission('inventory_media_bulk'), upload.array('images',100), async (req,res)=>{
+  if(req.apiKey)return res.status(403).json({error:'API keys cannot bulk-manage product images',code:'PRODUCT_MEDIA_INTERNAL_ONLY'});
+  const files=Array.isArray(req.files)?req.files:[];
+  if(!files.length)return res.status(400).json({error:'Choose at least one supported product image',code:'PRODUCT_MEDIA_IMAGES_REQUIRED'});
+  const replaceExisting=req.body?.replace_existing==='1'||req.body?.replace_existing==='true'||req.body?.replace_existing===true;
+  try{
+    const {rows:products}=await db.execute({sql:`SELECT p.id,p.sku,p.name,p.image_path,p.active,
+      (SELECT cpc.survivor_product_id FROM catalog_product_consolidations cpc WHERE cpc.duplicate_product_id=p.id LIMIT 1) AS consolidated_into_product_id
+      FROM products p`,args:[]});
+    const plan=planBulkImages(products,files,{replaceExisting});
+    const result={uploaded:0,skipped_existing:0,unmatched:[],invalid:[],ambiguous:[],consolidated:[],details:[]};
+    for(let i=0;i<files.length;i++){
+      const file=files[i],entry=plan[i],product=entry.product;
+      if(entry.status==='unmatched'){result.unmatched.push(file.originalname);continue;}
+      if(entry.status==='ambiguous'){result.ambiguous.push({file:file.originalname,skus:(entry.products||[]).map(p=>p.sku)});continue;}
+      if(entry.status==='consolidated'){result.consolidated.push({file:file.originalname,sku:product.sku,canonical_product_id:product.consolidated_into_product_id});continue;}
+      const validation=validateMemoryUpload(file,{kind:'image'});
+      if(!validation.ok){result.invalid.push({file:file.originalname,error:validation.error});continue;}
+      if(entry.status==='existing_image_preserved'){result.skipped_existing++;result.details.push({file:file.originalname,sku:product.sku,status:'existing_image_preserved'});continue;}
+      const oldPath=product.image_path||null;
+      const imagePath=await storeProductImage(product,file,validation);
+      product.image_path=imagePath;
+      result.uploaded++;
+      result.details.push({file:file.originalname,sku:product.sku,status:oldPath?'replaced':'added',image_path:imagePath});
+      await recordSecurityAudit({
+        actorEmployeeId:req.employee?.id||null,action:'product_image_bulk_updated',targetType:'product',targetId:Number(product.id),
+        oldValue:{image_path:oldPath},newValue:{image_path:imagePath,sku:product.sku,source_file:file.originalname},
+        reason:oldPath?'Bulk product image replacement':'Bulk product image assignment',
+        requestId:req.requestId||null,method:req.method,path:req.originalUrl||req.path,control:'product_media_bulk'
+      }).catch(()=>{});
+    }
+    res.json(result);
+  }catch(e){
+    console.error('product_media_bulk_error',{message:e?.message||'unknown'});
+    res.status(500).json({error:'Unable to process the product image batch right now.',code:'PRODUCT_MEDIA_BULK_FAILED'});
+  }
+});
+
 // POST upload product image
-router.post('/:id/image', requirePermission('inventory'), upload.single('image'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+router.post('/:id/image', requireImagePermission, upload.single('image'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No supported image uploaded', code:'PRODUCT_MEDIA_IMAGE_REQUIRED' });
+  const validation=validateMemoryUpload(req.file,{kind:'image'});
+  if(!validation.ok)return res.status(400).json({error:validation.error,code:'PRODUCT_MEDIA_IMAGE_INVALID'});
   try {
     await assertProductNotConsolidated(req.params.id);
-    const { rows: [existing] } = await db.execute({ sql: 'SELECT image_path FROM products WHERE id = ?', args: [req.params.id] });
-    if (existing?.image_path) {
-      if (existing.image_path.startsWith('https://')) {
-        await cloudDestroy(existing.image_path);
-      } else {
-        const old = path.join(__dirname, '..', existing.image_path);
-        if (fs.existsSync(old)) fs.unlinkSync(old);
-      }
-    }
-
-    const result = await cloudUpload(req.file.buffer, {
-      folder: 'pos-system/products',
-      public_id: `product-${req.params.id}`,
-      overwrite: true,
-      resource_type: 'image',
-    });
-
-    let imagePath;
-    if (result) {
-      imagePath = result.secure_url;
-    } else {
-      // Cloudinary not configured — save locally
-      const dir = path.join(__dirname, '../uploads/products');
-      fs.mkdirSync(dir, { recursive: true });
-      const ext = path.extname(req.file.originalname).toLowerCase();
-      const filename = `product-${req.params.id}-${Date.now()}${ext}`;
-      fs.writeFileSync(path.join(dir, filename), req.file.buffer);
-      imagePath = `/uploads/products/${filename}`;
-    }
-
-    await db.execute({ sql: 'UPDATE products SET image_path = ? WHERE id = ?', args: [imagePath, req.params.id] });
+    const { rows: [existing] } = await db.execute({ sql: 'SELECT sku, image_path FROM products WHERE id = ?', args: [req.params.id] });
+    const imagePath=await storeProductImage({...existing,id:Number(req.params.id)},req.file,validation);
+    await recordSecurityAudit({
+      actorEmployeeId:req.employee?.id||null,
+      action:'product_image_updated',
+      targetType:'product',
+      targetId:Number(req.params.id),
+      oldValue:{image_path:existing.image_path||null},
+      newValue:{image_path:imagePath,sku:existing.sku},
+      reason:'Product image uploaded or replaced',
+      requestId:req.requestId||null,method:req.method,path:req.originalUrl||req.path,control:'product_media'
+    }).catch(()=>{});
     res.json({ image_path: imagePath });
   } catch(e) { return sendProductMutationError(res,e,'Unable to update this product image right now.'); }
 });
 
 // DELETE product image
-router.delete('/:id/image', requirePermission('inventory'), async (req, res) => {
+router.delete('/:id/image', requireImagePermission, async (req, res) => {
   try {
     await assertProductNotConsolidated(req.params.id);
     const { rows: [product] } = await db.execute({ sql: 'SELECT image_path FROM products WHERE id = ?', args: [req.params.id] });
@@ -714,6 +782,7 @@ router.delete('/:id/image', requirePermission('inventory'), async (req, res) => 
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       }
       await db.execute({ sql: 'UPDATE products SET image_path = NULL WHERE id = ?', args: [req.params.id] });
+      await recordSecurityAudit({actorEmployeeId:req.employee?.id||null,action:'product_image_removed',targetType:'product',targetId:Number(req.params.id),oldValue:{image_path:product.image_path},newValue:{image_path:null},reason:'Product image removed',requestId:req.requestId||null,method:req.method,path:req.originalUrl||req.path,control:'product_media'}).catch(()=>{});
     }
     res.json({ success: true });
   } catch(e) { return sendProductMutationError(res,e,'Unable to update this product image right now.'); }
