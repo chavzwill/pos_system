@@ -8443,7 +8443,19 @@ const App = {
       monthly_rate:['monthlyrate','monthly','monthrate'],
       hourly_rate:['hourlyrate','hourly','hourrate'],
       replacement_value:['replacementvalue','replacementcost','assetvalue'],
-      is_accessory:['isaccessory','accessory']
+      is_accessory:['isaccessory','accessory'],
+      customer_number:['customernumber','customerno','accountnumber','accountno','customerid'],
+      first_name:['firstname','first','givenname'],last_name:['lastname','last','surname','familyname'],
+      phone:['phone','telephone','mobile','cell','contactnumber'],address:['address','streetaddress','address1'],
+      state:['state','parish','province'],zip:['zip','zipcode','postalcode','postcode'],
+      customer_type:['customertype','accounttype','type'],credit_terms_days:['credittermsdays','termsdays','paymenttermsdays'],
+      credit_limit:['creditlimit','accountlimit'],tax_exempt:['taxexempt','gctexempt'],tax_exemption_number:['taxexemptionnumber','taxexemptnumber','gctexemptionnumber'],
+      is_rental_customer:['isrentalcustomer','rentalcustomer','rentalclient'],rental_id_type:['rentalidtype','idtype','identificationtype'],
+      rental_id_number:['rentalidnumber','idnumber','identificationnumber'],rental_address_proof_type:['rentaladdressprooftype','addressprooftype','proofofaddress'],
+      rental_address_proof_details:['rentaladdressproofdetails','addressproofdetails'],rental_reference_name:['rentalreferencename','referencename'],
+      rental_reference_phone:['rentalreferencephone','referencephone'],rental_reference_relationship:['rentalreferencerelationship','referencerelationship'],
+      temporary_rental_exception:['temporaryrentalexception','rentalexception','legacyrentalexception'],exception_days:['exceptiondays','rentalexceptiondays'],
+      exception_reason:['exceptionreason','rentalexceptionreason','migrationreason']
     };
     const normSources = sourceHeaders.map(h=>({raw:h,n:this._normalizeImportHeader(h)}));
     const auto = {};
@@ -8887,6 +8899,8 @@ const App = {
             <svg viewBox="0 0 24 24" fill="currentColor" width="16" height="16"><path d="M15.5 14h-.79l-.28-.27A6.471 6.471 0 0 0 16 9.5 6.5 6.5 0 1 0 9.5 16c1.61 0 3.09-.59 4.23-1.57l.27.28v.79l5 4.99L20.49 19l-4.99-5zm-6 0C7.01 14 5 11.99 5 9.5S7.01 5 9.5 5 14 7.01 14 9.5 11.99 14 9.5 14z"/></svg>
             <input type="text" id="cust-search" placeholder="Search customers..." style="width:260px">
           </div>
+          <a class="btn btn-secondary" href="/api/customers/import/template" download title="Download customer import template">⇩ Template</a>
+          <label class="btn btn-secondary" style="cursor:pointer;margin:0" title="Import customers from CSV">⇧ Import<input type="file" accept=".csv" style="display:none" onchange="App.importCustomersCsv(this)"></label>
           <button class="btn btn-primary" onclick="App.showCustomerForm()">+ Add Customer</button>
         </div>
       </div>
@@ -8901,6 +8915,72 @@ const App = {
       const data = await this.api('GET', `/customers?search=${encodeURIComponent(q)}&active=1`);
       this.buildCustomerTable(data);
     });
+  },
+
+  async importCustomersCsv(inputEl) {
+    const file = inputEl.files[0];
+    inputEl.value = '';
+    if (!file) return;
+    const text = await file.text();
+    const parsedRows = this._parseCsv(text);
+    if (!parsedRows.length) { this.alert('No data rows found in CSV', 'error'); return; }
+
+    const rows = await this._mapImportColumns(parsedRows, [
+      {key:'customer_number',label:'Customer Number'},
+      {key:'first_name',label:'First Name',required:true},{key:'last_name',label:'Last Name',required:true},
+      {key:'email',label:'Email'},{key:'phone',label:'Phone'},{key:'address',label:'Address'},
+      {key:'city',label:'City'},{key:'state',label:'State / Parish'},{key:'zip',label:'ZIP / Postal Code'},
+      {key:'notes',label:'Notes'},{key:'customer_type',label:'Customer Type'},
+      {key:'credit_terms_days',label:'Credit Terms (Days)'},{key:'credit_limit',label:'Credit Limit'},
+      {key:'tax_exempt',label:'Tax Exempt'},{key:'tax_exemption_number',label:'Tax Exemption Number'},
+      {key:'is_rental_customer',label:'Rental Customer'},
+      {key:'rental_id_type',label:'Rental ID Type'},{key:'rental_id_number',label:'Rental ID Number'},
+      {key:'rental_address_proof_type',label:'Address Proof Type'},{key:'rental_address_proof_details',label:'Address Proof Details'},
+      {key:'rental_reference_name',label:'Rental Reference Name'},{key:'rental_reference_phone',label:'Rental Reference Phone'},
+      {key:'rental_reference_relationship',label:'Rental Reference Relationship'},
+      {key:'temporary_rental_exception',label:'Temporary Rental Exception'},
+      {key:'exception_days',label:'Exception Days'},{key:'exception_reason',label:'Exception Reason'}
+    ], 'Customer Import');
+    if (!rows) return;
+
+    const wantsException = rows.some(r => ['1','true','yes','y'].includes(String(r.temporary_rental_exception||'').trim().toLowerCase()));
+    if (wantsException && this.currentUser?.permissions?.rentals_compliance_exception !== true) {
+      this.alert('This file asks for temporary rental exceptions, but your account does not have rental compliance exception authority.', 'error');
+      return;
+    }
+
+    this.showModal(`
+      <div class="modal" style="max-width:520px">
+        <div class="modal-header"><span class="modal-title">Importing Customers</span></div>
+        <div class="modal-body">
+          <p id="cust-import-status" style="font-size:13px;color:var(--text-muted);margin-bottom:8px">Preparing ${rows.length} customer row(s)…</p>
+          <div style="background:var(--border);border-radius:6px;overflow:hidden;height:10px"><div id="cust-import-bar" style="background:var(--primary);height:100%;width:0%;transition:width .2s"></div></div>
+          <p style="font-size:11px;color:var(--text-muted);margin-top:10px">Existing customers are updated only when Customer Number matches exactly. Missing rental compliance remains visible even when a temporary exception is granted.</p>
+        </div>
+      </div>`);
+
+    let created=0,updated=0,exceptions=0,processed=0;
+    const errors=[],warnings=[];
+    const batchSize=50;
+    for(let i=0;i<rows.length;i+=batchSize){
+      const batch=rows.slice(i,i+batchSize);
+      try{
+        const result=await this.api('POST','/customers/import',{rows:batch});
+        created+=result.created||0;updated+=result.updated||0;exceptions+=result.exceptions_created||0;
+        errors.push(...(result.errors||[]));warnings.push(...(result.warnings||[]));
+      }catch(e){errors.push(e.message);}
+      processed+=batch.length;
+      const pct=Math.round(processed/rows.length*100);
+      const bar=document.getElementById('cust-import-bar'),status=document.getElementById('cust-import-status');
+      if(bar)bar.style.width=pct+'%';if(status)status.textContent=`Imported ${processed} of ${rows.length} row(s) (${pct}%)`;
+    }
+    this.closeModal();
+    let msg=`Customer import complete: ${created} created, ${updated} updated`;
+    if(exceptions)msg+=`, ${exceptions} temporary rental exception(s) granted`;
+    if(warnings.length)msg+=`\n\nNeeds follow-up (${warnings.length}):\n${warnings.slice(0,12).join('\n')}${warnings.length>12?'\n…':''}`;
+    if(errors.length)msg+=`\n\nErrors (${errors.length}):\n${errors.slice(0,12).join('\n')}${errors.length>12?'\n…':''}`;
+    this.alert(msg,errors.length?'error':'success');
+    this.renderCustomers();
   },
 
   buildCustomerTable(customers) {
