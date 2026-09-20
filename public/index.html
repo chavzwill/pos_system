@@ -459,6 +459,7 @@ body.pos-kiosk #sidebar, body.pos-kiosk #topbar { display: none; }
 </style>
 <script src="https://cdn.jsdelivr.net/npm/jsbarcode@3.11.6/dist/JsBarcode.all.min.js"></script>
 <link rel="stylesheet" href="/employee-learning-center.css?v=20260920-learning">
+<link rel="stylesheet" href="/rental-create-wizard.css?v=20260920-wizard">
 </head>
 <body>
 
@@ -5624,6 +5625,8 @@ const App = {
           <button class="modal-close">✕</button>
         </div>
         <div class="modal-body">
+          <div id="rc-wizard-progress" class="rc-wizard-progress" aria-label="Rental setup progress"></div>
+          <section data-rental-wizard-step="1" aria-label="Customer and dates">
           <div class="input-row">
             <div class="form-group" style="position:relative"><label>Customer *</label>
               <input type="text" id="rc-customer-search" placeholder="Search customer…" autocomplete="off"
@@ -5643,12 +5646,16 @@ const App = {
           </div>
           <p style="font-size:11px;color:var(--text-muted);margin-top:-6px">Item availability below reflects stock at the selected location.</p>
           <div class="form-group"><label>Rental Length</label><div style="display:flex;gap:6px;flex-wrap:wrap;margin-bottom:8px"><button type="button" class="btn btn-secondary btn-sm" onclick="App.setRentalDurationDays(1)">1 day</button><button type="button" class="btn btn-secondary btn-sm" onclick="App.setRentalDurationDays(2)">2 days</button><button type="button" class="btn btn-secondary btn-sm" onclick="App.setRentalDurationPreset('weekend')">Weekend</button><button type="button" class="btn btn-secondary btn-sm" onclick="App.setRentalDurationDays(7)">1 week</button><button type="button" class="btn btn-secondary btn-sm" onclick="App.setRentalDurationDays(30)">30 days</button></div><div style="display:flex;gap:8px;align-items:end;flex-wrap:wrap"><label style="flex:1;min-width:180px">Due Date *<input type="date" id="rc-duedate" value="${tomorrow}" oninput="App.syncRentalDurationFromDueDate();App._recalcRentalCheckoutEstimate()"></label><label style="width:120px">Days<input type="number" id="rc-duration-days" min="1" max="365" value="1" oninput="App.syncRentalDueDateFromDays();App._recalcRentalCheckoutEstimate()"></label></div><p id="rc-duration-summary" style="font-size:11px;color:var(--text-muted);margin:4px 0 0">1 rental day</p></div>
+          </section>
+          <section data-rental-wizard-step="2" aria-label="Rental items" hidden>
           <hr style="margin:12px 0">
           <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:8px">
             <strong>Items</strong>
             <button class="btn btn-sm btn-outline" onclick="App.addRentalCheckoutLine()">+ Add Item</button>
           </div>
           <div id="rental-checkout-lines"></div>
+          </section>
+          <section data-rental-wizard-step="3" aria-label="Delivery pickup and operator services" hidden>
           <hr style="margin:12px 0">
           <strong>Additional Services</strong>
           <p style="font-size:11px;color:var(--text-muted);margin:2px 0 8px">Costs entered here are charged along with the rental fee when the cashier processes payment. The driver/operator themselves are assigned later, at issue/return.</p>
@@ -5686,24 +5693,107 @@ const App = {
           <div id="rc-operator-fields" class="form-group" style="display:none;max-width:220px">
             <label style="font-size:11px">Operator Fee</label><input type="number" id="rc-operator-fee" value="0" min="0" step="0.01" oninput="App._recalcRentalCheckoutEstimate()">
           </div>
+          </section>
+          <section data-rental-wizard-step="4" aria-label="Review and hold" hidden>
           <hr style="margin:12px 0">
+          <div id="rc-wizard-review" class="rc-wizard-review"></div>
           <div id="rc-total-summary" style="background:var(--bg-secondary);border-radius:6px;padding:10px 12px;font-size:13px;margin-bottom:12px"></div>
           <div class="form-group"><label>Notes</label><textarea id="rc-agreement-notes" rows="2" placeholder="Optional notes for this rental…"></textarea></div>
           <p style="font-size:11px;color:var(--text-muted);margin-top:8px">This places the rental on hold — a cashier will collect payment (cash or credit) and the rental period begins when it's finalized at the register.</p>
+          </section>
         </div>
         <div class="modal-footer">
+          <button class="btn btn-secondary" id="rc-wizard-back" onclick="App.changeRentalWizardStep(-1)" style="display:none">Back</button>
           <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
-          <button class="btn btn-primary" onclick="App.holdRentalCheckout()">Place on Hold</button>
+          <button class="btn btn-primary" id="rc-wizard-next" onclick="App.changeRentalWizardStep(1)">Next: Items</button>
+          <button class="btn btn-primary" id="rc-wizard-submit" onclick="App.holdRentalCheckout()" style="display:none">Place on Hold</button>
         </div>
       </div>`);
     this.addRentalCheckoutLine();
     this._recalcRentalCheckoutEstimate();
+    this._initRentalCreateWizard();
     document.addEventListener('click', (e) => {
       if (!e.target.closest('#rc-customer-search') && !e.target.closest('#rc-customer-dd')) {
         const dd = document.getElementById('rc-customer-dd');
         if (dd) dd.style.display = 'none';
       }
     });
+  },
+
+  _initRentalCreateWizard() {
+    this._rentalWizardStep = 1;
+    this._renderRentalCreateWizard();
+  },
+
+  _validateRentalWizardStep(step) {
+    if (step === 1) {
+      if (!document.getElementById('rc-customer')?.value) return 'Select the customer before continuing.';
+      if (!document.getElementById('rc-branch')?.value) return 'Select the rental branch/location before continuing.';
+      if (!document.getElementById('rc-duedate')?.value) return 'Choose the rental due date before continuing.';
+    }
+    if (step === 2) {
+      const lines = Array.from(document.querySelectorAll('#rental-checkout-lines [id^="rental-line-"]'));
+      const selected = lines.filter(line => {
+        const idx = line.id.replace('rental-line-','');
+        return document.getElementById(`rl-prod-${idx}`)?.value && Number(document.getElementById(`rl-qty-${idx}`)?.value) > 0;
+      });
+      if (!selected.length) return 'Add at least one available rental item before continuing.';
+    }
+    return null;
+  },
+
+  changeRentalWizardStep(delta) {
+    const current = Number(this._rentalWizardStep || 1);
+    if (delta > 0) {
+      const error = this._validateRentalWizardStep(current);
+      if (error) { this.alert(error, 'error'); return; }
+    }
+    this._rentalWizardStep = Math.max(1, Math.min(4, current + Number(delta || 0)));
+    if (this._rentalWizardStep === 4) this._recalcRentalCheckoutEstimate();
+    this._renderRentalCreateWizard();
+  },
+
+  _renderRentalCreateWizard() {
+    const step = Math.max(1, Math.min(4, Number(this._rentalWizardStep || 1)));
+    const labels = ['Customer & Dates','Items','Services','Review & Hold'];
+    document.querySelectorAll('[data-rental-wizard-step]').forEach(section => {
+      section.hidden = Number(section.dataset.rentalWizardStep) !== step;
+    });
+    const progress = document.getElementById('rc-wizard-progress');
+    if (progress) progress.innerHTML = labels.map((label, i) => {
+      const n = i + 1, cls = n < step ? 'is-done' : n === step ? 'is-current' : '';
+      return `<div class="rc-wizard-progress__step ${cls}"><span>${n < step ? '✓' : n}</span><strong>${label}</strong></div>`;
+    }).join('');
+    const back = document.getElementById('rc-wizard-back');
+    const next = document.getElementById('rc-wizard-next');
+    const submit = document.getElementById('rc-wizard-submit');
+    if (back) back.style.display = step > 1 ? '' : 'none';
+    if (next) {
+      next.style.display = step < 4 ? '' : 'none';
+      const nextLabels = {1:'Next: Items',2:'Next: Services',3:'Review Rental'};
+      next.textContent = nextLabels[step] || 'Next';
+    }
+    if (submit) submit.style.display = step === 4 ? '' : 'none';
+    if (step === 4) {
+      const safe = v => String(v ?? '').replace(/[&<>\"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','\"':'&quot;',"'":'&#39;'}[c]));
+      const customer = document.getElementById('rc-customer-search')?.value || 'Selected customer';
+      const branch = document.getElementById('rc-branch');
+      const branchId = Number(branch?.value || 0);
+      const branchLabel = branch?.tagName === 'SELECT' ? (branch.selectedOptions?.[0]?.textContent || 'Selected branch') : ((this.currentUser.branches||[]).find(b=>Number(b.id)===branchId)?.name || 'Selected branch');
+      const due = document.getElementById('rc-duedate')?.value || '—';
+      const itemCount = Array.from(document.querySelectorAll('#rental-checkout-lines [id^="rental-line-"]')).filter(line => {
+        const idx = line.id.replace('rental-line-','');
+        return document.getElementById(`rl-prod-${idx}`)?.value && Number(document.getElementById(`rl-qty-${idx}`)?.value) > 0;
+      }).length;
+      const services = [
+        document.getElementById('rc-customer-pickup')?.checked ? 'Customer pickup' : null,
+        document.getElementById('rc-delivery')?.checked ? 'Delivery' : null,
+        document.getElementById('rc-pickup')?.checked ? 'Return pickup' : null,
+        document.getElementById('rc-operator')?.checked ? 'Company operator' : null
+      ].filter(Boolean);
+      const review = document.getElementById('rc-wizard-review');
+      if (review) review.innerHTML = `<div><small>Customer</small><strong>${safe(customer)}</strong></div><div><small>Branch</small><strong>${safe(branchLabel)}</strong></div><div><small>Due</small><strong>${safe(due)}</strong></div><div><small>Items</small><strong>${itemCount}</strong></div><div class="wide"><small>Services</small><strong>${safe(services.length ? services.join(' · ') : 'No additional services')}</strong></div>`;
+    }
   },
 
   _toggleRentalCreateService(which) {
