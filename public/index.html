@@ -127,6 +127,20 @@ input:focus, select:focus, textarea:focus { outline: none; border-color: var(--a
 .modal-footer { padding: 14px 20px; border-top: 1px solid var(--border); display: flex; justify-content: flex-end; gap: 10px; }
 .modal-close { background: none; border: none; cursor: pointer; color: var(--text-muted); padding: 4px; border-radius: 4px; }
 .modal-close:hover { color: var(--text); background: #f0f0f0; }
+.rental-hold-complete .modal-body { padding: 28px; }
+.rental-hold-complete__mark { width: 52px; height: 52px; border-radius: 50%; display: grid; place-items: center; background: rgba(46,125,50,.12); color: var(--success); font-size: 26px; font-weight: 800; margin-bottom: 16px; }
+.rental-hold-complete__eyebrow { color: var(--success); font-size: 12px; font-weight: 800; text-transform: uppercase; letter-spacing: .6px; margin-bottom: 6px; }
+.rental-hold-complete h2 { font-size: 24px; margin: 0 0 8px; }
+.rental-hold-complete__lead { margin: 0 0 20px; color: var(--text-muted); line-height: 1.5; }
+.rental-hold-complete__summary { display: grid; grid-template-columns: 1fr 1fr; gap: 10px; margin-bottom: 18px; }
+.rental-hold-complete__summary > div { border: 1px solid var(--border); border-radius: 8px; padding: 12px; background: rgba(0,0,0,.015); }
+.rental-hold-complete__summary small { display: block; color: var(--text-muted); font-size: 10px; text-transform: uppercase; letter-spacing: .4px; margin-bottom: 4px; }
+.rental-hold-complete__summary strong { display: block; font-size: 13px; line-height: 1.35; }
+.rental-hold-complete__next { display: flex; gap: 12px; align-items: flex-start; border-radius: 9px; padding: 13px 14px; background: rgba(0,126,55,.07); }
+.rental-hold-complete__next > span { flex: 0 0 auto; color: var(--accent); font-size: 11px; font-weight: 800; text-transform: uppercase; letter-spacing: .4px; padding-top: 2px; }
+.rental-hold-complete__next strong { font-size: 13px; }
+.rental-hold-complete__next p { margin: 3px 0 0; color: var(--text-muted); font-size: 12px; line-height: 1.45; }
+@media (max-width: 600px) { .rental-hold-complete__summary { grid-template-columns: 1fr; } .rental-hold-complete .modal-body { padding: 22px; } }
 
 /* POS Layout */
 #pos-section { display: flex; gap: 16px; height: 100%; }
@@ -6236,10 +6250,41 @@ const App = {
         customer_pickup: customerPickup ? 1 : 0,
       });
       this.closeModal();
-      this.alert(`Rental ${agreement.agreement_number} placed on hold — a cashier can recall it from Held Orders in the POS to collect payment`);
       this.renderRentals();
       this.updateHoldBadge();
+      this.showRentalHoldCompletion(agreement);
     } catch(e) { this.alert(e.message, 'error'); }
+  },
+
+  showRentalHoldCompletion(agreement) {
+    const safe = v => String(v ?? '').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+    const total = this.fmt(agreement.estimated_total || 0);
+    const due = agreement.due_date ? this.fmtDate(agreement.due_date) : 'Not set';
+    const canCollect = this.can('pos');
+    this.showModal(`
+      <div class="modal rental-hold-complete" style="max-width:520px">
+        <div class="modal-body">
+          <div class="rental-hold-complete__mark" aria-hidden="true">✓</div>
+          <div class="rental-hold-complete__eyebrow">Rental saved successfully</div>
+          <h2>Ready for payment</h2>
+          <p class="rental-hold-complete__lead">The rental is safely on hold. Inventory and rental rules remain governed until checkout is completed.</p>
+          <div class="rental-hold-complete__summary">
+            <div><small>Rental</small><strong>${safe(agreement.agreement_number || '—')}</strong></div>
+            <div><small>Status</small><strong>On hold · awaiting payment</strong></div>
+            <div><small>Estimated total</small><strong>${safe(total)}</strong></div>
+            <div><small>Due date</small><strong>${safe(due)}</strong></div>
+          </div>
+          <div class="rental-hold-complete__next">
+            <span>Next</span>
+            <div><strong>Collect payment at the register</strong><p>${canCollect ? 'You can process payment now, or another cashier can recall this rental from Held Orders.' : 'A cashier can recall this rental from Held Orders in the POS and collect payment.'}</p></div>
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="App.closeModal();App.viewRentalAgreement(${Number(agreement.id)})">View Rental</button>
+          <button class="btn btn-secondary" onclick="App.closeModal()">Done</button>
+          ${canCollect ? `<button class="btn btn-primary" onclick="App.closeModal();App.showFinalizeRentalModal(${Number(agreement.id)})">Process Payment</button>` : ''}
+        </div>
+      </div>`);
   },
 
   // ─── Finalize a held rental (collect payment) ────────────────────────────

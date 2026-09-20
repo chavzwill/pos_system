@@ -12,5 +12,11 @@ check('journey names custody actors',modern.includes('issue_security_employee_na
 check('journey reports customer signature capture',modern.includes('Customer signature captured'));
 check('journey is surfaced in modern rental workspace',modern.includes('<h4>Rental journey</h4>')&&modern.includes('${journey(a)}'));
 check('journey timeline has responsive styling',css.includes('.tt-rent__journey-row')&&css.includes('@media(max-width:720px)'));
+check('rental hold uses a persistent completion handoff',legacy.includes('showRentalHoldCompletion(agreement)')&&legacy.includes('Rental saved successfully')&&legacy.includes('Ready for payment'));
+check('completion handoff explains the next staff action',legacy.includes('Collect payment at the register')&&legacy.includes('recall this rental from Held Orders'));
+check('completion handoff exposes governed follow-up actions',legacy.includes('View Rental')&&legacy.includes('Process Payment')&&legacy.includes("const canCollect = this.can('pos')"));
+check('completion handoff presents durable agreement evidence',legacy.includes('agreement.agreement_number')&&legacy.includes('estimated_total')&&legacy.includes('On hold · awaiting payment'));
+check('old transient-only hold alert is removed',!legacy.includes('placed on hold — a cashier can recall it from Held Orders'));
+check('completion handoff has responsive styling',legacy.includes('.rental-hold-complete__summary')&&legacy.includes('@media (max-width: 600px)'));
 check('syntax wall includes rental journey contract',pkg.includes('check:rental-journey-ux'));
 if(failed){console.error('Rental Journey UX contract failed: '+failed);process.exit(1)}console.log('Rental Journey UX contract passed.');
