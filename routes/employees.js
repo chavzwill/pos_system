@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { db } = require('../database');
-const { createSession, destroySession, destroyEmployeeSessions, setSessionCookie, clearSessionCookie, readCookie } = require('../lib/sessionAuth');
+const { createSession, destroySession, destroyEmployeeSessions, setSessionCookie, clearSessionCookie, readCookie, markSessionReauthenticated, recentSessionReauth, REAUTH_TTL_MS } = require('../lib/sessionAuth');
 const { requireAuth, requirePermission, can } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
 const { loginRateLimit, privilegedPinRateLimit, resetRequestRateLimit } = require('../lib/securityHardening');
@@ -369,6 +369,62 @@ router.put('/:id', requirePermission('employees'), async (req, res) => {
     res.json(emp);
   } catch (e) {
     res.status(400).json({ error: 'Unable to update employee' });
+  }
+});
+
+router.post('/reauth-self', requireAuth, privilegedPinRateLimit, async (req, res) => {
+  try {
+    const employeeId = Number(req.employee?.id);
+    const sessionId = Number(req.sessionRecord?.id);
+    if (!employeeId || !sessionId) return res.status(401).json({ error: 'Signed-in employee session required' });
+    const purpose = String(req.body?.purpose || 'sensitive_action').trim();
+    if (!['sensitive_action','security_admin','financial_review','approval_review'].includes(purpose)) {
+      return res.status(400).json({ error: 'Unsupported reauthentication purpose' });
+    }
+    const pin = String(req.body?.pin || '');
+    const password = String(req.body?.password || '');
+    if ((!pin && !password) || (pin && password)) return res.status(400).json({ error: 'Enter either your PIN or password' });
+    const { rows: [row] } = await db.execute({ sql: 'SELECT id,pin,password,active FROM employees WHERE id=?', args: [employeeId] });
+    if (!row || !Number(row.active)) return res.status(401).json({ error: 'Employee account is unavailable' });
+    let verified = false, method = null;
+    if (pin) {
+      if (!validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
+      verified = await verifyPin(row.pin, pin);
+      method = 'pin';
+      if (verified) await upgradeLegacyPin(row.id, row.pin, pin);
+    } else {
+      verified = await verifyPassword(row.password, password);
+      method = 'password';
+    }
+    if (!verified) return res.status(403).json({ error: 'Verification failed' });
+    const verifiedAt = await markSessionReauthenticated(sessionId, employeeId, method, purpose);
+    resetRequestRateLimit(req);
+    await ensureSecurityAuditTable();
+    await recordSecurityAudit({
+      actorEmployeeId: employeeId,
+      action: 'session_reauthenticated',
+      targetType: 'session',
+      targetId: sessionId,
+      oldValue: null,
+      newValue: { purpose, method },
+      reason: 'Signed-in employee verified identity for a sensitive action',
+      requestId: req.requestId || null,
+      method: req.method,
+      path: req.originalUrl,
+      control: 'session_reauthentication',
+    });
+    res.json({ verified: true, verified_at: verifiedAt, expires_in_seconds: Math.floor(REAUTH_TTL_MS / 1000), purpose });
+  } catch (e) {
+    res.status(500).json({ error: 'Reauthentication failed' });
+  }
+});
+
+router.get('/reauth-status', requireAuth, async (req, res) => {
+  try {
+    const row = await recentSessionReauth(Number(req.sessionRecord?.id), Number(req.employee?.id));
+    res.json({ verified: !!row, verified_at: row?.verified_at || null, method: row?.method || null, purpose: row?.purpose || null, expires_in_seconds: row ? Math.max(0, Math.floor((REAUTH_TTL_MS - (Date.now() - new Date(row.verified_at).getTime())) / 1000)) : 0 });
+  } catch (e) {
+    res.status(500).json({ error: 'Unable to read reauthentication status' });
   }
 });
 
