@@ -128,6 +128,8 @@ async function _init() {
     )` },
     { sql: `CREATE TRIGGER IF NOT EXISTS catalog_product_consolidations_no_update BEFORE UPDATE ON catalog_product_consolidations BEGIN SELECT RAISE(ABORT,'catalog product consolidations are append-only'); END` },
     { sql: `CREATE TRIGGER IF NOT EXISTS catalog_product_consolidations_no_delete BEFORE DELETE ON catalog_product_consolidations BEGIN SELECT RAISE(ABORT,'catalog product consolidations are append-only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_product_tombstone_guard BEFORE UPDATE ON products WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.id) BEGIN SELECT RAISE(ABORT,'consolidated product tombstones are immutable'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_product_delete_guard BEFORE DELETE ON products WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.id) BEGIN SELECT RAISE(ABORT,'consolidated product tombstones are immutable'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS customers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       customer_number TEXT UNIQUE,
@@ -372,6 +374,8 @@ async function _init() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(product_id, branch_id)
     )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_branch_stock_guard_insert BEFORE INSERT ON branch_inventory WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=NEW.product_id) AND ABS(COALESCE(NEW.stock_qty,0))>0.000000001 BEGIN SELECT RAISE(ABORT,'consolidated product cannot receive branch stock'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_branch_stock_guard_update BEFORE UPDATE OF stock_qty ON branch_inventory WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=NEW.product_id) AND ABS(COALESCE(NEW.stock_qty,0))>0.000000001 BEGIN SELECT RAISE(ABORT,'consolidated product cannot receive branch stock'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS stock_movements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       product_id INTEGER NOT NULL REFERENCES products(id),
@@ -382,6 +386,7 @@ async function _init() {
       reason TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_stock_movement_guard BEFORE INSERT ON stock_movements WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=NEW.product_id) AND ABS(COALESCE(NEW.quantity_change,0))>0.000000001 BEGIN SELECT RAISE(ABORT,'consolidated product cannot receive stock movement'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS branch_transfers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       transfer_number TEXT UNIQUE NOT NULL,
@@ -940,6 +945,9 @@ async function _init() {
       attr_values TEXT NOT NULL DEFAULT '[]',
       sort_order INTEGER DEFAULT 0
     )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_variation_type_guard_insert BEFORE INSERT ON product_variation_types WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=NEW.product_id) BEGIN SELECT RAISE(ABORT,'consolidated product variation settings are immutable'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_variation_type_guard_update BEFORE UPDATE ON product_variation_types WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.product_id) BEGIN SELECT RAISE(ABORT,'consolidated product variation settings are immutable'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_variation_type_guard_delete BEFORE DELETE ON product_variation_types WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.product_id) BEGIN SELECT RAISE(ABORT,'consolidated product variation settings are immutable'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS product_variations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -955,6 +963,9 @@ async function _init() {
       active INTEGER NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_variation_guard_insert BEFORE INSERT ON product_variations WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=NEW.product_id) BEGIN SELECT RAISE(ABORT,'consolidated product variations are immutable'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_variation_guard_update BEFORE UPDATE ON product_variations WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.product_id) BEGIN SELECT RAISE(ABORT,'consolidated product variations are immutable'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_variation_guard_delete BEFORE DELETE ON product_variations WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.product_id) BEGIN SELECT RAISE(ABORT,'consolidated product variations are immutable'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS woo_sync_map (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       entity_type TEXT NOT NULL,

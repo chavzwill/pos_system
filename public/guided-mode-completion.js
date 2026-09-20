@@ -30,6 +30,8 @@ function networkRule(url,method,status){if(status<200||status>=300)return'';cons
  if(t==='Create, dispatch or receive a branch transfer'&&s===4&&/\/api\/.*transfers\//.test(url)&&/receive/i.test(url)&&writeMethod(method))return'Transfer received.';
  if(t==='Adjust inventory'&&s>=2&&/\/api\/.*(?:inventory|stock|products)/.test(url)&&writeMethod(method))return'Inventory change saved.';
  if(t==='Manage product brands'&&s>=3&&/\/api\/brands(?:\/|\?|$)/.test(url)&&writeMethod(method))return s===4?'Brand logo or brand update saved.':'Brand record saved.';
+ if(t==='Review duplicate catalog products'&&s===3&&method==='PATCH'&&/\/api\/catalog-integrity\/duplicate-review(?:\?|$)/.test(url))return'Duplicate review decision saved.';
+ if(t==='Review duplicate catalog products'&&s===5&&method==='POST'&&/\/api\/catalog-integrity\/duplicate-consolidations(?:\?|$)/.test(url))return'Duplicate records consolidated into the chosen survivor.';
  if(t==='Run a stock or cycle count'&&s>=2&&/\/api\/.*(?:cycle-count|stock-count|inventory-count|counts)/.test(url)&&writeMethod(method))return'Count workflow updated.';
  if(t==='Create or manage a quotation'&&s===2&&method==='POST'&&/\/api\/.*quot/.test(url))return'Quotation created.';
  if(t==='Create or manage a quotation'&&s===3&&/\/api\/.*quot/.test(url)&&writeMethod(method))return'Quotation status was updated.';

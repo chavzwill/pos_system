@@ -9,6 +9,7 @@ const TASK_CONTEXT={
  'Dispatch, route or complete a delivery':{domain:'dispatch',feature:'logistics-intelligence',selector:'#tt-logistics-intelligence'},
  'Adjust inventory':{domain:'inventory',feature:'inventory-workspace',selector:'#tt-inventory-workspace'},
  'Manage product brands':{domain:'inventory',feature:'catalog-admin-workspace',selector:'.catalog-admin-overlay'},
+ 'Review duplicate catalog products':{domain:'inventory',feature:'catalog-admin-workspace',selector:'.catalog-admin-overlay'},
  'Run a stock or cycle count':{domain:'inventory'},
  'Create or approve a purchase request':{domain:'purchasing',feature:'purchasing-workspace',selector:'#tt-purchasing-workspace',tab:'pr'},
  'Create, edit, copy, cancel or receive a PO':{domain:'purchasing',feature:'purchasing-workspace',selector:'#tt-purchasing-workspace',tab:'po'},
