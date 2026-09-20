@@ -5,7 +5,7 @@ const read=f=>fs.readFileSync(path.join(root,f),'utf8');
 let failed=0;
 const check=(n,o)=>o?console.log('PASS Consolidation Sync:',n):(failed++,console.error('FAIL Consolidation Sync:',n));
 const route=read('routes/commerce-sync.js'),pkg=read('package.json');
-check('commerce contract version bumped for consolidation payload',route.includes("CONTRACT_VERSION = '2026-09-20.1'"));
+check('commerce contract version includes consolidation payload',/CONTRACT_VERSION = '2026-09-20\.[12]'/.test(route));
 check('catalog export includes product consolidations',route.includes('product_consolidations'));
 check('mapping exports duplicate and survivor ids',route.includes('duplicate_product_id')&&route.includes('survivor_product_id'));
 check('mapping exports duplicate and survivor skus',route.includes('duplicate_sku')&&route.includes('survivor_sku'));

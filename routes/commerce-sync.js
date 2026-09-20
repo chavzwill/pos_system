@@ -9,7 +9,7 @@ const { resolveCanonicalProduct } = require('../lib/catalog-integrity');
 router.use(requirePermission('inventory'));
 router.use('/catalog-cleanup-dependencies', require('./catalog-cleanup-dependencies'));
 
-const CONTRACT_VERSION = '2026-09-20.1';
+const CONTRACT_VERSION = '2026-09-20.2';
 
 function publicProduct(p) {
   return {
@@ -123,6 +123,71 @@ async function resolveCanonicalAvailability(requestedSku) {
   });
   return { requested, resolved, product };
 }
+
+function promotionStatus(p,today){
+  if(!Number(p.active))return'inactive';
+  if(p.start_date&&String(p.start_date)>today)return'scheduled';
+  if(p.end_date&&String(p.end_date)<today)return'ended';
+  return'live';
+}
+
+router.get('/promotions', async (req, res) => {
+  try {
+    const includeInactive=String(req.query.include_inactive||'')==='1';
+    const today=new Date().toISOString().slice(0,10);
+    const {rows:promotions}=await db.execute({
+      sql:`SELECT id,name,description,type,value,min_purchase,applies_to,start_date,end_date,active
+            FROM promotions ${includeInactive?'':'WHERE active=1'} ORDER BY id`,
+      args:[]
+    });
+    const ids=promotions.map(p=>Number(p.id));
+    let scopeRows=[],codeRows=[];
+    if(ids.length){
+      const marks=ids.map(()=>'?').join(',');
+      ({rows:scopeRows}=await db.execute({
+        sql:`SELECT pi.promotion_id,pi.item_type,pi.item_id,
+                    p.sku product_sku,p.name product_name,
+                    c.name category_name
+             FROM promotion_items pi
+             LEFT JOIN products p ON pi.item_type='product' AND p.id=pi.item_id
+             LEFT JOIN categories c ON pi.item_type='category' AND c.id=pi.item_id
+             WHERE pi.promotion_id IN (${marks})
+             ORDER BY pi.promotion_id,pi.item_type,pi.item_id`,
+        args:ids
+      }));
+      ({rows:codeRows}=await db.execute({
+        sql:`SELECT promotion_id,code,active FROM promotion_codes
+             WHERE promotion_id IN (${marks}) ORDER BY promotion_id,code`,
+        args:ids
+      }));
+    }
+    const scopes=new Map(),codes=new Map();
+    for(const s of scopeRows){
+      if(!scopes.has(Number(s.promotion_id)))scopes.set(Number(s.promotion_id),[]);
+      scopes.get(Number(s.promotion_id)).push(s.item_type==='product'
+        ?{item_type:'product',item_id:Number(s.item_id),product_sku:s.product_sku||null,product_name:s.product_name||null}
+        :{item_type:'category',item_id:Number(s.item_id),category_name:s.category_name||null});
+    }
+    for(const c of codeRows){
+      if(!codes.has(Number(c.promotion_id)))codes.set(Number(c.promotion_id),[]);
+      codes.get(Number(c.promotion_id)).push({code:c.code,active:Number(c.active)!==0});
+    }
+    res.json({
+      contract_version:CONTRACT_VERSION,
+      generated_at:new Date().toISOString(),
+      checkout_authoritative:true,
+      promotions:promotions.map(p=>({
+        id:Number(p.id),name:p.name,description:p.description||null,type:p.type,value:Number(p.value)||0,
+        min_purchase:Number(p.min_purchase)||0,applies_to:p.applies_to||'all',
+        start_date:p.start_date||null,end_date:p.end_date||null,active:Number(p.active)!==0,
+        status:promotionStatus(p,today),scopes:scopes.get(Number(p.id))||[],codes:codes.get(Number(p.id))||[]
+      }))
+    });
+  } catch(e) {
+    console.error('commerce_sync_promotions_error',{code:e?.code||'unknown'});
+    res.status(500).json({error:'Unable to prepare website promotions right now.',code:'COMMERCE_SYNC_PROMOTIONS_UNAVAILABLE'});
+  }
+});
 
 router.get('/availability/:sku', async (req, res) => {
   try {

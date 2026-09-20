@@ -1277,6 +1277,27 @@ async function _init() {
     try { await db.execute({ sql, args: [] }); } catch(e) {}
   }
 
+  // Canonical catalog continuity: older consolidations may predate promotion
+  // scope migration. Reconcile those current campaign assignments at startup
+  // without touching historical transaction evidence.
+  {
+    const tx = await db.transaction('write');
+    try {
+      await tx.execute({ sql: `INSERT OR IGNORE INTO promotion_items(promotion_id,item_type,item_id)
+        SELECT pi.promotion_id,'product',c.survivor_product_id
+        FROM promotion_items pi
+        JOIN catalog_product_consolidations c ON c.duplicate_product_id=pi.item_id
+        WHERE pi.item_type='product'`, args: [] });
+      await tx.execute({ sql: `DELETE FROM promotion_items
+        WHERE item_type='product'
+          AND item_id IN (SELECT duplicate_product_id FROM catalog_product_consolidations)`, args: [] });
+      await tx.commit();
+    } catch(e) {
+      try { await tx.rollback(); } catch(_) {}
+      throw e;
+    }
+  }
+
   // quotation_item_sources.purchase_request_item_id originally declared a
   // plain (no ON DELETE action) FK to purchase_request_items — on a DB that
   // enforces foreign keys, that reference blocks the DROP TABLE below from
