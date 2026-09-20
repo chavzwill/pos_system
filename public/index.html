@@ -5949,18 +5949,19 @@ const App = {
 
     const deliveryFee = document.getElementById('rc-delivery')?.checked ? parseFloat(document.getElementById('rc-delivery-cost')?.value) || 0 : 0;
     const pickupFee = document.getElementById('rc-pickup')?.checked ? parseFloat(document.getElementById('rc-pickup-cost')?.value) || 0 : 0;
-    const operatorFee = document.getElementById('rc-operator')?.checked ? parseFloat(document.getElementById('rc-operator-fee')?.value) || 0 : 0;
+    const operatorRequired = document.getElementById('rc-operator')?.checked || false;
+    const operatorFee = operatorRequired ? parseFloat(document.getElementById('rc-operator-fee')?.value) || 0 : 0;
     const servicesTotal = deliveryFee + pickupFee + operatorFee;
-    // Deposit mirrors the fee 1:1 (double-charge model — see PATCH .../checkout
-    // in routes/rentals.js), so what's actually collected at the register is
-    // fee + matching deposit + tax + service fees, not just the fee alone.
-    const grandTotal = feeSubtotal + feeSubtotal + taxTotal + servicesTotal;
+    // When a Total Tools operator is required, the customer does not take operating custody.
+    // The server therefore waives the refundable rental deposit and this preview mirrors that rule.
+    const depositTotal = operatorRequired ? 0 : feeSubtotal;
+    const grandTotal = feeSubtotal + depositTotal + taxTotal + servicesTotal;
     const days = Math.max(1, Math.round((new Date(`${dueDateStr}T00:00:00`) - new Date(new Date().toDateString())) / 86400000));
 
     summaryEl.innerHTML = `
       <div style="font-weight:600;margin-bottom:6px">Estimated Total — ${days} day${days===1?'':'s'}</div>
       ${rows.map(r => `<div style="display:flex;justify-content:space-between"><span>${r.label}</span><span>${this.fmt(r.fee)}</span></div>`).join('')}
-      <div style="display:flex;justify-content:space-between"><span>Refundable Deposit</span><span>${this.fmt(feeSubtotal)}</span></div>
+      <div style="display:flex;justify-content:space-between"><span>Refundable Deposit${operatorRequired ? ' <span style="color:var(--text-muted);font-weight:400">(waived — company operator provided)</span>' : ''}</span><span>${this.fmt(depositTotal)}</span></div>
       <div style="display:flex;justify-content:space-between"><span>Tax</span><span>${this.fmt(taxTotal)}</span></div>
       ${deliveryFee ? `<div style="display:flex;justify-content:space-between"><span>Delivery Fee</span><span>${this.fmt(deliveryFee)}</span></div>` : ''}
       ${pickupFee ? `<div style="display:flex;justify-content:space-between"><span>Pickup Fee</span><span>${this.fmt(pickupFee)}</span></div>` : ''}
@@ -6184,7 +6185,7 @@ const App = {
             }).join('')}
             <div style="border-top:1px dashed var(--border);margin-top:8px;padding-top:8px;font-size:13px">
               <div>Rental Fee <span style="float:right">${this.fmt(a.estimated_rental_subtotal || 0)}</span></div>
-              <div>Refundable Deposit <span style="float:right">${this.fmt(a.estimated_deposit_total || 0)}</span></div>
+              <div>Refundable Deposit${a.operator_required ? ' <span style="color:var(--text-muted)">(waived — company operator provided)</span>' : ''} <span style="float:right">${this.fmt(a.estimated_deposit_total || 0)}</span></div>
               ${a.estimated_tax ? `<div>Tax <span style="float:right">${this.fmt(a.estimated_tax)}</span></div>` : ''}
               ${a.delivery_required ? `<div>Delivery Fee <span style="float:right">${this.fmt(a.delivery_cost)}</span></div>` : ''}
               ${a.pickup_required ? `<div>Pickup Fee <span style="float:right">${this.fmt(a.pickup_cost)}</span></div>` : ''}
