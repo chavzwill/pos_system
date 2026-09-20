@@ -11,7 +11,7 @@ check('planner reuses cleanup evidence',lib.includes('inspectProductCleanup'));
 check('planner reports master data conflicts',lib.includes('conflicts'));
 check('planner detects branch stock',lib.includes('branch_stock_qty'));
 check('planner gives deterministic suggested primary',lib.includes('suggested_primary')&&lib.includes('reference_count'));
-const planner=lib.slice(lib.indexOf('async function planDuplicateConsolidation'),lib.indexOf('async function catalogHealth'));
+const planner=lib.slice(lib.indexOf('async function planDuplicateConsolidation'),lib.indexOf('async function inspectDuplicateConsolidation'));
 check('planner never mutates product data',planner&&!/\b(UPDATE|INSERT|DELETE|REPLACE)\b/i.test(planner));
 check('planner route is GET and inventory protected',route.includes("router.get('/duplicate-consolidation-plan'")&&route.includes("requirePermission('inventory')"));
 check('UI exposes Plan consolidation only for confirmed group',ui.includes('Plan consolidation')&&ui.includes('confirmed_duplicate'));

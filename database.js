@@ -115,6 +115,19 @@ async function _init() {
     )` },
     { sql: `CREATE TRIGGER IF NOT EXISTS catalog_duplicate_review_events_no_update BEFORE UPDATE ON catalog_duplicate_review_events BEGIN SELECT RAISE(ABORT,'catalog duplicate review events are append-only'); END` },
     { sql: `CREATE TRIGGER IF NOT EXISTS catalog_duplicate_review_events_no_delete BEFORE DELETE ON catalog_duplicate_review_events BEGIN SELECT RAISE(ABORT,'catalog duplicate review events are append-only'); END` },
+    { sql: `CREATE TABLE IF NOT EXISTS catalog_product_consolidations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      candidate_key TEXT NOT NULL,
+      survivor_product_id INTEGER NOT NULL REFERENCES products(id),
+      duplicate_product_id INTEGER NOT NULL UNIQUE REFERENCES products(id),
+      review_version INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      consolidated_by INTEGER NOT NULL REFERENCES employees(id),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK(survivor_product_id <> duplicate_product_id)
+    )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_product_consolidations_no_update BEFORE UPDATE ON catalog_product_consolidations BEGIN SELECT RAISE(ABORT,'catalog product consolidations are append-only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_product_consolidations_no_delete BEFORE DELETE ON catalog_product_consolidations BEGIN SELECT RAISE(ABORT,'catalog product consolidations are append-only'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS customers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       customer_number TEXT UNIQUE,
