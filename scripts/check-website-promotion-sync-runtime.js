@@ -66,7 +66,7 @@ async function run(){
 
     const projection=await request(base,'/api/commerce-sync/promotions');
     assert.equal(projection.status,200);
-    assert.equal(projection.body.contract_version,'2026-09-20.2');
+    assert.equal(projection.body.contract_version,'2026-09-20.3');
     assert.equal(projection.body.checkout_authoritative,true);
     const livePromo=projection.body.promotions.find(x=>Number(x.id)===liveId);
     assert.ok(livePromo);assert.equal(livePromo.status,'live');

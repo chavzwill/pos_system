@@ -9,7 +9,7 @@ const { resolveCanonicalProduct } = require('../lib/catalog-integrity');
 router.use(requirePermission('inventory'));
 router.use('/catalog-cleanup-dependencies', require('./catalog-cleanup-dependencies'));
 
-const CONTRACT_VERSION = '2026-09-20.2';
+const CONTRACT_VERSION = '2026-09-20.3';
 
 function publicProduct(p) {
   return {
@@ -55,6 +55,9 @@ router.get('/catalog', async (req, res) => {
     });
     const { rows: categories } = await db.execute({sql:'SELECT id,name,description FROM categories ORDER BY name',args:[]});
     const { rows: brands } = await db.execute({sql:'SELECT id,name,description,logo_path,active FROM brands ORDER BY name',args:[]});
+    const { rows: categoryConsolidations } = await db.execute({sql:`SELECT cc.duplicate_category_id,cc.duplicate_name,cc.survivor_category_id,s.name survivor_name,cc.created_at consolidated_at
+      FROM catalog_category_consolidations cc JOIN categories s ON s.id=cc.survivor_category_id
+      ORDER BY cc.created_at,cc.duplicate_category_id`,args:[]});
     const { rows: productConsolidations } = await db.execute({sql:`SELECT pc.duplicate_product_id,d.sku duplicate_sku,pc.survivor_product_id,s.sku survivor_sku,pc.created_at consolidated_at
       FROM catalog_product_consolidations pc
       JOIN products d ON d.id=pc.duplicate_product_id
@@ -94,6 +97,7 @@ router.get('/catalog', async (req, res) => {
       contract_version: CONTRACT_VERSION, generated_at: new Date().toISOString(),
       categories: categories.map(c=>({id:c.id,name:c.name,description:c.description||null})),
       brands: brands.map(b=>({id:b.id,name:b.name,description:b.description||null,logo_path:b.logo_path||null,active:Number(b.active)!==0})),
+      category_consolidations: categoryConsolidations.map(x=>({duplicate_category_id:Number(x.duplicate_category_id),duplicate_name:x.duplicate_name||null,survivor_category_id:Number(x.survivor_category_id),survivor_name:x.survivor_name||null,consolidated_at:x.consolidated_at||null})),
       product_consolidations: productConsolidations.map(x=>({duplicate_product_id:Number(x.duplicate_product_id),duplicate_sku:x.duplicate_sku||null,survivor_product_id:Number(x.survivor_product_id),survivor_sku:x.survivor_sku||null,consolidated_at:x.consolidated_at||null})),
       products: products.map(p => ({ ...publicProduct(p), branches: invMap.get(Number(p.id)) || [], variations: varMap.get(Number(p.id)) || [] })),
     });

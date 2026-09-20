@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
-const { resolveCanonicalProduct } = require('../lib/catalog-integrity');
+const { resolveCanonicalProduct, resolveCanonicalCategory } = require('../lib/catalog-integrity');
 
 // List all promotions with code count
 router.get('/', requirePermission('promotions'), async (req, res) => {
@@ -92,8 +92,11 @@ router.post('/:id/items', requirePermission('promotions'), async (req, res) => {
       canonicalized=Boolean(resolved.is_consolidated);
       if(!resolved.canonical_active)return res.status(409).json({error:'The surviving product is not active and cannot be added to a promotion.',code:'PROMOTION_PRODUCT_NOT_ACTIVE'});
     }else{
-      const {rows:[category]}=await db.execute({sql:'SELECT id FROM categories WHERE id=?',args:[targetId]});
-      if(!category)return res.status(404).json({error:'Category not found.',code:'PROMOTION_CATEGORY_NOT_FOUND'});
+      try{
+        const resolved=await resolveCanonicalCategory(targetId);
+        targetId=Number(resolved.canonical_category_id);
+        canonicalized=Boolean(resolved.is_consolidated);
+      }catch(e){if(e?.code==='CATALOG_CATEGORY_NOT_FOUND')return res.status(404).json({error:'Category not found.',code:'PROMOTION_CATEGORY_NOT_FOUND'});throw e;}
     }
     const { rows: conflicts } = await db.execute({
       sql: `SELECT p.name FROM promotion_items pi

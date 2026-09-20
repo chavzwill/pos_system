@@ -130,6 +130,19 @@ async function _init() {
     { sql: `CREATE TRIGGER IF NOT EXISTS catalog_product_consolidations_no_delete BEFORE DELETE ON catalog_product_consolidations BEGIN SELECT RAISE(ABORT,'catalog product consolidations are append-only'); END` },
     { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_product_tombstone_guard BEFORE UPDATE ON products WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.id) BEGIN SELECT RAISE(ABORT,'consolidated product tombstones are immutable'); END` },
     { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_product_delete_guard BEFORE DELETE ON products WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.id) BEGIN SELECT RAISE(ABORT,'consolidated product tombstones are immutable'); END` },
+    { sql: `CREATE TABLE IF NOT EXISTS catalog_category_consolidations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      candidate_key TEXT NOT NULL,
+      survivor_category_id INTEGER NOT NULL REFERENCES categories(id),
+      duplicate_category_id INTEGER NOT NULL UNIQUE,
+      duplicate_name TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      consolidated_by INTEGER NOT NULL REFERENCES employees(id),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK(survivor_category_id <> duplicate_category_id)
+    )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_category_consolidations_no_update BEFORE UPDATE ON catalog_category_consolidations BEGIN SELECT RAISE(ABORT,'catalog category consolidations are append-only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_category_consolidations_no_delete BEFORE DELETE ON catalog_category_consolidations BEGIN SELECT RAISE(ABORT,'catalog category consolidations are append-only'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS customers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       customer_number TEXT UNIQUE,
