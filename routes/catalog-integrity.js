@@ -2,7 +2,7 @@
 const express=require('express');
 const router=express.Router();
 const {requirePermission}=require('../lib/permissions');
-const {catalogHealth,inspectProductCleanup,setProductLifecycle,reviewDuplicateCandidate,planDuplicateConsolidation,inspectDuplicateConsolidation}=require('../lib/catalog-integrity');
+const {catalogHealth,inspectProductCleanup,setProductLifecycle,reviewDuplicateCandidate,planDuplicateConsolidation,inspectDuplicateConsolidation,consolidateDuplicateProducts}=require('../lib/catalog-integrity');
 
 router.use(requirePermission('inventory'));
 function safe(res,error){
@@ -17,6 +17,22 @@ router.get('/health',async(req,res)=>{
 router.get('/duplicate-consolidation-plan',async(req,res)=>{try{return res.json(await planDuplicateConsolidation(req.query.candidate_key));}catch(e){return safe(res,e);}});
 router.get('/duplicate-review/:candidateKey/consolidation-preview',async(req,res)=>{
   try{return res.json(await inspectDuplicateConsolidation(req.params.candidateKey));}catch(e){return safe(res,e);}
+});
+router.post('/duplicate-consolidations',async(req,res)=>{
+  try{
+    const result=await consolidateDuplicateProducts({
+      candidateKey:req.body?.candidate_key,
+      survivorProductId:req.body?.survivor_product_id,
+      reason:req.body?.reason,
+      confirmation:req.body?.confirmation,
+      expectedReviewVersion:req.body?.expected_review_version,
+      actorEmployeeId:req.employee?.id||null,
+      requestId:req.requestId||null,
+      method:req.method||null,
+      path:req.originalUrl||req.path||null
+    });
+    return res.json(result);
+  }catch(e){return safe(res,e);}
 });
 router.patch('/duplicate-review',async(req,res)=>{
   try{
