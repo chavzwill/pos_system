@@ -2,7 +2,7 @@
 const express=require('express');
 const router=express.Router();
 const {requirePermission}=require('../lib/permissions');
-const {catalogHealth,inspectProductCleanup,setProductLifecycle,reviewDuplicateCandidate,planDuplicateConsolidation,inspectDuplicateConsolidation,consolidateDuplicateProducts}=require('../lib/catalog-integrity');
+const {catalogHealth,inspectProductCleanup,setProductLifecycle,reviewDuplicateCandidate,planDuplicateConsolidation,inspectDuplicateConsolidation,consolidateDuplicateProducts,inspectCategoryConsolidation,consolidateDuplicateCategories}=require('../lib/catalog-integrity');
 
 router.use(requirePermission('inventory'));
 function safe(res,error){
@@ -15,6 +15,10 @@ router.get('/health',async(req,res)=>{
   try{return res.json(await catalogHealth({limit:req.query.limit}));}catch(e){return safe(res,e);}
 });
 router.get('/duplicate-consolidation-plan',async(req,res)=>{try{return res.json(await planDuplicateConsolidation(req.query.candidate_key));}catch(e){return safe(res,e);}});
+router.get('/category-consolidation-preview',async(req,res)=>{try{return res.json(await inspectCategoryConsolidation(req.query.candidate_key));}catch(e){return safe(res,e);}});
+router.post('/category-consolidations',async(req,res)=>{
+  try{return res.json(await consolidateDuplicateCategories({candidateKey:req.body?.candidate_key,survivorCategoryId:req.body?.survivor_category_id,reason:req.body?.reason,confirmation:req.body?.confirmation,actorEmployeeId:req.employee?.id||null,requestId:req.requestId||null,method:req.method||null,path:req.originalUrl||req.path||null}));}catch(e){return safe(res,e);}
+});
 router.get('/duplicate-review/:candidateKey/consolidation-preview',async(req,res)=>{
   try{return res.json(await inspectDuplicateConsolidation(req.params.candidateKey));}catch(e){return safe(res,e);}
 });
