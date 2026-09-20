@@ -7,6 +7,8 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
+const { can } = require('../lib/permissions');
+const { complianceMissing, grantException } = require('../lib/rental-compliance');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -157,6 +159,129 @@ async function validateCashBackCard(cash_back_card_type_id, cash_back_card_numbe
   }
   return null;
 }
+
+
+function importBool(value, fallback = false) {
+  if (value === undefined || value === null || String(value).trim() === '') return fallback;
+  const v = String(value).trim().toLowerCase();
+  if (['1','true','yes','y','active'].includes(v)) return true;
+  if (['0','false','no','n','inactive'].includes(v)) return false;
+  return fallback;
+}
+function importNum(value, fallback = 0) {
+  const n = Number(String(value ?? '').replace(/,/g,'').trim());
+  return Number.isFinite(n) ? n : fallback;
+}
+function importText(value) {
+  const v = String(value ?? '').trim();
+  return v || null;
+}
+
+router.get('/import/template', requirePermission('customers'), (req, res) => {
+  const headers = [
+    'customer_number','first_name','last_name','email','phone','address','city','state','zip','notes',
+    'customer_type','credit_terms_days','credit_limit','tax_exempt','tax_exemption_number',
+    'is_rental_customer','rental_id_type','rental_id_number','rental_address_proof_type','rental_address_proof_details',
+    'rental_reference_name','rental_reference_phone','rental_reference_relationship',
+    'temporary_rental_exception','exception_days','exception_reason'
+  ];
+  res.setHeader('Content-Type','text/csv; charset=utf-8');
+  res.setHeader('Content-Disposition','attachment; filename="customer-import-template.csv"');
+  res.send(headers.join(',')+'\n');
+});
+
+router.post('/import', requirePermission('customers'), async (req, res) => {
+  const rows = Array.isArray(req.body?.rows) ? req.body.rows : [];
+  if (!rows.length) return res.status(400).json({ error: 'No customer rows supplied' });
+  if (rows.length > 250) return res.status(400).json({ error: 'Customer import is limited to 250 rows per batch' });
+
+  const wantsTemporaryException = rows.some(r => importBool(r.temporary_rental_exception, false));
+  if (wantsTemporaryException) {
+    if (req.apiKey) return res.status(403).json({ error: 'API keys cannot grant temporary rental compliance exceptions' });
+    if (!req.employee || !can(req.employee.permissions, 'rentals_compliance_exception')) {
+      return res.status(403).json({ error: 'Temporary rental exceptions require explicit rental compliance authority' });
+    }
+  }
+
+  let created = 0, updated = 0, exceptions_created = 0;
+  const errors = [], warnings = [];
+  for (let index = 0; index < rows.length; index++) {
+    const row = rows[index] || {};
+    const first = importText(row.first_name), last = importText(row.last_name);
+    if (!first || !last) { errors.push(`Row ${index + 2}: first and last name are required`); continue; }
+
+    const customerNumber = importText(row.customer_number);
+    const tx = await db.transaction('write');
+    let rowCreated = false, rowUpdated = false;
+    try {
+      let existing = null;
+      if (customerNumber) {
+        const { rows: [found] } = await tx.execute({ sql: 'SELECT * FROM customers WHERE customer_number = ?', args: [customerNumber] });
+        existing = found || null;
+      }
+
+      const type = String(row.customer_type || existing?.customer_type || 'cash').trim().toLowerCase() === 'credit' ? 'credit' : 'cash';
+      const isRental = importBool(row.is_rental_customer, !!existing?.is_rental_customer);
+      const values = {
+        first_name:first,last_name:last,email:importText(row.email) ?? existing?.email ?? null,phone:importText(row.phone) ?? existing?.phone ?? null,address:importText(row.address) ?? existing?.address ?? null,
+        city:importText(row.city) ?? existing?.city ?? null,state:importText(row.state) ?? existing?.state ?? null,zip:importText(row.zip) ?? existing?.zip ?? null,notes:importText(row.notes) ?? existing?.notes ?? null,
+        customer_type:type,credit_terms_days:Math.max(1,Math.round(importNum(row.credit_terms_days, existing?.credit_terms_days || 30))),
+        credit_limit:Math.max(0,importNum(row.credit_limit, existing?.credit_limit || 0)),tax_exempt:importBool(row.tax_exempt, !!existing?.tax_exempt)?1:0,
+        tax_exemption_number:importText(row.tax_exemption_number) ?? existing?.tax_exemption_number ?? null,is_rental_customer:isRental?1:0,
+        rental_id_type:isRental?(importText(row.rental_id_type) ?? existing?.rental_id_type ?? null):null,rental_id_number:isRental?(importText(row.rental_id_number) ?? existing?.rental_id_number ?? null):null,
+        rental_address_proof_type:isRental?(importText(row.rental_address_proof_type) ?? existing?.rental_address_proof_type ?? null):null,
+        rental_address_proof_details:isRental?(importText(row.rental_address_proof_details) ?? existing?.rental_address_proof_details ?? null):null,
+        rental_reference_name:isRental?(importText(row.rental_reference_name) ?? existing?.rental_reference_name ?? null):null,
+        rental_reference_phone:isRental?(importText(row.rental_reference_phone) ?? existing?.rental_reference_phone ?? null):null,
+        rental_reference_relationship:isRental?(importText(row.rental_reference_relationship) ?? existing?.rental_reference_relationship ?? null):null,
+      };
+
+      let customerId;
+      if (existing) {
+        await tx.execute({ sql:`UPDATE customers SET first_name=?,last_name=?,email=?,phone=?,address=?,city=?,state=?,zip=?,notes=?,
+          customer_type=?,credit_terms_days=?,credit_limit=?,credit_enabled=?,tax_exempt=?,tax_exemption_number=?,
+          is_rental_customer=?,rental_id_type=?,rental_id_number=?,rental_address_proof_type=?,rental_address_proof_details=?,
+          rental_reference_name=?,rental_reference_phone=?,rental_reference_relationship=? WHERE id=?`,
+          args:[values.first_name,values.last_name,values.email,values.phone,values.address,values.city,values.state,values.zip,values.notes,
+            values.customer_type,values.credit_terms_days,values.credit_limit,type==='credit'?1:0,values.tax_exempt,values.tax_exemption_number,
+            values.is_rental_customer,values.rental_id_type,values.rental_id_number,values.rental_address_proof_type,values.rental_address_proof_details,
+            values.rental_reference_name,values.rental_reference_phone,values.rental_reference_relationship,existing.id] });
+        customerId = existing.id; rowUpdated = true;
+      } else {
+        const number = customerNumber || await nextNumber(tx, 'customers', 'customer_number', 'CUST-', 4);
+        const result = await tx.execute({ sql:`INSERT INTO customers
+          (customer_number,first_name,last_name,email,phone,address,city,state,zip,notes,customer_type,credit_terms_days,credit_limit,credit_enabled,
+           tax_exempt,tax_exemption_number,is_rental_customer,rental_id_type,rental_id_number,rental_address_proof_type,rental_address_proof_details,
+           rental_reference_name,rental_reference_phone,rental_reference_relationship)
+          VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,
+          args:[number,values.first_name,values.last_name,values.email,values.phone,values.address,values.city,values.state,values.zip,values.notes,
+            values.customer_type,values.credit_terms_days,values.credit_limit,type==='credit'?1:0,values.tax_exempt,values.tax_exemption_number,
+            values.is_rental_customer,values.rental_id_type,values.rental_id_number,values.rental_address_proof_type,values.rental_address_proof_details,
+            values.rental_reference_name,values.rental_reference_phone,values.rental_reference_relationship] });
+        customerId = Number(result.lastInsertRowid); rowCreated = true;
+      }
+
+      const { rows: [customer] } = await tx.execute({ sql: 'SELECT * FROM customers WHERE id=?', args: [customerId] });
+      const missing = complianceMissing(customer);
+      if (isRental && missing.length) warnings.push(`Row ${index + 2}: ${first} ${last} still needs ${missing.join(', ')}`);
+
+      if (isRental && importBool(row.temporary_rental_exception, false) && missing.length) {
+        const days = Math.min(30, Math.max(1, Math.round(importNum(row.exception_days, 14))));
+        const expiresAt = new Date(Date.now() + days * 86400000).toISOString();
+        const reason = importText(row.exception_reason) || `Legacy customer migration: temporary continuity while missing rental compliance information is collected.`;
+        await grantException(tx,{customerId,approvedBy:req.employee.id,reason,expiresAt});
+        exceptions_created++;
+      }
+      await tx.commit();
+      if (rowCreated) created++;
+      if (rowUpdated) updated++;
+    } catch (e) {
+      try { await tx.rollback(); } catch {}
+      errors.push(`Row ${index + 2}: ${e?.message || 'Import failed'}`);
+    }
+  }
+  res.json({ created, updated, exceptions_created, errors, warnings });
+});
 
 router.post('/', requirePermission('customers'), async (req, res) => {
   const {
