@@ -8,7 +8,9 @@ const ADMIN_PASSWORD=process.env.POS_TEST_PASSWORD||'CI-Test-Auth!2026';
 
 async function login(username=ADMIN_USER,password=ADMIN_PASSWORD){
  const r=await fetch(`${BASE}/api/employees/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
- return {status:r.status,body:await r.json().catch(()=>null),cookie:(r.headers.get('set-cookie')||'').split(';')[0]};
+ const cookie=(r.headers.get('set-cookie')||'').split(';')[0],body=await r.json().catch(()=>null);
+ if(r.status===200&&username===ADMIN_USER){const verify=await fetch(`${BASE}/api/employees/reauth-self`,{method:'POST',headers:{'Content-Type':'application/json',Cookie:cookie},body:JSON.stringify({purpose:'security_admin',password})});expect(verify.status,await verify.text()).toBe(200);}
+ return {status:r.status,body,cookie};
 }
 async function api(cookie,method,path,body,headers={}){
  const r=await fetch(`${BASE}${path}`,{method,headers:{Cookie:cookie,'Content-Type':'application/json',...headers},body:body===undefined?undefined:JSON.stringify(body)});
