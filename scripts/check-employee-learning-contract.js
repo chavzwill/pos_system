@@ -1,0 +1,18 @@
+'use strict';
+const fs=require('fs'),path=require('path');const root=path.join(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
+let failed=0;const check=(n,o)=>o?console.log('PASS Employee Learning:',n):(failed++,console.error('FAIL Employee Learning:',n));
+const ui=read('public/employee-learning-center.js'),css=read('public/employee-learning-center.css'),guide=read('public/guided-mode.js'),shell=read('public/app-shell.html'),legacy=read('public/index.html'),pkg=read('package.json');
+check('learning center defines staff lessons',ui.includes('Learning & Help Center')&&ui.includes('Common mistakes to avoid'));
+check('lessons are role filtered',ui.includes('allowedLesson')&&ui.includes('profile()?.domains'));
+check('learning topics cover core operations',ui.includes("id:'sale'")&&ui.includes("id:'repair'")&&ui.includes("id:'rental'")&&ui.includes("id:'po'")&&ui.includes("id:'dispatch'"));
+check('lesson completion is employee scoped on device',ui.includes("tt-learning-complete:")&&ui.includes('profile()?.employee?.id'));
+check('learning can launch exact Guide Me task',ui.includes('TotalToolsGuideMe.openTask(l.task)'));
+check('Guide Me exposes direct task API',guide.includes('window.TotalToolsGuideMe')&&guide.includes('openTask:(id)'));
+check('fast shell loads learning styles',shell.includes('employee-learning-center.css'));
+check('fast shell loads learning script',shell.includes('employee-learning-center.js'));
+check('legacy surface loads learning styles',legacy.includes('employee-learning-center.css'));
+check('legacy surface loads learning script',legacy.includes('employee-learning-center.js'));
+check('legacy surface has fallback launcher',ui.includes('tt-learning-launcher--floating'));
+check('learning UI is responsive',css.includes('@media(max-width:720px)'));
+check('syntax wall includes employee learning contract',pkg.includes('check:employee-learning'));
+if(failed){console.error('Employee Learning contract failed: '+failed);process.exit(1)}console.log('Employee Learning contract passed.');
