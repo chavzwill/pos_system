@@ -214,6 +214,7 @@ app.use('/api/api-keys', require('./routes/api-keys'));
 app.use('/api/rentals', require('./routes/rental-checkout-cash-drawer-guard'));
 app.use('/api/rentals', require('./routes/rental-refund-settlement'));
 app.use('/api/rentals', require('./routes/rental-loss-prevention'));
+app.use('/api/rentals', require('./routes/rental-compliance-exceptions'));
 app.use('/api/rentals', require('./routes/rentals'));
 app.use('/api/layaway', require('./routes/layaway'));
 app.use('/api/work-orders', require('./routes/work-order-financial-runtime-guard'));
