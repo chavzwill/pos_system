@@ -16,7 +16,13 @@ async function login(username = process.env.POS_TEST_USER || 'admin', password =
     body: JSON.stringify({ username, password }),
   });
   expect(r.status).toBe(200);
-  return { cookie: (r.headers.get('set-cookie') || '').split(';')[0], body: await r.json() };
+  const cookie = (r.headers.get('set-cookie') || '').split(';')[0];
+  const body = await r.json();
+  if (username === (process.env.POS_TEST_USER || 'admin')) {
+    const verify = await fetch(`${BASE}/api/employees/reauth-self`, { method: 'POST', headers: { 'Content-Type': 'application/json', Cookie: cookie }, body: JSON.stringify({ purpose: 'security_admin', password }) });
+    expect(verify.status, await verify.text()).toBe(200);
+  }
+  return { cookie, body };
 }
 
 async function api(cookie, path, options = {}) {
@@ -254,6 +260,8 @@ test.describe('Operational security boundaries', () => {
       expect(created.status).toBe(201);
       employee = created.body;
       const limited = await login(username, password);
+      const limitedReauth = await api(limited.cookie, '/api/employees/reauth-self', { method: 'POST', body: JSON.stringify({ purpose: 'security_admin', password }) });
+      expect(limitedReauth.status, JSON.stringify(limitedReauth.body)).toBe(200);
 
       const promote = await api(limited.cookie, `/api/security-groups/${admin.body.security_group_id}/assign`, {
         method: 'POST',

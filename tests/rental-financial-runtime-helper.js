@@ -5,7 +5,7 @@ const r2=v=>Number(Number(v||0).toFixed(2));
 const SIG='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 async function login(username=process.env.POS_TEST_USER||'admin',password=process.env.POS_TEST_PASSWORD||'123456'){
   const r=await fetch(`${BASE}/api/employees/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
-  expect(r.status).toBe(200);return {cookie:(r.headers.get('set-cookie')||'').split(';')[0],body:await r.json()};
+  expect(r.status).toBe(200);const cookie=(r.headers.get('set-cookie')||'').split(';')[0],body=await r.json();if(username===(process.env.POS_TEST_USER||'admin')){const verify=await fetch(`${BASE}/api/employees/reauth-self`,{method:'POST',headers:{'Content-Type':'application/json',Cookie:cookie},body:JSON.stringify({purpose:'security_admin',password})});expect(verify.status,await verify.text()).toBe(200);}return {cookie,body};
 }
 async function api(cookie,path,options={}){const headers={Cookie:cookie,Accept:'application/json',...(options.headers||{})};if(options.body&&!headers['Content-Type'])headers['Content-Type']='application/json';const r=await fetch(`${BASE}${path}`,{...options,headers});return {status:r.status,body:await r.json().catch(()=>null)};}
 function line(detail,code){return detail.body?.lines?.find(x=>String(x.account_code)===String(code));}

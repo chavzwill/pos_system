@@ -11,10 +11,10 @@ async function login(username = ADMIN_USER, password = ADMIN_PASSWORD) {
     body: JSON.stringify({ username, password }),
   });
   expect(response.status).toBe(200);
-  return {
-    cookie: (response.headers.get('set-cookie') || '').split(';')[0],
-    body: await response.json(),
-  };
+  const cookie=(response.headers.get('set-cookie')||'').split(';')[0];
+  const body=await response.json();
+  if(username===ADMIN_USER){const verify=await fetch(`${BASE}/api/employees/reauth-self`,{method:'POST',headers:{'Content-Type':'application/json',Cookie:cookie},body:JSON.stringify({purpose:'security_admin',password})});expect(verify.status,await verify.text()).toBe(200);}
+  return {cookie,body};
 }
 
 async function api(cookie, path, options = {}) {

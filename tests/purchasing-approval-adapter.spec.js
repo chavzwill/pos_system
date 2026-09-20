@@ -15,6 +15,7 @@ async function api(cookie,method,path,body){
 }
 async function fixture(){
  const admin=await login();expect(admin.status,JSON.stringify(admin.body)).toBe(200);
+ const reauth=await api(admin.cookie,'POST','/api/employees/reauth-self',{purpose:'security_admin',password:ADMIN_PASSWORD});expect(reauth.status,JSON.stringify(reauth.body)).toBe(200);
  const suffix=`${Date.now()}${Math.random().toString(36).slice(2,6)}`;
  const branchId=admin.body.default_branch_id||1;
  const department=await api(admin.cookie,'POST','/api/department-approvals/departments',{code:`P${suffix}`,name:`Purchasing Test ${suffix}`});
