@@ -18,6 +18,9 @@ const retailReturn=read('routes/retail-return-hardening.js');
 const refund=read('routes/retail-refund-settlement.js');
 const retailCost=read('routes/retail-cost-integrity.js');
 const returnAccounting=read('lib/accounting-retail-returns.js');
+const transactions=read('routes/transactions.js');
+const database=read('database.js');
+const legacyUi=read('public/index.html');
 const checks=[];
 const check=(name,pass)=>checks.push({name,pass:!!pass});
 const workflows=[
@@ -88,6 +91,18 @@ check('Retail cost integrity mounted before legacy transaction route',server.ind
 check('Replacement return hardening mounted before legacy transaction route',server.indexOf("require('./routes/replacement-return-hardening')")<server.indexOf("require('./routes/transactions')"));
 check('Quotation hardening mounted before legacy quotation route',server.indexOf("require('./routes/quotation-workflow-hardening')")>=0&&server.indexOf("require('./routes/quotation-workflow-hardening')")<server.indexOf("require('./routes/quotations')"));
 check('Quotation sale filter matches persisted retail type',quotes.includes('<option value="retail"')&&!quotes.includes('<option value="sale"'));
+check('Sales-agent hold requires a selected customer in browser',legacyUi.includes('Find or add the customer before placing this sales order on hold'));
+check('Sales-agent hold requires active customer on server',recall.includes('Select or add the customer before placing this sales order on hold')&&recall.includes("SELECT id,active FROM customers WHERE id=?"));
+check('Sales-agent identity on hold comes from authenticated employee',recall.includes('req.body.employee_id = req.employee.id'));
+check('Sales-agent attribution is a durable transaction field',database.includes('sales_agent_id INTEGER REFERENCES employees(id)'));
+check('Held orders persist sales-agent attribution',transactions.includes('employee_id,sales_agent_id,branch_id')&&transactions.includes('employee_id || 1, employee_id || 1'));
+check('Cashier recall does not delete held order before payment',!legacyUi.includes("await this.api('DELETE', `/transactions/${id}/hold`)"));
+check('Cashier checkout carries exact held-order identity',legacyUi.includes('source_hold_id: this._activeHeldOrderId || null'));
+check('Recall restores authoritative customer branch and sales agent',recall.includes('req.body.customer_id = held.customer_id')&&recall.includes('req.body.branch_id = held.branch_id')&&recall.includes('req.body.sales_agent_id = held.employee_id'));
+check('Held order closes only after completed-sale linkage',recall.includes("UPDATE transactions SET status='converted' WHERE id=? AND status='hold'")&&recall.includes('held_sale_recall_links'));
+check('Completed transaction preserves cashier and sales agent separately',transactions.includes('employee_id,sales_agent_id,branch_id,drawer_session_id'));
+check('Sales commission follows sales agent not cashier',transactions.includes('calcCommission(savedTx.sales_agent_id || savedTx.employee_id'));
+check('Cashier order queue is POS-authorized while hold remains sales permission',legacyUi.includes("this.can('pos') ? `<button class=\"pos-grid-btn hold\" onclick=\"App.recallOrder()\">Customer Orders")&&legacyUi.includes("this.can('pos_hold') ? `<button class=\"pos-grid-btn hold\" onclick=\"App.holdOrder()\">Hold"));
 for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} Workflow: ${c.name}`);
 if(checks.some(c=>!c.pass))process.exit(1);
 console.log(`Workflow contract OK (${checks.length} checks across ${workflows.length} workflows).`);
