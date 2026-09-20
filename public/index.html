@@ -4568,8 +4568,18 @@ const App = {
     inputEl.value = '';
     if (!file) return;
     const text = await file.text();
-    const rows = this._parseCsv(text);
-    if (!rows.length) { this.alert('No data rows found in CSV', 'error'); return; }
+    const parsedRows = this._parseCsv(text);
+    if (!parsedRows.length) { this.alert('No data rows found in CSV', 'error'); return; }
+    const rows = await this._mapImportColumns(parsedRows, [
+      {key:'sku',label:'SKU',required:true},{key:'name',label:'Item Name',required:true},{key:'description',label:'Description'},
+      {key:'model_number',label:'Model Number'},{key:'size',label:'Size'},{key:'category_name',label:'Category'},
+      {key:'branch_name',label:'Branch'},{key:'stock_qty',label:'Stock Quantity'},{key:'min_stock',label:'Minimum Stock'},
+      {key:'tax_rate',label:'Tax Rate'},{key:'taxable',label:'Taxable'},{key:'rental_classification',label:'Rental Classification'},
+      {key:'daily_rate',label:'Daily Rate'},{key:'weekly_rate',label:'Weekly Rate'},{key:'monthly_rate',label:'Monthly Rate'},
+      {key:'hourly_rate',label:'Hourly Rate'},{key:'replacement_value',label:'Replacement Value'},
+      {key:'is_accessory',label:'Accessory'},{key:'active',label:'Active'}
+    ], 'Rental Item Import');
+    if (!rows) return;
 
     const BATCH_SIZE = 25;
     const batches = [];
@@ -8243,13 +8253,96 @@ const App = {
   },
 
   // ─── CSV Import / Export ──────────────────────────────────
+  _normalizeImportHeader(value) {
+    return String(value || '').trim().toLowerCase().replace(/[^a-z0-9]+/g, '');
+  },
+
+  async _mapImportColumns(rows, fields, title) {
+    if (!rows?.length) return null;
+    const sourceHeaders = Object.keys(rows[0] || {});
+    const aliases = {
+      sku:['sku','itemcode','itemnumber','productcode','stockcode'],
+      barcode:['barcode','upc','ean','gtin'],
+      name:['name','productname','itemname','descriptionname'],
+      description:['description','details','productdescription'],
+      category_name:['category','categoryname','department','group'],
+      supplier_name:['supplier','suppliername','vendor','vendorname'],
+      price:['price','sellingprice','sellprice','retailprice','unitprice'],
+      cost:['cost','unitcost','buyprice','purchaseprice'],
+      tax_rate:['tax','taxrate','vat','vatrate','gct','gctrate'],
+      stock_qty:['stock','stockqty','quantity','qty','onhand','qtyonhand'],
+      min_stock:['minstock','minimumstock','reorderlevel','reorderpoint'],
+      active:['active','enabled','status'],
+      model_number:['model','modelnumber','modelno'],
+      size:['size','dimension','dimensions'],
+      branch_name:['branch','branchname','location','storename'],
+      taxable:['taxable','istaxable'],
+      rental_classification:['rentalclassification','classification','rentalclass','class'],
+      daily_rate:['dailyrate','daily','dayrate'],
+      weekly_rate:['weeklyrate','weekly','weekrate'],
+      monthly_rate:['monthlyrate','monthly','monthrate'],
+      hourly_rate:['hourlyrate','hourly','hourrate'],
+      replacement_value:['replacementvalue','replacementcost','assetvalue'],
+      is_accessory:['isaccessory','accessory']
+    };
+    const normSources = sourceHeaders.map(h=>({raw:h,n:this._normalizeImportHeader(h)}));
+    const auto = {};
+    for (const f of fields) {
+      const candidates = [f.key, ...(aliases[f.key] || [])].map(x=>this._normalizeImportHeader(x));
+      const match = normSources.find(h=>candidates.includes(h.n));
+      auto[f.key] = match?.raw || '';
+    }
+    return await new Promise(resolve => {
+      const safe=s=>String(s??'').replace(/[&<>\"']/g,ch=>({"&":"&amp;","<":"&lt;",">":"&gt;","\\\"":"&quot;","'":"&#39;"}[ch]));
+      const modal=document.createElement('div');
+      modal.className='modal-overlay active';
+      modal.innerHTML=`<div class="modal" style="max-width:860px">
+        <div class="modal-header"><span class="modal-title">${title} — Map Import Columns</span><button class="modal-close" data-cancel>✕</button></div>
+        <div class="modal-body">
+          <p style="color:var(--text-muted);font-size:13px;margin-bottom:12px">Match the spreadsheet columns to the POS fields. We auto-matched what we could. Required fields must be mapped before import.</p>
+          <div style="display:grid;grid-template-columns:minmax(180px,1fr) minmax(220px,1fr);gap:8px 14px">
+            ${fields.map(f=>`<label style="display:contents"><span style="align-self:center;font-size:13px;font-weight:600">${f.label}${f.required?' *':''}</span><select data-map="${f.key}"><option value="">Do not import</option>${sourceHeaders.map(h=>`<option value="${safe(h)}" ${auto[f.key]===h?'selected':''}>${safe(h)}</option>`).join('')}</select></label>`).join('')}
+          </div>
+          <div style="margin-top:16px">
+            <div style="font-weight:600;margin-bottom:6px">Preview</div>
+            <div id="import-map-preview" class="table-wrap" style="max-height:220px;overflow:auto"></div>
+          </div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-secondary" data-cancel>Cancel</button><button class="btn btn-primary" data-continue>Continue Import</button></div>
+      </div>`;
+      document.body.appendChild(modal);
+      const getMapping=()=>Object.fromEntries(fields.map(f=>[f.key,modal.querySelector(`[data-map="${f.key}"]`)?.value||'']));
+      const renderPreview=()=>{
+        const mapping=getMapping(), preview=rows.slice(0,3).map(r=>Object.fromEntries(fields.map(f=>[f.label,mapping[f.key]?r[mapping[f.key]]:''])));
+        const table=modal.querySelector('#import-map-preview');
+        table.innerHTML=`<table><thead><tr>${fields.map(f=>`<th>${f.label}</th>`).join('')}</tr></thead><tbody>${preview.map(r=>`<tr>${fields.map(f=>`<td>${safe(r[f.label])}</td>`).join('')}</tr>`).join('')}</tbody></table>`;
+      };
+      modal.querySelectorAll('[data-map]').forEach(el=>el.addEventListener('change',renderPreview));
+      modal.querySelectorAll('[data-cancel]').forEach(el=>el.addEventListener('click',()=>{modal.remove();resolve(null);}));
+      modal.querySelector('[data-continue]').addEventListener('click',()=>{
+        const mapping=getMapping(),missing=fields.filter(f=>f.required&&!mapping[f.key]);
+        if(missing.length){this.alert('Map required field(s): '+missing.map(f=>f.label).join(', '),'error');return;}
+        const mapped=rows.map(r=>Object.fromEntries(fields.map(f=>[f.key,mapping[f.key]?String(r[mapping[f.key]]??'').trim():''])));
+        modal.remove();resolve(mapped);
+      });
+      renderPreview();
+    });
+  },
+
   async importProductsCsv(inputEl) {
     const file = inputEl.files[0];
     inputEl.value = '';
     if (!file) return;
     const text = await file.text();
-    const rows = this._parseCsv(text);
-    if (!rows.length) { this.alert('No data rows found in CSV', 'error'); return; }
+    const parsedRows = this._parseCsv(text);
+    if (!parsedRows.length) { this.alert('No data rows found in CSV', 'error'); return; }
+    const rows = await this._mapImportColumns(parsedRows, [
+      {key:'sku',label:'SKU',required:true},{key:'barcode',label:'Barcode'},{key:'name',label:'Product Name',required:true},
+      {key:'description',label:'Description'},{key:'category_name',label:'Category'},{key:'price',label:'Selling Price'},
+      {key:'cost',label:'Cost'},{key:'tax_rate',label:'Tax Rate'},{key:'stock_qty',label:'Stock Quantity'},
+      {key:'min_stock',label:'Minimum Stock'},{key:'active',label:'Active'},{key:'supplier_name',label:'Supplier'}
+    ], 'Inventory Import');
+    if (!rows) return;
     try {
       const result = await this.api('POST', '/products/import', { rows });
       let msg = `Import complete: ${result.created} created, ${result.updated} updated`;
