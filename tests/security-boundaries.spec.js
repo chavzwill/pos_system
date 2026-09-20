@@ -260,6 +260,8 @@ test.describe('Operational security boundaries', () => {
       expect(created.status).toBe(201);
       employee = created.body;
       const limited = await login(username, password);
+      const limitedReauth = await api(limited.cookie, '/api/employees/reauth-self', { method: 'POST', body: JSON.stringify({ purpose: 'security_admin', password }) });
+      expect(limitedReauth.status, JSON.stringify(limitedReauth.body)).toBe(200);
 
       const promote = await api(limited.cookie, `/api/security-groups/${admin.body.security_group_id}/assign`, {
         method: 'POST',
