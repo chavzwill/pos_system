@@ -10,11 +10,10 @@ async function login(username, credential, kind = 'password') {
     headers: { 'Content-Type': 'application/json' },
     body: JSON.stringify({ username, [kind]: credential }),
   });
-  return {
-    status: response.status,
-    body: await response.json().catch(() => null),
-    cookie: (response.headers.get('set-cookie') || '').split(';')[0],
-  };
+  const cookie=(response.headers.get('set-cookie')||'').split(';')[0];
+  const body=await response.json().catch(()=>null);
+  if(response.status===200&&kind==='password'&&username===ADMIN_USER){const verify=await fetch(`${BASE}/api/employees/reauth-self`,{method:'POST',headers:{'Content-Type':'application/json',Cookie:cookie},body:JSON.stringify({purpose:'security_admin',password:credential})});expect(verify.status,await verify.text()).toBe(200);}
+  return {status:response.status,body,cookie};
 }
 
 async function api(cookie, path, options = {}) {
