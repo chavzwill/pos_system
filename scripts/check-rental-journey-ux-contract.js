@@ -1,0 +1,16 @@
+'use strict';
+const fs=require('fs'),path=require('path');const root=path.join(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
+let failed=0;const check=(n,o)=>o?console.log('PASS Rental Journey UX:',n):(failed++,console.error('FAIL Rental Journey UX:',n));
+const legacy=read('public/index.html'),modern=read('public/rentals-workspace.js'),css=read('public/rentals-workspace.css'),pkg=read('package.json');
+check('new rental exposes quick duration presets',legacy.includes("setRentalDurationDays(1)")&&legacy.includes("setRentalDurationPreset('weekend')")&&legacy.includes("setRentalDurationDays(7)"));
+check('days field and due date stay bidirectionally linked',legacy.includes('syncRentalDueDateFromDays()')&&legacy.includes('syncRentalDurationFromDueDate()'));
+check('duration input is bounded',legacy.includes('max="365"')&&legacy.includes('Math.min(365'));
+check('manual due date continues recalculating authoritative estimate',legacy.includes("syncRentalDurationFromDueDate();App._recalcRentalCheckoutEstimate()"));
+check('journey summary uses existing lifecycle evidence',modern.includes('Agreement created')&&modern.includes('Security release')&&modern.includes('Return security')&&modern.includes('Final settlement'));
+check('journey includes pause and resume evidence',modern.includes('Rental paused')&&modern.includes('Rental resumed'));
+check('journey names custody actors',modern.includes('issue_security_employee_name')&&modern.includes('return_driver_employee_name')&&modern.includes('return_security_employee_name'));
+check('journey reports customer signature capture',modern.includes('Customer signature captured'));
+check('journey is surfaced in modern rental workspace',modern.includes('<h4>Rental journey</h4>')&&modern.includes('${journey(a)}'));
+check('journey timeline has responsive styling',css.includes('.tt-rent__journey-row')&&css.includes('@media(max-width:720px)'));
+check('syntax wall includes rental journey contract',pkg.includes('check:rental-journey-ux'));
+if(failed){console.error('Rental Journey UX contract failed: '+failed);process.exit(1)}console.log('Rental Journey UX contract passed.');
