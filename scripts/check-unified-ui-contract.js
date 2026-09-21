@@ -3,7 +3,7 @@ const fs=require('fs'),path=require('path');
 const root=path.join(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 let failed=0;const check=(n,p)=>p?console.log('PASS Unified UI:',n):(failed++,console.error('FAIL Unified UI:',n));
-const css=read('public/unified-ui-system.css'),shell=read('public/app-shell.html'),legacy=read('public/index.html'),pkg=read('package.json');
+const css=read('public/unified-ui-system.css'),shell=read('public/app-shell.html'),legacy=read('public/index.html'),pkg=read('package.json'),shellCss=read('public/meeting-demo-shell.css'),shellJs=read('public/meeting-demo-shell.js'),identityJs=read('public/total-tools-identity.js'),guideAccess=read('public/guided-mode-access.js');
 check('shared token system exists',css.includes('--tt-control-h:42px')&&css.includes('--tt-radius-lg:18px')&&css.includes('--tt-space-4:16px'));
 check('button heights and radii are normalized',css.includes('.btn{min-height:var(--tt-control-h)')&&css.includes('border-radius:var(--tt-radius-sm)'));
 check('keyboard focus is visible',css.includes(':focus-visible')&&css.includes('outline:3px solid rgba(8,123,62,.20)'));
@@ -40,7 +40,15 @@ check('accounts receivable uses shared panel row and detail geometry',css.includ
 check('reduced motion is respected',css.includes('@media(prefers-reduced-motion:reduce)'));
 check('scrollbars are restrained and consistent',css.includes('::-webkit-scrollbar-thumb'));
 check('legacy POS loads unified UI after feature styles',legacy.indexOf('/unified-ui-system.css')>legacy.indexOf('/rental-create-wizard.css'));
-check('operations shell loads unified UI last',shell.indexOf('/unified-ui-system.css')>shell.indexOf('/employee-learning-center.css'));
+check('operations shell excludes superseded competing shell styles',!shell.includes('/total-tools-identity.css')&&!shell.includes('/premium-shell-v2.css')&&!shell.includes('/premium-shell-v3.css'));
+check('Guide Me base loads before guide refinements',shell.indexOf('/guided-mode-base.css')>-1&&shell.indexOf('/guided-mode-base.css')<shell.indexOf('/guided-mode-efficiency.css'));
+check('operations shell loads unified tokens before authoritative shell layer',shell.indexOf('/unified-ui-system.css')>shell.indexOf('/employee-learning-center.css')&&shell.indexOf('/meeting-demo-shell.css')>shell.indexOf('/unified-ui-system.css'));
+check('staff shell does not expose developer health tooling',!shell.includes('/meeting-readiness.css')&&!shell.includes('/meeting-readiness.js')&&!shellJs.includes('System health'));
+check('Quick Actions opens real tools instead of only focusing a card',shellJs.includes("source.click()")&&shellJs.includes("role','menuitem")&&!shellJs.includes("preferred?.focus()"));
+check('legacy identity enhancer does not inject duplicate Guide Me controls',!identityJs.includes("className='shell-guide-native'")&&!identityJs.includes("className='shell-guide-top'"));
+check('topbar Guide Me has one stable text control',guideAccess.includes("b.textContent='Guide Me'")&&!guideAccess.includes("b.textContent='?'")&&!guideAccess.includes('>?</span>'));
+check('authoritative shell uses unified design tokens',shellCss.includes('var(--tt-surface-soft)')&&shellCss.includes('var(--tt-radius-md)')&&shellCss.includes('var(--tt-border)'));
+check('authoritative shell avoids tiny desktop typography',!/(?:font-size:)\s*(?:[1-9](?:\.[0-9]+)?)px/.test(shellCss));
 check('full syntax wall includes unified UI contract',pkg.includes('check:unified-ui'));
 if(failed){console.error('Unified UI contract failed: '+failed);process.exit(1)}
 console.log('Unified UI contract passed.');
