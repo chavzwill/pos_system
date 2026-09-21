@@ -26,6 +26,11 @@ check('admin and settings share toolbar card and footer rhythm',css.includes('.t
 check('integration admin uses shared panel row and secret modal law',css.includes('.iaw-panel')&&css.includes('.iaw-row')&&css.includes('.iaw-secret'));
 check('catalog admin remains spacious but follows shared controls and panels',css.includes('.catalog-admin-panel')&&css.includes('.catalog-admin-btn')&&css.includes('.catalog-admin-card'));
 check('accounts receivable follows shared panel toolbar and row law',css.includes('.arw{border-radius:var(--tt-radius-xl)')&&css.includes('.arw-toolbar')&&css.includes('.arw-row'));
+check('warehouse ecommerce and commissions share secondary surface law',css.includes('.wow-panel')&&css.includes('.ecom-panel')&&css.includes('.cm-panel'));
+check('promotions and layaway follow shared commerce geometry',css.includes('.tt-promo__panel')&&css.includes('.tt-promo-row')&&css.includes('.tt-lw{border-radius:var(--tt-radius-xl)'));
+check('logistics scheduling and financial intelligence share panel rhythm',css.includes('.tt-li-panel')&&css.includes('.tt-si-panel')&&css.includes('.tt-finctl__panel'));
+check('drawer and denomination surfaces preserve spacious shared geometry',css.includes('.cdw-panel')&&css.includes('.cdw-tenders article')&&css.includes('.denom-panel')&&css.includes('.denom-card'));
+check('technician management aligns with shared borders shadows and card law',css.includes('.tt-tmi{border-color:var(--tt-border)')&&css.includes('.tt-tmi__tech'));
 check('reduced motion is respected',css.includes('@media(prefers-reduced-motion:reduce)'));
 check('scrollbars are restrained and consistent',css.includes('::-webkit-scrollbar-thumb'));
 check('legacy POS loads unified UI after feature styles',legacy.indexOf('/unified-ui-system.css')>legacy.indexOf('/rental-create-wizard.css'));
