@@ -1,0 +1,23 @@
+'use strict';
+const fs=require('fs'),path=require('path');
+const root=path.join(__dirname,'..');
+const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+let failed=0;const check=(n,p)=>p?console.log('PASS Unified UI:',n):(failed++,console.error('FAIL Unified UI:',n));
+const css=read('public/unified-ui-system.css'),shell=read('public/app-shell.html'),legacy=read('public/index.html'),pkg=read('package.json');
+check('shared token system exists',css.includes('--tt-control-h:42px')&&css.includes('--tt-radius-lg:18px')&&css.includes('--tt-space-4:16px'));
+check('button heights and radii are normalized',css.includes('.btn{min-height:var(--tt-control-h)')&&css.includes('border-radius:var(--tt-radius-sm)'));
+check('keyboard focus is visible',css.includes(':focus-visible')&&css.includes('outline:3px solid rgba(8,123,62,.20)'));
+check('form controls share focus behavior',css.includes('input:focus,select:focus,textarea:focus')&&css.includes('box-shadow:0 0 0 3px'));
+check('modal chrome is normalized',css.includes('.modal-header{padding:16px 20px')&&css.includes('.modal-footer{padding:14px 20px'));
+check('workspace panels share modern surface law',css.includes('.tt-sales__panel')&&css.includes('.tt-purch__panel')&&css.includes('.tt-rent__panel')&&css.includes('box-shadow:var(--tt-shadow-panel)'));
+check('loading empty and error states share typography',css.includes('[class$="__loading"]')&&css.includes('[class$="__empty"]')&&css.includes('[class$="__error"]'));
+check('commerce handoff surfaces are normalized together',css.includes('.tt-sales__catalog')&&css.includes('.tt-held__detail')&&css.includes('.tt-cc__detail'));
+check('sales held and cashier actions share control law',css.includes('.tt-sales__actions button')&&css.includes('.tt-held__payment-grid button')&&css.includes('.tt-cc__action button'));
+check('mobile modal behavior is normalized',css.includes('@media(max-width:760px)')&&css.includes('.modal-footer .btn{flex:1 1 auto}'));
+check('reduced motion is respected',css.includes('@media(prefers-reduced-motion:reduce)'));
+check('scrollbars are restrained and consistent',css.includes('::-webkit-scrollbar-thumb'));
+check('legacy POS loads unified UI after feature styles',legacy.indexOf('/unified-ui-system.css')>legacy.indexOf('/rental-create-wizard.css'));
+check('operations shell loads unified UI last',shell.indexOf('/unified-ui-system.css')>shell.indexOf('/employee-learning-center.css'));
+check('full syntax wall includes unified UI contract',pkg.includes('check:unified-ui'));
+if(failed){console.error('Unified UI contract failed: '+failed);process.exit(1)}
+console.log('Unified UI contract passed.');
