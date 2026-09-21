@@ -31,6 +31,12 @@ check('promotions and layaway follow shared commerce geometry',css.includes('.tt
 check('logistics scheduling and financial intelligence share panel rhythm',css.includes('.tt-li-panel')&&css.includes('.tt-si-panel')&&css.includes('.tt-finctl__panel'));
 check('drawer and denomination surfaces preserve spacious shared geometry',css.includes('.cdw-panel')&&css.includes('.cdw-tenders article')&&css.includes('.denom-panel')&&css.includes('.denom-card'));
 check('technician management aligns with shared borders shadows and card law',css.includes('.tt-tmi{border-color:var(--tt-border)')&&css.includes('.tt-tmi__tech'));
+check('admin and settings use shared back-office geometry',css.includes('.tt-admin-card')&&css.includes('.tt-settings__field')&&css.includes('.tt-settings__panel footer'));
+check('supplier workspace uses shared cards forms and modal law',css.includes('.suppliers-panel')&&css.includes('.suppliers-card{border-radius:var(--tt-radius-lg)')&&css.includes('.suppliers-form'));
+check('integration admin uses shared panels rows and secret modal',css.includes('.iaw-panel')&&css.includes('.iaw-row')&&css.includes('.iaw-secret{border-radius:var(--tt-radius-lg)'));
+check('finance intelligence uses shared KPI table and exception law',css.includes('.tt-aiacct-kpi')&&css.includes('.tt-aiacct-tablewrap')&&css.includes('.tt-aiacct-exception'));
+check('ledger uses shared section table and dialog geometry',css.includes('.tt-ledger section')&&css.includes('.tt-ledger dialog{border-radius:var(--tt-radius-lg)')&&css.includes('.tt-ledger th,.tt-ledger td'));
+check('accounts receivable uses shared panel row and detail geometry',css.includes('.arw{border-radius:var(--tt-radius-xl)')&&css.includes('.arw-row')&&css.includes('.arw-detail>section'));
 check('reduced motion is respected',css.includes('@media(prefers-reduced-motion:reduce)'));
 check('scrollbars are restrained and consistent',css.includes('::-webkit-scrollbar-thumb'));
 check('legacy POS loads unified UI after feature styles',legacy.indexOf('/unified-ui-system.css')>legacy.indexOf('/rental-create-wizard.css'));
