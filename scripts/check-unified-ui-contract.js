@@ -14,6 +14,12 @@ check('loading empty and error states share typography',css.includes('[class$="_
 check('commerce handoff surfaces are normalized together',css.includes('.tt-sales__catalog')&&css.includes('.tt-held__detail')&&css.includes('.tt-cc__detail'));
 check('sales held and cashier actions share control law',css.includes('.tt-sales__actions button')&&css.includes('.tt-held__payment-grid button')&&css.includes('.tt-cc__action button'));
 check('mobile modal behavior is normalized',css.includes('@media(max-width:760px)')&&css.includes('.modal-footer .btn{flex:1 1 auto}'));
+check('operational toolbars share spacing and surface law',css.includes('.tt-inv__toolbar')&&css.includes('.tt-rent__toolbar')&&css.includes('.tt-tr__toolbar')&&css.includes('.tt-op-reports__controls')&&css.includes('.tt-wo__filters'));
+check('operational metrics share card geometry',css.includes('.tt-inv__metrics article')&&css.includes('.tt-rent__metrics article')&&css.includes('.tt-tr__metrics article'));
+check('inventory rental and transfer details share surface rhythm',css.includes('.tt-inv__detail')&&css.includes('.tt-rent__detail')&&css.includes('.tt-tr__detail'));
+check('repair workspace uses shared detail card law',css.includes('.tt-wo__detail-card')&&css.includes('.tt-wo-row'));
+check('operational reports use shared panel and card law',css.includes('.tt-op-reports{border-radius:var(--tt-radius-xl)')&&css.includes('.tt-op-reports__card'));
+check('rental modal follows shared modal geometry',css.includes('.tt-rent__modal{border-radius:var(--tt-radius-lg)')&&css.includes('.tt-rent__modal footer'));
 check('reduced motion is respected',css.includes('@media(prefers-reduced-motion:reduce)'));
 check('scrollbars are restrained and consistent',css.includes('::-webkit-scrollbar-thumb'));
 check('legacy POS loads unified UI after feature styles',legacy.indexOf('/unified-ui-system.css')>legacy.indexOf('/rental-create-wizard.css'));
