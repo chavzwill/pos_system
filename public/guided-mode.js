@@ -101,8 +101,38 @@
     ]},
     { id:'erp', title:'Stock Planning & Replenishment', keywords:['stock planning','replenishment','reordering','smart transfer','recommendation','slow moving','stockout','supplier performance','what to order'], steps:[
       { find:['stock planning','stock health','reordering'], text:'Open Stock Planning & Replenishment.' },
-      { find:['low stock','move between branches','what to order','supplier choice'], text:'Review why the system is suggesting the action: branch stock, demand, supplier performance or stock history.' },
-      { find:['create transfer','purchase request'], text:'If the action makes sense, use the normal transfer or purchasing process. Suggestions must never change stock automatically.' }
+      { find:['low stock','move between branches','what to order','supplier choice'], text:'Review the reason for the suggestion: branch stock, demand, supplier performance or stock history.' },
+      { find:['create transfer','purchase request'], text:'If the action makes sense, continue with the normal transfer or purchasing process.' }
+    ]},
+    { id:'customer', title:'Find or add a customer', keywords:['customer','add customer','find customer','customer account','new customer'], steps:[
+      { find:['customers','customer directory'], text:'Open Customers.' },
+      { find:['search','phone','email','customer number'], text:'Search first so you do not create a duplicate customer.' },
+      { find:['add customer','new customer','create customer'], text:'If the customer is not already there, add the correct contact and account details.' }
+    ]},
+    { id:'supplier', title:'Find or update a supplier', keywords:['supplier','vendor','supplier details','supplier terms'], steps:[
+      { find:['suppliers','supplier management'], text:'Open Suppliers.' },
+      { find:['search','supplier'], text:'Find the supplier before making changes.' },
+      { find:['edit','payment terms','contact'], text:'Update only the details you have verified, then save the supplier record.' }
+    ]},
+    { id:'receive', title:'Receive a supplier delivery', keywords:['receive delivery','receive stock','supplier delivery','goods received','receive purchase order'], steps:[
+      { find:['purchase orders','purchasing'], text:'Open Purchase Orders and find the order that arrived.' },
+      { find:['receive','receive items','goods received'], text:'Open receiving and enter only what physically arrived.' },
+      { find:['shortage','damaged','serial','lot','bin'], text:'Record shortages, damage and any required serial, lot or bin details before completing the receipt.' }
+    ]},
+    { id:'rental-return', title:'Return a rental', keywords:['rental return','return rental','check in rental','rental damage','rental balance'], steps:[
+      { find:['rentals','rental operations'], text:'Open Rentals and find the agreement being returned.' },
+      { find:['return','check in'], text:'Record the returned equipment and its actual condition.' },
+      { find:['damage','fees','balance','payment'], text:'Review damage, additional charges, deposits and any balance before closing the return.' }
+    ]},
+    { id:'accounts', title:'Record a customer account payment', keywords:['account payment','customer payment','receivable','invoice payment','credit customer'], steps:[
+      { find:['accounts receivable','customer accounts','finance'], text:'Open Accounts Receivable and find the customer.' },
+      { find:['invoice','balance'], text:'Confirm the invoice and outstanding balance before taking payment.' },
+      { find:['payment','record payment'], text:'Record the payment against the correct invoice and verify the receipt.' }
+    ]},
+    { id:'staff-access', title:'Change an employee’s access', keywords:['employee access','permissions','security group','staff permission','role access'], steps:[
+      { find:['people','employees','security','permissions'], text:'Open People & Access or Security & Permissions.' },
+      { find:['employee','staff'], text:'Choose the correct employee.' },
+      { find:['permission','security group','access'], text:'Apply the access needed for the job, review the change, then save it.' }
     ]}
   ];
 
@@ -159,7 +189,7 @@
   function choose(task){state.task=task;state.step=0;render();}
   function close(){clearHighlight();state.open=false;state.task=null;state.step=0;shell()?.remove();state.observer?.disconnect();state.observer=null;document.getElementById('tt-guide-launcher')?.focus();}
   function open(){if(state.open)return;state.open=true;const root=document.createElement('div');root.id='tt-guided-mode';document.body.appendChild(root);render();state.observer=new MutationObserver(()=>{if(state.task){const step=state.task.steps[state.step]; if(step && !visible(state.target)) highlight(step);}});state.observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});}
-  function bind(){const root=shell(); if(!root)return; root.querySelectorAll('[data-guide-close]').forEach(x=>x.addEventListener('click',close)); root.querySelector('[data-guide-search]')?.addEventListener('submit',e=>{e.preventDefault();const q=root.querySelector('#tt-guide-input')?.value||'';const task=bestTask(q);if(task)choose(task);else{const toast=document.createElement('div');toast.className='tt-guide-toast';toast.textContent='I could not match that task yet. Try words like sale, repair, dispatch, rental, purchase order, transfer, inventory, report, drawer or technician pay.';document.body.appendChild(toast);setTimeout(()=>toast.remove(),4500);}}); root.querySelectorAll('[data-task]').forEach(btn=>btn.addEventListener('click',()=>choose(TASKS.find(t=>t.id===btn.dataset.task)))); root.querySelector('[data-guide-home]')?.addEventListener('click',()=>{clearHighlight();state.task=null;state.step=0;render();}); root.querySelector('[data-guide-prev]')?.addEventListener('click',()=>{if(state.step>0){state.step--;render();}}); root.querySelector('[data-guide-next]')?.addEventListener('click',()=>{if(!state.task)return;if(state.step>=state.task.steps.length-1)close();else{state.step++;render();}});}
+  function bind(){const root=shell(); if(!root)return; root.querySelectorAll('[data-guide-close]').forEach(x=>x.addEventListener('click',close)); root.querySelector('[data-guide-search]')?.addEventListener('submit',e=>{e.preventDefault();const q=root.querySelector('#tt-guide-input')?.value||'';const task=bestTask(q);if(task)choose(task);else{const toast=document.createElement('div');toast.className='tt-guide-toast';toast.textContent='I could not match that task yet. Try words like sale, customer, rental return, supplier delivery, purchase order, account payment, repair, transfer, report or staff access.';document.body.appendChild(toast);setTimeout(()=>toast.remove(),4500);}}); root.querySelectorAll('[data-task]').forEach(btn=>btn.addEventListener('click',()=>choose(TASKS.find(t=>t.id===btn.dataset.task)))); root.querySelector('[data-guide-home]')?.addEventListener('click',()=>{clearHighlight();state.task=null;state.step=0;render();}); root.querySelector('[data-guide-prev]')?.addEventListener('click',()=>{if(state.step>0){state.step--;render();}}); root.querySelector('[data-guide-next]')?.addEventListener('click',()=>{if(!state.task)return;if(state.step>=state.task.steps.length-1)close();else{state.step++;render();}});}
   window.TotalToolsGuideMe={open,openTask:(id)=>{const task=TASKS.find(t=>t.id===id);if(!task)return false;if(!state.open)open();choose(task);return true;},tasks:()=>TASKS.map(t=>({id:t.id,title:t.title}))};
   function install(){
     if(document.getElementById('tt-guide-launcher'))return;
