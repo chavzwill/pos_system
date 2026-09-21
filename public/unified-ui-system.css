@@ -151,3 +151,69 @@ th{letter-spacing:.045em}
   .tt-wo__detail{padding:8px!important}
   .tt-op-reports__body{padding:8px!important}
 }
+
+/* Back-office and relationship continuity */
+:is(.tt-crm__panel,.tt-cp__panel,.tt-admin__panel,.tt-settings__panel,.tt-supplier-ledger__panel,.iaw,.suppliers-shell,.catalog-admin-shell,.arw){
+  color:var(--tt-text)
+}
+:is(.tt-crm__panel,.tt-cp__panel,.tt-admin__panel,.tt-settings__panel,.tt-supplier-ledger__panel){
+  border-radius:var(--tt-radius-xl)!important;border-color:var(--tt-border)!important;box-shadow:var(--tt-shadow-panel)!important;background:var(--tt-surface-soft)!important
+}
+:is(.tt-crm__panel>header,.tt-cp__panel>header,.tt-admin__head,.tt-settings__panel>header,.tt-supplier-ledger__panel>header,.suppliers-head,.iaw-head){
+  padding:18px 20px!important;border-bottom:1px solid var(--tt-border)!important;background:var(--tt-surface)!important
+}
+:is(.tt-crm__panel h2,.tt-cp__panel>header h2,.tt-admin__head h2,.tt-settings__panel header h2,.tt-supplier-ledger__panel header h2,.suppliers-head h1,.iaw-head h1){
+  font-size:22px!important;letter-spacing:-.02em
+}
+:is(.tt-crm__tabs,.tt-admin__tabs,.tt-settings__panel>nav,.tt-cp__toolbar,.suppliers-toolbar,.tt-supplier-ledger__toolbar){
+  gap:8px!important;padding:10px 12px!important;background:var(--tt-surface-muted)!important;border-color:var(--tt-border)!important
+}
+:is(.tt-crm__tabs button,.tt-admin__tabs button,.tt-settings__panel>nav button,.tt-cp-tabs button,.tt-cp__toolbar>button,.suppliers-btn,.iaw-back,.iaw-primary,.iaw-row button){
+  min-height:var(--tt-control-h-sm)!important;border-radius:var(--tt-radius-sm)!important;padding:0 11px!important;font-size:11px!important
+}
+:is(.tt-crm__body,.tt-admin__body,.tt-settings__body,.tt-cp__list,.suppliers-shell,.tt-supplier-ledger__body,.arw){
+  padding:12px!important
+}
+:is(.tt-crm__list,.tt-crm__detail,.tt-crm__dash,.tt-admin-card,.tt-settings__field,.tt-settings__toggle,.tt-cp-card,.suppliers-panel,.suppliers-metrics article,.iaw-panel,.iaw-metrics article,.arw-detail>section,.arw-metrics article){
+  border-radius:var(--tt-radius-md)!important;border-color:var(--tt-border)!important
+}
+:is(.tt-crm__metrics,.tt-crm__dash-metrics,.tt-admin__metrics,.tt-cp__metrics,.suppliers-metrics,.iaw-metrics,.arw-metrics){gap:8px!important}
+:is(.tt-crm__metrics article,.tt-crm__dash-metrics article,.tt-admin__metrics article,.tt-cp__metrics article,.suppliers-metrics article,.iaw-metrics article,.arw-metrics article){
+  padding:11px 12px!important
+}
+:is(.tt-crm__metrics small,.tt-admin__metrics span,.tt-cp__metrics small,.suppliers-metrics small,.iaw-metrics small,.arw-metrics small){font-size:9px!important}
+:is(.tt-crm__metrics strong,.tt-admin__metrics strong,.tt-cp__metrics strong,.suppliers-metrics strong,.iaw-metrics strong,.arw-metrics strong){font-size:18px!important}
+.tt-crm__detail{padding:14px!important}.tt-crm__hero{padding-bottom:12px!important}
+.tt-crm__facts{gap:8px!important}.tt-crm__facts div{border-radius:var(--tt-radius-sm)!important;padding:9px 10px!important}
+.tt-crm-row{padding:10px 11px!important}.tt-crm-row strong{font-size:12px!important}.tt-crm-row span{font-size:10px!important}
+.tt-cp-card{padding:12px!important}.tt-cp-card h3{font-size:13px!important}.tt-cp-card p{font-size:11px!important}
+.tt-cp-modal form,.suppliers-card,.iaw-secret,.catalog-admin-card{border-radius:var(--tt-radius-lg)!important;box-shadow:var(--tt-shadow-panel)!important;border-color:var(--tt-border)!important}
+.tt-cp-modal form{padding:18px!important;gap:12px!important}.tt-cp-modal header{padding-bottom:10px!important;border-bottom:1px solid var(--tt-border)!important}
+.suppliers-shell{max-width:1500px}.suppliers-head{margin:-12px -12px 12px!important}
+.suppliers-toolbar{border-radius:var(--tt-radius-md)!important}.suppliers-layout{gap:10px!important}
+.suppliers-row{padding:11px 12px!important}.suppliers-row strong{font-size:12px!important}.suppliers-row small{font-size:10px!important}
+.suppliers-detail{padding:14px!important}.suppliers-grid{gap:8px!important}.suppliers-grid div{border-radius:var(--tt-radius-sm)!important;padding:9px 10px!important}
+.tt-admin__body{padding:12px!important}.tt-admin__grid{gap:8px!important}.tt-admin-card{padding:12px!important}
+.tt-admin-card h3{font-size:13px!important}.tt-admin-card p{font-size:11px!important}.tt-admin-card__meta span,.tt-admin__permissions span{border-radius:999px!important;padding:4px 7px!important}
+.tt-admin__toolbar{padding:10px 12px!important;border-radius:var(--tt-radius-md)!important;gap:8px!important}
+.tt-settings__body{padding:12px!important}.tt-settings__grid{gap:8px!important}.tt-settings__field{padding:11px 12px!important}.tt-settings__toggle{padding:11px 12px!important}
+.tt-settings__panel footer{padding:12px 16px!important;gap:8px!important;background:var(--tt-surface-soft)!important}
+.tt-settings__panel footer button{min-height:var(--tt-control-h-sm)!important;border-radius:var(--tt-radius-sm)!important;padding:0 11px!important}
+.tt-settings__toast{border-radius:var(--tt-radius-sm)!important;padding:9px 12px!important;font-size:11px!important;box-shadow:var(--tt-shadow-float)!important}
+.iaw{padding:12px!important}.iaw-head{border-radius:var(--tt-radius-lg)!important}.iaw-grid{gap:10px!important}.iaw-panel{padding:13px!important}.iaw-row{border-radius:var(--tt-radius-sm)!important;padding:10px 11px!important}
+.iaw-readiness{border-radius:var(--tt-radius-sm)!important}.iaw-note{border-radius:var(--tt-radius-sm)!important;padding:10px 12px!important}
+.catalog-admin-shell{padding:18px!important}.catalog-admin-head{margin-bottom:14px!important}.catalog-admin-head h1{font-size:28px!important}
+.catalog-admin-tabs{gap:8px!important;margin:10px 0 14px!important}.catalog-admin-tabs button{min-height:var(--tt-control-h-sm)!important}
+.catalog-admin-panel,.catalog-admin-metrics article{border-radius:var(--tt-radius-md)!important;box-shadow:none!important}
+.catalog-admin-panel{padding:14px!important}.catalog-admin-toolbar{gap:8px!important;margin-bottom:10px!important}
+.catalog-admin-btn{min-height:var(--tt-control-h-sm)!important;border-radius:var(--tt-radius-sm)!important;padding:0 12px!important}
+.catalog-admin-card{padding:18px!important}.catalog-admin-health-card{border-radius:var(--tt-radius-md)!important}
+.arw{border-radius:var(--tt-radius-xl)!important;box-shadow:var(--tt-shadow-panel)!important;border-color:var(--tt-border)!important}
+.arw header{padding:18px 20px!important;border-bottom:1px solid var(--tt-border)!important}.arw header h2{font-size:22px!important}
+.arw-toolbar{padding:10px 12px!important;border-radius:var(--tt-radius-md)!important}.arw-list{gap:6px!important}.arw-row{border-radius:var(--tt-radius-sm)!important;padding:10px 11px!important}
+.arw-detail{gap:10px!important}.arw-detail>section{padding:13px!important}.arw-table{border-radius:var(--tt-radius-sm)!important}
+@media(max-width:760px){
+  :is(.tt-crm__body,.tt-admin__body,.tt-settings__body,.tt-cp__list,.suppliers-shell,.tt-supplier-ledger__body,.arw){padding:8px!important}
+  :is(.tt-crm__panel,.tt-cp__panel,.tt-admin__panel,.tt-settings__panel,.tt-supplier-ledger__panel,.arw){border-radius:0!important}
+  .catalog-admin-shell{padding:10px!important}
+}

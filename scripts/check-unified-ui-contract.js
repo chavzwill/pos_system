@@ -20,6 +20,12 @@ check('inventory rental and transfer details share surface rhythm',css.includes(
 check('repair workspace uses shared detail card law',css.includes('.tt-wo__detail-card')&&css.includes('.tt-wo-row'));
 check('operational reports use shared panel and card law',css.includes('.tt-op-reports{border-radius:var(--tt-radius-xl)')&&css.includes('.tt-op-reports__card'));
 check('rental modal follows shared modal geometry',css.includes('.tt-rent__modal{border-radius:var(--tt-radius-lg)')&&css.includes('.tt-rent__modal footer'));
+check('customer CRM and programs share back-office surface law',css.includes('.tt-crm__panel')&&css.includes('.tt-cp__panel')&&css.includes('.tt-crm__facts')&&css.includes('.tt-cp-card'));
+check('suppliers and supplier ledger share back-office geometry',css.includes('.suppliers-panel')&&css.includes('.tt-supplier-ledger__panel')&&css.includes('.suppliers-grid'));
+check('admin and settings share toolbar card and footer rhythm',css.includes('.tt-admin__toolbar')&&css.includes('.tt-admin-card')&&css.includes('.tt-settings__field')&&css.includes('.tt-settings__panel footer'));
+check('integration admin uses shared panel row and secret modal law',css.includes('.iaw-panel')&&css.includes('.iaw-row')&&css.includes('.iaw-secret'));
+check('catalog admin remains spacious but follows shared controls and panels',css.includes('.catalog-admin-panel')&&css.includes('.catalog-admin-btn')&&css.includes('.catalog-admin-card'));
+check('accounts receivable follows shared panel toolbar and row law',css.includes('.arw{border-radius:var(--tt-radius-xl)')&&css.includes('.arw-toolbar')&&css.includes('.arw-row'));
 check('reduced motion is respected',css.includes('@media(prefers-reduced-motion:reduce)'));
 check('scrollbars are restrained and consistent',css.includes('::-webkit-scrollbar-thumb'));
 check('legacy POS loads unified UI after feature styles',legacy.indexOf('/unified-ui-system.css')>legacy.indexOf('/rental-create-wizard.css'));
