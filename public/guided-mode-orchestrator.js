@@ -17,7 +17,13 @@ const TASK_CONTEXT={
  'Create or manage a quotation':{domain:'sales',feature:'quotations-workspace',selector:'#tt-quotes'},
  'Run, export or print a report':{domain:'finance',feature:'operational-reports',selector:'#tt-operational-reports'},
  'Review technician compensation':{domain:'service'},
- 'Stock Planning & Replenishment':{domain:'purchasing',feature:'inventory-intelligence',selector:'#tt-inventory-intelligence'}
+ 'Stock Planning & Replenishment':{domain:'purchasing',feature:'inventory-intelligence',selector:'#tt-inventory-intelligence'},
+ 'Find or add a customer':{domain:'crm',feature:'customer-crm-workspace',selector:'#tt-customer-crm-workspace'},
+ 'Find or update a supplier':{domain:'purchasing'},
+ 'Receive a supplier delivery':{domain:'purchasing',feature:'purchasing-workspace',selector:'#tt-purchasing-workspace',tab:'po'},
+ 'Return a rental':{domain:'rentals',feature:'rentals-workspace',selector:'#tt-rentals-workspace'},
+ 'Record a customer account payment':{domain:'finance'},
+ 'Change an employee’s access':{domain:'administration',feature:'rbac-workspace',selector:'#tt-rbac-workspace'}
 };
 const API={
  'sales-workspace':'TotalToolsSalesWorkspace','cashier-controls-workspace':'TotalToolsCashierControls','work-orders-workspace':'TotalToolsWorkOrdersWorkspace','rentals-workspace':'TotalToolsRentalsWorkspace','logistics-intelligence':'TotalToolsLogisticsIntelligence','inventory-workspace':'TotalToolsInventoryWorkspace','catalog-admin-workspace':'TotalToolsCatalogAdmin','purchasing-workspace':'TotalToolsPurchasingWorkspace','transfers-workspace':'TotalToolsTransfersWorkspace','quotations-workspace':'TotalToolsQuotationsWorkspace','operational-reports':'TotalToolsOperationalReports','inventory-intelligence':'TotalToolsInventoryIntelligence'
