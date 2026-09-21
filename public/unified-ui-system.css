@@ -352,3 +352,52 @@ th{letter-spacing:.045em}
   .suppliers-head{margin:-8px -8px 8px!important}
   .arw{padding:8px!important}.arw header{margin:-8px -8px 8px!important}
 }
+
+
+/* Production readability floor — staff-facing text must remain legible across workspaces. */
+:root{--tt-font-xs:12px;--tt-font-sm:13px;--tt-font-md:14px}
+:is(
+  .tt-sales__product strong,.tt-held__row strong,.tt-cc__tx strong,
+  .tt-inv__facts strong,.tt-rent__facts strong,.tt-tr__facts strong,.tt-wo__fact strong,
+  .tt-crm-row strong,.suppliers-row strong,.tt-op-reports__card strong
+){font-size:12.5px!important;line-height:1.4!important}
+:is(
+  .tt-sales__product span,.tt-held__row span,.tt-held__row small,.tt-cc__tx small,
+  .tt-wo-row small,.tt-crm-row span,.suppliers-row small,.tt-op-reports__card span
+){font-size:11.5px!important;line-height:1.45!important}
+:is(
+  .tt-inv__metrics small,.tt-rent__metrics small,.tt-tr__metrics small,.tt-op-reports__summary small,
+  .tt-inv__facts small,.tt-rent__facts small,.tt-tr__facts small,.tt-wo__fact small,
+  .tt-crm__metrics small,.tt-admin__metrics span,.tt-cp__metrics small,.suppliers-metrics small,.iaw-metrics small,.arw-metrics small
+){font-size:10.5px!important;line-height:1.35!important}
+:is(
+  .tt-inv__table th,.tt-rent__table th,.tt-op-reports th,
+  .tt-aiacct-tablewrap th,.tt-ledger th,.arw table th
+){font-size:10.5px!important;line-height:1.35!important}
+:is(
+  .tt-inv__table td,.tt-rent__table td,.tt-op-reports td,
+  .tt-aiacct-tablewrap td,.tt-ledger td,.arw table td
+){font-size:12px!important;line-height:1.45!important}
+:is(
+  .tt-sales__tabs button,.tt-sales__toolbar button,.tt-held__list-head button,.tt-cc__toolbar button,
+  .tt-inv__toolbar button,.tt-rent__toolbar button,.tt-tr__toolbar button,.tt-op-reports__controls button,
+  .tt-op-reports__actions button,.tt-wo__new,.tt-wo__back,
+  .tt-crm__tabs button,.tt-admin__tabs button,.tt-settings__panel>nav button,.tt-cp-tabs button,
+  .suppliers-btn,.iaw-back,.iaw-primary,.iaw-row button
+){font-size:12px!important}
+:is(
+  .tt-rent__status,.tt-tr em,.tt-wo-pill
+){font-size:10px!important;line-height:1.25!important}
+:is(
+  .tt-sales__panel,.tt-held__panel,.tt-cc__panel,.tt-inv__panel,.tt-rent__panel,.tt-tr__panel,
+  .tt-wo__panel,.tt-purch__panel,.tt-quotes__panel,.tt-logistics__panel,.tt-reports__panel,
+  .tt-admin__panel,.tt-settings__panel,.tt-crm__panel,.tt-cp__panel,.tt-supplier-ledger__panel,
+  .arw,.iaw,.suppliers-shell,.catalog-admin-shell
+){max-width:100%!important}
+:is(
+  .tt-inv__table,.tt-rent__table,.tt-op-reports__table,.tt-aiacct-tablewrap,.tt-ledger__tablewrap,.arw-table
+){overflow:auto!important;overscroll-behavior:contain}
+@media(max-width:760px){
+  :is(.tt-inv__table td,.tt-rent__table td,.tt-op-reports td,.tt-aiacct-tablewrap td,.tt-ledger td,.arw table td){font-size:12.5px!important}
+  :is(.tt-sales__product span,.tt-held__row span,.tt-held__row small,.tt-cc__tx small,.tt-wo-row small,.tt-crm-row span,.suppliers-row small){font-size:12px!important}
+}
