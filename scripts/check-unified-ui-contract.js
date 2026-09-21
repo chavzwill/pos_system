@@ -20,6 +20,12 @@ check('inventory rental and transfer details share surface rhythm',css.includes(
 check('repair workspace uses shared detail card law',css.includes('.tt-wo__detail-card')&&css.includes('.tt-wo-row'));
 check('operational reports use shared panel and card law',css.includes('.tt-op-reports{border-radius:var(--tt-radius-xl)')&&css.includes('.tt-op-reports__card'));
 check('rental modal follows shared modal geometry',css.includes('.tt-rent__modal{border-radius:var(--tt-radius-lg)')&&css.includes('.tt-rent__modal footer'));
+check('admin and settings use shared back-office geometry',css.includes('.tt-admin-card')&&css.includes('.tt-settings__field')&&css.includes('.tt-settings__panel footer'));
+check('supplier workspace uses shared cards forms and modal law',css.includes('.suppliers-panel')&&css.includes('.suppliers-card{border-radius:var(--tt-radius-lg)')&&css.includes('.suppliers-form'));
+check('integration admin uses shared panels rows and secret modal',css.includes('.iaw-panel')&&css.includes('.iaw-row')&&css.includes('.iaw-secret{border-radius:var(--tt-radius-lg)'));
+check('finance intelligence uses shared KPI table and exception law',css.includes('.tt-aiacct-kpi')&&css.includes('.tt-aiacct-tablewrap')&&css.includes('.tt-aiacct-exception'));
+check('ledger uses shared section table and dialog geometry',css.includes('.tt-ledger section')&&css.includes('.tt-ledger dialog{border-radius:var(--tt-radius-lg)')&&css.includes('.tt-ledger th,.tt-ledger td'));
+check('accounts receivable uses shared panel row and detail geometry',css.includes('.arw{border-radius:var(--tt-radius-xl)')&&css.includes('.arw-row')&&css.includes('.arw-detail>section'));
 check('reduced motion is respected',css.includes('@media(prefers-reduced-motion:reduce)'));
 check('scrollbars are restrained and consistent',css.includes('::-webkit-scrollbar-thumb'));
 check('legacy POS loads unified UI after feature styles',legacy.indexOf('/unified-ui-system.css')>legacy.indexOf('/rental-create-wizard.css'));
