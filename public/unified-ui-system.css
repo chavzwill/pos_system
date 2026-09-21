@@ -217,3 +217,58 @@ th{letter-spacing:.045em}
   :is(.tt-crm__panel,.tt-cp__panel,.tt-admin__panel,.tt-settings__panel,.tt-supplier-ledger__panel,.arw){border-radius:0!important}
   .catalog-admin-shell{padding:10px!important}
 }
+
+/* Final secondary-surface continuity */
+:is(.wow-head,.ecom-shell>header,.cm-head,.tt-promo__panel>header,.tt-li-panel>header,.tt-si-panel>header,.tt-finctl__panel>header,.cdw-panel>header){
+  padding:18px 20px!important;border-bottom:1px solid var(--tt-border)!important;background:var(--tt-surface)!important
+}
+:is(.wow-head h1,.ecom-shell h2,.cm-head h2,.tt-promo__panel header h2,.tt-li-panel header h2,.tt-si-panel header h2,.tt-finctl__panel header h2,.cdw-panel h2){
+  font-size:22px!important;letter-spacing:-.02em
+}
+:is(.wow-metrics,.ecom-metrics,.cm-metrics,.tt-promo__metrics,.tt-li-stats,.tt-si-kpis,.tt-finctl-kpis,.cdw-metrics,.denom-metrics){gap:8px!important}
+:is(.wow-metrics article,.ecom-metrics article,.cm-metrics article,.tt-promo__metrics article,.tt-li-stats article,.tt-si-kpi,.tt-finctl-kpi,.cdw-metrics article,.denom-metrics article){
+  border-radius:var(--tt-radius-md)!important;border-color:var(--tt-border)!important;padding:11px 12px!important;box-shadow:none!important
+}
+:is(.wow-panel,.ecom-panel,.cm-panel,.tt-promo__detail,.tt-li-grid>section,.tt-si-body>section,.tt-finctl section,.cdw-table,.cdw-recon,.denom-panel){
+  border-radius:var(--tt-radius-md)!important;border-color:var(--tt-border)!important;box-shadow:none!important
+}
+:is(.wow-back,.wow-panel button,.ecom-shell button,.cm-head button,.cm-toolbar button,.cm-panel button,.tt-promo__toolbar>button,.tt-promo__filters button,.tt-promo-detail__head button,.tt-li-section-head button,.tt-li-actions button,.tt-si-toolbar button,.tt-si-best button,.cdw-panel button,.denom-btn,.denom-link){
+  min-height:var(--tt-control-h-sm)!important;border-radius:var(--tt-radius-sm)!important;padding:0 11px!important
+}
+:is(.cm-toolbar,.tt-promo__toolbar,.tt-si-toolbar,.tt-finctl__filters){gap:8px!important;padding:10px 12px!important;background:var(--tt-surface-muted)!important;border-color:var(--tt-border)!important}
+.wow-shell,.ecom-shell,.cm-shell{padding:12px!important}
+.wow-head,.cm-head{margin-bottom:10px!important;border-radius:var(--tt-radius-lg)!important}
+.wow-grid,.ecom-catalog,.cm-layout{gap:10px!important}
+.wow-panel,.ecom-panel,.cm-panel{padding:13px!important}
+.wow-list article,.ecom-catalog article,.cm-fail{border-radius:var(--tt-radius-sm)!important;border-color:var(--tt-border)!important}
+.wow-table-wrap,.ecom-table-wrap,.cm-table-wrap{border-radius:var(--tt-radius-sm)!important}
+.ecom-shell{border-radius:var(--tt-radius-xl)!important;box-shadow:var(--tt-shadow-panel)!important;border-color:var(--tt-border)!important}
+.ecom-shell>header{margin:-12px -12px 10px!important}
+.ecom-drawer{border-radius:var(--tt-radius-lg)!important;box-shadow:var(--tt-shadow-panel)!important;border-color:var(--tt-border)!important;padding:16px!important}
+.ecom-detail-grid{gap:8px!important}.ecom-detail-grid article{border-radius:var(--tt-radius-sm)!important;padding:10px!important}
+.tt-promo__panel{border-radius:var(--tt-radius-xl)!important;border-color:var(--tt-border)!important;box-shadow:var(--tt-shadow-panel)!important}
+.tt-promo__content{gap:8px!important;padding:0 12px 12px!important}.tt-promo__detail{padding:14px!important}
+.tt-promo-row{border-radius:var(--tt-radius-sm)!important;padding:11px 76px 11px 12px!important}.tt-promo-row strong{font-size:12px!important}.tt-promo-row span{font-size:10px!important}
+.tt-promo__detail dl{gap:8px!important}.tt-promo__detail dl div{border-radius:var(--tt-radius-sm)!important;padding:9px 10px!important}
+.tt-lw{border-radius:var(--tt-radius-xl)!important;border-color:var(--tt-border)!important;box-shadow:var(--tt-shadow-panel)!important}
+.tt-lw__head{padding:18px 20px!important}.tt-lw__toolbar{padding:10px 12px!important;gap:8px!important}.tt-lw__metrics{gap:8px!important;padding:10px 12px 6px!important}
+.tt-li-panel{border-radius:var(--tt-radius-xl)!important;border-color:var(--tt-border)!important;box-shadow:var(--tt-shadow-panel)!important}
+.tt-li-stats{gap:8px!important;padding:10px 12px 4px!important}.tt-li-grid{gap:8px!important;padding:8px 12px 12px!important}
+.tt-li-grid>section{border-radius:var(--tt-radius-md)!important}.tt-li-job,.tt-li-transfer{border-radius:var(--tt-radius-sm)!important;padding:10px!important}
+.tt-si-panel{border-radius:var(--tt-radius-xl)!important;border-color:var(--tt-border)!important;box-shadow:var(--tt-shadow-panel)!important}
+.tt-si-kpis{gap:8px!important;padding:10px 12px 0!important}.tt-si-body{gap:10px!important;padding:10px 12px 12px!important}
+.tt-si-body>section,.tt-si-tech,.tt-si-rec{border-radius:var(--tt-radius-md)!important}.tt-si-tech,.tt-si-rec{padding:11px!important}
+.tt-finctl__panel{border-radius:var(--tt-radius-xl)!important;border-color:var(--tt-border)!important;box-shadow:var(--tt-shadow-panel)!important}
+.tt-finctl__body{padding:12px!important;gap:10px!important}.tt-finctl-signals{gap:8px!important}.tt-finctl-signals article{border-radius:var(--tt-radius-md)!important;padding:11px!important}
+.cdw-overlay{padding:12px!important;background:rgba(7,16,14,.42)!important;backdrop-filter:blur(5px)!important}
+.cdw-panel{border-radius:var(--tt-radius-xl)!important;box-shadow:var(--tt-shadow-panel)!important;border-color:var(--tt-border)!important}
+.cdw-body{padding:18px!important}.cdw-tenders{gap:10px!important}.cdw-tenders article{border-radius:var(--tt-radius-md)!important;border-color:var(--tt-border)!important}
+.denom-shell{padding:18px!important}.denom-head{margin-bottom:16px!important}.denom-head h1{font-size:28px!important}
+.denom-grid{gap:10px!important}.denom-panel{padding:14px!important}.denom-card{border-radius:var(--tt-radius-lg)!important;box-shadow:var(--tt-shadow-panel)!important;padding:18px!important}
+.tt-tmi{border-color:var(--tt-border)!important;box-shadow:var(--tt-shadow-panel)!important}.tt-tmi__body{padding:12px!important}
+.tt-tmi__kpis,.tt-tmi__alerts,.tt-tmi__detail,.tt-tmi__team{border-color:var(--tt-border)!important;box-shadow:none!important}
+.tt-tmi__layout{gap:10px!important}.tt-tmi__team-grid{gap:8px!important}.tt-tmi__tech{border-radius:var(--tt-radius-sm)!important}
+@media(max-width:900px){
+  .wow-shell,.ecom-shell,.cm-shell,.denom-shell{padding:8px!important}
+  :is(.ecom-shell,.tt-promo__panel,.tt-lw,.tt-li-panel,.tt-si-panel,.tt-finctl__panel,.cdw-panel,.tt-tmi){border-radius:0!important}
+}
