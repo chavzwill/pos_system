@@ -9,6 +9,8 @@ const authority=read('public/unified-ui-system.css');
 const shellCss=read('public/app-shell.css');
 const salesCss=read('public/sales-workspace.css');
 const salesJs=read('public/sales-workspace.js');
+const inventoryJs=read('public/inventory-workspace.js');
+const purchasingJs=read('public/purchasing-workspace.js');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -188,6 +190,28 @@ check('sales is scanner and keyboard first without weakening checkout confirmati
   salesJs.includes("if(!confirm(`Complete this sale") &&
   salesJs.includes("notice('Cash tendered cannot be less than the sale total.','error')") &&
   salesCss.includes('.tt-sales__shortcuts')
+);
+
+check('inventory is search-first without weakening adjustment control',
+  inventoryJs.includes('function focusSearch(') &&
+  inventoryJs.includes('function bindShortcuts()') &&
+  inventoryJs.includes("e.key==='F2'") &&
+  inventoryJs.includes("e.key==='F3'") &&
+  inventoryJs.includes('aria-keyshortcuts="/"') &&
+  inventoryJs.includes("if(!confirm(`Adjust ${state.selected.name}") &&
+  inventoryJs.includes("notice('A reason is required for every stock adjustment.','error')")
+);
+
+check('purchasing accelerates document entry while preserving authority boundaries',
+  purchasingJs.includes('function focusComposer(') &&
+  purchasingJs.includes('function focusLine(index)') &&
+  purchasingJs.includes("e.key==='F2'") &&
+  purchasingJs.includes("e.key==='F3'") &&
+  purchasingJs.includes('aria-keyshortcuts="F2"') &&
+  purchasingJs.includes('aria-keyshortcuts="F3"') &&
+  purchasingJs.includes("confirm('Cancel this purchase order?')") &&
+  purchasingJs.includes("confirm('Post these received quantities into inventory?')") &&
+  purchasingJs.includes("notice('Enter at least one quantity received.','error')")
 );
 
 check('legacy source still declares authoritative ui after feature styles',
