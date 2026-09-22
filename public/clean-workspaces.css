@@ -10,7 +10,7 @@
   .tt-aiacct__panel,.tt-ledger__panel,.arw,.iaw,.suppliers-shell,.catalog-admin-shell,.wow-panel,.ecom-panel,.cm-panel,.tt-promo__panel,.tt-lw,
   .tt-li-panel,.tt-si-panel,.tt-finctl__panel,.cdw-panel,.denom-panel,.tt-tmi
 ){
-  background:var(--cw-surface)!important;border:1px solid var(--cw-line)!important;border-radius:var(--cw-r-xl)!important;box-shadow:var(--cw-shadow)!important;color:var(--cw-text)!important;overflow:hidden!important
+  background:var(--cw-surface)!important;border:1px solid var(--cw-line)!important;border-radius:var(--cw-r-xl)!important;box-shadow:var(--cw-shadow)!important;color:var(--cw-text)!important
 }
 :is(
   .tt-sales__panel,.tt-held__panel,.tt-cc__panel,.tt-inv__panel,.tt-rent__panel,.tt-tr__panel,.tt-wo__panel,.tt-purch__panel,.tt-quotes__panel,
@@ -53,13 +53,23 @@
   .tt-crm-row,.suppliers-row,.tt-cp-card,.tt-admin-card,.tt-settings__field,.tt-settings__toggle,.iaw-row,.catalog-admin-card,.arw-row,
   .tt-op-reports__card
 ){
-  border:1px solid var(--cw-line)!important;border-radius:var(--cw-r-sm)!important;background:#fff!important;box-shadow:none!important
+  border:1px solid var(--cw-line)!important;border-radius:var(--cw-r-sm)!important;box-shadow:none!important
 }
 :is(
   .tt-sales__product,.tt-held__row,.tt-cc__tx,.tt-wo-row,.tt-crm-row,.suppliers-row,.arw-row
 ){padding:12px 13px!important}
 :is(.tt-sales__product:hover,.tt-held__row:hover,.tt-cc__tx:hover,.tt-wo-row:hover,.tt-crm-row:hover,.suppliers-row:hover,.arw-row:hover){
   background:#fbfdfc!important;border-color:#cfdad4!important
+}
+:is(
+  .tt-sales__product.is-active,.tt-sales__product.is-selected,.tt-held__row.is-active,.tt-held__row.is-selected,
+  .tt-cc__tx.is-active,.tt-cc__tx.is-selected,.tt-wo-row.is-active,.tt-wo-row.is-selected,
+  .tt-crm-row.is-active,.tt-crm-row.is-selected,.suppliers-row.is-active,.suppliers-row.is-selected,
+  .arw-row.is-active,.arw-row.is-selected,
+  .tt-sales__product[aria-selected="true"],.tt-held__row[aria-selected="true"],.tt-cc__tx[aria-selected="true"],
+  .tt-wo-row[aria-selected="true"],.tt-crm-row[aria-selected="true"],.suppliers-row[aria-selected="true"],.arw-row[aria-selected="true"]
+){
+  background:var(--cw-tint)!important;border-color:#bad8c7!important;box-shadow:inset 3px 0 0 var(--cw-accent)!important
 }
 :is(
   .tt-sales__metrics article,.tt-held__metrics article,.tt-inv__metrics article,.tt-rent__metrics article,.tt-tr__metrics article,.tt-crm__metrics article,
@@ -131,3 +141,14 @@
   :is(.tt-sales__panel,.tt-held__panel,.tt-cc__panel,.tt-inv__panel,.tt-rent__panel,.tt-tr__panel,.tt-wo__panel,.tt-purch__panel,.tt-quotes__panel,.tt-logistics__panel,.tt-reports__panel,.tt-admin__panel,.tt-settings__panel,.tt-crm__panel,.tt-cp__panel,.tt-supplier-ledger__panel) h2{font-size:21px!important}
 }
 @media(prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
+
+
+/* Preserve workflow meaning: clean styling must never erase semantic state. */
+:is(.is-warning,.warning,[data-state="warning"],[data-status="warning"]){--cw-state:#fff8df}
+:is(.is-danger,.danger,.error,[data-state="error"],[data-status="error"],[data-status="overdue"]){--cw-state:#fff0ee}
+:is(.is-success,.success,[data-state="success"],[data-status="success"],[data-status="complete"]){--cw-state:#eef8f2}
+:is(.is-warning,.warning,.is-danger,.danger,.error,.is-success,.success)[class*="row"],
+:is([data-state="warning"],[data-state="error"],[data-state="success"],[data-status="overdue"],[data-status="complete"]){
+  background:var(--cw-state)!important
+}
+:is(button,[role="button"],input,select,textarea,a):focus-visible{outline:3px solid rgba(8,123,70,.18)!important;outline-offset:2px!important}
