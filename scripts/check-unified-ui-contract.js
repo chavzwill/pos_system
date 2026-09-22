@@ -144,6 +144,31 @@ check('home is task-led and written for staff',
   shellJs.includes("administration:'Admin'")
 );
 
+check('quick command removes navigation hunting for permitted tasks',
+  shellJs.includes("RECENT_TASKS_KEY='tt:shell:recent-tasks'") &&
+  shellJs.includes('function commandCatalog()') &&
+  shellJs.includes('function openCommand(') &&
+  shellJs.includes("String(e.key).toLowerCase()==='k'") &&
+  shellJs.includes('allowedFeature(key)') &&
+  shellJs.includes('rememberTask(key,title)')
+);
+
+check('shell feedback avoids blocking alerts for shell-level support and module failures',
+  shellJs.includes('function showToast(') &&
+  shellJs.includes("window.TotalToolsShellUI={command:openCommand,toast:showToast}") &&
+  shellJs.includes("showToast(`${title||'Workspace'} could not open") &&
+  !shellJs.includes("else alert('Guide Me is available inside supported tasks.')") &&
+  !shellJs.includes("else alert('Help & Learning is still loading. Please try again.')")
+);
+
+check('quick command is responsive and keyboard accessible',
+  shellCss.includes('.shell-command__panel') &&
+  shellCss.includes('.shell-command-result') &&
+  shellCss.includes('.shell-command-button') &&
+  shellCss.includes('.shell-toast-host') &&
+  shellCss.includes('max-height:calc(100dvh - 16px)')
+);
+
 check('legacy source still declares authoritative ui after feature styles',
   legacy.indexOf('/unified-ui-system.css') > legacy.indexOf('/rental-create-wizard.css')
 );

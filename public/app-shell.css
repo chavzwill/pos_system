@@ -107,6 +107,30 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 .shell-card button{align-self:flex-start;min-height:44px;border:0;border-radius:12px;background:var(--tt-green);color:#fff;font-weight:750;padding:0 14px}
 .shell-mobile-menu{display:none;min-height:44px;border:1px solid var(--tt-border);background:#fff;border-radius:12px;padding:0 14px}
 .shell-empty--standalone{max-width:520px;margin:15vh auto}
+.shell-topbar__actions{display:flex;align-items:center;gap:10px}
+.shell-command-button{min-height:42px;display:inline-flex;align-items:center;gap:10px;padding:0 12px;border:1px solid var(--tt-border);border-radius:12px;background:#fff;color:var(--tt-text);font-size:12px;font-weight:750}
+.shell-command-button:hover{border-color:#9CC9AE;background:var(--tt-soft)}
+.shell-command-button kbd,.shell-command__search kbd{border:1px solid var(--tt-border);background:var(--tt-bg);border-radius:8px;padding:4px 7px;color:var(--tt-text-2);font-size:11px;font-family:inherit;font-weight:750;box-shadow:inset 0 -1px 0 rgba(17,23,20,.08)}
+.shell-command{position:fixed;inset:0;z-index:1300}
+.shell-command__backdrop{position:absolute;inset:0;background:rgba(16,23,19,.42);backdrop-filter:blur(4px)}
+.shell-command__panel{position:relative;width:min(660px,calc(100vw - 32px));max-height:min(720px,calc(100dvh - 48px));margin:7vh auto 0;background:var(--tt-surface);border:1px solid var(--tt-border);border-radius:24px;box-shadow:var(--tt-shadow-float);overflow:hidden;display:flex;flex-direction:column;animation:shell-command-in .16s ease-out}
+.shell-command__panel header{display:flex;align-items:center;justify-content:space-between;gap:16px;padding:20px 22px 14px}
+.shell-command__panel header h2{margin:4px 0 0;font-size:24px;letter-spacing:-.035em}
+.shell-command__panel header>button{width:44px;height:44px;border:1px solid var(--tt-border);border-radius:12px;background:#fff;font-size:20px;color:var(--tt-text)}
+.shell-command__search{position:relative;padding:0 20px 14px}
+.shell-command__search input{width:100%;height:52px;border:1px solid var(--tt-border-strong);border-radius:14px;padding:0 72px 0 15px;background:#fff;color:var(--tt-text);font-size:15px}
+.shell-command__search input:focus{border-color:var(--tt-green);box-shadow:0 0 0 3px rgba(11,122,62,.12);outline:0}
+.shell-command__search kbd{position:absolute;right:32px;top:13px}
+.shell-command-results{padding:4px 10px 12px;overflow:auto;min-height:0}
+.shell-command-result{width:100%;min-height:64px;border:0;border-radius:14px;background:transparent;padding:10px 12px;display:flex;align-items:center;justify-content:space-between;gap:16px;text-align:left;color:var(--tt-text)}
+.shell-command-result:hover,.shell-command-result.is-selected{background:var(--tt-green-soft)}
+.shell-command-result span{display:grid;gap:3px;min-width:0}.shell-command-result strong{font-size:14px}.shell-command-result small{font-size:12px;color:var(--tt-text-2);white-space:nowrap;overflow:hidden;text-overflow:ellipsis}.shell-command-result em{font-style:normal;color:var(--tt-green-deep);font-size:12px;font-weight:750}
+.shell-command-empty{padding:28px 18px;text-align:center}.shell-command-empty strong{display:block;font-size:14px}.shell-command-empty span{display:block;margin-top:5px;color:var(--tt-text-2);font-size:13px}
+.shell-toast-host{position:fixed;right:20px;bottom:20px;z-index:1450;display:grid;gap:10px;width:min(380px,calc(100vw - 32px));pointer-events:none}
+.shell-toast{pointer-events:auto;min-height:48px;display:flex;align-items:center;justify-content:space-between;gap:12px;padding:11px 12px 11px 14px;border:1px solid var(--tt-border);border-radius:14px;background:#fff;box-shadow:var(--tt-shadow-float);font-size:13px;font-weight:650;opacity:0;transform:translateY(8px);transition:opacity .16s ease,transform .16s ease}
+.shell-toast.is-visible{opacity:1;transform:translateY(0)}.shell-toast--success{border-left:4px solid var(--tt-success)}.shell-toast--error{border-left:4px solid var(--tt-danger)}.shell-toast--info{border-left:4px solid var(--tt-info)}
+.shell-toast button{width:36px;height:36px;border:0;border-radius:10px;background:var(--tt-soft);color:var(--tt-text);font-size:18px}
+@keyframes shell-command-in{from{opacity:0;transform:translateY(-8px) scale(.99)}to{opacity:1;transform:none}}
 @media(max-width:1180px){
   .shell-primary-action{grid-column:span 6}.shell-primary-action:first-child{grid-column:span 12;grid-row:auto;min-height:280px}
   .shell-grid,.shell-utility-grid{grid-template-columns:repeat(2,minmax(0,1fr))}
@@ -127,7 +151,8 @@ button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-vis
 }
 @media(max-width:640px){
   .shell-login__panel{padding:18px}.shell-login__card{padding:22px;border-radius:20px}.shell-login__brand{min-height:30dvh;padding:22px}.shell-login__brand h1{font-size:34px;margin:18px 0}.shell-login__brand p{font-size:14px;line-height:1.55}.shell-login__card input{font-size:16px}
-  .shell-topbar{min-height:62px;padding:0 14px}.shell-topbar__brand{display:none}.shell-topbar>div>span{display:none}.shell-content{padding:22px 14px 36px}
+  .shell-topbar{min-height:62px;padding:0 14px}.shell-topbar__brand{display:none}.shell-topbar>div>span{display:none}.shell-command-button{min-height:44px;padding:0 11px}.shell-command-button span{font-size:0}.shell-command-button span:after{content:"Tasks";font-size:12px}.shell-command-button kbd{display:none}.shell-content{padding:22px 14px 36px}
+  .shell-command__panel{width:calc(100vw - 16px);max-height:calc(100dvh - 16px);margin:8px auto 0;border-radius:20px}.shell-command__panel header{padding:16px 16px 12px}.shell-command__panel header h2{font-size:21px}.shell-command__search{padding:0 14px 10px}.shell-command__search input{height:50px;padding-right:14px;font-size:16px}.shell-command__search kbd{display:none}.shell-command-results{padding:2px 6px 10px}.shell-command-result{min-height:62px;padding:9px 10px}.shell-toast-host{left:12px;right:12px;bottom:12px;width:auto}
   .shell-home-head{margin-bottom:24px;gap:16px}.shell-home-head h1{font-size:32px}.shell-home-head__branch{padding:13px 14px;border-radius:14px}
   .shell-section{margin-top:28px}.shell-section-head{margin-bottom:12px}.shell-section-head>div:first-child{gap:10px}.shell-section-head h2,.shell-section-head h3{font-size:19px}.shell-section-head p{font-size:12px}
   .shell-section-number{width:28px;height:28px;border-radius:9px}
