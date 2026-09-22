@@ -12,6 +12,7 @@ const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
 const pkg=read('package.json');
+const server=read('server.js');
 
 check('authoritative palette is exact',
   authority.includes('--tt-green:#0B7A3E') &&
@@ -125,8 +126,26 @@ check('home is task-led and written for staff',
   shellJs.includes("administration:'Admin'")
 );
 
-check('legacy fallback still receives authoritative ui last',
+check('legacy source still declares authoritative ui after feature styles',
   legacy.indexOf('/unified-ui-system.css') > legacy.indexOf('/rental-create-wizard.css')
+);
+
+check('legacy runtime strips retired competing themes before rendering',
+  server.includes('retiredThemePattern') &&
+  server.includes('premium-shell-v2|premium-shell-v3') &&
+  server.includes('late-2020s-workspaces') &&
+  server.includes('workspace-quality-pass') &&
+  server.includes('unified-ui-system)')
+);
+
+check('legacy runtime injects a single authoritative stylesheet last',
+  server.includes('id="tt-authoritative-ui"') &&
+  server.includes("versioned('/unified-ui-system.css')") &&
+  server.indexOf("versioned('/unified-ui-system.css')") > server.indexOf("versioned('/employee-assist-ui.css')")
+);
+
+check('legacy runtime cache version is advanced for ui v2',
+  server.includes("CLIENT_ASSET_VERSION = '20260922-ui-v2-all'")
 );
 
 check('full syntax wall includes authoritative ui contract',pkg.includes('check:unified-ui'));
