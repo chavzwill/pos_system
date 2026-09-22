@@ -311,6 +311,76 @@ th,td{padding:13px 14px!important;border-bottom:1px solid var(--tt-border)!impor
 :is(.is-warn,.warn,[class*="warning"],[class*="pending"],[class*="attention"]){color:#8A5A0A!important}
 :is(.is-error,.error,.danger,[class*="failed"],[class*="rejected"],[class*="overdue"]){color:var(--tt-danger)!important}
 
+/* Exact palette convergence for legacy selectors that previously carried literal brand colors. */
+:is(
+  .tt-rent,.tt-wo,.tt-finctl,.tt-crm,.tt-promo,.tt-supplier-ledger,.tt-op-reports,.tt-purch,
+  .tt-settlement,.tt-tech-pay,.tt-tmi,.tt-coach,.tt-aiacct,.tt-ledger,.tt-inv,.tt-tr,.tt-quotes
+) :is([class*="eyebrow"],[class*="kicker"]){color:var(--tt-green)!important}
+
+:is(
+  .tt-rent__toolbar button,.tt-rent__actions button,.tt-rent__missing-card button,.tt-rent__modal button,
+  .tt-wo__new,.tt-wo__actions button.primary,.tt-wo__form button,.tt-wo__qc-actions button.primary,
+  .tt-finctl__filters button,
+  .tt-promo__toolbar>button,.tt-promo-detail__head button,.tt-promo-section-head button,.tt-promo-form footer button:last-child,.tt-promo__filters button.is-active,
+  .tt-supplier-ledger__toolbar button,.tt-supplier-ledger-modal__actions button:last-child,
+  .tt-op-reports__controls button,
+  .tt-purch button,
+  .tt-settlement__filters button,.tt-settlement .dialogactions button:last-child,
+  .tt-tech-pay button.tt-action.is-primary
+){
+  background:var(--tt-green)!important;border-color:var(--tt-green)!important;color:#fff!important
+}
+:is(
+  .tt-rent__toolbar button,.tt-rent__actions button,.tt-rent__missing-card button,.tt-rent__modal button,
+  .tt-wo__new,.tt-wo__actions button.primary,.tt-wo__form button,.tt-wo__qc-actions button.primary,
+  .tt-finctl__filters button,.tt-promo__toolbar>button,.tt-promo__filters button.is-active,
+  .tt-supplier-ledger__toolbar button,.tt-op-reports__controls button,.tt-purch button,.tt-settlement__filters button
+):hover{background:var(--tt-green-deep)!important;border-color:var(--tt-green-deep)!important}
+
+:is(.tt-wo-row.is-active,.tt-crm-row.is-active,.tt-purch__row.is-selected,.tt-tech-score__row.is-selected){
+  background:var(--tt-green-soft)!important;border-color:var(--tt-green)!important
+}
+:is(.tt-wo-row:hover,.tt-crm-row:hover,.tt-promo-row:hover,.tt-op-reports__card:hover){
+  border-color:#9CC9AE!important;background:#F5FAF7!important
+}
+:is(.tt-wo__quality-state.is-ready>span,.tt-wo__checks .is-pass>span,.tt-wo__quality-latest strong.is-pass){
+  background:var(--tt-success-soft)!important;color:var(--tt-success)!important
+}
+:is(.tt-wo__qc-checklist input){accent-color:var(--tt-green)!important}
+.tt-purch__spinner{border-top-color:var(--tt-green)!important}
+.tt-tech-score__coverage-bar span{background:var(--tt-green)!important}
+.tt-purch__head:before{background:var(--tt-green)!important}
+.tt-op-reports-launcher{
+  min-height:44px!important;padding:0 14px!important;border:1px solid var(--tt-border-strong)!important;
+  border-radius:var(--tt-radius-sm)!important;background:var(--tt-surface)!important;color:var(--tt-green-deep)!important;
+  font-size:13px!important;font-weight:750!important
+}
+.tt-op-reports-launcher:hover{border-color:#9CC9AE!important;background:var(--tt-green-soft)!important}
+.tt-settlement{
+  font-family:Inter,Geist,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
+  font-size:14px!important;line-height:1.45!important;color:var(--tt-text)!important
+}
+.tt-settlement :is(div,section,article,aside,nav,header,footer,p,span,small,label,strong,b,em,button,input,select,textarea,th,td,a){font-size:inherit!important}
+.tt-settlement :is(small,[class*="eyebrow"],[class*="meta"],[class*="hint"],[class*="muted"],[class*="label"],[class*="badge"],[class*="status"],[class*="pill"]){font-size:12px!important;line-height:1.35!important}
+.tt-settlement :is(h1,h2,h3,h4){color:var(--tt-text)!important;letter-spacing:-.025em!important;line-height:1.15!important;text-transform:none!important}
+.tt-settlement h2{font-size:24px!important}.tt-settlement h3{font-size:18px!important}
+.tt-settlement p{font-size:13px!important;line-height:1.55!important;color:var(--tt-text-2)!important}
+.tt-settlement button{min-height:44px!important;border-radius:var(--tt-radius-sm)!important;font-size:13px!important;font-weight:750!important}
+.tt-settlement :is(input:not([type="checkbox"]):not([type="radio"]),select){
+  min-height:48px!important;border:1px solid var(--tt-border-strong)!important;border-radius:var(--tt-radius-sm)!important;
+  background:#fff!important;color:var(--tt-text)!important;padding:0 14px!important;font-size:13px!important
+}
+.tt-settlement__panel{
+  background:var(--tt-bg)!important;border:1px solid var(--tt-border)!important;border-radius:var(--tt-radius-xl)!important;box-shadow:var(--tt-shadow-float)!important
+}
+.tt-settlement__panel>header{background:var(--tt-surface)!important;border-bottom:1px solid var(--tt-border)!important}
+.tt-settlement__filters{gap:10px!important;padding:12px 14px!important;background:var(--tt-surface-muted)!important;border-color:var(--tt-border)!important}
+.tt-settlement-kpi{
+  background:var(--tt-surface)!important;border:1px solid var(--tt-border)!important;border-radius:var(--tt-radius-md)!important;box-shadow:none!important
+}
+.tt-settlement-kpi strong{font-size:24px!important;color:var(--tt-text)!important}
+.tt-settlement .tiny{min-height:24px!important;border-radius:999px!important;padding:4px 9px!important;font-size:11px!important}
+
 /* Preserve the deliberate Sales/POS hierarchy from the V2 reference surface. */
 .tt-sales__eyebrow{font-size:11px!important}
 .tt-sales__head h2{font-size:30px!important;line-height:1.05!important;letter-spacing:-.04em!important}
