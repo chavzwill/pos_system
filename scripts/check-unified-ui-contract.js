@@ -152,6 +152,21 @@ check('legacy runtime cache version is advanced for ui v2',
   server.includes("CLIENT_ASSET_VERSION = '20260922-ui-v2-all'")
 );
 
+check('staff manual does not publish retired credential guidance',
+  !manual.includes('123456') &&
+  !manual.includes('stored and checked in plain text') &&
+  manual.includes('fresh production installation does not create a usable default administrator password') &&
+  manual.includes('Passwords and staff PINs are protected using secure password hashing')
+);
+
+check('staff manual describes the task-led home',
+  manual.includes('<h2 class="module">Home</h2>') &&
+  manual.includes('What do you want to do?') &&
+  manual.includes('Live snapshot') &&
+  manual.includes('Needs attention') &&
+  manual.includes('More tools')
+);
+
 check('staff manual is governed by ui v2',
   manual.includes('/manual-ui-v2.css?v=20260922-ui-v2-all') &&
   manual.includes('<title>Total Tools — Staff Manual</title>') &&
