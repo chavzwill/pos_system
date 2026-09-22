@@ -311,6 +311,30 @@ th,td{padding:13px 14px!important;border-bottom:1px solid var(--tt-border)!impor
 :is(.is-warn,.warn,[class*="warning"],[class*="pending"],[class*="attention"]){color:#8A5A0A!important}
 :is(.is-error,.error,.danger,[class*="failed"],[class*="rejected"],[class*="overdue"]){color:var(--tt-danger)!important}
 
+/* Preserve the deliberate Sales/POS hierarchy from the V2 reference surface. */
+.tt-sales__eyebrow{font-size:11px!important}
+.tt-sales__head h2{font-size:30px!important;line-height:1.05!important;letter-spacing:-.04em!important}
+.tt-sales__head p{font-size:13px!important}
+.tt-sales__tabs button,.tt-sales__toolbar button{font-size:13px!important}
+.tt-sales__product strong{font-size:15px!important;line-height:1.35!important}
+.tt-sales__product span{font-size:12px!important}
+.tt-sales__product footer b{font-size:16px!important}
+.tt-sales__product footer em{font-size:12px!important}
+.tt-sales__customer small{font-size:12px!important}
+.tt-sales__customer-selected{font-size:13px!important}
+.tt-sales__line strong{font-size:13px!important}
+.tt-sales__line span{font-size:12px!important}
+.tt-sales__totals>div{font-size:13px!important}
+.tt-sales__totals div.total{font-size:22px!important}
+.tt-sales__tx strong,.tt-sales__tx b{font-size:13px!important}
+.tt-sales__tx span{font-size:12px!important}
+.tt-sales__tx em{font-size:11px!important}
+.tt-sales__tx-modal header small{font-size:12px!important}
+.tt-sales__tx-modal header h3{font-size:22px!important}
+.tt-sales__tx-modal header p{font-size:13px!important}
+.tt-sales__receipt-line,.tt-sales__receipt-totals div,.tt-sales__payment-evidence div{font-size:13px!important}
+.tt-sales__receipt-totals .total{font-size:21px!important}
+
 /* Predictive lookup and floating helpers follow the same surface system. */
 .tt-predictive-list{background:var(--tt-surface)!important;border:1px solid var(--tt-border)!important;border-radius:var(--tt-radius-md)!important;box-shadow:var(--tt-shadow-float)!important;overflow:hidden!important}
 .tt-predictive-option{min-height:48px!important;padding:11px 14px!important;font-size:13px!important;border-color:var(--tt-border)!important}
