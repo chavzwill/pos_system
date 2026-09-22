@@ -62,6 +62,14 @@ check('tables stay scannable instead of becoming card grids',
   authority.includes('td{font-size:13px!important')
 );
 
+check('legacy literal palette remnants are neutralized by exact v2 selectors',
+  authority.includes('.tt-op-reports-launcher{') &&
+  authority.includes('.tt-settlement__panel{') &&
+  authority.includes('.tt-purch__spinner{border-top-color:var(--tt-green)!important}') &&
+  authority.includes('.tt-tech-score__coverage-bar span{background:var(--tt-green)!important}') &&
+  authority.includes('.tt-purch__head:before{background:var(--tt-green)!important}')
+);
+
 check('status language has semantic success warning danger treatment',
   authority.includes('--tt-success:#11864A') &&
   authority.includes('--tt-warning:#C98B16') &&
@@ -79,7 +87,7 @@ const sectors=[
   '.tt-sales','.tt-held','.tt-cc','cdw-panel','.tt-quotes','.tt-lw','.tt-promo',
   '.tt-rent','.tt-inv','.tt-tr','.tt-purch','suppliers-shell','.tt-supplier-ledger','wow-shell',
   '.tt-wo','.tt-repair-auth__panel','.tt-repair-comms__panel','.tt-rn__panel','.tt-repair-ops__panel','.tt-rpi-panel',
-  '.tt-logistics','.tt-li-panel','.tt-si-panel','.tt-rebalance',
+  '.tt-logistics','.tt-li-panel','.tt-si-panel','.tt-rebalance','.tt-settlement',
   '.tt-crm','.tt-cp','.tt-aiacct','.tt-ledger','.arw','.tt-finctl','.tt-op-reports',
   '.tt-admin','.tt-settings','.tt-rbac','.iaw','catalog-admin-panel',
   'ecom-shell','cm-shell','denom-shell','.tt-tmi','.tt-tech-pay','.tt-coach',
