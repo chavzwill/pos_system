@@ -29,7 +29,7 @@ const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
 const fastShellPath = path.join(publicDir, 'app-shell.html');
-const CLIENT_ASSET_VERSION = '20260824-0800';
+const CLIENT_ASSET_VERSION = '20260922-ui-v2-all';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -55,7 +55,9 @@ function getLegacyAppScript() {
 function getEnhancedIndex() {
   if (enhancedIndexCache) return enhancedIndexCache;
   const source = fs.readFileSync(indexPath, 'utf8');
-  const legacy = extractLegacyApp(source);
+  const retiredThemePattern = /<link\b[^>]*href=["'][^"']*\/(?:workspace-quality-pass|premium-shell-v2|premium-shell-v3|late-2020s-workspaces|late-2020s-intelligence-finance|late-2020s-operations|late-2020s-pos-commerce|late-2020s-admin-marketing|late-2020s-config-crm|meeting-demo-shell|meeting-readiness)\.css(?:\?[^"']*)?["'][^>]*>\s*/gi;
+  const presentationSource = source.replace(retiredThemePattern, '');
+  const legacy = extractLegacyApp(presentationSource);
   legacyAppScriptCache = legacy.script;
   const headAssets = [
     '<script src="' + versioned('/client-diagnostics.js') + '" defer></script>',
@@ -63,7 +65,8 @@ function getEnhancedIndex() {
     '<link rel="stylesheet" href="' + versioned('/pos-experience.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/employee-workspace-home.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/predictive-lookup.css') + '">',
-'<link rel="stylesheet" href="' + versioned('/employee-assist-ui.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/employee-assist-ui.css') + '">',
+    '<link id="tt-authoritative-ui" rel="stylesheet" href="' + versioned('/unified-ui-system.css') + '">',
   ];
   const bodyAssets = [
     '<script src="' + versioned('/pos-guide-map.js') + '" defer></script>',
@@ -76,7 +79,7 @@ function getEnhancedIndex() {
 '<script src="' + versioned('/employee-assist-ui.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
   ];
-  let html = source.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '" defer></script>' + source.slice(legacy.end);
+  let html = presentationSource.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '" defer></script>' + presentationSource.slice(legacy.end);
   for (const tag of headAssets) html = html.replace('</head>', `  ${tag}\n</head>`);
   for (const tag of bodyAssets) html = html.replace('</body>', `  ${tag}\n</body>`);
   enhancedIndexCache = html;
