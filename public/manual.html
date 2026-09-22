@@ -122,7 +122,7 @@
     <div class="toc-group">
       <div class="toc-group-label">Start Here</div>
       <a href="#getting-started">Getting Started</a>
-      <a href="#dashboard">Dashboard</a>
+      <a href="#dashboard">Home</a>
     </div>
     <div class="toc-group">
       <div class="toc-group-label">Sales</div>
@@ -181,7 +181,7 @@
       <div class="callout note"><strong>Security note</strong>Passwords and staff PINs are protected using secure password hashing. Older credentials are upgraded when they are successfully used. Password changes and privileged resets revoke existing sessions. Never share your password or PIN, and only use credentials issued through the approved staff setup or reset process.</div>
 
       <h3>The sidebar</h3>
-      <p>The left sidebar is grouped into hubs — <strong>Sales</strong>, <strong>Accounts</strong>, <strong>Warehouse</strong>, <strong>Purchasing</strong>, <strong>Dispatch</strong>, and <strong>Admin</strong> — plus <strong>Dashboard</strong> at the top. Clicking a hub opens a tile grid of the individual screens inside it; which tiles you see depends on your permissions (see <a href="#security">Security Groups</a>). This manual link itself opens in a new tab so you can keep it open for reference while you work.</p>
+      <p>The left sidebar shows the work areas assigned to you, such as <strong>Sales</strong>, <strong>Repairs</strong>, <strong>Rentals</strong>, <strong>Dispatch</strong>, <strong>Inventory</strong>, <strong>Purchasing</strong>, <strong>Customers</strong>, <strong>Finance</strong>, or <strong>Admin</strong>. Your permissions determine which areas appear. Selecting an area updates Home to show that team's most useful actions, live snapshot and exceptions instead of sending you through a separate tile directory.</p>
 
       <h3>Branches</h3>
       <p>Everything in the app — stock, sales, drawers, warehouse bins — is scoped to a <strong>branch</strong>. If your account has multi-branch access and is assigned to more than one branch, you'll see a branch switcher; otherwise you're locked to your assigned default branch. See <a href="#branches">Branches</a> for how locations are set up.</p>
@@ -191,18 +191,16 @@
     </section>
 
     <section class="module" id="dashboard">
-      <h2 class="module">Dashboard</h2>
-      <p class="module-intro">The landing page after login — a snapshot of how the business (or your branch) is doing right now.</p>
-      <p>Everyone sees a dashboard regardless of role. It shows:</p>
+      <h2 class="module">Home</h2>
+      <p class="module-intro">Your role-aware starting point for the work that matters now.</p>
+      <p>Home changes with the work area you select and only shows information and actions available to your signed-in account. At the top you will see your current branch and a greeting, followed by four clear sections:</p>
       <ul>
-        <li>Today's and this month's sales totals and transaction counts</li>
-        <li>Total active customers</li>
-        <li>A <strong>low-stock count</strong> badge — also shown as a red notification in the top header everywhere in the app, so it's always visible, not just on this page</li>
-        <li>The five most recent transactions</li>
-        <li>A 7-day sales trend</li>
-        <li>A per-branch breakdown, if you have multi-branch access</li>
+        <li><strong>What do you want to do?</strong> — the most useful actions for the selected work area, such as starting a sale, finding a customer, recalling a held order, reviewing stock, or opening dispatch.</li>
+        <li><strong>Live snapshot</strong> — a small set of operational numbers that help you decide what to do next. The exact measures depend on the selected area.</li>
+        <li><strong>Needs attention</strong> — real exceptions such as stockouts, overdue rentals, purchase requests waiting for approval, late purchase orders, or overdue supplier payments when that data is available.</li>
+        <li><strong>More tools</strong> — additional permitted functions for the selected work area.</li>
       </ul>
-      <div class="callout note"><strong>Low stock</strong>The low-stock count checks each product's stock at the branch level first, falling back to its overall stock figure only for products that have never been tracked per-branch. Rental items and services are never counted as "low stock" since they don't carry ordinary sale inventory.</div>
+      <div class="callout note"><strong>Truthful states</strong>If a work area does not provide a live summary or attention feed, Home says that the data is unavailable instead of reporting a false zero or implying that everything is clear.</div>
     </section>
 
     <section class="module" id="pos">
