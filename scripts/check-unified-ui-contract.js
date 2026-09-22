@@ -51,6 +51,7 @@ check('authoritative shell uses clean design tokens',shellCss.includes('--ui-bg:
 check('authoritative shell avoids tiny desktop typography',!/(?:font-size:)\s*(?:[1-9](?:\.[0-9]+)?)px/.test(shellCss));
 check('clean workspace layer exists',workspaceCss.includes('--cw-bg:')&&workspaceCss.includes('.tt-sales__panel')&&workspaceCss.includes('.tt-admin__panel'));
 check('clean shell enhancer is active',shell.includes('/clean-shell.js')&&!shell.includes('/meeting-demo-shell.js'));
+check('clean Guide Me layer replaces old final-pass UI',shell.includes('/clean-guide.css')&&!shell.includes('/guided-mode-final-pass.css')&&!shell.includes('/guided-mode-qa.css'));
 check('full syntax wall includes unified UI contract',pkg.includes('check:unified-ui'));
 if(failed){console.error('Unified UI contract failed: '+failed);process.exit(1)}
 console.log('Unified UI contract passed.');
