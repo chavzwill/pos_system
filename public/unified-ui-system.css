@@ -73,7 +73,7 @@ th,td{padding:13px 14px!important;border-bottom:1px solid var(--tt-border)!impor
   .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
   .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
 ) :is(div,section,article,aside,nav,header,footer,p,span,small,label,strong,b,em,button,input,select,textarea,th,td,a){
-  font-size:inherit
+  font-size:inherit!important
 }
 :is(
   .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
@@ -145,6 +145,17 @@ th,td{padding:13px 14px!important;border-bottom:1px solid var(--tt-border)!impor
   .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
   .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
 ) :is(p,[class*="description"],[class*="subtitle"]){font-size:13px!important;line-height:1.55!important;color:var(--tt-text-2)!important}
+
+
+/* Remove the old yellow-strip / dense-header treatment from sector chrome. */
+:is(
+  .tt-held,.tt-cc,.tt-quotes,.tt-lw,.tt-promo,.tt-rent,.tt-inv,.tt-tr,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-admin,.tt-settings,.tt-rbac,.iaw,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,.tt-repair-auth__panel,.tt-repair-comms__panel,
+  .tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,.tt-si-panel,.tt-rebalance,.tt-ea-modal,.tt-learn,.tt-guide,.tt-po-document-context,.tt-qi__panel
+) :is([class$="__head"],[class$="-head"]){
+  background:var(--tt-surface)!important;border-bottom:1px solid var(--tt-border)!important;border-bottom-color:var(--tt-border)!important
+}
 
 /* Controls are large enough for staff use and consistent across every module. */
 :is(
