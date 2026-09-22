@@ -91,6 +91,12 @@ check('all major frontend sectors are governed by the authoritative layer',
   sectors.every(token=>authority.includes(token))
 );
 
+check('global authority preserves the sales reference hierarchy',
+  authority.includes('.tt-sales__head h2{font-size:30px!important') &&
+  authority.includes('.tt-sales__product strong{font-size:15px!important') &&
+  authority.includes('.tt-sales__totals div.total{font-size:22px!important')
+);
+
 check('frontline reference surfaces keep their dedicated v2 implementations',
   shellCss.includes('--tt-green:#0B7A3E') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(shellCss) &&
