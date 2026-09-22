@@ -55,7 +55,7 @@ function getLegacyAppScript() {
 function getEnhancedIndex() {
   if (enhancedIndexCache) return enhancedIndexCache;
   const source = fs.readFileSync(indexPath, 'utf8');
-  const retiredThemePattern = /<link\b[^>]*href=["'][^"']*\/(?:workspace-quality-pass|premium-shell-v2|premium-shell-v3|late-2020s-workspaces|late-2020s-intelligence-finance|late-2020s-operations|late-2020s-pos-commerce|late-2020s-admin-marketing|late-2020s-config-crm|meeting-demo-shell|meeting-readiness)\.css(?:\?[^"']*)?["'][^>]*>\s*/gi;
+  const retiredThemePattern = /<link\b[^>]*href=["'][^"']*\/(?:workspace-quality-pass|premium-shell-v2|premium-shell-v3|late-2020s-workspaces|late-2020s-intelligence-finance|late-2020s-operations|late-2020s-pos-commerce|late-2020s-admin-marketing|late-2020s-config-crm|meeting-demo-shell|meeting-readiness|unified-ui-system)\.css(?:\?[^"']*)?["'][^>]*>\s*/gi;
   const presentationSource = source.replace(retiredThemePattern, '');
   const legacy = extractLegacyApp(presentationSource);
   legacyAppScriptCache = legacy.script;
