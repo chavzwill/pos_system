@@ -49,7 +49,10 @@ check('retired identity enhancer is not loaded',!deferred.includes('/total-tools
 check('topbar Guide Me has one stable text control',guideAccess.includes("b.textContent='Guide Me'")&&!guideAccess.includes("b.textContent='?'")&&!guideAccess.includes('>?</span>'));
 check('authoritative shell uses clean design tokens',shellCss.includes('--ui-bg:')&&shellCss.includes('--ui-accent:')&&shellCss.includes('.shell-primary-grid'));
 check('authoritative shell avoids tiny desktop typography',!/(?:font-size:)\s*(?:[1-9](?:\.[0-9]+)?)px/.test(shellCss));
+check('mature workspace foundations remain active beneath clean UI',shell.includes('/workspace-quality-pass.css')&&shell.includes('/late-2020s-workspaces.css')&&shell.includes('/late-2020s-pos-commerce.css')&&shell.includes('/late-2020s-operations.css')&&shell.includes('/late-2020s-intelligence-finance.css')&&shell.includes('/late-2020s-admin-marketing.css')&&shell.includes('/late-2020s-config-crm.css'));
 check('clean workspace layer exists',workspaceCss.includes('--cw-bg:')&&workspaceCss.includes('.tt-sales__panel')&&workspaceCss.includes('.tt-admin__panel'));
+check('clean workspace layer does not clip workspace interactions',!workspaceCss.includes('overflow:hidden!important'));
+check('clean workspace layer preserves selected state visibility',workspaceCss.includes('.is-selected')&&workspaceCss.includes('[aria-selected="true"]'));
 check('clean shell enhancer is active',shell.includes('/clean-shell.js')&&!shell.includes('/meeting-demo-shell.js'));
 check('clean Guide Me layer replaces old final-pass UI',shell.includes('/clean-guide.css')&&!shell.includes('/guided-mode-final-pass.css')&&!shell.includes('/guided-mode-qa.css'));
 check('full syntax wall includes unified UI contract',pkg.includes('check:unified-ui'));
