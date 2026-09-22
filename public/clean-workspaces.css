@@ -1,0 +1,133 @@
+/* Clean workspace layer — one visual language for all operational surfaces. */
+:root{
+  --cw-bg:#f5f7f6;--cw-surface:#fff;--cw-soft:#f0f5f2;--cw-tint:#eaf5ef;--cw-text:#111814;--cw-muted:#66736c;
+  --cw-line:#e2e8e4;--cw-line-strong:#d2ddd7;--cw-accent:#087b46;--cw-accent-dark:#056437;--cw-warning:#b47a00;--cw-danger:#b93a31;
+  --cw-r-sm:12px;--cw-r-md:18px;--cw-r-lg:24px;--cw-r-xl:28px;--cw-shadow:0 16px 48px rgba(13,31,22,.08);
+}
+:is(
+  .tt-sales__panel,.tt-held__panel,.tt-cc__panel,.tt-inv__panel,.tt-rent__panel,.tt-tr__panel,.tt-wo__panel,.tt-purch__panel,.tt-quotes__panel,
+  .tt-logistics__panel,.tt-reports__panel,.tt-admin__panel,.tt-settings__panel,.tt-crm__panel,.tt-cp__panel,.tt-supplier-ledger__panel,
+  .tt-aiacct__panel,.tt-ledger__panel,.arw,.iaw,.suppliers-shell,.catalog-admin-shell,.wow-panel,.ecom-panel,.cm-panel,.tt-promo__panel,.tt-lw,
+  .tt-li-panel,.tt-si-panel,.tt-finctl__panel,.cdw-panel,.denom-panel,.tt-tmi
+){
+  background:var(--cw-surface)!important;border:1px solid var(--cw-line)!important;border-radius:var(--cw-r-xl)!important;box-shadow:var(--cw-shadow)!important;color:var(--cw-text)!important;overflow:hidden!important
+}
+:is(
+  .tt-sales__panel,.tt-held__panel,.tt-cc__panel,.tt-inv__panel,.tt-rent__panel,.tt-tr__panel,.tt-wo__panel,.tt-purch__panel,.tt-quotes__panel,
+  .tt-logistics__panel,.tt-reports__panel,.tt-admin__panel,.tt-settings__panel,.tt-crm__panel,.tt-cp__panel,.tt-supplier-ledger__panel
+)>header,
+:is(.tt-admin__head,.tt-settings__panel>header,.tt-op-reports__head,.tt-wo__top,.suppliers-head,.iaw-head){
+  min-height:72px!important;padding:18px 22px!important;background:#fff!important;border-bottom:1px solid var(--cw-line)!important
+}
+:is(
+  .tt-sales__panel,.tt-held__panel,.tt-cc__panel,.tt-inv__panel,.tt-rent__panel,.tt-tr__panel,.tt-wo__panel,.tt-purch__panel,.tt-quotes__panel,
+  .tt-logistics__panel,.tt-reports__panel,.tt-admin__panel,.tt-settings__panel,.tt-crm__panel,.tt-cp__panel,.tt-supplier-ledger__panel
+) h2,
+:is(.tt-op-reports__head h2,.tt-wo__top h2,.suppliers-head h1,.iaw-head h1){
+  font-size:24px!important;line-height:1.08!important;letter-spacing:-.035em!important;font-weight:820!important;color:var(--cw-text)!important
+}
+:is(
+  .tt-sales__tabs,.tt-sales__toolbar,.tt-held__list-head,.tt-cc__toolbar,.tt-inv__toolbar,.tt-rent__toolbar,.tt-tr__toolbar,.tt-purch__toolbar,
+  .tt-quotes__toolbar,.tt-op-reports__controls,.tt-wo__filters,.tt-crm__tabs,.tt-admin__tabs,.tt-settings__panel>nav,.tt-cp__toolbar,
+  .suppliers-toolbar,.tt-supplier-ledger__toolbar,.iaw-toolbar,.catalog-admin-toolbar
+){
+  gap:8px!important;padding:10px 14px!important;background:var(--cw-soft)!important;border-color:var(--cw-line)!important
+}
+:is(
+  .tt-sales__tabs button,.tt-sales__toolbar button,.tt-held__list-head button,.tt-cc__toolbar button,.tt-inv__toolbar button,.tt-rent__toolbar button,
+  .tt-tr__toolbar button,.tt-purch__toolbar button,.tt-quotes__toolbar button,.tt-op-reports__controls button,.tt-op-reports__actions button,
+  .tt-wo__new,.tt-wo__back,.tt-crm__tabs button,.tt-admin__tabs button,.tt-settings__panel>nav button,.tt-cp-tabs button,.tt-cp__toolbar>button,
+  .suppliers-btn,.iaw-back,.iaw-primary,.iaw-row button,.catalog-admin-btn
+){
+  min-height:40px!important;padding:0 12px!important;border-radius:var(--cw-r-sm)!important;font-size:12px!important;font-weight:780!important
+}
+:is(
+  .tt-sales__catalog,.tt-sales__cart,.tt-sales__history,.tt-held__list,.tt-held__detail,.tt-cc__list,.tt-cc__detail,.tt-inv__list,.tt-inv__detail,
+  .tt-rent__list,.tt-rent__detail,.tt-tr__list,.tt-tr__detail,.tt-crm__list,.tt-crm__detail,.tt-crm__dash,.suppliers-panel,.iaw-panel,
+  .catalog-admin-panel,.arw-detail>section,.tt-op-reports__group,.tt-op-reports__table
+){
+  border:1px solid var(--cw-line)!important;border-radius:var(--cw-r-md)!important;background:#fff!important;box-shadow:none!important
+}
+:is(
+  .tt-sales__product,.tt-held__row,.tt-cc__tx,.tt-inv__facts div,.tt-rent__facts div,.tt-tr__facts div,.tt-wo__fact,.tt-wo-row,
+  .tt-crm-row,.suppliers-row,.tt-cp-card,.tt-admin-card,.tt-settings__field,.tt-settings__toggle,.iaw-row,.catalog-admin-card,.arw-row,
+  .tt-op-reports__card
+){
+  border:1px solid var(--cw-line)!important;border-radius:var(--cw-r-sm)!important;background:#fff!important;box-shadow:none!important
+}
+:is(
+  .tt-sales__product,.tt-held__row,.tt-cc__tx,.tt-wo-row,.tt-crm-row,.suppliers-row,.arw-row
+){padding:12px 13px!important}
+:is(.tt-sales__product:hover,.tt-held__row:hover,.tt-cc__tx:hover,.tt-wo-row:hover,.tt-crm-row:hover,.suppliers-row:hover,.arw-row:hover){
+  background:#fbfdfc!important;border-color:#cfdad4!important
+}
+:is(
+  .tt-sales__metrics article,.tt-held__metrics article,.tt-inv__metrics article,.tt-rent__metrics article,.tt-tr__metrics article,.tt-crm__metrics article,
+  .tt-crm__dash-metrics article,.tt-admin__metrics article,.tt-cp__metrics article,.suppliers-metrics article,.iaw-metrics article,.arw-metrics article,
+  .tt-aiacct-kpi,.tt-ledger-kpis article,.tt-op-reports__summary div
+){
+  min-height:82px!important;padding:13px 14px!important;border:1px solid var(--cw-line)!important;border-radius:var(--cw-r-md)!important;background:#fff!important;box-shadow:none!important
+}
+:is(
+  .tt-sales__metrics small,.tt-held__metrics small,.tt-inv__metrics small,.tt-rent__metrics small,.tt-tr__metrics small,.tt-crm__metrics small,
+  .tt-admin__metrics span,.tt-cp__metrics small,.suppliers-metrics small,.iaw-metrics small,.arw-metrics small,.tt-aiacct-kpi small,
+  .tt-ledger-kpis small,.tt-op-reports__summary small
+){font-size:10.5px!important;color:var(--cw-muted)!important;letter-spacing:.04em!important}
+:is(
+  .tt-sales__metrics strong,.tt-held__metrics strong,.tt-inv__metrics strong,.tt-rent__metrics strong,.tt-tr__metrics strong,.tt-crm__metrics strong,
+  .tt-admin__metrics strong,.tt-cp__metrics strong,.suppliers-metrics strong,.iaw-metrics strong,.arw-metrics strong,.tt-aiacct-kpi strong,
+  .tt-ledger-kpis strong
+){font-size:21px!important;letter-spacing:-.03em!important}
+:is(
+  .tt-sales__product strong,.tt-held__row strong,.tt-cc__tx strong,.tt-wo-row strong,.tt-crm-row strong,.suppliers-row strong,.arw-row strong,
+  .tt-op-reports__card strong
+){font-size:13px!important;line-height:1.4!important}
+:is(
+  .tt-sales__product span,.tt-held__row span,.tt-held__row small,.tt-cc__tx small,.tt-wo-row small,.tt-crm-row span,.suppliers-row small,
+  .arw-row small,.tt-op-reports__card span
+){font-size:11.5px!important;line-height:1.45!important;color:var(--cw-muted)!important}
+:is(table){border-collapse:separate;border-spacing:0}
+:is(
+  .tt-inv__table th,.tt-rent__table th,.tt-op-reports th,.tt-aiacct-tablewrap th,.tt-ledger th,.arw table th
+){padding:11px 13px!important;background:var(--cw-soft)!important;color:#506057!important;font-size:10.5px!important;letter-spacing:.05em!important}
+:is(
+  .tt-inv__table td,.tt-rent__table td,.tt-op-reports td,.tt-aiacct-tablewrap td,.tt-ledger td,.arw table td
+){padding:12px 13px!important;font-size:12px!important;line-height:1.45!important;border-color:var(--cw-line)!important}
+:is(input:not([type="checkbox"]):not([type="radio"]),select,textarea){
+  border:1px solid var(--cw-line-strong)!important;border-radius:var(--cw-r-sm)!important;background:#fff!important;color:var(--cw-text)!important
+}
+:is(input:not([type="checkbox"]):not([type="radio"]),select){min-height:42px!important}
+:is(input:focus,select:focus,textarea:focus){border-color:var(--cw-accent)!important;box-shadow:0 0 0 4px rgba(8,123,70,.08)!important;outline:none!important}
+:is(.btn,.btn-primary,.btn-secondary,.btn-success,button){font-family:inherit}
+:is(.btn-primary,.btn-success){background:var(--cw-accent)!important;border-color:var(--cw-accent)!important;color:#fff!important}
+:is(.btn-primary:hover,.btn-success:hover){background:var(--cw-accent-dark)!important;border-color:var(--cw-accent-dark)!important}
+:is(.modal,.tt-rent__modal,.tt-tr__composer,.tt-cp-modal form,.suppliers-card,.iaw-secret,.catalog-admin-card,.tt-sales__tx-modal>section){
+  border:1px solid var(--cw-line)!important;border-radius:var(--cw-r-lg)!important;background:#fff!important;box-shadow:var(--cw-shadow)!important
+}
+:is(.modal-header,.tt-rent__modal>header,.tt-sales__tx-modal header){padding:17px 19px!important;border-bottom:1px solid var(--cw-line)!important;background:#fff!important}
+:is(.modal-footer,.tt-rent__modal footer,.tt-sales__tx-modal footer){padding:13px 17px!important;border-top:1px solid var(--cw-line)!important;background:var(--cw-soft)!important}
+:is([class$="__loading"],[class$="__empty"],[class$="__state"],.arw-loading,.arw-empty){
+  color:var(--cw-muted)!important;font-size:12.5px!important;line-height:1.5!important
+}
+:is([class$="__error"],.arw-error){color:var(--cw-danger)!important}
+:is(.tt-rent__status,.tt-tr em,.tt-wo-pill,[class*="__status"],[class*="-status"]){
+  border-radius:999px!important;font-size:10px!important;font-weight:760!important
+}
+:is(
+  .tt-inv__table,.tt-rent__table,.tt-op-reports__table,.tt-aiacct-tablewrap,.tt-ledger__tablewrap,.arw-table
+){overflow:auto!important;overscroll-behavior:contain}
+@media(max-width:900px){
+  :is(
+    .tt-sales__panel,.tt-held__panel,.tt-cc__panel,.tt-inv__panel,.tt-rent__panel,.tt-tr__panel,.tt-wo__panel,.tt-purch__panel,.tt-quotes__panel,
+    .tt-logistics__panel,.tt-reports__panel,.tt-admin__panel,.tt-settings__panel,.tt-crm__panel,.tt-cp__panel,.tt-supplier-ledger__panel,
+    .tt-aiacct__panel,.tt-ledger__panel,.arw,.iaw,.suppliers-shell,.catalog-admin-shell
+  ){border-radius:18px!important;max-width:calc(100vw - 12px)!important}
+}
+@media(max-width:620px){
+  :is(
+    .tt-sales__panel,.tt-held__panel,.tt-cc__panel,.tt-inv__panel,.tt-rent__panel,.tt-tr__panel,.tt-wo__panel,.tt-purch__panel,.tt-quotes__panel,
+    .tt-logistics__panel,.tt-reports__panel,.tt-admin__panel,.tt-settings__panel,.tt-crm__panel,.tt-cp__panel,.tt-supplier-ledger__panel
+  )>header{min-height:64px!important;padding:15px 16px!important}
+  :is(.tt-sales__panel,.tt-held__panel,.tt-cc__panel,.tt-inv__panel,.tt-rent__panel,.tt-tr__panel,.tt-wo__panel,.tt-purch__panel,.tt-quotes__panel,.tt-logistics__panel,.tt-reports__panel,.tt-admin__panel,.tt-settings__panel,.tt-crm__panel,.tt-cp__panel,.tt-supplier-ledger__panel) h2{font-size:21px!important}
+}
+@media(prefers-reduced-motion:reduce){*{transition-duration:.01ms!important;animation-duration:.01ms!important}}
