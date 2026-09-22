@@ -3,7 +3,7 @@ const fs=require('fs'),path=require('path');
 const root=path.join(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 let failed=0;const check=(n,p)=>p?console.log('PASS Unified UI:',n):(failed++,console.error('FAIL Unified UI:',n));
-const css=read('public/unified-ui-system.css'),shell=read('public/app-shell.html'),legacy=read('public/index.html'),pkg=read('package.json');
+const css=read('public/unified-ui-system.css'),shell=read('public/app-shell.html'),shellCss=read('public/app-shell.css'),shellJs=read('public/app-shell.js'),salesCss=read('public/sales-workspace.css'),legacy=read('public/index.html'),pkg=read('package.json');
 check('shared token system exists',css.includes('--tt-control-h:42px')&&css.includes('--tt-radius-lg:18px')&&css.includes('--tt-space-4:16px'));
 check('button heights and radii are normalized',css.includes('.btn{min-height:var(--tt-control-h)')&&css.includes('border-radius:var(--tt-radius-sm)'));
 check('keyboard focus is visible',css.includes(':focus-visible')&&css.includes('outline:3px solid rgba(8,123,62,.20)'));
@@ -40,7 +40,14 @@ check('accounts receivable uses shared panel row and detail geometry',css.includ
 check('reduced motion is respected',css.includes('@media(prefers-reduced-motion:reduce)'));
 check('scrollbars are restrained and consistent',css.includes('::-webkit-scrollbar-thumb'));
 check('legacy POS loads unified UI after feature styles',legacy.indexOf('/unified-ui-system.css')>legacy.indexOf('/rental-create-wizard.css'));
-check('operations shell loads unified UI last',shell.indexOf('/unified-ui-system.css')>shell.indexOf('/employee-learning-center.css'));
+check('operations shell owns the new visual system instead of loading the legacy theme stack',!shell.includes('/unified-ui-system.css')&&!shell.includes('/premium-shell-v2.css')&&!shell.includes('/premium-shell-v3.css')&&!shell.includes('/late-2020s-'));
+check('authoritative Total Tools palette anchors the shell',shellCss.includes('--tt-green:#0B7A3E')&&shellCss.includes('--tt-yellow:#F2D11F')&&shellCss.includes('--tt-bg:#F6F7F4')&&shellCss.includes('--tt-nav:#101713'));
+check('new shell uses human task-led home sections',shellJs.includes('What do you want to do?')&&shellJs.includes('Live snapshot')&&shellJs.includes('Needs attention')&&shellJs.includes('More tools'));
+check('new shell uses staff language for primary navigation',shellJs.includes("service:'Repairs'")&&shellJs.includes("dispatch:'Dispatch'")&&shellJs.includes("crm:'Customers'")&&shellJs.includes("administration:'Admin'"));
+check('new shell keeps ordinary staff text at 11px or above',!/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(shellCss));
+check('new shell provides accessible control and focus geometry',shellCss.includes('min-height:44px')&&shellCss.includes('height:48px')&&shellCss.includes(':focus-visible')&&shellCss.includes('@media(prefers-reduced-motion:reduce)'));
+check('sales reference workspace follows new radius and control laws',salesCss.includes('border-radius:28px')&&salesCss.includes('height:48px')&&salesCss.includes('border-radius:18px')&&salesCss.includes('@media(prefers-reduced-motion:reduce)'));
+check('sales staff text is not solved with tiny typography',!/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(salesCss));
 check('full syntax wall includes unified UI contract',pkg.includes('check:unified-ui'));
 if(failed){console.error('Unified UI contract failed: '+failed);process.exit(1)}
 console.log('Unified UI contract passed.');
