@@ -137,14 +137,31 @@ check('every dynamically declared workspace stylesheet exists',
   moduleCss.length>=20 && moduleCss.every(file=>fs.existsSync(path.join(root,'public',path.basename(file))))
 );
 
-check('home is task-led and written for staff',
-  shellJs.includes('What do you want to do?') &&
-  shellJs.includes('Live snapshot') &&
+check('home is task-led, quiet and written for staff',
+  shellJs.includes('What do you need?') &&
+  shellJs.includes('Today at a glance') &&
   shellJs.includes('Needs attention') &&
-  shellJs.includes('More tools') &&
+  shellJs.includes('function domainIntro(') &&
+  shellJs.includes('function moreCards(') &&
   shellJs.includes("service:'Repairs'") &&
   shellJs.includes("crm:'Customers'") &&
   shellJs.includes("administration:'Admin'")
+);
+
+check('purchasing landing keeps four clear first-level destinations',
+  shellJs.includes("purchasing:[['Suppliers'") &&
+  shellJs.includes("['Purchase Orders'") &&
+  shellJs.includes("['Purchase Requests'") &&
+  shellJs.includes("['Receiving'") &&
+  shellJs.includes("'suppliers-workspace':['/suppliers-workspace.css'") &&
+  purchasingJs.includes('async function open(opts={})')
+);
+
+check('advanced tools are progressively disclosed instead of always visible',
+  shellJs.includes('<details class="shell-more">') &&
+  shellCss.includes('.shell-more summary') &&
+  shellCss.includes('.shell-choice-grid') &&
+  shellCss.includes('.shell-quiet-section--snapshot')
 );
 
 check('quick command removes navigation hunting for permitted tasks',
@@ -243,12 +260,13 @@ check('staff manual does not publish retired credential guidance',
   manual.includes('Passwords and staff PINs are protected using secure password hashing')
 );
 
-check('staff manual describes the task-led home',
+check('staff manual describes the simple task-led home',
   manual.includes('<h2 class="module">Home</h2>') &&
-  manual.includes('What do you want to do?') &&
-  manual.includes('Live snapshot') &&
+  manual.includes('What do you need?') &&
+  manual.includes('Today at a glance') &&
   manual.includes('Needs attention') &&
-  manual.includes('More tools')
+  manual.includes('More tools') &&
+  manual.includes('Suppliers, Purchase Orders, Purchase Requests, and Receiving')
 );
 
 check('staff manual is governed by ui v2',
