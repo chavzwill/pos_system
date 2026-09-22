@@ -2,52 +2,134 @@
 const fs=require('fs'),path=require('path');
 const root=path.join(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-let failed=0;const check=(n,p)=>p?console.log('PASS Unified UI:',n):(failed++,console.error('FAIL Unified UI:',n));
-const css=read('public/unified-ui-system.css'),shell=read('public/app-shell.html'),shellCss=read('public/app-shell.css'),shellJs=read('public/app-shell.js'),salesCss=read('public/sales-workspace.css'),legacy=read('public/index.html'),pkg=read('package.json');
-check('shared token system exists',css.includes('--tt-control-h:42px')&&css.includes('--tt-radius-lg:18px')&&css.includes('--tt-space-4:16px'));
-check('button heights and radii are normalized',css.includes('.btn{min-height:var(--tt-control-h)')&&css.includes('border-radius:var(--tt-radius-sm)'));
-check('keyboard focus is visible',css.includes(':focus-visible')&&css.includes('outline:3px solid rgba(8,123,62,.20)'));
-check('form controls share focus behavior',css.includes('input:focus,select:focus,textarea:focus')&&css.includes('box-shadow:0 0 0 3px'));
-check('modal chrome is normalized',css.includes('.modal-header{padding:16px 20px')&&css.includes('.modal-footer{padding:14px 20px'));
-check('workspace panels share modern surface law',css.includes('.tt-sales__panel')&&css.includes('.tt-purch__panel')&&css.includes('.tt-rent__panel')&&css.includes('box-shadow:var(--tt-shadow-panel)'));
-check('loading empty and error states share typography',css.includes('[class$="__loading"]')&&css.includes('[class$="__empty"]')&&css.includes('[class$="__error"]'));
-check('commerce handoff surfaces are normalized together',css.includes('.tt-sales__catalog')&&css.includes('.tt-held__detail')&&css.includes('.tt-cc__detail'));
-check('sales held and cashier actions share control law',css.includes('.tt-sales__actions button')&&css.includes('.tt-held__payment-grid button')&&css.includes('.tt-cc__action button'));
-check('mobile modal behavior is normalized',css.includes('@media(max-width:760px)')&&css.includes('.modal-footer .btn{flex:1 1 auto}'));
-check('operational toolbars share spacing and surface law',css.includes('.tt-inv__toolbar')&&css.includes('.tt-rent__toolbar')&&css.includes('.tt-tr__toolbar')&&css.includes('.tt-op-reports__controls')&&css.includes('.tt-wo__filters'));
-check('operational metrics share card geometry',css.includes('.tt-inv__metrics article')&&css.includes('.tt-rent__metrics article')&&css.includes('.tt-tr__metrics article'));
-check('inventory rental and transfer details share surface rhythm',css.includes('.tt-inv__detail')&&css.includes('.tt-rent__detail')&&css.includes('.tt-tr__detail'));
-check('repair workspace uses shared detail card law',css.includes('.tt-wo__detail-card')&&css.includes('.tt-wo-row'));
-check('operational reports use shared panel and card law',css.includes('.tt-op-reports{border-radius:var(--tt-radius-xl)')&&css.includes('.tt-op-reports__card'));
-check('rental modal follows shared modal geometry',css.includes('.tt-rent__modal{border-radius:var(--tt-radius-lg)')&&css.includes('.tt-rent__modal footer'));
-check('customer CRM and programs share back-office surface law',css.includes('.tt-crm__panel')&&css.includes('.tt-cp__panel')&&css.includes('.tt-crm__facts')&&css.includes('.tt-cp-card'));
-check('suppliers and supplier ledger share back-office geometry',css.includes('.suppliers-panel')&&css.includes('.tt-supplier-ledger__panel')&&css.includes('.suppliers-grid'));
-check('admin and settings share toolbar card and footer rhythm',css.includes('.tt-admin__toolbar')&&css.includes('.tt-admin-card')&&css.includes('.tt-settings__field')&&css.includes('.tt-settings__panel footer'));
-check('integration admin uses shared panel row and secret modal law',css.includes('.iaw-panel')&&css.includes('.iaw-row')&&css.includes('.iaw-secret'));
-check('catalog admin remains spacious but follows shared controls and panels',css.includes('.catalog-admin-panel')&&css.includes('.catalog-admin-btn')&&css.includes('.catalog-admin-card'));
-check('accounts receivable follows shared panel toolbar and row law',css.includes('.arw{border-radius:var(--tt-radius-xl)')&&css.includes('.arw-toolbar')&&css.includes('.arw-row'));
-check('warehouse ecommerce and commissions share secondary surface law',css.includes('.wow-panel')&&css.includes('.ecom-panel')&&css.includes('.cm-panel'));
-check('promotions and layaway follow shared commerce geometry',css.includes('.tt-promo__panel')&&css.includes('.tt-promo-row')&&css.includes('.tt-lw{border-radius:var(--tt-radius-xl)'));
-check('logistics scheduling and financial intelligence share panel rhythm',css.includes('.tt-li-panel')&&css.includes('.tt-si-panel')&&css.includes('.tt-finctl__panel'));
-check('drawer and denomination surfaces preserve spacious shared geometry',css.includes('.cdw-panel')&&css.includes('.cdw-tenders article')&&css.includes('.denom-panel')&&css.includes('.denom-card'));
-check('technician management aligns with shared borders shadows and card law',css.includes('.tt-tmi{border-color:var(--tt-border)')&&css.includes('.tt-tmi__tech'));
-check('admin and settings use shared back-office geometry',css.includes('.tt-admin-card')&&css.includes('.tt-settings__field')&&css.includes('.tt-settings__panel footer'));
-check('supplier workspace uses shared cards forms and modal law',css.includes('.suppliers-panel')&&css.includes('.suppliers-card{border-radius:var(--tt-radius-lg)')&&css.includes('.suppliers-form'));
-check('integration admin uses shared panels rows and secret modal',css.includes('.iaw-panel')&&css.includes('.iaw-row')&&css.includes('.iaw-secret{border-radius:var(--tt-radius-lg)'));
-check('finance intelligence uses shared KPI table and exception law',css.includes('.tt-aiacct-kpi')&&css.includes('.tt-aiacct-tablewrap')&&css.includes('.tt-aiacct-exception'));
-check('ledger uses shared section table and dialog geometry',css.includes('.tt-ledger section')&&css.includes('.tt-ledger dialog{border-radius:var(--tt-radius-lg)')&&css.includes('.tt-ledger th,.tt-ledger td'));
-check('accounts receivable uses shared panel row and detail geometry',css.includes('.arw{border-radius:var(--tt-radius-xl)')&&css.includes('.arw-row')&&css.includes('.arw-detail>section'));
-check('reduced motion is respected',css.includes('@media(prefers-reduced-motion:reduce)'));
-check('scrollbars are restrained and consistent',css.includes('::-webkit-scrollbar-thumb'));
-check('legacy POS loads unified UI after feature styles',legacy.indexOf('/unified-ui-system.css')>legacy.indexOf('/rental-create-wizard.css'));
-check('operations shell owns the new visual system instead of loading the legacy theme stack',!shell.includes('/unified-ui-system.css')&&!shell.includes('/premium-shell-v2.css')&&!shell.includes('/premium-shell-v3.css')&&!shell.includes('/late-2020s-'));
-check('authoritative Total Tools palette anchors the shell',shellCss.includes('--tt-green:#0B7A3E')&&shellCss.includes('--tt-yellow:#F2D11F')&&shellCss.includes('--tt-bg:#F6F7F4')&&shellCss.includes('--tt-nav:#101713'));
-check('new shell uses human task-led home sections',shellJs.includes('What do you want to do?')&&shellJs.includes('Live snapshot')&&shellJs.includes('Needs attention')&&shellJs.includes('More tools'));
-check('new shell uses staff language for primary navigation',shellJs.includes("service:'Repairs'")&&shellJs.includes("dispatch:'Dispatch'")&&shellJs.includes("crm:'Customers'")&&shellJs.includes("administration:'Admin'"));
-check('new shell keeps ordinary staff text at 11px or above',!/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(shellCss));
-check('new shell provides accessible control and focus geometry',shellCss.includes('min-height:44px')&&shellCss.includes('height:48px')&&shellCss.includes(':focus-visible')&&shellCss.includes('@media(prefers-reduced-motion:reduce)'));
-check('sales reference workspace follows new radius and control laws',salesCss.includes('border-radius:28px')&&salesCss.includes('height:48px')&&salesCss.includes('border-radius:18px')&&salesCss.includes('@media(prefers-reduced-motion:reduce)'));
-check('sales staff text is not solved with tiny typography',!/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(salesCss));
-check('full syntax wall includes unified UI contract',pkg.includes('check:unified-ui'));
-if(failed){console.error('Unified UI contract failed: '+failed);process.exit(1)}
-console.log('Unified UI contract passed.');
+let failed=0;
+const check=(name,pass)=>pass?console.log('PASS Authoritative UI:',name):(failed++,console.error('FAIL Authoritative UI:',name));
+
+const authority=read('public/unified-ui-system.css');
+const shellCss=read('public/app-shell.css');
+const salesCss=read('public/sales-workspace.css');
+const shellHtml=read('public/app-shell.html');
+const shellJs=read('public/app-shell.js');
+const legacy=read('public/index.html');
+const pkg=read('package.json');
+
+check('authoritative palette is exact',
+  authority.includes('--tt-green:#0B7A3E') &&
+  authority.includes('--tt-green-deep:#075C31') &&
+  authority.includes('--tt-yellow:#F2D11F') &&
+  authority.includes('--tt-bg:#F6F7F4') &&
+  authority.includes('--tt-text:#111714')
+);
+
+check('spacing radius and control tokens are coherent',
+  authority.includes('--tt-radius-sm:12px') &&
+  authority.includes('--tt-radius-md:18px') &&
+  authority.includes('--tt-radius-lg:24px') &&
+  authority.includes('--tt-radius-xl:28px') &&
+  authority.includes('--tt-control-h:48px') &&
+  authority.includes('--tt-control-h-sm:44px')
+);
+
+const tiny = [...authority.matchAll(/font-size\s*:\s*([0-9.]+)px/gi)].map(m=>Number(m[1])).filter(n=>n<=10);
+check('authoritative layer contains no staff text at 10px or below', tiny.length===0);
+
+check('keyboard focus is explicit and visible',
+  authority.includes(':focus-visible') &&
+  authority.includes('outline:3px solid rgba(11,122,62,.20)')
+);
+
+check('reduced motion is respected globally',
+  authority.includes('@media(prefers-reduced-motion:reduce)') &&
+  authority.includes('animation:none!important') &&
+  authority.includes('transition:none!important')
+);
+
+check('responsive laws cover desktop tablet and mobile',
+  authority.includes('@media(max-width:1280px)') &&
+  authority.includes('@media(max-width:1024px)') &&
+  authority.includes('@media(max-width:768px)') &&
+  authority.includes('@media(max-width:480px)')
+);
+
+check('tables stay scannable instead of becoming card grids',
+  authority.includes('table{border-collapse:separate') &&
+  authority.includes('th{font-size:12px!important') &&
+  authority.includes('td{font-size:13px!important')
+);
+
+check('status language has semantic success warning danger treatment',
+  authority.includes('--tt-success:#11864A') &&
+  authority.includes('--tt-warning:#C98B16') &&
+  authority.includes('--tt-danger:#C44238') &&
+  authority.includes('[class*="overdue"]')
+);
+
+check('controls meet the staff interaction size law',
+  authority.includes('min-height:var(--tt-control-h-sm)!important') &&
+  authority.includes('min-height:var(--tt-control-h)!important') &&
+  authority.includes('border-radius:var(--tt-radius-sm)!important')
+);
+
+const sectors=[
+  '.tt-sales','.tt-held','.tt-cc','cdw-panel','.tt-quotes','.tt-lw','.tt-promo',
+  '.tt-rent','.tt-inv','.tt-tr','.tt-purch','suppliers-shell','.tt-supplier-ledger','wow-shell',
+  '.tt-wo','.tt-repair-auth__panel','.tt-repair-comms__panel','.tt-rn__panel','.tt-repair-ops__panel','.tt-rpi-panel',
+  '.tt-logistics','.tt-li-panel','.tt-si-panel','.tt-rebalance',
+  '.tt-crm','.tt-cp','.tt-aiacct','.tt-ledger','.arw','.tt-finctl','.tt-op-reports',
+  '.tt-admin','.tt-settings','.tt-rbac','.iaw','catalog-admin-panel',
+  'ecom-shell','cm-shell','denom-shell','.tt-tmi','.tt-tech-pay','.tt-coach',
+  '.tt-ea-modal','.tt-learn','.tt-employee-workspace-home','.tt-guide',
+  '.tt-po-document-context','.tt-po-dialog','.tt-qi__panel','.rc-wizard-review','.tt-cat__panel',
+  '.tt-predictive-list'
+];
+check('all major frontend sectors are governed by the authoritative layer',
+  sectors.every(token=>authority.includes(token))
+);
+
+check('frontline reference surfaces keep their dedicated v2 implementations',
+  shellCss.includes('--tt-green:#0B7A3E') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(shellCss) &&
+  salesCss.includes('--sales-green:#0B7A3E') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(salesCss)
+);
+
+check('shell removes retired competing theme layers',
+  !shellHtml.includes('/premium-shell-v2.css') &&
+  !shellHtml.includes('/premium-shell-v3.css') &&
+  !shellHtml.includes('/late-2020s-') &&
+  !shellHtml.includes('/workspace-quality-pass.css')
+);
+
+check('shell loads authoritative system last among static styles',
+  shellHtml.includes('id="tt-authoritative-ui"') &&
+  shellHtml.indexOf('/unified-ui-system.css') > shellHtml.indexOf('/employee-learning-center.css')
+);
+
+check('dynamic workspace css is inserted before authoritative system',
+  shellJs.includes("document.getElementById('tt-authoritative-ui')") &&
+  shellJs.includes('document.head.insertBefore(l,authority)')
+);
+
+const moduleCss=[...shellJs.matchAll(/['"]([^'"]+\.css)['"]/g)].map(m=>m[1].replace(/^\//,''));
+check('every dynamically declared workspace stylesheet exists',
+  moduleCss.length>=20 && moduleCss.every(file=>fs.existsSync(path.join(root,'public',path.basename(file))))
+);
+
+check('home is task-led and written for staff',
+  shellJs.includes('What do you want to do?') &&
+  shellJs.includes('Live snapshot') &&
+  shellJs.includes('Needs attention') &&
+  shellJs.includes('More tools') &&
+  shellJs.includes("service:'Repairs'") &&
+  shellJs.includes("crm:'Customers'") &&
+  shellJs.includes("administration:'Admin'")
+);
+
+check('legacy fallback still receives authoritative ui last',
+  legacy.indexOf('/unified-ui-system.css') > legacy.indexOf('/rental-create-wizard.css')
+);
+
+check('full syntax wall includes authoritative ui contract',pkg.includes('check:unified-ui'));
+
+if(failed){console.error('Authoritative UI contract failed: '+failed);process.exit(1)}
+console.log('Authoritative UI contract passed.');
