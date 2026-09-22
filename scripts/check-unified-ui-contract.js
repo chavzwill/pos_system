@@ -11,6 +11,10 @@ const salesCss=read('public/sales-workspace.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
+const manual=read('public/manual.html');
+const manualCss=read('public/manual-ui-v2.css');
+const preview=read('public/preview.html');
+const previewCss=read('public/preview-ui-v2.css');
 const pkg=read('package.json');
 const server=read('server.js');
 
@@ -146,6 +150,29 @@ check('legacy runtime injects a single authoritative stylesheet last',
 
 check('legacy runtime cache version is advanced for ui v2',
   server.includes("CLIENT_ASSET_VERSION = '20260922-ui-v2-all'")
+);
+
+check('staff manual is governed by ui v2',
+  manual.includes('/manual-ui-v2.css?v=20260922-ui-v2-all') &&
+  manual.includes('<title>Total Tools — Staff Manual</title>') &&
+  manualCss.includes('--manual-green:#0B7A3E') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(manualCss) &&
+  manualCss.includes('@media(prefers-reduced-motion:reduce)')
+);
+
+check('standalone preview is governed by ui v2',
+  preview.includes('/preview-ui-v2.css?v=20260922-ui-v2-all') &&
+  preview.includes('Total Tools — UI V2 Preview') &&
+  previewCss.includes('--g:#0B7A3E!important') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(previewCss) &&
+  previewCss.includes('@media(prefers-reduced-motion:reduce)')
+);
+
+check('all four html surfaces have an authoritative v2 path',
+  shellHtml.includes('/unified-ui-system.css') &&
+  server.includes("versioned('/unified-ui-system.css')") &&
+  manual.includes('/manual-ui-v2.css') &&
+  preview.includes('/preview-ui-v2.css')
 );
 
 check('full syntax wall includes authoritative ui contract',pkg.includes('check:unified-ui'));
