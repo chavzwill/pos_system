@@ -8,6 +8,7 @@ const check=(name,pass)=>pass?console.log('PASS Authoritative UI:',name):(failed
 const authority=read('public/unified-ui-system.css');
 const shellCss=read('public/app-shell.css');
 const salesCss=read('public/sales-workspace.css');
+const salesJs=read('public/sales-workspace.js');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -167,6 +168,26 @@ check('quick command is responsive and keyboard accessible',
   shellCss.includes('.shell-command-button') &&
   shellCss.includes('.shell-toast-host') &&
   shellCss.includes('max-height:calc(100dvh - 16px)')
+);
+
+check('recent task recovery is one tap from home',
+  shellJs.includes('function continueWorking()') &&
+  shellJs.includes('Pick up where you left off') &&
+  shellJs.includes("document.getElementById('shell-resume-all')") &&
+  shellJs.includes('rememberTask(key,title);renderWorkspace(currentDomain)') &&
+  shellCss.includes('.shell-resume__list') &&
+  shellCss.includes('.shell-resume__item')
+);
+
+check('sales is scanner and keyboard first without weakening checkout confirmation',
+  salesJs.includes('function focusProductSearch(') &&
+  salesJs.includes('function bindSalesShortcuts()') &&
+  salesJs.includes("e.key==='F2'") &&
+  salesJs.includes("e.key==='F3'") &&
+  salesJs.includes('aria-keyshortcuts="/"') &&
+  salesJs.includes("if(!confirm(`Complete this sale") &&
+  salesJs.includes("notice('Cash tendered cannot be less than the sale total.','error')") &&
+  salesCss.includes('.tt-sales__shortcuts')
 );
 
 check('legacy source still declares authoritative ui after feature styles',
