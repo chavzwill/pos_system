@@ -1,0 +1,32 @@
+/* Clean Guide Me presentation */
+#tt-guided-mode .tt-guide{border-radius:22px!important;border:1px solid #dde6e1!important;box-shadow:0 28px 90px rgba(12,30,22,.18)!important;background:#fff!important}
+#tt-guided-mode .tt-guide:before{background:linear-gradient(90deg,#087b46,#f2c94c)!important}
+#tt-guided-mode .tt-guide__head{padding:16px 18px!important;background:#fff!important}
+#tt-guided-mode .tt-guide__head h2{font-size:22px!important;letter-spacing:-.03em!important}
+#tt-guided-mode .tt-guide__head p{font-size:12.5px!important;line-height:1.5!important}
+#tt-guided-mode .tt-guide__body{padding:16px 18px 18px!important}
+#tt-guided-mode .tt-guide__chip{min-height:42px!important;padding:10px 11px!important;border:1px solid #e1e8e4!important;border-radius:12px!important;background:#f7faf8!important;font-size:12px!important;line-height:1.4!important}
+#tt-guided-mode .tt-guide__step{padding:13px 14px!important;border-radius:0 12px 12px 0!important;background:#f4f8f5!important}
+#tt-guided-mode .tt-guide__step h3{font-size:15px!important}
+#tt-guided-mode .tt-guide__step>p{font-size:12.5px!important;line-height:1.5!important}
+#tt-guided-mode .tt-guide__step-count{font-size:10px!important}
+#tt-guided-mode .tt-guide__progress{height:5px!important}
+#tt-guided-mode .tt-guide__coach-note{font-size:11.5px!important;line-height:1.45!important;border-radius:10px!important}
+#tt-guided-mode .tt-guide__exact-action{padding:10px 11px!important;border-radius:12px!important}
+#tt-guided-mode .tt-guide__exact-action small{font-size:10px!important}
+#tt-guided-mode .tt-guide__exact-action strong{font-size:12px!important;line-height:1.4!important}
+#tt-guided-mode .tt-guide__exact-action button{min-height:38px!important;padding:0 11px!important;border-radius:10px!important;font-size:11.5px!important}
+#tt-guided-mode .tt-guide__actions{gap:8px!important;padding-top:8px!important}
+#tt-guided-mode .tt-guide__actions button{min-height:40px!important;padding:0 12px!important;border-radius:10px!important;font-size:12px!important}
+#tt-guided-mode .tt-guide__availability{border-radius:12px!important;background:#f4f8f5!important}
+#tt-guided-mode .tt-guide__availability strong{font-size:12px!important}
+#tt-guided-mode .tt-guide__availability span{font-size:11.5px!important}
+#tt-guided-mode .tt-guide__qa-recovery{margin-top:10px;padding:11px;border:1px solid #dde6e1;border-radius:12px;background:#f7faf8;display:flex;flex-direction:column;gap:6px}
+#tt-guided-mode .tt-guide__qa-recovery strong{font-size:12px;color:#173f2c}
+#tt-guided-mode .tt-guide__qa-recovery span{font-size:11.5px;line-height:1.45;color:#607168}
+#tt-guided-mode .tt-guide__qa-recovery>div{display:flex;gap:7px;margin-top:3px}
+#tt-guided-mode .tt-guide__qa-recovery button{flex:1;min-height:38px;border:1px solid #cfdad3;border-radius:10px;background:#fff;color:#244c36;font-size:11.5px;font-weight:800}
+#tt-guided-mode .tt-guide__qa-recovery button:first-child{background:#087b46;border-color:#087b46;color:#fff}
+@media(max-width:900px){#tt-guided-mode .tt-guide{width:min(420px,calc(100vw - 20px))!important;left:auto!important;right:10px!important;max-height:58vh!important}#tt-guided-mode .tt-guide__head{padding:14px 15px!important}#tt-guided-mode .tt-guide__body{padding:13px 15px 15px!important}}
+@media(max-width:520px){#tt-guided-mode .tt-guide{width:calc(100vw - 16px)!important;right:8px!important;max-height:62vh!important}#tt-guided-mode .tt-guide__qa-recovery>div{flex-direction:column}}
+@media(prefers-reduced-motion:reduce){.tt-guide-fallback-highlight,[data-guide-fallback-target="true"]{animation:none!important}}
