@@ -99,6 +99,8 @@ const assetKeys=src=>{const m=src.match(/const assets=\{([\s\S]*?)\};/);return m
 const activeJsSources=[shellHtml,shellJs,shellDeferredJs,nativeSupportJs,loaderHardeningSource].join('\n');
 const activeJsFiles=[...new Set([...activeJsSources.matchAll(/['\"]\/?([^'\"]+\.js)(?:\?[^'\"]*)?['\"]/g)].map(m=>path.basename(m[1])))].filter(f=>fs.existsSync(path.join(root,'public',f)));
 const activeJsText=activeJsFiles.map(f=>read('public/'+f));
+const declaredShellTokens=new Set([...shellCss.matchAll(/(--tt-[a-z0-9-]+)\s*:/gi)].map(m=>m[1]));
+const usedShellTokens=[...shellCss.matchAll(/var\((--tt-[a-z0-9-]+)/gi)].map(m=>m[1]);
 
 check('authoritative palette is exact',
   authority.includes('--tt-green:#0B7A3E') &&
@@ -106,6 +108,10 @@ check('authoritative palette is exact',
   authority.includes('--tt-yellow:#F2D11F') &&
   authority.includes('--tt-bg:#F6F7F4') &&
   authority.includes('--tt-text:#111714')
+);
+
+check('shell theme tokens are complete with no unresolved custom properties',
+  declaredShellTokens.size>=20 && usedShellTokens.every(token=>declaredShellTokens.has(token))
 );
 
 check('spacing radius and control tokens are coherent',
@@ -298,6 +304,15 @@ check('shell feedback avoids blocking alerts for shell-level support and module 
   shellJs.includes("showToast(`${title||'Workspace'} could not open") &&
   !shellJs.includes("else alert('Guide Me is available inside supported tasks.')") &&
   !shellJs.includes("else alert('Help & Learning is still loading. Please try again.')")
+);
+
+check('canonical shell overlays contain and restore keyboard focus',
+  shellJs.includes('aria-labelledby="shell-input-dialog-title"') &&
+  shellJs.includes('aria-describedby="shell-input-dialog-description"') &&
+  shellJs.includes("if(e.key==='Tab')") &&
+  shellJs.includes('commandReturnFocus=document.activeElement') &&
+  shellJs.includes("target.focus({preventScroll:true})") &&
+  shellJs.includes("previous.focus({preventScroll:true})")
 );
 
 check('quick command is responsive and keyboard accessible',
