@@ -28,6 +28,10 @@ const quotationsCss=read('public/quotations-workspace.css');
 const warehouseJs=read('public/warehouse-operations-workspace.js');
 const warehouseCss=read('public/warehouse-operations-workspace.css');
 const nativeSupportJs=read('public/shell-native-support.js');
+const operationalReportsJs=read('public/operational-reports.js');
+const operationalReportsCss=read('public/operational-reports.css');
+const settingsJs=read('public/settings-workspace.js');
+const settingsCss=read('public/settings-workspace.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -400,6 +404,32 @@ check('final shell responsive geometry prevents command-bar wrap',
   authority.includes('.shell-topbar{min-height:76px!important;padding:12px 20px!important') &&
   authority.includes('@media(max-width:640px){.shell-topbar{min-height:68px!important;padding:10px 12px!important;display:flex!important') &&
   authority.includes('.shell-command-button{width:100%!important;min-width:0!important;height:48px!important')
+);
+
+check('reports opens with truthful quick choices and progressively disclosed library',
+  operationalReportsJs.includes('Start with a common business question') &&
+  operationalReportsJs.includes('Every result comes from the live POS data available to your account.') &&
+  operationalReportsJs.includes('tt-op-reports__quick-grid') &&
+  operationalReportsJs.includes('<details class="tt-op-reports__group"') &&
+  operationalReportsJs.includes('Download CSV') &&
+  operationalReportsJs.includes('Print / Save PDF') &&
+  operationalReportsCss.includes('.tt-op-reports__quick-card') &&
+  operationalReportsCss.includes('#tt-op-reports-root .tt-op-reports__controls input') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(operationalReportsCss)
+);
+
+check('settings opens as a plain-language index before exposing configuration forms',
+  settingsJs.includes("tab:'',saving:false,error:''") &&
+  settingsJs.includes('function settingsHome()') &&
+  settingsJs.includes('Choose what you want to manage') &&
+  settingsJs.includes('data-setting=') &&
+  settingsJs.includes('data-settings-home') &&
+  settingsJs.includes('function reasonField()') &&
+  settingsJs.includes('Required for integration or credential changes and recorded in the security audit.') &&
+  !settingsJs.includes('catch(err){state.saving=false;render();alert(err.message);}') &&
+  settingsCss.includes('.tt-settings__menu>button') &&
+  settingsCss.includes('#tt-settings .tt-settings__field input{font-size:16px!important}') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(settingsCss)
 );
 
 check('legacy source still declares authoritative ui after feature styles',
