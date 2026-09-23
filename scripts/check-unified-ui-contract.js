@@ -48,6 +48,10 @@ const commissionsJs=read('public/commissions-workspace.js');
 const commissionsCss=read('public/commissions-workspace.css');
 const integrationAdminJs=read('public/integration-admin-workspace.js');
 const integrationAdminCss=read('public/integration-admin-workspace.css');
+const customerProgramsJs=read('public/customer-programs-workspace.js');
+const customerProgramsCss=read('public/customer-programs-workspace.css');
+const ecommerceJs=read('public/ecommerce-operations-workspace.js');
+const ecommerceCss=read('public/ecommerce-operations-workspace.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -559,6 +563,30 @@ check('settings opens as a plain-language index before exposing configuration fo
   settingsCss.includes('.tt-settings__menu>button') &&
   settingsCss.includes('#tt-settings .tt-settings__field input{font-size:16px!important}') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(settingsCss)
+);
+
+check('customer programs uses the final visual law without weakening pricing authority',
+  customerProgramsJs.includes('Customer Benefit Programs') &&
+  customerProgramsJs.includes('checkout remains the pricing authority') &&
+  customerProgramsJs.includes('function confirmDelete(name)') &&
+  customerProgramsJs.includes("notice('Customer program deleted.','success')") &&
+  !customerProgramsJs.includes("confirm('Delete") &&
+  customerProgramsCss.includes('--cp-green:#0B7A3E') &&
+  customerProgramsCss.includes('#tt-customer-programs .tt-cp-modal input{font-size:16px!important}') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(customerProgramsCss)
+);
+
+check('e-commerce operations is queue-led and preserves warehouse shipment authority',
+  ecommerceJs.includes('<h2>Online Orders</h2>') &&
+  ecommerceJs.includes('<h3>Order queue</h3>') &&
+  ecommerceJs.includes('function confirmShipment(order)') &&
+  ecommerceJs.includes('Stock movement still occurs only through the existing warehouse process.') &&
+  ecommerceJs.includes('<details class="ecom-panel ecom-disclosure">') &&
+  ecommerceJs.includes("notice('Shipment draft created.','success')") &&
+  !ecommerceJs.includes("confirm('Create a draft shipment") &&
+  ecommerceCss.includes('--ec-green:#0B7A3E') &&
+  ecommerceCss.includes('.ecom-disclosure summary') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(ecommerceCss)
 );
 
 check('legacy source still declares authoritative ui after feature styles',
