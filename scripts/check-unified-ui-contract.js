@@ -11,6 +11,8 @@ const salesCss=read('public/sales-workspace.css');
 const salesJs=read('public/sales-workspace.js');
 const inventoryJs=read('public/inventory-workspace.js');
 const purchasingJs=read('public/purchasing-workspace.js');
+const workOrdersJs=read('public/work-orders-workspace.js');
+const workOrdersCss=read('public/work-orders-workspace.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -229,6 +231,20 @@ check('purchasing accelerates document entry while preserving authority boundari
   purchasingJs.includes("confirm('Cancel this purchase order?')") &&
   purchasingJs.includes("confirm('Post these received quantities into inventory?')") &&
   purchasingJs.includes("notice('Enter at least one quantity received.','error')")
+);
+
+check('repairs uses a calm search-first queue with progressive detail',
+  workOrdersJs.includes('function focusSearch(') &&
+  workOrdersJs.includes('function bindShortcuts()') &&
+  workOrdersJs.includes("e.key==='F2'") &&
+  workOrdersJs.includes("e.key==='F3'") &&
+  workOrdersJs.includes('aria-keyshortcuts="/"') &&
+  workOrdersJs.includes('tt-wo__disclosure') &&
+  workOrdersJs.includes('<h3>Quality check</h3>') &&
+  workOrdersCss.includes('.tt-wo__disclosure summary') &&
+  workOrdersCss.includes('.tt-wo__shortcuts') &&
+  workOrdersCss.includes('font-size:16px!important') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(workOrdersCss)
 );
 
 check('legacy source still declares authoritative ui after feature styles',
