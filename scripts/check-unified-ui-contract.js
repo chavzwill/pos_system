@@ -19,6 +19,8 @@ const customerCrmJs=read('public/customer-crm-workspace.js');
 const customerCrmCss=read('public/customer-crm-workspace.css');
 const accountingJs=read('public/accounting-intelligence.js');
 const accountingCss=read('public/accounting-intelligence.css');
+const logisticsJs=read('public/logistics-intelligence.js');
+const logisticsCss=read('public/logistics-intelligence.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -300,6 +302,20 @@ check('finance shows decisions first and moves analysis behind disclosure',
   accountingCss.includes('#tt-accounting-intelligence #tt-aiacct-start') &&
   accountingCss.includes('font-size:16px!important') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(accountingCss)
+);
+
+check('dispatch is queue-first with searchable work and explicit coverage exceptions',
+  logisticsJs.includes('function filteredJobs()') &&
+  logisticsJs.includes('function focusSearch(') &&
+  logisticsJs.includes('function bindShortcuts()') &&
+  logisticsJs.includes("e.key==='F2'") &&
+  logisticsJs.includes("e.key==='F3'") &&
+  logisticsJs.includes('aria-keyshortcuts="/"') &&
+  logisticsJs.includes('<span>Needs coverage</span>') &&
+  logisticsJs.includes("notice('Dispatch queue refreshed.','success')") &&
+  logisticsCss.includes('.tt-li-coverage summary') &&
+  logisticsCss.includes('#tt-logistics-intelligence #tt-li-search{font-size:16px!important}') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(logisticsCss)
 );
 
 check('legacy source still declares authoritative ui after feature styles',
