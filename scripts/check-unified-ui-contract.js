@@ -67,6 +67,16 @@ const settlementJs=read('public/settlement-reconciliation.js');
 const settlementCss=read('public/settlement-reconciliation.css');
 const cashierControlsJs=read('public/cashier-controls-workspace.js');
 const cashierControlsCss=read('public/cashier-controls-workspace.css');
+const adminJs=read('public/admin-workspace.js');
+const adminCss=read('public/admin-workspace.css');
+const attentionJs=read('public/operations-attention-center.js');
+const attentionCss=read('public/operations-attention-center.css');
+const purchasingCss=read('public/purchasing-workspace.css');
+const suppliersJs=read('public/suppliers-workspace.js');
+const suppliersCss=read('public/suppliers-workspace.css');
+const transfersJs=read('public/transfers-workspace.js');
+const transfersCss=read('public/transfers-workspace.css');
+const loaderHardeningJs=read('public/workspace-loader-hardening.js');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -76,6 +86,7 @@ const preview=read('public/preview.html');
 const previewCss=read('public/preview-ui-v2.css');
 const pkg=read('package.json');
 const server=read('server.js');
+const assetKeys=src=>{const m=src.match(/const assets=\{([\s\S]*?)\};/);return m?[...m[1].matchAll(/'([^']+)'\s*:/g)].map(x=>x[1]):[];};
 
 check('authoritative palette is exact',
   authority.includes('--tt-green:#0B7A3E') &&
@@ -285,6 +296,51 @@ check('purchasing accelerates document entry while preserving authority boundari
   purchasingJs.includes("confirm('Cancel this purchase order?')") &&
   purchasingJs.includes("confirm('Post these received quantities into inventory?')") &&
   purchasingJs.includes("notice('Enter at least one quantity received.','error')")
+);
+
+check('remaining purchasing admin supplier transfer surfaces keep final mobile interaction law',
+  adminJs.includes('async function open(opts={})') &&
+  adminJs.includes("['employees','branches','security'].includes(opts.tab)") &&
+  adminCss.includes('#tt-admin .tt-admin__toolbar input') &&
+  adminCss.includes('font-size:16px!important') &&
+  purchasingCss.includes('.tt-purch__tabs{position:static;top:auto;z-index:auto}') &&
+  suppliersCss.includes('.suppliers-overlay .suppliers-shell .suppliers-panel.suppliers-toolbar input[data-search]') &&
+  suppliersCss.includes('font-size:16px!important') &&
+  suppliersCss.includes('.suppliers-overlay.has-selection .suppliers-list{display:none}') &&
+  transfersCss.includes('.tt-tr.has-selection .tt-tr__list{display:none}') &&
+  transfersCss.includes('#tt-transfers-workspace .tt-tr__composer input') &&
+  transfersCss.includes('font-size:16px!important') &&
+  attentionCss.includes('.tt-oac__section-head{position:static;top:auto;z-index:auto}') &&
+  attentionCss.includes('.tt-oac.has-selection .tt-oac__queue{display:none}')
+);
+
+check('transfers use product-native review dialogs while preserving physical-stock confirmation',
+  transfersJs.includes('function confirmAction(') &&
+  transfersJs.includes('function receiveDialog(') &&
+  transfersJs.includes("title:'Post received quantities?'") &&
+  transfersJs.includes("message:'Post these received quantities to destination inventory? This changes physical stock.'") &&
+  transfersJs.includes("title:'Cancel transfer?'") &&
+  !transfersJs.includes('prompt(')
+);
+
+check('operations attention remains evidence-only and one-job mobile',
+  attentionJs.includes('This screen highlights risk; it does not silently change stock, payroll, purchasing, finance or customer records.') &&
+  attentionJs.includes('Evidence-only · No automatic operational mutation') &&
+  attentionJs.includes('data-list-back') &&
+  attentionCss.includes('.tt-oac.has-selection .tt-oac__queue{display:none}') &&
+  attentionCss.includes('.tt-oac:not(.has-selection) .tt-oac__detail{display:none}')
+);
+
+check('workspace hardening registry cannot hide shell modules or lose tile intent',
+  assetKeys(shellJs).length>0 &&
+  assetKeys(shellJs).every(k=>assetKeys(loaderHardeningJs).includes(k)) &&
+  loaderHardeningJs.includes("'suppliers-workspace':['/suppliers-workspace.css'") &&
+  loaderHardeningJs.includes("'warehouse-operations':['/warehouse-operations-workspace.css'") &&
+  loaderHardeningJs.includes("options={...options,tab:'pr'}") &&
+  loaderHardeningJs.includes("options={...options,tab:'po'}") &&
+  loaderHardeningJs.includes("options={...options,tab:'branches'}") &&
+  loaderHardeningJs.includes("window.TotalToolsShellUI?.toast") &&
+  !loaderHardeningJs.includes('catch(err=>alert(')
 );
 
 check('repairs uses a calm search-first queue with progressive detail',
