@@ -252,13 +252,15 @@ check('quick command removes navigation hunting for permitted tasks',
   shellJs.includes('rememberTask(key,title)')
 );
 
-check('active shell-loaded frontend contains no blocking browser alert or prompt calls',
+check('active shell-loaded frontend contains no blocking browser alert prompt or confirm calls',
   activeJsFiles.length>=20 &&
-  activeJsText.every(src=>!/(?:\balert\s*\(|\bprompt\s*\()/.test(src))
+  activeJsText.every(src=>!/(?:\balert\s*\(|\bprompt\s*\(|\bconfirm\s*\()/.test(src))
 );
 
-check('shared shell input dialog replaces browser prompts in high-use operational flows',
+check('shared shell dialog replaces blocking browser prompts and confirms in operational flows',
   shellJs.includes('function requestInput(') &&
+  shellJs.includes('async function confirmAction(') &&
+  shellJs.includes('confirm:confirmAction') &&
   shellJs.includes('request:requestInput') &&
   shellCss.includes('.shell-input-dialog__panel') &&
   shellCss.includes('.shell-input-dialog__fields input') &&
@@ -292,7 +294,7 @@ check('shared dialog preserves evidence requirements in migrated workflows',
 
 check('shell feedback avoids blocking alerts for shell-level support and module failures',
   shellJs.includes('function showToast(') &&
-  shellJs.includes("window.TotalToolsShellUI={command:openCommand,toast:showToast,request:requestInput}") &&
+  shellJs.includes("window.TotalToolsShellUI={command:openCommand,toast:showToast,request:requestInput,confirm:confirmAction}") &&
   shellJs.includes("showToast(`${title||'Workspace'} could not open") &&
   !shellJs.includes("else alert('Guide Me is available inside supported tasks.')") &&
   !shellJs.includes("else alert('Help & Learning is still loading. Please try again.')")
@@ -321,7 +323,7 @@ check('sales is scanner and keyboard first without weakening checkout confirmati
   salesJs.includes("e.key==='F2'") &&
   salesJs.includes("e.key==='F3'") &&
   salesJs.includes('aria-keyshortcuts="/"') &&
-  salesJs.includes("if(!confirm(`Complete this sale") &&
+  salesJs.includes("title:'Complete sale?'") && salesJs.includes("confirmLabel:'Complete sale'") &&
   salesJs.includes("notice('Cash tendered cannot be less than the sale total.','error')") &&
   salesCss.includes('.tt-sales__shortcuts')
 );
@@ -332,7 +334,7 @@ check('inventory is search-first without weakening adjustment control',
   inventoryJs.includes("e.key==='F2'") &&
   inventoryJs.includes("e.key==='F3'") &&
   inventoryJs.includes('aria-keyshortcuts="/"') &&
-  inventoryJs.includes("if(!confirm(`Adjust ${state.selected.name}") &&
+  inventoryJs.includes("title:'Post stock adjustment?'") && inventoryJs.includes("confirmLabel:'Post adjustment'") &&
   inventoryJs.includes("notice('A reason is required for every stock adjustment.','error')")
 );
 
@@ -343,8 +345,8 @@ check('purchasing accelerates document entry while preserving authority boundari
   purchasingJs.includes("e.key==='F3'") &&
   purchasingJs.includes('aria-keyshortcuts="F2"') &&
   purchasingJs.includes('aria-keyshortcuts="F3"') &&
-  purchasingJs.includes("confirm('Cancel this purchase order?')") &&
-  purchasingJs.includes("confirm('Post these received quantities into inventory?')") &&
+  purchasingJs.includes("title:'Cancel purchase order?'") &&
+  purchasingJs.includes("title:'Post received quantities?'") &&
   purchasingJs.includes("notice('Enter at least one quantity received.','error')")
 );
 
@@ -421,7 +423,7 @@ check('rentals opens as a calm queue and progressively discloses lifecycle evide
   rentalsJs.includes('<span>History</span>') &&
   rentalsJs.includes('<span>Assigned equipment</span>') &&
   rentalsJs.includes('<span>Missing items</span>') &&
-  rentalsJs.includes("if(!confirm(`Resume ${a.agreement_number}?") &&
+  rentalsJs.includes("title:'Resume rental?'") &&
   !rentalsJs.includes('if(!state.selected&&state.rows.length)state.selected=state.rows[0]') &&
   rentalsCss.includes('.tt-rent.has-selection .tt-rent__list{display:none}') &&
   rentalsCss.includes('#tt-rentals-workspace #tt-rent-search') &&
@@ -480,8 +482,8 @@ check('held orders is search-first and preserves deliberate sale boundaries',
   heldSalesJs.includes('function bindShortcuts()') &&
   heldSalesJs.includes('aria-keyshortcuts="/"') &&
   !heldSalesJs.includes('if(!state.selected&&state.holds.length)state.selected=state.holds[0].id') &&
-  heldSalesJs.includes("if(!confirm(`Complete ${h.transaction_number}") &&
-  heldSalesJs.includes("if(!confirm(`Cancel held sale ${h.transaction_number}") &&
+  heldSalesJs.includes("title:'Complete recalled sale?'") &&
+  heldSalesJs.includes("title:'Cancel held order?'") &&
   heldSalesJs.includes("notice('Cash tendered cannot be less than the current total.','error')") &&
   heldSalesCss.includes('.tt-held.has-selection .tt-held__list{display:none}') &&
   heldSalesCss.includes('#tt-held-sales #tt-held-search') &&
@@ -789,7 +791,7 @@ check('inventory operations is readable and preserves audited stock adjustment c
   inventoryJs.includes('function focusSearch(') &&
   inventoryJs.includes('Reason is required for auditability') &&
   inventoryJs.includes("notice('A reason is required for every stock adjustment.','error')") &&
-  inventoryJs.includes('if(!confirm(') &&
+  inventoryJs.includes("window.TotalToolsShellUI?.confirm?.({title:'Post stock adjustment?'") &&
   inventoryJs.includes('Adjust ${state.selected.name}') &&
   inventoryJs.includes("method:'PATCH'") &&
   inventoryCss.includes('--inv-green:#0B7A3E') &&
