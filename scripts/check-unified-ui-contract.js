@@ -21,6 +21,8 @@ const accountingJs=read('public/accounting-intelligence.js');
 const accountingCss=read('public/accounting-intelligence.css');
 const logisticsJs=read('public/logistics-intelligence.js');
 const logisticsCss=read('public/logistics-intelligence.css');
+const heldSalesJs=read('public/held-sales-workspace.js');
+const heldSalesCss=read('public/held-sales-workspace.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -316,6 +318,20 @@ check('dispatch is queue-first with searchable work and explicit coverage except
   logisticsCss.includes('.tt-li-coverage summary') &&
   logisticsCss.includes('#tt-logistics-intelligence #tt-li-search{font-size:16px!important}') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(logisticsCss)
+);
+
+check('held orders is search-first and preserves deliberate sale boundaries',
+  heldSalesJs.includes('function filteredHolds()') &&
+  heldSalesJs.includes('function focusSearch(') &&
+  heldSalesJs.includes('function bindShortcuts()') &&
+  heldSalesJs.includes('aria-keyshortcuts="/"') &&
+  !heldSalesJs.includes('if(!state.selected&&state.holds.length)state.selected=state.holds[0].id') &&
+  heldSalesJs.includes("if(!confirm(`Complete ${h.transaction_number}") &&
+  heldSalesJs.includes("if(!confirm(`Cancel held sale ${h.transaction_number}") &&
+  heldSalesJs.includes("notice('Cash tendered cannot be less than the current total.','error')") &&
+  heldSalesCss.includes('.tt-held.has-selection .tt-held__list{display:none}') &&
+  heldSalesCss.includes('#tt-held-sales #tt-held-search') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(heldSalesCss)
 );
 
 check('legacy source still declares authoritative ui after feature styles',
