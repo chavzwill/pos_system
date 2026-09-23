@@ -44,6 +44,10 @@ const technicianCompJs=read('public/technician-compensation.js');
 const technicianCompCss=read('public/technician-compensation.css');
 const technicianMgmtJs=read('public/technician-management-intelligence.js');
 const technicianMgmtCss=read('public/technician-management-intelligence.css');
+const commissionsJs=read('public/commissions-workspace.js');
+const commissionsCss=read('public/commissions-workspace.css');
+const integrationAdminJs=read('public/integration-admin-workspace.js');
+const integrationAdminCss=read('public/integration-admin-workspace.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -493,6 +497,42 @@ check('technician team is action-led and uses one-item mobile management flow',
   technicianMgmtCss.includes('.tt-tmi.has-selection .tt-tmi__alerts{display:none}') &&
   technicianMgmtCss.includes('.tt-tmi__queue-back') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(technicianMgmtCss)
+);
+
+check('commissions is readable and keeps approval/payment transitions deliberate',
+  commissionsJs.includes('Review earned commission, approve verified records, and keep payment status clear.') &&
+  commissionsJs.includes('function confirmAction(') &&
+  commissionsJs.includes("title:'Approve commission?'") &&
+  commissionsJs.includes("title:'Mark commission paid?'") &&
+  commissionsJs.includes("title:'Approve all pending commission?'") &&
+  commissionsJs.includes("notice('Pending commission approved.','success')") &&
+  commissionsJs.includes('cm-disclosure') &&
+  !commissionsJs.includes('function showErr(e){alert(') &&
+  commissionsCss.includes('.cm-confirm-layer') &&
+  commissionsCss.includes('.cm-disclosure summary') &&
+  commissionsCss.includes('font-size:16px!important') &&
+  authority.includes('.cm-overlay .cm-shell .cm-toolbar input') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(commissionsCss)
+);
+
+check('integration credential administration uses audited in-product dialogs without browser prompts',
+  integrationAdminJs.includes("const VALID_SCOPES=['products:read'") &&
+  integrationAdminJs.includes('function reasonValid(value)') &&
+  integrationAdminJs.includes('function actionDialog(') &&
+  integrationAdminJs.includes('Security controlled') &&
+  integrationAdminJs.includes('Required for the security audit.') &&
+  integrationAdminJs.includes("title:'Create API key'") &&
+  integrationAdminJs.includes("title:'Rotate API key'") &&
+  integrationAdminJs.includes("title:'Revoke API key'") &&
+  integrationAdminJs.includes('Shown once') &&
+  integrationAdminJs.includes('it cannot be revealed later.') &&
+  !integrationAdminJs.includes('prompt(') &&
+  !integrationAdminJs.includes('confirm(') &&
+  integrationAdminCss.includes('.iaw-dialog-layer') &&
+  integrationAdminCss.includes('.iaw-scope-grid') &&
+  integrationAdminCss.includes('font-size:16px!important') &&
+  authority.includes('.iaw-layer .iaw-metrics{grid-template-columns:1fr 1fr!important') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(integrationAdminCss)
 );
 
 check('reports opens with truthful quick choices and progressively disclosed library',

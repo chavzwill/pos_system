@@ -451,11 +451,12 @@ th,td{padding:13px 14px!important;border-bottom:1px solid var(--tt-border)!impor
 @media(max-width:560px){
   .arw-overlay.open .arw .arw-toolbar input,.arw-overlay.open .arw .arw-toolbar select,.arw-overlay.open .arw .arw-detail input,.arw-overlay.open .arw .arw-detail select,.arw-overlay.open .arw .arw-detail textarea{font-size:16px!important}
   .catalog-admin-overlay .catalog-admin-shell .catalog-admin-panel .catalog-admin-toolbar input,.catalog-admin-overlay .catalog-admin-shell .catalog-admin-panel .catalog-admin-toolbar select{font-size:16px!important}
-  .arw-overlay .arw-metrics{grid-template-columns:1fr 1fr!important}
+  .cm-overlay .cm-shell .cm-toolbar input,.cm-overlay .cm-shell .cm-toolbar select{font-size:16px!important}
+  .arw-overlay .arw-metrics,.cm-overlay .cm-metrics,.iaw-layer .iaw-metrics{grid-template-columns:1fr 1fr!important}
 }
 @media(max-width:480px){
   :is([class*="__metrics"],[class*="-metrics"],[class*="__kpis"],[class*="-kpis"]){grid-template-columns:1fr!important}
-  .arw-overlay .arw-metrics{grid-template-columns:1fr 1fr!important}
+  .arw-overlay .arw-metrics,.cm-overlay .cm-metrics,.iaw-layer .iaw-metrics{grid-template-columns:1fr 1fr!important}
   :is(.modal-footer,[class*="__actions"],[class*="-actions"]){display:grid!important;grid-template-columns:1fr!important;width:100%!important}
   :is(.modal-footer,[class*="__actions"],[class*="-actions"]) button{width:100%!important;min-width:0!important}
   :is([class*="__head"],[class*="-head"],[class*="__header"],[class*="-header"]){gap:10px!important}
