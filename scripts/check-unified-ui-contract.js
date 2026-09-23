@@ -77,6 +77,11 @@ const suppliersCss=read('public/suppliers-workspace.css');
 const transfersJs=read('public/transfers-workspace.js');
 const transfersCss=read('public/transfers-workspace.css');
 const loaderHardeningJs=read('public/workspace-loader-hardening.js');
+const layawayJs=read('public/layaway-workspace.js');
+const repairAuthorizationsJs=read('public/repair-authorizations.js');
+const routePlanningJs=read('public/logistics-route-planning.js');
+const departmentApprovalsJs=read('public/department-approvals-ui.js');
+const catalogWorkflowJs=read('public/catalog-workflow-enhancer.js');
 const secondaryReadableCss=['repair-communications.css','repair-parts-integrity.css','repair-notifications.css','layaway-workspace.css','scheduling-intelligence.css','purchase-order-document-context.css','repair-authorizations.css','technician-coaching.css','rbac-workspace.css','stock-rebalancing.css','repair-operations.css','employee-learning-center.css','total-tools-identity.css','guided-mode-efficiency.css','guided-mode-qa.css','guided-mode-final-pass.css'].map(f=>[f,read('public/'+f)]);
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
@@ -241,9 +246,37 @@ check('quick command removes navigation hunting for permitted tasks',
   shellJs.includes('rememberTask(key,title)')
 );
 
+check('shared shell input dialog replaces browser prompts in high-use operational flows',
+  shellJs.includes('function requestInput(') &&
+  shellJs.includes('request:requestInput') &&
+  shellCss.includes('.shell-input-dialog__panel') &&
+  shellCss.includes('.shell-input-dialog__fields input') &&
+  shellCss.includes('font-size:16px') &&
+  !salesJs.includes('prompt(') &&
+  !layawayJs.includes('prompt(') &&
+  !warehouseJs.includes('prompt(') &&
+  !repairAuthorizationsJs.includes('prompt(') &&
+  !departmentApprovalsJs.includes('prompt(') &&
+  !routePlanningJs.includes('prompt(') &&
+  !catalogWorkflowJs.includes('prompt(')
+);
+
+check('shared dialog preserves evidence requirements in migrated workflows',
+  salesJs.includes("title:'Email receipt'") &&
+  layawayJs.includes("title:'Record layaway payment'") &&
+  layawayJs.includes("title:'Cancel layaway plan'") &&
+  warehouseJs.includes("title:'Post shipment'") &&
+  warehouseJs.includes("title:'Create warehouse zone'") &&
+  repairAuthorizationsJs.includes("title:decision==='approved'?'Approve estimate':'Reject estimate'") &&
+  departmentApprovalsJs.includes("title:'Reject request'") &&
+  routePlanningJs.includes("title:'Confirm pickup / custody'") &&
+  routePlanningJs.includes("title:'Skip route stop'") &&
+  routePlanningJs.includes("title:'Close route'")
+);
+
 check('shell feedback avoids blocking alerts for shell-level support and module failures',
   shellJs.includes('function showToast(') &&
-  shellJs.includes("window.TotalToolsShellUI={command:openCommand,toast:showToast}") &&
+  shellJs.includes("window.TotalToolsShellUI={command:openCommand,toast:showToast,request:requestInput}") &&
   shellJs.includes("showToast(`${title||'Workspace'} could not open") &&
   !shellJs.includes("else alert('Guide Me is available inside supported tasks.')") &&
   !shellJs.includes("else alert('Help & Learning is still loading. Please try again.')")
