@@ -32,6 +32,10 @@ const operationalReportsJs=read('public/operational-reports.js');
 const operationalReportsCss=read('public/operational-reports.css');
 const settingsJs=read('public/settings-workspace.js');
 const settingsCss=read('public/settings-workspace.css');
+const guidedModeJs=read('public/guided-mode.js');
+const guidedAccessJs=read('public/guided-mode-access.js');
+const guidedHardeningJs=read('public/guided-mode-hardening.js');
+const guidedExactJs=read('public/guided-mode-exact-action.js');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -404,6 +408,25 @@ check('final shell responsive geometry prevents command-bar wrap',
   authority.includes('.shell-topbar{min-height:76px!important;padding:12px 20px!important') &&
   authority.includes('@media(max-width:640px){.shell-topbar{min-height:68px!important;padding:10px 12px!important;display:flex!important') &&
   authority.includes('.shell-command-button{width:100%!important;min-width:0!important;height:48px!important')
+);
+
+check('Guide Me is a fluent non-modal coach with one canonical entry path',
+  guidedModeJs.includes('aria-modal="false"') &&
+  guidedModeJs.includes('state.returnFocus') &&
+  guidedModeJs.includes("document.getElementById('tt-guide-launcher')?.remove()") &&
+  guidedAccessJs.includes("window.TotalToolsGuideMe?.open") &&
+  guidedAccessJs.includes("document.getElementById('tt-guide-access')?.remove()") &&
+  guidedAccessJs.includes("document.getElementById('tt-guide-quick')?.remove()") &&
+  guidedHardeningJs.includes("panel.setAttribute('aria-modal','false')") &&
+  guidedHardeningJs.includes('Guide Me is a non-modal coach') &&
+  guidedExactJs.includes('function sales()') &&
+  guidedExactJs.includes("heading.textContent='Follow the highlighted control'") &&
+  authority.includes('Guide Me final authority — one fluent coach surface') &&
+  authority.includes('#tt-guide-launcher,#tt-guide-access,#tt-guide-quick{display:none!important}') &&
+  authority.includes('#tt-guided-mode .tt-guide__search input{min-width:0!important;height:50px!important') &&
+  authority.includes('@media(max-width:900px){') &&
+  authority.includes('#tt-guided-mode .tt-guide__search input{font-size:16px!important}') &&
+  authority.includes('max-height:min(58dvh,520px)!important')
 );
 
 check('reports opens with truthful quick choices and progressively disclosed library',
