@@ -28,6 +28,8 @@ const accountingJs=read('public/accounting-intelligence.js');
 const accountingCss=read('public/accounting-intelligence.css');
 const logisticsJs=read('public/logistics-intelligence.js');
 const logisticsCss=read('public/logistics-intelligence.css');
+const logisticsFieldJs=read('public/logistics-field-execution.js');
+const logisticsLocationJs=read('public/logistics-location-intelligence.js');
 const heldSalesJs=read('public/held-sales-workspace.js');
 const heldSalesCss=read('public/held-sales-workspace.css');
 const quotationsJs=read('public/quotations-workspace.js');
@@ -489,6 +491,21 @@ check('dispatch is queue-first with searchable work and explicit coverage except
   logisticsCss.includes('.tt-li-coverage summary') &&
   logisticsCss.includes('#tt-logistics-intelligence #tt-li-search{font-size:16px!important}') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(logisticsCss)
+);
+
+check('dispatch supporting dialogs use the unified product dialog law',
+  logisticsFieldJs.includes('tt-logistics-dialog__panel') &&
+  logisticsFieldJs.includes('aria-labelledby="tt-field-modal-title"') &&
+  logisticsFieldJs.includes("if(e.key==='Tab')") &&
+  logisticsFieldJs.includes("previous.focus({preventScroll:true})") &&
+  logisticsLocationJs.includes('aria-labelledby="tt-route-modal-title"') &&
+  logisticsLocationJs.includes('<label>Latitude<input') &&
+  logisticsLocationJs.includes('<label>Zone code<input') &&
+  logisticsLocationJs.includes('tt-logistics-dialog__actions') &&
+  logisticsLocationJs.includes("if(e.key==='Tab')") &&
+  logisticsCss.includes('/* Unified Dispatch dialog law */') &&
+  logisticsCss.includes('.tt-field-modal,.tt-route-modal') &&
+  logisticsCss.includes('@media(max-width:640px){.tt-field-modal,.tt-route-modal')
 );
 
 check('held orders is search-first and preserves deliberate sale boundaries',
