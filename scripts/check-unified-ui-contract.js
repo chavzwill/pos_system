@@ -77,6 +77,7 @@ const suppliersCss=read('public/suppliers-workspace.css');
 const transfersJs=read('public/transfers-workspace.js');
 const transfersCss=read('public/transfers-workspace.css');
 const loaderHardeningJs=read('public/workspace-loader-hardening.js');
+const secondaryReadableCss=['repair-communications.css','repair-parts-integrity.css','repair-notifications.css','layaway-workspace.css','scheduling-intelligence.css','purchase-order-document-context.css','repair-authorizations.css','technician-coaching.css','rbac-workspace.css','stock-rebalancing.css','repair-operations.css','employee-learning-center.css','total-tools-identity.css','guided-mode-efficiency.css','guided-mode-qa.css','guided-mode-final-pass.css'].map(f=>[f,read('public/'+f)]);
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -329,6 +330,10 @@ check('operations attention remains evidence-only and one-job mobile',
   attentionJs.includes('data-list-back') &&
   attentionCss.includes('.tt-oac.has-selection .tt-oac__queue{display:none}') &&
   attentionCss.includes('.tt-oac:not(.has-selection) .tt-oac__detail{display:none}')
+);
+
+check('active secondary workspaces contain no staff microtype at 10px or below',
+  secondaryReadableCss.every(([,css])=>!/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(css))
 );
 
 check('workspace hardening registry cannot hide shell modules or lose tile intent',
