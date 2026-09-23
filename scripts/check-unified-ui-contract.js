@@ -13,6 +13,8 @@ const inventoryJs=read('public/inventory-workspace.js');
 const purchasingJs=read('public/purchasing-workspace.js');
 const workOrdersJs=read('public/work-orders-workspace.js');
 const workOrdersCss=read('public/work-orders-workspace.css');
+const rentalsJs=read('public/rentals-workspace.js');
+const rentalsCss=read('public/rentals-workspace.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -242,9 +244,26 @@ check('repairs uses a calm search-first queue with progressive detail',
   workOrdersJs.includes('tt-wo__disclosure') &&
   workOrdersJs.includes('<h3>Quality check</h3>') &&
   workOrdersCss.includes('.tt-wo__disclosure summary') &&
-  workOrdersCss.includes('.tt-wo__shortcuts') &&
-  workOrdersCss.includes('font-size:16px!important') &&
+  workOrdersCss.includes('.tt-wo.has-selection .tt-wo__list-pane{display:none}') &&
+  workOrdersCss.includes('#tt-work-orders-workspace #tt-wo-search{font-size:16px!important}') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(workOrdersCss)
+);
+
+check('rentals opens as a calm queue and progressively discloses lifecycle evidence',
+  rentalsJs.includes('function focusSearch(') &&
+  rentalsJs.includes('function bindShortcuts()') &&
+  rentalsJs.includes("e.key==='F2'") &&
+  rentalsJs.includes("e.key==='F3'") &&
+  rentalsJs.includes('aria-keyshortcuts="/"') &&
+  rentalsJs.includes('tt-rent__disclosure') &&
+  rentalsJs.includes('<span>History</span>') &&
+  rentalsJs.includes('<span>Assigned equipment</span>') &&
+  rentalsJs.includes('<span>Missing items</span>') &&
+  rentalsJs.includes("if(!confirm(`Resume ${a.agreement_number}?") &&
+  !rentalsJs.includes('if(!state.selected&&state.rows.length)state.selected=state.rows[0]') &&
+  rentalsCss.includes('.tt-rent.has-selection .tt-rent__list{display:none}') &&
+  rentalsCss.includes('#tt-rentals-workspace #tt-rent-search') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(rentalsCss)
 );
 
 check('legacy source still declares authoritative ui after feature styles',
