@@ -10,6 +10,13 @@ const shellCss=read('public/app-shell.css');
 const salesCss=read('public/sales-workspace.css');
 const salesJs=read('public/sales-workspace.js');
 const inventoryJs=read('public/inventory-workspace.js');
+const inventoryCss=read('public/inventory-workspace.css');
+const inventoryIntelligenceJs=read('public/inventory-intelligence.js');
+const inventoryIntelligenceCss=read('public/inventory-intelligence.css');
+const supplierLedgerJs=read('public/supplier-ledger.js');
+const supplierLedgerCss=read('public/supplier-ledger.css');
+const accountingLedgerJs=read('public/accounting-ledger.js');
+const accountingLedgerCss=read('public/accounting-ledger.css');
 const purchasingJs=read('public/purchasing-workspace.js');
 const workOrdersJs=read('public/work-orders-workspace.js');
 const workOrdersCss=read('public/work-orders-workspace.css');
@@ -644,6 +651,53 @@ check('cashier controls is search-first and preserves deliberate return and void
   cashierControlsCss.includes('.tt-cc.has-selection .tt-cc__list{display:none}') &&
   cashierControlsCss.includes('#tt-cashier-controls #tt-cc-search{font-size:16px!important}') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(cashierControlsCss)
+);
+
+check('supplier ledger is readable while payment retries remain idempotent',
+  supplierLedgerJs.includes('Formal payables begin only when a supplier invoice is posted.') &&
+  supplierLedgerJs.includes("PAYMENT_OPERATION_STORAGE='tt_supplier_payment_operation_v1'") &&
+  supplierLedgerJs.includes("headers:{'Idempotency-Key':operationKey}") &&
+  supplierLedgerJs.includes('A supplier payment is still awaiting a deterministic retry.') &&
+  supplierLedgerJs.includes('tt-supplier-ledger-disclosure') &&
+  supplierLedgerCss.includes('--sl-green:#0B7A3E') &&
+  supplierLedgerCss.includes('#tt-supplier-ledger #tt-supplier-ledger-branch') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(supplierLedgerCss)
+);
+
+check('inventory planning is readable, evidence-led and remains advisory',
+  inventoryIntelligenceJs.includes('Suggested actions never change stock automatically.') &&
+  inventoryIntelligenceJs.includes('tt-ii-planning') &&
+  inventoryIntelligenceJs.includes('data-go-transfer') &&
+  inventoryIntelligenceJs.includes('data-go-purchasing') &&
+  inventoryIntelligenceCss.includes('--ii-green:#0B7A3E') &&
+  inventoryIntelligenceCss.includes('.tt-ii-planning summary') &&
+  inventoryIntelligenceCss.includes('#tt-inventory-intelligence #tt-ii-branch') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(inventoryIntelligenceCss)
+);
+
+check('inventory operations is readable and preserves audited stock adjustment control',
+  inventoryJs.includes('function focusSearch(') &&
+  inventoryJs.includes('Reason is required for auditability') &&
+  inventoryJs.includes("notice('A reason is required for every stock adjustment.','error')") &&
+  inventoryJs.includes('if(!confirm(') &&
+  inventoryJs.includes('Adjust ${state.selected.name}') &&
+  inventoryJs.includes("method:'PATCH'") &&
+  inventoryCss.includes('--inv-green:#0B7A3E') &&
+  inventoryCss.includes('#tt-inventory-workspace #tt-inv-search') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(inventoryCss)
+);
+
+check('accounting ledger is readable and keeps irreversible posting explicit',
+  accountingLedgerJs.includes('Balanced journals, trial balance and source-traceable posted entries.') &&
+  accountingLedgerJs.includes('function confirmPost(journal)') &&
+  accountingLedgerJs.includes('Posted journals are locked and must be corrected by reversal.') &&
+  accountingLedgerJs.includes("notice('Journal posted.','success')") &&
+  accountingLedgerJs.includes('tt-ledger-disclosure') &&
+  !accountingLedgerJs.includes("confirm('Post this balanced journal?") &&
+  accountingLedgerCss.includes('--al-green:#0B7A3E') &&
+  accountingLedgerCss.includes('.tt-ledger-confirm') &&
+  accountingLedgerCss.includes('#tt-accounting-ledger #tt-ledger-end') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(accountingLedgerCss)
 );
 
 check('legacy source still declares authoritative ui after feature styles',
