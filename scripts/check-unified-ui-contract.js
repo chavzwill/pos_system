@@ -23,6 +23,8 @@ const logisticsJs=read('public/logistics-intelligence.js');
 const logisticsCss=read('public/logistics-intelligence.css');
 const heldSalesJs=read('public/held-sales-workspace.js');
 const heldSalesCss=read('public/held-sales-workspace.css');
+const quotationsJs=read('public/quotations-workspace.js');
+const quotationsCss=read('public/quotations-workspace.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -332,6 +334,20 @@ check('held orders is search-first and preserves deliberate sale boundaries',
   heldSalesCss.includes('.tt-held.has-selection .tt-held__list{display:none}') &&
   heldSalesCss.includes('#tt-held-sales #tt-held-search') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(heldSalesCss)
+);
+
+check('quotes is search-first with quiet filters and history',
+  quotationsJs.includes('function focusSearch(') &&
+  quotationsJs.includes('function bindShortcuts()') &&
+  quotationsJs.includes("e.key==='F2'") &&
+  quotationsJs.includes("e.key==='F3'") &&
+  quotationsJs.includes('aria-keyshortcuts="/"') &&
+  quotationsJs.includes('tt-quotes__filters') &&
+  quotationsJs.includes('tt-quotes__history') &&
+  quotationsCss.includes('.tt-quotes__filters summary') &&
+  quotationsCss.includes('.tt-quotes__history summary') &&
+  quotationsCss.includes('#tt-quotes #tt-quotes-search') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(quotationsCss)
 );
 
 check('legacy source still declares authoritative ui after feature styles',
