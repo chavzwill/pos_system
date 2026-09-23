@@ -25,6 +25,9 @@ const heldSalesJs=read('public/held-sales-workspace.js');
 const heldSalesCss=read('public/held-sales-workspace.css');
 const quotationsJs=read('public/quotations-workspace.js');
 const quotationsCss=read('public/quotations-workspace.css');
+const warehouseJs=read('public/warehouse-operations-workspace.js');
+const warehouseCss=read('public/warehouse-operations-workspace.css');
+const nativeSupportJs=read('public/shell-native-support.js');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -348,6 +351,55 @@ check('quotes is search-first with quiet filters and history',
   quotationsCss.includes('.tt-quotes__history summary') &&
   quotationsCss.includes('#tt-quotes #tt-quotes-search') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(quotationsCss)
+);
+
+check('warehouse is queue-first and keeps storage evidence progressively disclosed',
+  warehouseJs.includes('function filteredShipments()') &&
+  warehouseJs.includes('function bindShortcuts()') &&
+  warehouseJs.includes('aria-keyshortcuts="/"') &&
+  warehouseJs.includes('wow-storage') &&
+  warehouseJs.includes('wow-history') &&
+  warehouseCss.includes('.wow-overlay.has-selection .wow-queue{display:none}') &&
+  warehouseCss.includes('.wow-storage summary') &&
+  warehouseCss.includes('.wow-history summary') &&
+  warehouseCss.includes('.wow-overlay #wow-search{font-size:16px!important}') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(warehouseCss)
+);
+
+check('warehouse is first-class in the simplified shell and quick command',
+  shellJs.includes("['Warehouse','Prepare shipments, find storage locations and manage warehouse flow.','warehouse-operations']") &&
+  shellJs.includes("'warehouse-operations':['/warehouse-operations-workspace.css'") &&
+  shellJs.includes("'warehouse-operations':'warehouse'") &&
+  shellJs.includes("if(key==='warehouse-operations')return'Open warehouse'")
+);
+
+check('native support tools attach to progressive disclosure instead of retired shell grid',
+  nativeSupportJs.includes("document.getElementById('shell-content')") &&
+  nativeSupportJs.includes("content.querySelector('.shell-more')") &&
+  nativeSupportJs.includes("className='shell-more'") &&
+  !nativeSupportJs.includes("document.getElementById('shell-grid')")
+);
+
+check('final shell visual law is warm framed, white canvased and search led',
+  shellCss.includes('--tt-frame:#FBF5E9') &&
+  shellCss.includes('.shell-search-label') &&
+  shellCss.includes('.shell-profile-mark') &&
+  shellJs.includes('Search tasks, customers, stock or orders') &&
+  shellJs.includes('shell-topbar-avatar') &&
+  authority.includes('Shell authority exception: the application frame has its own warm visual law.') &&
+  authority.includes('.shell-sidebar{background:#FBF5E9!important') &&
+  authority.includes('.shell-nav button.is-active{background:#0B7A3E!important;color:#fff!important') &&
+  authority.includes('.shell-main{background:#fff!important') &&
+  authority.includes('.shell-command-button{display:flex!important;flex:1 1 auto!important') &&
+  authority.includes('.shell-topbar>.shell-command-search,.shell-topbar>.shell-quick-actions,.shell-topbar>.tt-learning-launcher{display:none!important')
+);
+
+check('final shell responsive geometry prevents command-bar wrap',
+  authority.includes('.shell-topbar{min-height:82px!important') &&
+  authority.includes('@media(max-width:1080px){.shell-app{background:#fff!important') &&
+  authority.includes('.shell-topbar{min-height:76px!important;padding:12px 20px!important') &&
+  authority.includes('@media(max-width:640px){.shell-topbar{min-height:68px!important;padding:10px 12px!important;display:flex!important') &&
+  authority.includes('.shell-command-button{width:100%!important;min-width:0!important;height:48px!important')
 );
 
 check('legacy source still declares authoritative ui after feature styles',

@@ -458,6 +458,50 @@ th,td{padding:13px 14px!important;border-bottom:1px solid var(--tt-border)!impor
   :is([class*="toolbar"],[class*="filters"],[class*="tabs"]){padding-left:10px!important;padding-right:10px!important}
   :is(.tt-guide,.tt-ea-modal,.tt-learn){width:100vw!important;max-width:100vw!important}
 }
+/* Shell authority exception: the application frame has its own warm visual law. */
+html,body{background:#FBF5E9!important}
+.shell-app{background:#FBF5E9!important}
+.shell-sidebar{background:#FBF5E9!important;color:#111714!important}
+.shell-brand strong,.shell-sidebar footer strong{color:#111714!important}
+.shell-brand span,.shell-sidebar footer span,.shell-guide span{color:#66716B!important}
+.shell-nav button{background:transparent!important;color:#303934!important}
+.shell-nav button:hover{background:rgba(11,122,62,.07)!important;color:#075C31!important}
+.shell-nav button.is-active{background:#0B7A3E!important;color:#fff!important;box-shadow:none!important}
+.shell-nav button.is-active:before{background:#F2D11F!important}
+.shell-guide{background:transparent!important;border-color:rgba(17,23,20,.08)!important}
+.shell-guide button{background:#0B7A3E!important;color:#fff!important;border-color:#0B7A3E!important}
+.shell-guide button+button{background:#fff!important;color:#111714!important;border-color:#DCE5DF!important}
+.shell-sidebar footer{border-top-color:rgba(17,23,20,.08)!important}
+.shell-sidebar footer button{background:transparent!important;color:#C44238!important;border:0!important;min-height:36px!important}
+.shell-main{background:#fff!important}
+.shell-topbar{min-height:82px!important;height:auto!important;padding:14px 28px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:18px!important;background:rgba(255,255,255,.96)!important;border-bottom:1px solid #ECEDE9!important}
+.shell-command-button{display:flex!important;flex:1 1 auto!important;width:auto!important;max-width:760px!important;height:52px!important;min-height:52px!important;max-height:52px!important;align-items:center!important;justify-content:flex-start!important;gap:12px!important;padding:0 15px!important;border:1px solid #CED5D0!important;border-radius:16px!important;background:#fff!important;color:#66716B!important;overflow:hidden!important;white-space:nowrap!important}
+.shell-command-button:hover{background:#fff!important;border-color:#9FC2AD!important}
+.shell-command-button .shell-search-icon{flex:0 0 auto!important;font-size:24px!important;line-height:1!important;color:#111714!important}
+.shell-command-button .shell-search-label{flex:1 1 auto!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:13px!important;color:#6A746E!important;text-align:left!important}
+.shell-command-button kbd{flex:0 0 auto!important;font-size:11px!important}
+.shell-topbar__profile{display:flex!important;align-items:center!important;gap:10px!important}
+.shell-topbar-avatar,.shell-profile-mark{background:#0B7A3E!important;color:#fff!important}
+.shell-content{background:#fff!important}
+.shell-page-head__branch,.shell-resume{background:#FFF9EE!important;border-color:#E8E0D4!important}
+.shell-choice,.shell-attention-list,.shell-kpis article,.shell-more__grid>button{background:#fff!important}
+.shell-choice__mark{background:#EAF6EF!important;color:#075C31!important}
+.shell-choice:nth-child(4n+2) .shell-choice__mark,.shell-attention-count{background:#FFF6C9!important;color:#6D5B00!important}
+.shell-choice__action,.shell-more__grid em,.shell-resume__item em{color:#075C31!important}
+.shell-resume__item{background:#fff!important;color:#111714!important;border-color:#E6DED3!important}
+.shell-resume__item small{color:#66716B!important}
+.shell-login{background:#FBF5E9!important}
+.shell-login__brand{background:#FBF5E9!important;color:#111714!important}
+.shell-login__brand h1{color:#111714!important}
+.shell-login__brand p,.shell-login__brand small{color:#66716B!important}
+.shell-login__panel{background:#fff!important}
+.shell-login__card{background:transparent!important;border:0!important;box-shadow:none!important}
+.shell-login__card button{background:#0B7A3E!important;color:#fff!important}
+.shell-topbar>.shell-command-search,.shell-topbar>.shell-quick-actions,.shell-topbar>.tt-learning-launcher{display:none!important}
+@media(max-width:1080px){.shell-app{background:#fff!important}.shell-sidebar{background:#FBF5E9!important}.shell-main{background:#fff!important}.shell-topbar{min-height:76px!important;padding:12px 20px!important}.shell-command-button{max-width:none!important}.shell-topbar__profile>div{display:none!important}.shell-topbar-avatar{width:40px!important;height:40px!important}.shell-mobile-menu{width:auto!important;min-width:64px!important;height:44px!important;min-height:44px!important;padding:0 12px!important;justify-content:center!important;flex:0 0 auto!important}}
+@media(max-width:640px){.shell-topbar{min-height:68px!important;padding:10px 12px!important;display:flex!important;align-items:center!important;gap:8px!important;flex-wrap:nowrap!important}.shell-command-button{width:100%!important;min-width:0!important;height:48px!important;min-height:48px!important;max-height:48px!important;padding:0 12px!important}.shell-command-button .shell-search-label{font-size:0!important}.shell-command-button .shell-search-label:after{content:"Search";font-size:13px!important}.shell-topbar__profile>div{display:none!important}.shell-topbar-avatar{width:38px!important;height:38px!important}}
+@media(max-width:430px){.shell-topbar{grid-template-columns:auto minmax(0,1fr)!important}.shell-topbar__profile{display:none!important}.shell-command-button .shell-search-icon{font-size:21px!important}}
+
 @media(prefers-reduced-motion:reduce){
   *,*:before,*:after{scroll-behavior:auto!important;animation:none!important;transition:none!important}
 }
