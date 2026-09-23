@@ -40,6 +40,10 @@ const accountsReceivableJs=read('public/accounts-receivable-workspace.js');
 const accountsReceivableCss=read('public/accounts-receivable-workspace.css');
 const catalogAdminJs=read('public/catalog-admin-workspace.js');
 const catalogAdminCss=read('public/catalog-admin-workspace.css');
+const technicianCompJs=read('public/technician-compensation.js');
+const technicianCompCss=read('public/technician-compensation.css');
+const technicianMgmtJs=read('public/technician-management-intelligence.js');
+const technicianMgmtCss=read('public/technician-management-intelligence.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -464,6 +468,31 @@ check('products and categories is search-first and preserves governed catalog co
   catalogAdminCss.includes('font-size:16px!important') &&
   authority.includes('.catalog-admin-overlay .catalog-admin-shell .catalog-admin-panel .catalog-admin-toolbar input') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(catalogAdminCss)
+);
+
+check('technician performance is readable, evidence-led and keeps pay controls explicit',
+  technicianCompJs.includes('Technician Performance') &&
+  technicianCompJs.includes('Pay & Adjustments') &&
+  technicianCompJs.includes('Pay changes always remain controlled.') &&
+  technicianCompJs.includes('data-tech-back') &&
+  technicianCompJs.includes('Performance evidence never changes pay automatically.') &&
+  technicianCompJs.includes('Automatic pay change: No') &&
+  technicianCompCss.includes('.tt-tech-pay.has-tech .tt-tech-score__list{display:none}') &&
+  technicianCompCss.includes('.tt-tech-score__back') &&
+  technicianCompCss.includes('font-size:16px!important') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(technicianCompCss)
+);
+
+check('technician team is action-led and uses one-item mobile management flow',
+  technicianMgmtJs.includes('See who needs attention, why the issue surfaced, and the next management action.') &&
+  technicianMgmtJs.includes('<strong>Needs attention</strong>') &&
+  technicianMgmtJs.includes('<strong>Team context</strong>') &&
+  technicianMgmtJs.includes('Attention points') &&
+  technicianMgmtJs.includes('data-alert-back') &&
+  technicianMgmtJs.includes('they never change pay or discipline anyone automatically.') &&
+  technicianMgmtCss.includes('.tt-tmi.has-selection .tt-tmi__alerts{display:none}') &&
+  technicianMgmtCss.includes('.tt-tmi__queue-back') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(technicianMgmtCss)
 );
 
 check('reports opens with truthful quick choices and progressively disclosed library',
