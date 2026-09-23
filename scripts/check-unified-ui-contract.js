@@ -52,6 +52,14 @@ const customerProgramsJs=read('public/customer-programs-workspace.js');
 const customerProgramsCss=read('public/customer-programs-workspace.css');
 const ecommerceJs=read('public/ecommerce-operations-workspace.js');
 const ecommerceCss=read('public/ecommerce-operations-workspace.css');
+const promotionsJs=read('public/promotions-workspace.js');
+const promotionsCss=read('public/promotions-workspace.css');
+const financialControlsJs=read('public/financial-controls-intelligence.js');
+const financialControlsCss=read('public/financial-controls-intelligence.css');
+const settlementJs=read('public/settlement-reconciliation.js');
+const settlementCss=read('public/settlement-reconciliation.css');
+const cashierControlsJs=read('public/cashier-controls-workspace.js');
+const cashierControlsCss=read('public/cashier-controls-workspace.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -587,6 +595,55 @@ check('e-commerce operations is queue-led and preserves warehouse shipment autho
   ecommerceCss.includes('--ec-green:#0B7A3E') &&
   ecommerceCss.includes('.ecom-disclosure summary') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(ecommerceCss)
+);
+
+check('promotions uses readable campaign flow and in-product code entry',
+  promotionsJs.includes('function codeDialog()') &&
+  promotionsJs.includes('without bypassing checkout pricing controls') &&
+  promotionsJs.includes("root().classList.add('has-selection')") &&
+  promotionsJs.includes("notice('Promotion code added.','success')") &&
+  !promotionsJs.includes("prompt('Promotion code')") &&
+  !promotionsJs.includes("prompt('Usage limit") &&
+  promotionsCss.includes('--promo-green:#0B7A3E') &&
+  promotionsCss.includes('.tt-promo.has-selection .tt-promo__list{display:none}') &&
+  promotionsCss.includes('#tt-promotions .tt-promo-form input') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(promotionsCss)
+);
+
+check('financial controls keeps truthful finance boundaries and progressively discloses analysis',
+  financialControlsJs.includes('Not a cash-flow statement:') &&
+  financialControlsJs.includes('tt-finctl-disclosure') &&
+  financialControlsJs.includes('Known commitments ÷ recorded inflow proxy') &&
+  financialControlsCss.includes('--fc-green:#0B7A3E') &&
+  financialControlsCss.includes('.tt-finctl-disclosure summary') &&
+  financialControlsCss.includes('#tt-fin-controls #tt-finctl-start') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(financialControlsCss)
+);
+
+check('settlement reconciliation keeps evidence primary and secondary tables on demand',
+  settlementJs.includes('Settlement batches') &&
+  settlementJs.includes('tt-settlement-section') &&
+  settlementJs.includes('POS evidence waiting for settlement matching') &&
+  settlementJs.includes("notice(e.message+' — match POS transactions to this batch before reconciliation.','error')") &&
+  settlementCss.includes('--sr-green:#0B7A3E') &&
+  settlementCss.includes('.tt-settlement-section summary') &&
+  settlementCss.includes('#tt-settlement-rec .tt-settlement__filters input') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(settlementCss)
+);
+
+check('cashier controls is search-first and preserves deliberate return and void boundaries',
+  cashierControlsJs.includes('function confirmAction(') &&
+  cashierControlsJs.includes('aria-keyshortcuts="/"') &&
+  cashierControlsJs.includes("title:'Process return?'") &&
+  cashierControlsJs.includes("title:'Void transaction?'") &&
+  cashierControlsJs.includes("notice('Manager override PIN is required.','error')") &&
+  cashierControlsJs.includes("notice('Void reason is required.','error')") &&
+  !cashierControlsJs.includes("confirm(`Void") &&
+  !cashierControlsJs.includes("confirm(`Process this") &&
+  cashierControlsCss.includes('--cc-green:#0B7A3E') &&
+  cashierControlsCss.includes('.tt-cc.has-selection .tt-cc__list{display:none}') &&
+  cashierControlsCss.includes('#tt-cashier-controls #tt-cc-search{font-size:16px!important}') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(cashierControlsCss)
 );
 
 check('legacy source still declares authoritative ui after feature styles',
