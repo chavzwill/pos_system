@@ -38,6 +38,8 @@ const guidedHardeningJs=read('public/guided-mode-hardening.js');
 const guidedExactJs=read('public/guided-mode-exact-action.js');
 const accountsReceivableJs=read('public/accounts-receivable-workspace.js');
 const accountsReceivableCss=read('public/accounts-receivable-workspace.css');
+const catalogAdminJs=read('public/catalog-admin-workspace.js');
+const catalogAdminCss=read('public/catalog-admin-workspace.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -444,6 +446,24 @@ check('accounts receivable is search-first, readable and keeps credit approval c
   accountsReceivableCss.includes('font-size:16px!important') &&
   authority.includes('.arw-overlay.open .arw .arw-toolbar input') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(accountsReceivableCss)
+);
+
+check('products and categories is search-first and preserves governed catalog controls',
+  catalogAdminJs.includes('Products & Categories') &&
+  catalogAdminJs.includes('function focusSearch(') &&
+  catalogAdminJs.includes('function bindShortcuts()') &&
+  catalogAdminJs.includes("e.key==='F2'") &&
+  catalogAdminJs.includes("e.key==='F3'") &&
+  catalogAdminJs.includes('aria-keyshortcuts="/"') &&
+  catalogAdminJs.includes('Catalog Health') &&
+  catalogAdminJs.includes('Consolidate duplicate records') &&
+  catalogAdminJs.includes('Type CONSOLIDATE to confirm') &&
+  catalogAdminCss.includes('.catalog-admin-shortcuts') &&
+  catalogAdminCss.includes('.catalog-admin-table th') &&
+  catalogAdminCss.includes('.catalog-admin-health-card.severity-high') &&
+  catalogAdminCss.includes('font-size:16px!important') &&
+  authority.includes('.catalog-admin-overlay .catalog-admin-shell .catalog-admin-panel .catalog-admin-toolbar input') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(catalogAdminCss)
 );
 
 check('reports opens with truthful quick choices and progressively disclosed library',
