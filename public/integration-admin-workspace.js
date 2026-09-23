@@ -3,7 +3,7 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 async function json(url,opts={}){const r=await fetch(url,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d;}
 let host=null,keys=[],settings={};
 const VALID_SCOPES=['products:read','products:write','customers:read','customers:write','orders:read','orders:write','repairs:read','repairs:write'];
-const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else alert(String(message||''))};
+const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else console.error(String(message||''))};
 function parseScopes(v){try{return Array.isArray(v)?v:JSON.parse(v||'[]')}catch{return[]}}
 function setting(k){if(Array.isArray(settings)){const row=settings.find(x=>x.key===k);return row?.value||''}return settings?.[k]??''}
 function reasonValid(value){return String(value||'').trim().length>=8;}

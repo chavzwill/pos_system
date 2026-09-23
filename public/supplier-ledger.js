@@ -3,7 +3,7 @@ const state={open:false,overview:null,invoices:[],branch_id:''};
 const PAYMENT_OPERATION_STORAGE='tt_supplier_payment_operation_v1';
 const money=v=>new Intl.NumberFormat(undefined,{style:'currency',currency:'JMD',maximumFractionDigits:0}).format(Number(v||0));
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else alert(String(message||''))};
+const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else console.error(String(message||''))};
 async function api(path,opts={}){const r=await fetch('/api/supplier-ledger'+path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Request failed');return d;}
 function stable(value){if(Array.isArray(value))return value.map(stable);if(value&&typeof value==='object')return Object.keys(value).sort().reduce((o,k)=>(o[k]=stable(value[k]),o),{});return value;}
 function paymentFingerprint(body){return JSON.stringify(stable(body||{}));}

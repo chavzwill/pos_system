@@ -2,7 +2,7 @@
 const state={open:false,data:null,accounts:[],start:'',end:'',branch_id:''};
 const money=v=>new Intl.NumberFormat(undefined,{style:'currency',currency:'JMD',maximumFractionDigits:0}).format(Number(v||0));
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else alert(String(message||''))};
+const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else console.error(String(message||''))};
 async function api(path,opts={}){const r=await fetch('/api/settlement-reconciliation'+path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});const d=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(d.error||'Request failed');e.payload=d;throw e;}return d;}
 function root(){return document.getElementById('tt-settlement-rec');}
 function shell(){let e=root();if(e)return e;e=document.createElement('div');e.id='tt-settlement-rec';e.className='tt-settlement';document.body.appendChild(e);return e;}

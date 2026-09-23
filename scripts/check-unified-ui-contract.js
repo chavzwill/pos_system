@@ -35,6 +35,8 @@ const quotationsCss=read('public/quotations-workspace.css');
 const warehouseJs=read('public/warehouse-operations-workspace.js');
 const warehouseCss=read('public/warehouse-operations-workspace.css');
 const nativeSupportJs=read('public/shell-native-support.js');
+const shellDeferredJs=read('public/shell-deferred.js');
+const loaderHardeningSource=read('public/workspace-loader-hardening.js');
 const operationalReportsJs=read('public/operational-reports.js');
 const operationalReportsCss=read('public/operational-reports.css');
 const settingsJs=read('public/settings-workspace.js');
@@ -94,6 +96,9 @@ const previewCss=read('public/preview-ui-v2.css');
 const pkg=read('package.json');
 const server=read('server.js');
 const assetKeys=src=>{const m=src.match(/const assets=\{([\s\S]*?)\};/);return m?[...m[1].matchAll(/'([^']+)'\s*:/g)].map(x=>x[1]):[];};
+const activeJsSources=[shellHtml,shellJs,shellDeferredJs,nativeSupportJs,loaderHardeningSource].join('\n');
+const activeJsFiles=[...new Set([...activeJsSources.matchAll(/['\"]\/?([^'\"]+\.js)(?:\?[^'\"]*)?['\"]/g)].map(m=>path.basename(m[1])))].filter(f=>fs.existsSync(path.join(root,'public',f)));
+const activeJsText=activeJsFiles.map(f=>read('public/'+f));
 
 check('authoritative palette is exact',
   authority.includes('--tt-green:#0B7A3E') &&
@@ -245,6 +250,11 @@ check('quick command removes navigation hunting for permitted tasks',
   shellJs.includes("String(e.key).toLowerCase()==='k'") &&
   shellJs.includes('allowedFeature(key)') &&
   shellJs.includes('rememberTask(key,title)')
+);
+
+check('active shell-loaded frontend contains no blocking browser alert or prompt calls',
+  activeJsFiles.length>=20 &&
+  activeJsText.every(src=>!/(?:\balert\s*\(|\bprompt\s*\()/.test(src))
 );
 
 check('shared shell input dialog replaces browser prompts in high-use operational flows',

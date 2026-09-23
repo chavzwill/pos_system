@@ -2,7 +2,7 @@
 const state={profile:null,orders:[],catalog:null,health:null,selected:null,loading:false};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>new Intl.NumberFormat(undefined,{style:'currency',currency:'JMD',maximumFractionDigits:0}).format(Number(v||0));
-const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else alert(String(message||''))};
+const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else console.error(String(message||''))};
 function confirmShipment(order){return new Promise(resolve=>{const layer=document.createElement('div');layer.className='ecom-confirm-layer';layer.innerHTML=`<section class="ecom-confirm" role="dialog" aria-modal="true"><span class="ecom-kicker">Review action</span><h3>Create shipment draft?</h3><p>Create a warehouse shipment draft for ${esc(order?.external_order_id||order?.transaction_number||'this online order')}? Stock movement still occurs only through the existing warehouse process.</p><div><button class="secondary" data-cancel>Cancel</button><button data-confirm>Create draft</button></div></section>`;document.body.appendChild(layer);const done=v=>{layer.remove();resolve(v)};layer.querySelector('[data-cancel]').onclick=()=>done(false);layer.querySelector('[data-confirm]').onclick=()=>done(true);layer.querySelector('[data-cancel]').focus();});}
 const dt=v=>v?new Date(v).toLocaleString():'—';
 function can(key){const p=state.profile?.permissions||{};if(p[key])return true;const prefix=key.replace(/-/g,'_')+'_';return Object.entries(p).some(([k,v])=>v&&(k===key||k.startsWith(prefix)));}

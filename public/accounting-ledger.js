@@ -2,7 +2,7 @@
 const state={open:false,accounts:[],journals:[],trial:null,end:'',branch_id:''};
 const money=v=>new Intl.NumberFormat(undefined,{style:'currency',currency:'JMD',maximumFractionDigits:0}).format(Number(v||0));
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]||c));
-const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else alert(String(message||''))};
+const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else console.error(String(message||''))};
 function confirmPost(journal){return new Promise(resolve=>{const layer=document.createElement('div');layer.className='tt-ledger-confirm';layer.innerHTML=`<section role="dialog" aria-modal="true"><span class="eyebrow">Review posting</span><h3>Post balanced journal?</h3><p>Post ${esc(journal||'this journal')}? Posted journals are locked and must be corrected by reversal.</p><div><button data-cancel>Cancel</button><button class="primary" data-confirm>Post journal</button></div></section>`;document.body.appendChild(layer);const done=v=>{layer.remove();resolve(v)};layer.querySelector('[data-cancel]').onclick=()=>done(false);layer.querySelector('[data-confirm]').onclick=()=>done(true);layer.querySelector('[data-cancel]').focus();});}
 async function api(path,opts={}){const r=await fetch('/api/accounting-ledger'+path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||'Request failed');return d;}
 function root(){return document.getElementById('tt-accounting-ledger');}

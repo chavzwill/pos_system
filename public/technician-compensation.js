@@ -9,7 +9,7 @@
   const money = n => new Intl.NumberFormat('en-JM',{style:'currency',currency:'JMD',maximumFractionDigits:2}).format(Number(n)||0);
   const pct = n => n == null ? '—' : Number(n).toFixed(1) + '%';
   const label = s => String(s || 'unavailable').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
-  const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else alert(String(message||''))};
+  const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else console.error(String(message||''))};
 
   async function request(path, init={}) { const response=await fetch(API+path,{credentials:'same-origin',headers:{Accept:'application/json',...(init.body?{'Content-Type':'application/json'}:{}),...(init.headers||{})},...init}); const payload=await response.json().catch(()=>({})); if(!response.ok) throw new Error(payload.error||'Technician intelligence is unavailable'); return payload; }
   function authenticated(){if(document.querySelector('.shell-app'))return true;const login=document.getElementById('login-screen'),main=document.getElementById('main');if(login&&main)return getComputedStyle(login).display==='none'&&getComputedStyle(main).display!=='none';return !!window.__TT_WORKSPACE_PROFILE__;}

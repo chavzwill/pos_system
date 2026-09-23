@@ -2,7 +2,7 @@
 const state={open:false,tab:'customers',customers:[],selected:null,dashboard:null,search:'',shortcutHandler:null};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>new Intl.NumberFormat(undefined,{style:'currency',currency:'JMD',maximumFractionDigits:0}).format(Number(v||0));
-const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else alert(String(message||''))};
+const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else console.error(String(message||''))};
 function focusSearch(select=false){setTimeout(()=>{const el=document.getElementById('tt-crm-search');if(el){el.focus({preventScroll:true});if(select)el.select()}},0)}
 function bindShortcuts(){if(state.shortcutHandler)return;state.shortcutHandler=e=>{if(!state.open)return;const tag=String(e.target?.tagName||'').toLowerCase(),typing=['input','textarea','select'].includes(tag)||e.target?.isContentEditable;if(e.key==='/'&&!typing&&state.tab==='customers'){e.preventDefault();focusSearch(true)}if(e.key==='F2'){e.preventDefault();switchTab(state.tab==='customers'?'pipeline':'customers')}if(e.key==='Escape'&&state.selected&&window.innerWidth<=820){e.preventDefault();state.selected=null;render();focusSearch()}};document.addEventListener('keydown',state.shortcutHandler)}
 async function api(url,opts={}){const r=await fetch(url,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d;}

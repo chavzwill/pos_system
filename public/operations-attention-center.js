@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const state={open:false,loading:false,data:null,error:null,filter:'all',selected:null};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else alert(String(message||''))};
+const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else console.error(String(message||''))};
 const label=s=>String(s||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
 const related={
  inventory:{css:'/inventory-intelligence.css',js:'/inventory-intelligence.js',global:'TotalToolsInventoryIntelligence',title:'Stock Planning & Replenishment'},

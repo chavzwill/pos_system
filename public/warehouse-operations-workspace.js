@@ -1,7 +1,7 @@
 ﻿(()=>{'use strict';
 let root=null,profile=null,state={branchId:'',zones:[],bins:[],assignments:[],shipments:[],selectedShipment:null,flow:null,search:'',shortcutHandler:null};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else alert(String(message||''))};
+const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else console.error(String(message||''))};
 async function json(url,opts={}){const r=await fetch(url,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d;}
 function can(key){const p=profile?.permissions||{};if(p[key])return true;const prefix=key.replace(/-/g,'_')+'_';return Object.entries(p).some(([k,v])=>v&&(k===key||k.startsWith(prefix)));}
 function focusSearch(select=false){setTimeout(()=>{const el=document.getElementById('wow-search');if(el){el.focus({preventScroll:true});if(select)el.select()}},0)}

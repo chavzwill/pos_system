@@ -3,7 +3,7 @@ const state={open:false,rows:[],selected:null,query:'',status:'all',type:'all',d
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>new Intl.NumberFormat(undefined,{style:'currency',currency:'JMD',maximumFractionDigits:2}).format(Number(v||0));
 const fmt=v=>Number(v||0).toLocaleString(undefined,{maximumFractionDigits:6});
-const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else alert(String(message||''))};
+const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else console.error(String(message||''))};
 async function api(path){const r=await fetch('/api/quotations'+path,{credentials:'same-origin',headers:{Accept:'application/json'}});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d;}
 async function uomUsage(id){const r=await fetch(`/api/inventory-traceability/uom/usage?source_type=quotation&source_id=${encodeURIComponent(id)}`,{credentials:'same-origin',headers:{Accept:'application/json'}});return r.ok?r.json():[];}
 function root(){let el=document.getElementById('tt-quotes');if(!el){el=document.createElement('div');el.id='tt-quotes';el.className='tt-quotes';document.body.appendChild(el);}return el;}

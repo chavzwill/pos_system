@@ -1,7 +1,7 @@
 (()=>{'use strict';
 const state={open:false,tab:'employees',employees:[],branches:[],groups:[],query:''};
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
-const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else alert(String(message||''))};
+const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else console.error(String(message||''))};
 async function api(url,opts={}){const r=await fetch(url,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});const data=await r.json().catch(()=>({}));if(!r.ok)throw new Error(data.error||`Request failed (${r.status})`);return data;}
 function root(){let el=document.getElementById('tt-admin');if(!el){el=document.createElement('div');el.id='tt-admin';el.className='tt-admin';document.body.appendChild(el);}return el;}
 function close(){root().remove();state.open=false;}
