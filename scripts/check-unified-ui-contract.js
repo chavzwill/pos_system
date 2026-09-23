@@ -42,6 +42,8 @@ const shellDeferredJs=read('public/shell-deferred.js');
 const loaderHardeningSource=read('public/workspace-loader-hardening.js');
 const operationalReportsJs=read('public/operational-reports.js');
 const operationalReportsCss=read('public/operational-reports.css');
+const denominationsJs=read('public/denominations-workspace.js');
+const denominationsCss=read('public/denominations-workspace.css');
 const settingsJs=read('public/settings-workspace.js');
 const settingsCss=read('public/settings-workspace.css');
 const guidedModeJs=read('public/guided-mode.js');
@@ -718,6 +720,15 @@ check('reports opens with truthful quick choices and progressively disclosed lib
   operationalReportsCss.includes('.tt-op-reports__quick-card') &&
   operationalReportsCss.includes('#tt-op-reports-root .tt-op-reports__controls input') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(operationalReportsCss)
+);
+
+check('denomination editor uses the canonical dialog interaction law',
+  denominationsJs.includes('role="dialog" aria-modal="true" aria-labelledby="denom-dialog-title"') &&
+  denominationsJs.includes("if(e.key==='Tab')") &&
+  denominationsJs.includes("previous.focus({preventScroll:true})") &&
+  denominationsJs.includes("if(e.target===modal)closeModal()") &&
+  denominationsCss.includes('/* Denomination dialog mobile law */') &&
+  denominationsCss.includes('.denom-card input,.denom-card select{font-size:16px}')
 );
 
 check('settings opens as a plain-language index before exposing configuration forms',
