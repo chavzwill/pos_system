@@ -17,6 +17,8 @@ const rentalsJs=read('public/rentals-workspace.js');
 const rentalsCss=read('public/rentals-workspace.css');
 const customerCrmJs=read('public/customer-crm-workspace.js');
 const customerCrmCss=read('public/customer-crm-workspace.css');
+const accountingJs=read('public/accounting-intelligence.js');
+const accountingCss=read('public/accounting-intelligence.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -278,6 +280,26 @@ check('customers is search-first with focused mobile detail and quiet history',
   customerCrmCss.includes('.tt-crm.has-selection .tt-crm__list{display:none}') &&
   customerCrmCss.includes('#tt-customer-crm #tt-crm-search{font-size:16px!important}') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(customerCrmCss)
+);
+
+check('finance shows decisions first and moves analysis behind disclosure',
+  accountingJs.includes('<h3>Financial position</h3>') &&
+  accountingJs.includes("kpi('Revenue'") &&
+  accountingJs.includes("kpi('Estimated gross profit'") &&
+  accountingJs.includes("kpi('Accounts receivable'") &&
+  accountingJs.includes("kpi('90+ day exposure'") &&
+  !accountingJs.includes("kpi('Discounts'") &&
+  !accountingJs.includes("kpi('Credit sales'") &&
+  accountingJs.indexOf('Needs attention') < accountingJs.indexOf('Branch performance') &&
+  accountingJs.includes('<span>Branch performance</span>') &&
+  accountingJs.includes('<span>Repair profitability</span>') &&
+  accountingJs.includes('<span>How these numbers are calculated</span>') &&
+  accountingJs.includes('tt-aiacct__filter-disclosure') &&
+  accountingCss.includes('.tt-aiacct__disclosure summary') &&
+  accountingCss.includes('.tt-aiacct__filter-disclosure>summary') &&
+  accountingCss.includes('#tt-accounting-intelligence #tt-aiacct-start') &&
+  accountingCss.includes('font-size:16px!important') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(accountingCss)
 );
 
 check('legacy source still declares authoritative ui after feature styles',
