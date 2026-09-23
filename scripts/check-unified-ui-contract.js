@@ -36,6 +36,8 @@ const guidedModeJs=read('public/guided-mode.js');
 const guidedAccessJs=read('public/guided-mode-access.js');
 const guidedHardeningJs=read('public/guided-mode-hardening.js');
 const guidedExactJs=read('public/guided-mode-exact-action.js');
+const accountsReceivableJs=read('public/accounts-receivable-workspace.js');
+const accountsReceivableCss=read('public/accounts-receivable-workspace.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -427,6 +429,21 @@ check('Guide Me is a fluent non-modal coach with one canonical entry path',
   authority.includes('@media(max-width:900px){') &&
   authority.includes('#tt-guided-mode .tt-guide__search input{font-size:16px!important}') &&
   authority.includes('max-height:min(58dvh,520px)!important')
+);
+
+check('accounts receivable is search-first, readable and keeps credit approval controlled',
+  accountsReceivableJs.includes('function focusSearch(') &&
+  accountsReceivableJs.includes('function bindShortcuts()') &&
+  accountsReceivableJs.includes("e.key==='F2'") &&
+  accountsReceivableJs.includes('aria-keyshortcuts="/"') &&
+  accountsReceivableJs.includes('Manager approval required') &&
+  accountsReceivableJs.includes('data-credit-request') &&
+  accountsReceivableJs.includes('data-payment') &&
+  accountsReceivableCss.includes('.arw-disclosure summary') &&
+  accountsReceivableCss.includes('.arw-row em.danger') &&
+  accountsReceivableCss.includes('font-size:16px!important') &&
+  authority.includes('.arw-overlay.open .arw .arw-toolbar input') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(accountsReceivableCss)
 );
 
 check('reports opens with truthful quick choices and progressively disclosed library',

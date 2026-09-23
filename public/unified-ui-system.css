@@ -448,8 +448,13 @@ th,td{padding:13px 14px!important;border-bottom:1px solid var(--tt-border)!impor
   :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea){font-size:16px!important}
   :is(h1,h2,h3,p,strong,span,label,button){overflow-wrap:anywhere}
 }
+@media(max-width:560px){
+  .arw-overlay.open .arw .arw-toolbar input,.arw-overlay.open .arw .arw-toolbar select,.arw-overlay.open .arw .arw-detail input,.arw-overlay.open .arw .arw-detail select,.arw-overlay.open .arw .arw-detail textarea{font-size:16px!important}
+  .arw-overlay .arw-metrics{grid-template-columns:1fr 1fr!important}
+}
 @media(max-width:480px){
   :is([class*="__metrics"],[class*="-metrics"],[class*="__kpis"],[class*="-kpis"]){grid-template-columns:1fr!important}
+  .arw-overlay .arw-metrics{grid-template-columns:1fr 1fr!important}
   :is(.modal-footer,[class*="__actions"],[class*="-actions"]){display:grid!important;grid-template-columns:1fr!important;width:100%!important}
   :is(.modal-footer,[class*="__actions"],[class*="-actions"]) button{width:100%!important;min-width:0!important}
   :is([class*="__head"],[class*="-head"],[class*="__header"],[class*="-header"]){gap:10px!important}
