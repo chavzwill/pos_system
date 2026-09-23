@@ -15,6 +15,8 @@ const workOrdersJs=read('public/work-orders-workspace.js');
 const workOrdersCss=read('public/work-orders-workspace.css');
 const rentalsJs=read('public/rentals-workspace.js');
 const rentalsCss=read('public/rentals-workspace.css');
+const customerCrmJs=read('public/customer-crm-workspace.js');
+const customerCrmCss=read('public/customer-crm-workspace.css');
 const shellHtml=read('public/app-shell.html');
 const shellJs=read('public/app-shell.js');
 const legacy=read('public/index.html');
@@ -264,6 +266,18 @@ check('rentals opens as a calm queue and progressively discloses lifecycle evide
   rentalsCss.includes('.tt-rent.has-selection .tt-rent__list{display:none}') &&
   rentalsCss.includes('#tt-rentals-workspace #tt-rent-search') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(rentalsCss)
+);
+
+check('customers is search-first with focused mobile detail and quiet history',
+  customerCrmJs.includes('function focusSearch(') &&
+  customerCrmJs.includes('function bindShortcuts()') &&
+  customerCrmJs.includes("e.key==='F2'") &&
+  customerCrmJs.includes('aria-keyshortcuts="/"') &&
+  customerCrmJs.includes('tt-crm__disclosure') &&
+  customerCrmJs.includes('>Opportunities</button>') &&
+  customerCrmCss.includes('.tt-crm.has-selection .tt-crm__list{display:none}') &&
+  customerCrmCss.includes('#tt-customer-crm #tt-crm-search{font-size:16px!important}') &&
+  !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(customerCrmCss)
 );
 
 check('legacy source still declares authoritative ui after feature styles',
