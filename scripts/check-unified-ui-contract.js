@@ -22,6 +22,7 @@ const workOrdersJs=read('public/work-orders-workspace.js');
 const workOrdersCss=read('public/work-orders-workspace.css');
 const rentalsJs=read('public/rentals-workspace.js');
 const rentalsCss=read('public/rentals-workspace.css');
+const rentalFleetJs=read('public/rental-fleet-management.js');
 const customerCrmJs=read('public/customer-crm-workspace.js');
 const customerCrmCss=read('public/customer-crm-workspace.css');
 const accountingJs=read('public/accounting-intelligence.js');
@@ -445,6 +446,15 @@ check('rentals opens as a calm queue and progressively discloses lifecycle evide
   rentalsCss.includes('.tt-rent.has-selection .tt-rent__list{display:none}') &&
   rentalsCss.includes('#tt-rentals-workspace #tt-rent-search') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(rentalsCss)
+);
+
+check('rental fleet dialogs match the canonical interaction law',
+  rentalFleetJs.includes('aria-labelledby="tt-fleet-modal-title"') &&
+  rentalFleetJs.includes('role="alert" aria-live="polite"') &&
+  rentalFleetJs.includes("if(e.key==='Tab')") &&
+  rentalFleetJs.includes("previous.focus({preventScroll:true})") &&
+  rentalFleetJs.includes('@media(max-width:640px)') &&
+  rentalFleetJs.includes('.tt-fleet__modal input,.tt-fleet__modal select,.tt-fleet__modal textarea{font-size:16px}')
 );
 
 check('customers is search-first with focused mobile detail and quiet history',
