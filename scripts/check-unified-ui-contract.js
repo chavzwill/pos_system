@@ -79,6 +79,7 @@ const transfersCss=read('public/transfers-workspace.css');
 const loaderHardeningJs=read('public/workspace-loader-hardening.js');
 const layawayJs=read('public/layaway-workspace.js');
 const repairAuthorizationsJs=read('public/repair-authorizations.js');
+const repairPartsJs=read('public/repair-parts-integrity.js');
 const routePlanningJs=read('public/logistics-route-planning.js');
 const departmentApprovalsJs=read('public/department-approvals-ui.js');
 const catalogWorkflowJs=read('public/catalog-workflow-enhancer.js');
@@ -258,7 +259,9 @@ check('shared shell input dialog replaces browser prompts in high-use operationa
   !repairAuthorizationsJs.includes('prompt(') &&
   !departmentApprovalsJs.includes('prompt(') &&
   !routePlanningJs.includes('prompt(') &&
-  !catalogWorkflowJs.includes('prompt(')
+  !catalogWorkflowJs.includes('prompt(') &&
+  !catalogAdminJs.includes('prompt(') &&
+  !repairPartsJs.includes('prompt(')
 );
 
 check('shared dialog preserves evidence requirements in migrated workflows',
@@ -271,7 +274,10 @@ check('shared dialog preserves evidence requirements in migrated workflows',
   departmentApprovalsJs.includes("title:'Reject request'") &&
   routePlanningJs.includes("title:'Confirm pickup / custody'") &&
   routePlanningJs.includes("title:'Skip route stop'") &&
-  routePlanningJs.includes("title:'Close route'")
+  routePlanningJs.includes("title:'Close route'") &&
+  catalogAdminJs.includes("title:'Consolidate duplicate categories'") &&
+  catalogAdminJs.includes("message:'Record the evidence or reason for this catalog review decision.'") &&
+  repairPartsJs.includes("title:'Open repair parts'")
 );
 
 check('shell feedback avoids blocking alerts for shell-level support and module failures',
