@@ -137,6 +137,23 @@ async function _init() {
       approval_code TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS smartcommerce_orders (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      external_order_id TEXT UNIQUE NOT NULL,
+      external_quote_id TEXT,
+      external_payment_reference TEXT NOT NULL,
+      external_customer_id TEXT,
+      customer_id INTEGER REFERENCES customers(id),
+      branch_id INTEGER NOT NULL REFERENCES branches(id),
+      transaction_id INTEGER UNIQUE NOT NULL REFERENCES transactions(id),
+      delivery_amount REAL NOT NULL DEFAULT 0,
+      service_amount REAL NOT NULL DEFAULT 0,
+      handling_amount REAL NOT NULL DEFAULT 0,
+      payload_hash TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'completed',
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      updated_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS settings (
       key TEXT PRIMARY KEY,
       value TEXT,
@@ -1770,6 +1787,8 @@ async function _init() {
     'CREATE INDEX IF NOT EXISTS idx_transaction_items_transaction_id ON transaction_items(transaction_id)',
     'CREATE INDEX IF NOT EXISTS idx_transaction_items_product_id ON transaction_items(product_id)',
     'CREATE INDEX IF NOT EXISTS idx_transaction_payments_transaction_id ON transaction_payments(transaction_id)',
+    'CREATE INDEX IF NOT EXISTS idx_smartcommerce_orders_transaction_id ON smartcommerce_orders(transaction_id)',
+    'CREATE INDEX IF NOT EXISTS idx_smartcommerce_orders_payment_reference ON smartcommerce_orders(external_payment_reference)',
     'CREATE INDEX IF NOT EXISTS idx_quotation_items_quote_id ON quotation_items(quote_id)',
     'CREATE INDEX IF NOT EXISTS idx_quotation_item_sources_quotation_item_id ON quotation_item_sources(quotation_item_id)',
     'CREATE INDEX IF NOT EXISTS idx_rental_agreements_customer_id ON rental_agreements(customer_id)',
