@@ -3,6 +3,7 @@ const router = express.Router();
 const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
+const { enqueuePurchaseRequested } = require('../lib/spendos-outbox');
 
 // Self-contained feature, not used as a cross-section lookup elsewhere —
 // module-level gate for all of it, matching the frontend's own section gate.
@@ -109,6 +110,19 @@ router.post('/', async (req, res) => {
           args: [prId, item.product_id, item.product_name, item.sku, item.quantity, item.unit_cost, item.item_type, item.product_url, item.notes, item.total, item.quotation_item_id]
         });
       }
+      await enqueuePurchaseRequested(tx, {
+        id: prId,
+        pr_number,
+        branch_id,
+        employee_id,
+        department,
+        request_type,
+        supplier_id,
+        currency,
+        status: 'draft',
+        sourceVersion: 1,
+        items: processedItems,
+      });
       await tx.commit();
       committed = true;
       const { rows: [pr] } = await db.execute({ sql: PR_SELECT + ' WHERE pr.id = ?', args: [prId] });
@@ -158,6 +172,23 @@ router.put('/:id', async (req, res) => {
           args: [pr.id, item.product_id, item.product_name, item.sku, item.quantity, item.unit_cost, item.item_type, item.product_url, item.notes, item.total, item.quotation_item_id]
         });
       }
+      const nextSpendosVersion = Number(pr.spendos_version || 1) + 1;
+      await tx.execute({
+        sql: 'UPDATE purchase_requests SET spendos_version = ? WHERE id = ?',
+        args: [nextSpendosVersion, pr.id],
+      });
+      await enqueuePurchaseRequested(tx, {
+        ...pr,
+        branch_id,
+        employee_id: employee_id || pr.employee_id,
+        department,
+        request_type,
+        supplier_id,
+        currency,
+        status: pr.status,
+        sourceVersion: nextSpendosVersion,
+        items: processedItems,
+      });
       await tx.commit();
       committed = true;
       const { rows: [updated] } = await db.execute({ sql: PR_SELECT + ' WHERE pr.id = ?', args: [pr.id] });

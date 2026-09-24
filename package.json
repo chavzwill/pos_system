@@ -108,7 +108,8 @@
     "check:logistics-live-journey": "node scripts/check-logistics-live-journey-contract.js",
     "check:rental-create-wizard": "node scripts/check-rental-create-wizard-contract.js",
     "check:staff-reauth": "node scripts/check-staff-reauth-contract.js",
-    "check:unified-ui": "node scripts/check-unified-ui-contract.js"
+    "check:unified-ui": "node scripts/check-unified-ui-contract.js",
+    "check:spendos-connector": "node --check lib/spendos-outbox.js && node --check routes/purchase-requests.js && node --check scripts/deliver-spendos-outbox.js && node --test tests/spendos-outbox-unit.test.js && node scripts/check-spendos-connector-runtime.js"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
