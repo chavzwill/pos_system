@@ -10,6 +10,7 @@ const { router: woocommerceRouter, runSyncAll: wooSyncAll } = require('./routes/
 const { apiKeyAuth } = require('./lib/apiKeyAuth');
 const { sessionAuth } = require('./lib/sessionAuth');
 const { logActivity } = require('./routes/crm');
+const { flushSmartCommerceSyncOutbox } = require('./lib/smartcommerceSyncPublisher');
 
 // Without these, any unhandled rejection (e.g. a bug in one request's async
 // code) crashes the entire Node process per Node's default behavior since
@@ -60,6 +61,21 @@ app.use('/api', apiKeyAuth);
 // requireAuth()/requirePermission() (lib/permissions.js), not here.
 app.use('/api', sessionAuth);
 
+// Durable SmartCommerce sync: after successful mutating API requests, ask the
+// outbox publisher to drain. Delivery is best-effort here; events remain in the
+// database and are retried by later writes / the periodic drain.
+app.use('/api', (req, res, next) => {
+  const method = String(req.method || 'GET').toUpperCase();
+  if (!['GET','HEAD','OPTIONS'].includes(method)) {
+    res.on('finish', () => {
+      if (res.statusCode >= 200 && res.statusCode < 300) {
+        flushSmartCommerceSyncOutbox().catch(() => {});
+      }
+    });
+  }
+  next();
+});
+
 app.use('/api/products',         require('./routes/products'));
 app.use('/api/categories',       require('./routes/categories'));
 app.use('/api/customers',        require('./routes/customers'));
@@ -107,6 +123,12 @@ if (!process.env.VERCEL) {
   app.listen(PORT, () => {
     console.log(`\n  POS System running at http://localhost:${PORT}\n`);
   });
+
+  // Periodic durable outbox drain. Failed deliveries retain their event/version
+  // identity and use bounded retry backoff rather than being dropped.
+  setInterval(() => {
+    flushSmartCommerceSyncOutbox().catch(() => {});
+  }, 30000);
 
   // WooCommerce auto-sync — check every 60 s, fire when interval has elapsed
   setInterval(async () => {
