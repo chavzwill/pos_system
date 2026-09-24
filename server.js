@@ -64,6 +64,7 @@ app.use('/api/products',         require('./routes/products'));
 app.use('/api/categories',       require('./routes/categories'));
 app.use('/api/customers',        require('./routes/customers'));
 app.use('/api/transactions',     require('./routes/transactions'));
+app.use('/api/smartcommerce-orders', require('./routes/smartcommerce-orders'));
 app.use('/api/employees',        require('./routes/employees'));
 app.use('/api/reports',          require('./routes/reports'));
 app.use('/api/settings',         require('./routes/settings'));
