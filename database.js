@@ -1,4 +1,5 @@
 const { createClient } = require('@libsql/client');
+const { ensureSmartCommerceSyncSchema } = require('./lib/smartcommerceSyncSchema');
 
 if (process.env.VERCEL && !process.env.TURSO_DATABASE_URL) {
   throw new Error('TURSO_DATABASE_URL is not set. Add it in Vercel project → Settings → Environment Variables.');
@@ -1779,6 +1780,8 @@ async function _init() {
   // the purchase_order_items/purchase_request_items rebuild blocks above —
   // those DROP and recreate those two tables, which would silently wipe out
   // any index created on them earlier in this function.
+  await ensureSmartCommerceSyncSchema(db);
+
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_transactions_customer_id ON transactions(customer_id)',
     'CREATE INDEX IF NOT EXISTS idx_transactions_branch_id ON transactions(branch_id)',
