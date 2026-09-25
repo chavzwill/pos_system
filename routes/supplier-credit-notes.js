@@ -72,7 +72,8 @@ router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.s
 router.get('/',async(req,res)=>{
   try{
     let sql=`SELECT n.*,s.name supplier_name,b.name branch_name,
-      ROUND(MAX(0,n.amount-n.applied_amount),2) remaining_amount
+      ROUND(MAX(0,n.amount-n.applied_amount),2) remaining_amount,
+      ROUND(COALESCE((SELECT SUM(a.settled_amount) FROM supplier_credit_note_applications a WHERE a.credit_note_id=n.id),0),2) settled_amount
       FROM supplier_credit_notes n
       JOIN suppliers s ON s.id=n.supplier_id
       LEFT JOIN branches b ON b.id=n.branch_id WHERE 1=1`;

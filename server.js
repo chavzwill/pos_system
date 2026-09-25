@@ -192,6 +192,7 @@ app.use('/api/cost-allocations',require('./routes/cost-allocations'));
 app.use('/api/supplier-recoverables',require('./routes/supplier-recoverables'));
 app.use('/api/supplier-returns',require('./routes/supplier-returns'));
 app.use('/api/supplier-credit-notes',require('./routes/supplier-credit-notes'));
+app.use('/api/supplier-recovery-attention',require('./routes/supplier-recovery-attention'));
 app.use('/api/spendos-management',require('./routes/spendos-management'));
 app.use('/api/security-groups', require('./routes/security-groups'));
 app.use('/api/quotations', require('./routes/quotation-workflow-hardening'));
