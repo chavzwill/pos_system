@@ -76,6 +76,121 @@ router.post('/objects',async(req,res)=>{
   }catch(e){res.status(400).json({error:e.message});}
 });
 
+router.post('/attention/refresh',async(req,res)=>{
+  try{
+    const {rows:targets}=await db.execute({sql:`SELECT
+      target_type,target_id,MAX(target_label) target_label,
+      ROUND(SUM(CASE WHEN source_type IN ('purchase_receipt','internal_consumption') THEN allocation_amount ELSE 0 END),2) actual_cost,
+      ROUND(SUM(CASE WHEN source_type IN ('purchase_receipt','internal_consumption') AND datetime(created_at)>=datetime('now','-30 days') THEN allocation_amount ELSE 0 END),2) trailing_30d_cost,
+      ROUND(SUM(CASE WHEN source_type IN ('purchase_receipt','internal_consumption') AND datetime(created_at)>=datetime('now','-60 days') AND datetime(created_at)<datetime('now','-30 days') THEN allocation_amount ELSE 0 END),2) prior_30d_cost,
+      COUNT(CASE WHEN source_type IN ('purchase_receipt','internal_consumption') AND valuation_status NOT IN ('actual','fully_valued') THEN 1 END) incomplete_actual_lines
+      FROM cost_allocations
+      GROUP BY target_type,target_id`,args:[]});
+    const detected=[];
+    const add=(row,reasonCode,priority,evidence)=>detected.push({
+      target_type:row.target_type,target_id:row.target_id==null?null:String(row.target_id),
+      target_label:row.target_label||null,reason_code:reasonCode,priority,evidence
+    });
+    for(const row of targets){
+      const trailing=Number(row.trailing_30d_cost||0),prior=Number(row.prior_30d_cost||0);
+      const costChangePct=prior>0?Number((((trailing-prior)/prior)*100).toFixed(2)):(trailing>0?null:0);
+      if(Number(row.incomplete_actual_lines||0)>0){
+        add(row,'valuation_evidence_gap','high',{actualCost:Number(row.actual_cost||0),incompleteActualLines:Number(row.incomplete_actual_lines||0),trailing30dCost:trailing});
+      }
+      if(row.target_type==='vehicle'&&row.target_id){
+        let jobs={recent_completed_jobs:0,prior_completed_jobs:0};
+        try{
+          ({rows:[jobs]}=await db.execute({sql:`SELECT
+            COUNT(CASE WHEN dj.status='completed' AND datetime(COALESCE(dj.completed_at,dj.created_at))>=datetime('now','-30 days') THEN 1 END) recent_completed_jobs,
+            COUNT(CASE WHEN dj.status='completed' AND datetime(COALESCE(dj.completed_at,dj.created_at))>=datetime('now','-60 days') AND datetime(COALESCE(dj.completed_at,dj.created_at))<datetime('now','-30 days') THEN 1 END) prior_completed_jobs
+            FROM dispatch_jobs dj JOIN dispatch_executions de ON de.dispatch_job_id=dj.id
+            WHERE de.vehicle_id=?`,args:[row.target_id]}));
+        }catch{}
+        const recent=Number(jobs?.recent_completed_jobs||0),old=Number(jobs?.prior_completed_jobs||0);
+        if(trailing>0&&recent===0){
+          add(row,'cost_without_recent_output','high',{trailing30dCost:trailing,recentCompletedDispatches:0,costChangePct});
+        }else if(recent>0&&old>0){
+          const current=trailing/recent,previous=prior/old,effChange=previous>0?((current-previous)/previous)*100:0;
+          if(effChange>=15){
+            add(row,'efficiency_worsening','high',{trailing30dCost:trailing,prior30dCost:prior,recentCompletedDispatches:recent,priorCompletedDispatches:old,recentCostPerDispatch:Number(current.toFixed(2)),priorCostPerDispatch:Number(previous.toFixed(2)),efficiencyChangePct:Number(effChange.toFixed(2)),costChangePct});
+          }
+        }
+      }else if(row.target_type==='branch'&&row.target_id){
+        let activity={recent_transactions:0,prior_transactions:0};
+        try{
+          ({rows:[activity]}=await db.execute({sql:`SELECT
+            COUNT(CASE WHEN status='completed' AND datetime(created_at)>=datetime('now','-30 days') THEN 1 END) recent_transactions,
+            COUNT(CASE WHEN status='completed' AND datetime(created_at)>=datetime('now','-60 days') AND datetime(created_at)<datetime('now','-30 days') THEN 1 END) prior_transactions
+            FROM transactions WHERE branch_id=?`,args:[row.target_id]}));
+        }catch{}
+        const recent=Number(activity?.recent_transactions||0),old=Number(activity?.prior_transactions||0);
+        if(trailing>0&&recent===0){
+          add(row,'cost_without_recent_output','high',{trailing30dCost:trailing,recentCompletedTransactions:0,costChangePct});
+        }else if(recent>0&&old>0){
+          const current=trailing/recent,previous=prior/old,effChange=previous>0?((current-previous)/previous)*100:0;
+          if(effChange>=15){
+            add(row,'efficiency_worsening','high',{trailing30dCost:trailing,prior30dCost:prior,recentCompletedTransactions:recent,priorCompletedTransactions:old,recentCostPerTransaction:Number(current.toFixed(2)),priorCostPerTransaction:Number(previous.toFixed(2)),efficiencyChangePct:Number(effChange.toFixed(2)),costChangePct});
+          }
+        }
+      }else if(costChangePct!=null&&costChangePct>=25){
+        add(row,'cost_rising_review','medium',{trailing30dCost:trailing,prior30dCost:prior,costChangePct,normalizedEfficiencyAvailable:false});
+      }
+    }
+    const seen=[];
+    for(const c of detected){
+      const key=`${c.target_type}|${c.target_id??''}|${c.reason_code}`;seen.push(key);
+      await db.execute({sql:`INSERT INTO cost_attention_cases(
+        target_type,target_id,target_label,reason_code,priority,status,evidence_json
+      ) VALUES(?,?,?,?,?,'identified',?)
+      ON CONFLICT(target_type,target_id,reason_code) DO UPDATE SET
+        target_label=excluded.target_label,priority=excluded.priority,evidence_json=excluded.evidence_json,
+        last_seen_at=CURRENT_TIMESTAMP,
+        status=CASE WHEN cost_attention_cases.status IN ('reviewing','dismissed') THEN cost_attention_cases.status ELSE 'identified' END,
+        resolved_at=CASE WHEN cost_attention_cases.status='resolved' THEN NULL ELSE cost_attention_cases.resolved_at END`,
+        args:[c.target_type,c.target_id,c.target_label,c.reason_code,c.priority,JSON.stringify(c.evidence)]});
+    }
+    const {rows:openCases}=await db.execute({sql:"SELECT id,target_type,target_id,reason_code,status FROM cost_attention_cases WHERE status='identified'",args:[]});
+    for(const c of openCases){
+      const key=`${c.target_type}|${c.target_id??''}|${c.reason_code}`;
+      if(!seen.includes(key))await db.execute({sql:"UPDATE cost_attention_cases SET status='condition_cleared',last_seen_at=CURRENT_TIMESTAMP WHERE id=?",args:[c.id]});
+    }
+    const {rows:cases}=await db.execute({sql:`SELECT c.*,e.first_name||' '||e.last_name assigned_to_name
+      FROM cost_attention_cases c LEFT JOIN employees e ON e.id=c.assigned_to_employee_id
+      ORDER BY CASE c.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,c.last_seen_at DESC,c.id DESC`,args:[]});
+    res.json({detected:detected.length,cases,methodology:{
+      creates_case_for:['valuation_evidence_gap','cost_without_recent_output','efficiency_worsening','cost_rising_review'],
+      does_not_escalate:'Higher spend with stable or improving normalized efficiency does not create an inefficiency case.'
+    }});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.get('/attention',async(req,res)=>{
+  try{
+    let sql=`SELECT c.*,e.first_name||' '||e.last_name assigned_to_name
+      FROM cost_attention_cases c LEFT JOIN employees e ON e.id=c.assigned_to_employee_id WHERE 1=1`;
+    const args=[];
+    if(req.query.status){sql+=' AND c.status=?';args.push(req.query.status);}
+    sql+=" ORDER BY CASE c.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,c.last_seen_at DESC,c.id DESC";
+    const {rows}=await db.execute({sql,args});res.json(rows);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.post('/attention/:id/state',async(req,res)=>{
+  try{
+    const status=String(req.body?.status||'').trim();
+    if(!['identified','reviewing','resolved','dismissed'].includes(status))return res.status(400).json({error:'Unsupported attention status'});
+    const note=String(req.body?.resolution_note||'').trim()||null;
+    if(['resolved','dismissed'].includes(status)&&!note)return res.status(400).json({error:'Resolution note is required'});
+    const assigned=req.body?.assigned_to_employee_id==null?(req.employee?.id||null):Number(req.body.assigned_to_employee_id);
+    await db.execute({sql:`UPDATE cost_attention_cases SET status=?,assigned_to_employee_id=?,
+      resolution_note=?,resolved_at=CASE WHEN ? IN ('resolved','dismissed') THEN CURRENT_TIMESTAMP ELSE NULL END,
+      last_seen_at=CURRENT_TIMESTAMP WHERE id=?`,args:[status,assigned,note,status,req.params.id]});
+    const {rows:[row]}=await db.execute({sql:'SELECT * FROM cost_attention_cases WHERE id=?',args:[req.params.id]});
+    if(!row)return res.status(404).json({error:'Attention case not found'});
+    res.json(row);
+  }catch(e){res.status(400).json({error:e.message});}
+});
+
 router.get('/economics',async(req,res)=>{
   try{
     const type=String(req.query.target_type||'').trim();

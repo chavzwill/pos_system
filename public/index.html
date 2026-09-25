@@ -11400,11 +11400,13 @@ const App = {
       this._poBranches = branches;
 
     } else if (tab === 'consumables') {
-      const [consumptions,costSummary,reconciliations] = await Promise.all([
+      const [consumptions,costSummary,reconciliations,attention] = await Promise.all([
         this.api('GET', '/cost-allocations/consumptions?limit=200'),
         this.api('GET', '/cost-allocations/summary'),
-        this.api('GET', '/cost-allocations/reconciliations?limit=100')
+        this.api('GET', '/cost-allocations/reconciliations?limit=100'),
+        this.api('POST', '/cost-allocations/attention/refresh', {})
       ]);
+      const attentionCases=(attention?.cases||[]).filter(x=>['identified','reviewing'].includes(x.status));
       const totalActual=costSummary.reduce((s,x)=>s+Number(x.received_actual_cost||0)+Number(x.consumed_actual_cost||0),0);
       const totalRequested=costSummary.reduce((s,x)=>s+Number(x.requested_cost||0),0);
       const incompleteLines=costSummary.reduce((s,x)=>s+Number(x.incomplete_actual_lines||0),0);
@@ -11428,6 +11430,25 @@ const App = {
           <div class="stat-card"><div class="stat-label">Actual allocated cost</div><div class="stat-value">${this.fmt(totalActual)}</div><div class="stat-meta">Received direct-use + issued inventory</div></div>
           <div class="stat-card"><div class="stat-label">Invoice variance</div><div class="stat-value">${this.fmt(invoiceVariance)}</div><div class="stat-meta">${reconciliations.filter(x=>x.status==='variance').length} invoice reconciliation issue(s)</div></div>
           <div class="stat-card"><div class="stat-label">Valuation gaps</div><div class="stat-value">${incompleteLines}</div><div class="stat-meta">Actual lines needing cost evidence</div></div>
+          <div class="stat-card"><div class="stat-label">Cost attention</div><div class="stat-value">${attentionCases.length}</div><div class="stat-meta">Open evidence-backed review case(s)</div></div>
+        </div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div><div class="card-title">Cost Attention</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Cases appear only when evidence supports review: worsening efficiency, cost with no recent output, rising unnormalized cost, or valuation gaps.</div></div>
+            <button class="btn btn-secondary" onclick="App.renderPurchasing('consumables')">Refresh evidence</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Priority</th><th>Target</th><th>Reason</th><th>Status</th><th>Evidence</th><th>Owner</th><th>Action</th></tr></thead>
+            <tbody>${attentionCases.length?attentionCases.map(x=>{let ev={};try{ev=JSON.parse(x.evidence_json||'{}')}catch{};const summary=x.reason_code==='efficiency_worsening'?`Efficiency +${Number(ev.efficiencyChangePct||0).toFixed(1)}% worse`:x.reason_code==='cost_without_recent_output'?`${this.fmt(ev.trailing30dCost||0)} cost with no recent output`:x.reason_code==='valuation_evidence_gap'?`${Number(ev.incompleteActualLines||0)} valuation gap(s)`:x.reason_code==='cost_rising_review'?`Cost +${Number(ev.costChangePct||0).toFixed(1)}%`:'Review evidence';return `<tr>
+              <td><span class="badge-pill ${x.priority==='high'?'badge-danger':'badge-warning'}">${x.priority}</span></td>
+              <td class="fw-600">${x.target_label||x.target_id||x.target_type}</td>
+              <td>${String(x.reason_code||'').replaceAll('_',' ')}</td>
+              <td>${String(x.status||'identified').replaceAll('_',' ')}</td>
+              <td>${summary}</td>
+              <td>${x.assigned_to_name||'Unassigned'}</td>
+              <td style="white-space:nowrap">${x.status==='identified'?`<button class="btn btn-sm btn-secondary" onclick="App._setCostAttentionState(${x.id},'reviewing')">Review</button>`:''}<button class="btn btn-sm btn-success" onclick="App._setCostAttentionState(${x.id},'resolved')">Resolve</button><button class="btn btn-sm btn-ghost" onclick="App._setCostAttentionState(${x.id},'dismissed')">Dismiss</button></td>
+            </tr>`}).join(''):'<tr><td colspan="7" class="empty-state">No evidence-backed cost attention cases</td></tr>'}</tbody>
+          </table></div>
         </div>
         <div class="card" style="margin-bottom:16px">
           <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
@@ -11577,6 +11598,18 @@ const App = {
     }catch(e){
       body.innerHTML=`<div class="empty-state">Unable to load cost intelligence: ${this.escapeHtml(e.message||'Unknown error')}</div>`;
     }
+  },
+
+  async _setCostAttentionState(id,status) {
+    let resolution_note=null;
+    if(['resolved','dismissed'].includes(status)){
+      resolution_note=window.prompt(status==='resolved'?'What was done to resolve this cost issue?':'Why is this case being dismissed?');
+      if(!resolution_note)return;
+    }
+    try{
+      await this.api('POST',`/cost-allocations/attention/${id}/state`,{status,resolution_note});
+      this.renderPurchasing('consumables');
+    }catch(e){this.alert(e.message||'Unable to update cost attention case','error');}
   },
 
   async showConsumptionForm() {
