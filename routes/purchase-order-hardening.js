@@ -5,11 +5,13 @@ const { syncBinQty } = require('../lib/binSync');
 const { requirePermission, can } = require('../lib/permissions');
 const { ensureCostAllocationSchema, copyAllocations, recordInvoiceReconciliation } = require('../lib/cost-allocations');
 const { enqueueSpendEvent } = require('../lib/spendos-outbox');
+const { ensureSupplierRecoverablesSchema, createShortageClaim } = require('../lib/supplier-recoverables');
 
 let receiptSchemaReady = false;
 async function ensureReceiptSchema() {
   if (receiptSchemaReady) return;
   await ensureCostAllocationSchema();
+  await ensureSupplierRecoverablesSchema();
   await db.batch([
     { sql: `CREATE TABLE IF NOT EXISTS purchase_receipts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -268,7 +270,12 @@ router.patch('/:id/close-short', requirePermission('purchasing_approve'), async 
     const stamp = new Date().toISOString();
     const note = `${po.notes ? `${po.notes}\n` : ''}[Closed short ${stamp}] ${reason}`;
     const tx = await db.transaction('write');let committed = false;
-    try {await tx.execute({ sql: `UPDATE purchase_orders SET status='received', received_at=CURRENT_TIMESTAMP, notes=? WHERE id=?`, args: [note, req.params.id] });await tx.execute({ sql: `UPDATE purchase_requests SET status='received' WHERE converted_to_po_id=? AND status!='received'`, args: [req.params.id] });await tx.commit(); committed = true;} catch (e) { if (!committed) await tx.rollback(); throw e; }
+    try {
+      await tx.execute({ sql: `UPDATE purchase_orders SET status='received', received_at=CURRENT_TIMESTAMP, notes=? WHERE id=?`, args: [note, req.params.id] });
+      await tx.execute({ sql: `UPDATE purchase_requests SET status='received' WHERE converted_to_po_id=? AND status!='received'`, args: [req.params.id] });
+      await createShortageClaim(tx,{po,ownerEmployeeId:actor(req),reason});
+      await tx.commit(); committed = true;
+    } catch (e) { if (!committed) await tx.rollback(); throw e; }
     const { rows: [updated] } = await db.execute({ sql: 'SELECT * FROM purchase_orders WHERE id=?', args: [req.params.id] });res.json(updated);
   } catch (e) { res.status(400).json({ error: e.message }); }
 });

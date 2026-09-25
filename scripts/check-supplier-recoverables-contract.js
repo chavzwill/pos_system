@@ -1,0 +1,41 @@
+'use strict';
+const fs=require('fs'),path=require('path'),vm=require('vm');
+const root=path.join(__dirname,'..');
+const read=p=>fs.readFileSync(path.join(root,p),'utf8');
+const lib=read('lib/supplier-recoverables.js');
+const route=read('routes/supplier-recoverables.js');
+const po=read('routes/purchase-order-hardening.js');
+const ui=read('public/index.html');
+const server=read('server.js');
+new vm.Script(lib,{filename:'supplier-recoverables.js'});
+new vm.Script(route,{filename:'supplier-recoverables-route.js'});
+const checks=[
+ ['supplier recoverables route is mounted',server.includes("app.use('/api/supplier-recoverables'")],
+ ['recoverables require purchasing or finance authority',route.includes("requireAnyPermission('purchasing','reports_financial','accounts')")],
+ ['claims and settlement history are durable',lib.includes('supplier_recoverable_claims')&&lib.includes('supplier_recoverable_settlements')],
+ ['claim identity is concurrency-safe',lib.includes('randomUUID')&&lib.includes("return 'SRC-'")],
+ ['supported recoverable types include credit note shortage return overcharge rebate and reimbursement',route.includes("'credit_note','supplier_return','shorted_goods','overcharge','damaged_goods','rebate','reimbursement','other'")],
+ ['identified exposure is distinct from confirmed amount',lib.includes('identified_amount REAL NOT NULL DEFAULT 0')&&lib.includes('confirmed_amount REAL NOT NULL DEFAULT 0')],
+ ['identified claim defaults to non-confirmed state',lib.includes("status TEXT NOT NULL DEFAULT 'identified'")],
+ ['short close initializes recoverables schema',po.includes('ensureSupplierRecoverablesSchema')],
+ ['close-short creates shortage claim inside purchase transaction',po.includes('createShortageClaim(tx,{po,ownerEmployeeId:actor(req),reason})')],
+ ['shortage amount derives from missing quantity and PO unit cost',lib.includes('quantity_ordered')&&lib.includes('quantity_received')&&lib.includes('missing_value:money(qty*Number(x.unit_cost||0))')],
+ ['shortage claim remains identified instead of automatically confirmed',lib.includes("'shorted_goods','identified'")],
+ ['duplicate shortage claim is prevented per purchase order',lib.includes("claim_type='shorted_goods'")&&lib.includes("source_type='purchase_order'")&&lib.includes('UNIQUE(claim_type,source_type,source_id)')],
+ ['confirmation requires supplier document or confirmation note',route.includes('Supplier document number or confirmation note is required')],
+ ['recovery requires confirmed claim',route.includes('Claim must be confirmed before recovery is recorded')],
+ ['recovery cannot exceed confirmed outstanding',route.includes('Recovery amount exceeds confirmed outstanding balance')],
+ ['settlements support credit note refund AP offset replacement and other',route.includes("'credit_note','cash_refund','bank_refund','ap_offset','replacement_value','other'")],
+ ['settlement requires an auditable reference',route.includes('Recovery reference is required')],
+ ['partial recovery remains open and full recovery closes',route.includes("'recovered':'partially_recovered'")],
+ ['summary separates identified exposure confirmed outstanding overdue and recovered',route.includes('identified_exposure')&&route.includes('confirmed_outstanding')&&route.includes('overdue_confirmed')&&route.includes('recovered_total')],
+ ['aging is based on confirmed outstanding only',route.includes('summary.aging[bucket]')&&route.includes('const identified=')&&route.includes('const confirmed=')],
+ ['UI exposes Supplier Recoverables in purchasing navigation',ui.includes("tabBtn('recoverables','Supplier Recoverables')")&&ui.includes('renderSupplierRecoverables')],
+ ['UI explicitly separates potential exposure from documented amount owed',ui.includes('Potential claim, not yet confirmed')&&ui.includes('Documented amount owed to us')],
+ ['UI exposes aging and claim lifecycle amounts',ui.includes('Confirmed Recoverables Aging')&&ui.includes('Identified')&&ui.includes('Confirmed')&&ui.includes('Recovered')&&ui.includes('Outstanding')],
+ ['UI can confirm supplier obligation and record recovery',ui.includes('_confirmSupplierRecoverable')&&ui.includes('_recoverSupplierRecoverable')]
+];
+let failed=0;
+for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Supplier recoverables: ${name}`);if(!ok)failed++;}
+if(failed){console.error(`Supplier recoverables contract FAILED (${failed}/${checks.length} failed).`);process.exit(1);}
+console.log(`Supplier recoverables contract OK (${checks.length} checks).`);

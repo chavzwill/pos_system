@@ -11371,6 +11371,7 @@ const App = {
           ${tabBtn('orders','Purchase Orders')}
           ${this.can('purchase_requests') ? tabBtn('requests','Purchase Requests') : ''}
           ${tabBtn('consumables','Consumables')}
+          ${tabBtn('recoverables','Supplier Recoverables')}
         </div>
         <div class="card">
           <div class="table-wrap">
@@ -11399,6 +11400,8 @@ const App = {
       this._poSuppliers = suppliers;
       this._poBranches = branches;
 
+    } else if (tab === 'recoverables') {
+      return this.renderSupplierRecoverables();
     } else if (tab === 'consumables') {
       const [consumptions,costSummary,reconciliations,attention] = await Promise.all([
         this.api('GET', '/cost-allocations/consumptions?limit=200'),
@@ -11424,6 +11427,7 @@ const App = {
           ${tabBtn('orders','Purchase Orders')}
           ${this.can('purchase_requests') ? tabBtn('requests','Purchase Requests') : ''}
           ${tabBtn('consumables','Consumables')}
+          ${tabBtn('recoverables','Supplier Recoverables')}
         </div>
         <div class="stats-grid" style="margin-bottom:16px">
           <div class="stat-card"><div class="stat-label">Requested allocation</div><div class="stat-value">${this.fmt(totalRequested)}</div><div class="stat-meta">Planned internal-use cost</div></div>
@@ -11528,6 +11532,7 @@ const App = {
           ${tabBtn('orders','Purchase Orders')}
           ${tabBtn('requests','Purchase Requests')}
           ${tabBtn('consumables','Consumables')}
+          ${tabBtn('recoverables','Supplier Recoverables')}
         </div>
         <div class="card" style="margin-bottom:0;border-bottom:none;border-radius:8px 8px 0 0;padding:10px 16px 0">
           <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
@@ -11567,6 +11572,67 @@ const App = {
           </div>
         </div>`;
     }
+  },
+
+  async renderSupplierRecoverables() {
+    this._purchasingTab='recoverables';
+    const c=document.getElementById('content');
+    c.innerHTML='<div class="empty-state"><p>Loading supplier recoverables...</p></div>';
+    try{
+      const results=await Promise.all([
+        this.api('GET','/supplier-recoverables'),
+        this.api('GET','/supplier-recoverables/summary'),
+        this.api('GET','/suppliers')
+      ]);
+      const claims=results[0]||[],summary=results[1]||{},suppliers=results[2]||[];
+      this._recoverableSuppliers=suppliers;
+      const tabButton=(key,label)=>'<button class="btn btn-sm '+(key==='recoverables'?'btn-primary':'btn-outline')+'" onclick="App.renderPurchasing(\''+key+'\')">'+label+'</button>';
+      const statusClass={identified:'badge-warning',confirmed:'badge-info',partially_recovered:'badge-purple',recovered:'badge-success',disputed:'badge-danger',cancelled:'badge-muted'};
+      const labels={credit_note:'Credit note',supplier_return:'Supplier return',shorted_goods:'Shorted goods',overcharge:'Overcharge',damaged_goods:'Damaged goods',rebate:'Rebate',reimbursement:'Reimbursement',other:'Other'};
+      const rows=claims.map(x=>{
+        let actions='';
+        if(x.status==='identified')actions='<button class="btn btn-sm btn-primary" onclick="App._confirmSupplierRecoverable('+x.id+')">Confirm</button>';
+        else if(x.status==='confirmed'||x.status==='partially_recovered')actions='<button class="btn btn-sm btn-success" onclick="App._recoverSupplierRecoverable('+x.id+','+Number(x.outstanding_amount||0)+')">Record recovery</button>';
+        return '<tr><td class="fw-600">'+this.escapeHtml(x.claim_number||'')+'</td><td>'+this.escapeHtml(x.supplier_name||'')+'</td><td>'+this.escapeHtml(labels[x.claim_type]||String(x.claim_type||'').replaceAll('_',' '))+'</td><td>'+this.escapeHtml(x.source_reference||x.source_id||'Manual')+'</td><td>'+this.fmt(x.identified_amount||0)+'</td><td>'+this.fmt(x.confirmed_amount||0)+'</td><td>'+this.fmt(x.recovered_amount||0)+'</td><td class="fw-600">'+this.fmt(x.outstanding_amount||0)+'</td><td>'+this.escapeHtml(String(x.aging_bucket||'').replaceAll('_','-'))+'</td><td><span class="badge-pill '+(statusClass[x.status]||'badge-info')+'">'+this.escapeHtml(String(x.status||'').replaceAll('_',' '))+'</span></td><td>'+actions+'</td></tr>';
+      }).join('');
+      const aging=summary.aging||{};
+      c.innerHTML='<div class="section-header"><div><h2>Supplier Recoverables</h2><p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Track money suppliers owe us from shortages, returns, credit notes, overcharges, rebates and reimbursements.</p></div><button class="btn btn-primary" onclick="App.showSupplierRecoverableForm()">+ New Claim</button></div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+'</div>'+
+        '<div class="stats-grid" style="margin-bottom:16px"><div class="stat-card"><div class="stat-label">Identified exposure</div><div class="stat-value">'+this.fmt(summary.identified_exposure||0)+'</div><div class="stat-meta">Potential claim, not yet confirmed</div></div><div class="stat-card"><div class="stat-label">Confirmed outstanding</div><div class="stat-value">'+this.fmt(summary.confirmed_outstanding||0)+'</div><div class="stat-meta">Documented amount owed to us</div></div><div class="stat-card"><div class="stat-label">Overdue confirmed</div><div class="stat-value">'+this.fmt(summary.overdue_confirmed||0)+'</div><div class="stat-meta">Past supplier due date</div></div><div class="stat-card"><div class="stat-label">Recovered</div><div class="stat-value">'+this.fmt(summary.recovered_total||0)+'</div><div class="stat-meta">Credits, refunds and offsets received</div></div></div>'+
+        '<div class="card" style="margin-bottom:16px"><div class="card-header"><div><div class="card-title">Confirmed Recoverables Aging</div><div style="font-size:12px;color:var(--text-muted)">Only confirmed supplier obligations appear here.</div></div></div><div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:0 16px 16px">'+
+        [['Current','current'],['1-30','1_30'],['31-60','31_60'],['61-90','61_90'],['90+','90_plus']].map(p=>'<div class="stat-card"><div class="stat-label">'+p[0]+'</div><div class="stat-value" style="font-size:18px">'+this.fmt(aging[p[1]]||0)+'</div></div>').join('')+'</div></div>'+
+        '<div class="card"><div class="table-wrap"><table><thead><tr><th>Claim</th><th>Supplier</th><th>Type</th><th>Source</th><th>Identified</th><th>Confirmed</th><th>Recovered</th><th>Outstanding</th><th>Aging</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+(rows||'<tr><td colspan="11" class="empty-state">No supplier recoverables yet</td></tr>')+'</tbody></table></div></div>';
+    }catch(e){c.innerHTML='<div class="empty-state">Unable to load supplier recoverables: '+this.escapeHtml(e.message||'Unknown error')+'</div>';}
+  },
+
+  showSupplierRecoverableForm() {
+    const suppliers=this._recoverableSuppliers||[];
+    const options=suppliers.map(s=>'<option value="'+s.id+'">'+this.escapeHtml(s.name||('Supplier '+s.id))+'</option>').join('');
+    this.showModal('<div class="modal" style="max-width:620px"><div class="modal-header"><span class="modal-title">New Supplier Recoverable</span><button class="modal-close" onclick="App.closeModal()">x</button></div><div class="modal-body"><div class="form-group"><label>Supplier</label><select id="src-supplier">'+options+'</select></div><div class="input-row"><div class="form-group"><label>Type</label><select id="src-type"><option value="credit_note">Credit note</option><option value="supplier_return">Supplier return</option><option value="shorted_goods">Shorted goods</option><option value="overcharge">Overcharge</option><option value="damaged_goods">Damaged goods</option><option value="rebate">Rebate</option><option value="reimbursement">Reimbursement</option><option value="other">Other</option></select></div><div class="form-group"><label>Amount</label><input id="src-amount" type="number" min="0.01" step="0.01"></div></div><div class="input-row"><div class="form-group"><label>Currency</label><input id="src-currency" value="JMD"></div><div class="form-group"><label>Due date</label><input id="src-due" type="date"></div></div><div class="form-group"><label>Source / Reference</label><input id="src-reference" placeholder="Return #, invoice #, claim reference"></div><div class="form-group"><label>Notes</label><textarea id="src-notes" rows="3"></textarea></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" onclick="App._saveSupplierRecoverable()">Create claim</button></div></div>');
+  },
+
+  async _saveSupplierRecoverable() {
+    const payload={supplier_id:Number(document.getElementById('src-supplier')?.value),claim_type:document.getElementById('src-type')?.value,identified_amount:Number(document.getElementById('src-amount')?.value),currency:document.getElementById('src-currency')?.value?.trim(),due_date:document.getElementById('src-due')?.value||null,source_reference:document.getElementById('src-reference')?.value?.trim()||null,notes:document.getElementById('src-notes')?.value?.trim()||null};
+    try{await this.api('POST','/supplier-recoverables',payload);this.closeModal();this.alert('Supplier recoverable claim created');this.renderSupplierRecoverables();}catch(e){this.alert(e.message||'Unable to create claim','error');}
+  },
+
+  async _confirmSupplierRecoverable(id) {
+    const confirmed_amount=Number(window.prompt('Confirmed amount supplier owes us'));
+    if(!Number.isFinite(confirmed_amount)||confirmed_amount<=0)return;
+    const supplier_document_number=window.prompt('Supplier credit note / claim / acknowledgement number (optional)')||'';
+    const confirmation_note=window.prompt('Supplier confirmation note (required if no document number)')||'';
+    if(!supplier_document_number&&!confirmation_note)return;
+    const due_date=window.prompt('Due date (optional, YYYY-MM-DD)')||null;
+    try{await this.api('POST','/supplier-recoverables/'+id+'/confirm',{confirmed_amount,supplier_document_number,confirmation_note,due_date});this.alert('Supplier obligation confirmed');this.renderSupplierRecoverables();}catch(e){this.alert(e.message||'Unable to confirm claim','error');}
+  },
+
+  async _recoverSupplierRecoverable(id,outstanding) {
+    const amount=Number(window.prompt('Recovery amount',String(outstanding||'')));
+    if(!Number.isFinite(amount)||amount<=0)return;
+    const settlement_type=window.prompt('Recovery type: credit_note, cash_refund, bank_refund, ap_offset, replacement_value, other','credit_note')||'';
+    const reference=window.prompt('Recovery reference / document number')||'';
+    if(!reference)return;
+    try{await this.api('POST','/supplier-recoverables/'+id+'/settlements',{amount,settlement_type,reference});this.alert('Supplier recovery recorded');this.renderSupplierRecoverables();}catch(e){this.alert(e.message||'Unable to record recovery','error');}
   },
 
   async _loadSavingsRealization() {
