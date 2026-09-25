@@ -11370,6 +11370,7 @@ const App = {
         <div style="display:flex;gap:8px;margin-bottom:16px">
           ${tabBtn('orders','Purchase Orders')}
           ${this.can('purchase_requests') ? tabBtn('requests','Purchase Requests') : ''}
+          ${tabBtn('consumables','Consumables')}
         </div>
         <div class="card">
           <div class="table-wrap">
@@ -11398,6 +11399,40 @@ const App = {
       this._poSuppliers = suppliers;
       this._poBranches = branches;
 
+    } else if (tab === 'consumables') {
+      const consumptions = await this.api('GET', '/cost-allocations/consumptions?limit=200');
+      if (this.section !== 'purchasing' && this.section !== 'purchase-requests') return;
+      c.innerHTML = `
+        <div class="section-header">
+          <div>
+            <h2>Consumables & Internal Cost Allocation</h2>
+            <p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Issue company stock to the machine, vehicle, equipment, building, branch, department, project, or work order that consumed it.</p>
+          </div>
+          <button class="btn btn-primary" onclick="App.showConsumptionForm()">+ Issue Consumable</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          ${tabBtn('orders','Purchase Orders')}
+          ${this.can('purchase_requests') ? tabBtn('requests','Purchase Requests') : ''}
+          ${tabBtn('consumables','Consumables')}
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Issue #</th><th>Branch</th><th>Issued By</th><th>Tracked Cost</th><th>Valuation</th><th>Date</th></tr></thead>
+              <tbody>
+                ${consumptions.length ? consumptions.map(x=>`
+                  <tr>
+                    <td class="fw-600">${x.consumption_number}</td>
+                    <td>${x.branch_name||'-'}</td>
+                    <td>${x.employee_name||'-'}</td>
+                    <td class="fw-600">${this.fmt(x.total_tracked_value||0)}</td>
+                    <td><span class="badge-pill ${x.valuation_status==='fully_valued'?'badge-success':x.valuation_status==='partial'?'badge-warning':'badge-danger'}">${x.valuation_status||'unknown'}</span></td>
+                    <td style="color:var(--text-muted)">${this.fmtDate(x.created_at)}</td>
+                  </tr>`).join('') : '<tr><td colspan="6" class="empty-state">No internal consumptions posted yet</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
     } else {
       // Purchase Requests tab
       const filter = this._prFilter || 'all';
@@ -11420,6 +11455,7 @@ const App = {
         <div style="display:flex;gap:8px;margin-bottom:16px">
           ${tabBtn('orders','Purchase Orders')}
           ${tabBtn('requests','Purchase Requests')}
+          ${tabBtn('consumables','Consumables')}
         </div>
         <div class="card" style="margin-bottom:0;border-bottom:none;border-radius:8px 8px 0 0;padding:10px 16px 0">
           <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
@@ -11459,6 +11495,96 @@ const App = {
           </div>
         </div>`;
     }
+  },
+
+  async showConsumptionForm() {
+    const products = await this.api('GET', '/products');
+    const branches = this.currentUser.branches || [];
+    this._consumptionProducts = products;
+    this.showModal(`
+      <div class="modal" style="max-width:760px">
+        <div class="modal-header"><span class="modal-title">Issue Consumable / Internal Stock</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <p style="margin:0 0 14px;color:var(--text-muted);font-size:13px">This removes stock from inventory and assigns its evidenced cost to the business object that consumed it.</p>
+          <div class="input-row">
+            <div class="form-group"><label>Branch</label><select id="con-branch"><option value="">-- Select Branch --</option>${branches.map(b=>`<option value="${b.id}">${b.name}</option>`).join('')}</select></div>
+            <div class="form-group"><label>Product / Consumable</label><select id="con-product"><option value="">-- Select Product --</option>${products.map(p=>`<option value="${p.id}">${p.name} (${p.sku||'-'})</option>`).join('')}</select></div>
+            <div class="form-group"><label>Quantity</label><input id="con-qty" type="number" min="0.01" step="0.01" value="1"></div>
+          </div>
+          <div class="input-row">
+            <div class="form-group"><label>Cost Target Type</label>
+              <select id="con-target-type" onchange="App._loadConsumptionTargets(this.value)">
+                <option value="rental_asset">Rental Machine / Asset</option>
+                <option value="vehicle">Vehicle</option>
+                <option value="equipment">Equipment</option>
+                <option value="building">Building / Property</option>
+                <option value="branch">Branch</option>
+                <option value="department">Department</option>
+                <option value="project">Project</option>
+                <option value="work_order">Work Order</option>
+                <option value="general_overhead">General Overhead</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Cost Target</label><select id="con-target"><option value="">Loading...</option></select></div>
+            <div class="form-group"><label>Expense Category</label>
+              <select id="con-category">
+                <option value="parts">Parts</option><option value="lubricants">Lubricants</option>
+                <option value="fuel">Fuel</option><option value="cleaning">Cleaning</option>
+                <option value="maintenance">Maintenance</option><option value="office_consumables">Office Consumables</option>
+                <option value="safety">Safety / PPE</option><option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-row">
+            <div class="form-group"><label>Purpose</label><input id="con-purpose" placeholder="e.g. scheduled service, repair, cleaning"></div>
+            <div class="form-group"><label>Bin ID <span style="color:var(--text-muted)">(if bin-controlled)</span></label><input id="con-bin" type="number" placeholder="Optional"></div>
+            <div class="form-group"><label>Notes</label><input id="con-notes" placeholder="Additional context"></div>
+          </div>
+          <div style="padding:10px 12px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--text-muted)">
+            Cost is taken from tracked inventory valuation. Missing cost evidence is flagged as partial/unvalued rather than estimated.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="App.postConsumption()">Post Consumption</button>
+        </div>
+      </div>`);
+    await this._loadConsumptionTargets('rental_asset');
+  },
+
+  async _loadConsumptionTargets(type) {
+    const select=document.getElementById('con-target');
+    if(!select)return;
+    select.innerHTML='<option value="">Loading...</option>';
+    try {
+      const rows=await this.api('GET', `/cost-allocations/targets?type=${encodeURIComponent(type)}`);
+      select.innerHTML='<option value="">-- Select Target --</option>'+rows.map(x=>`<option value="${x.id}" data-label="${this.escapeAttr(x.name||x.code||'')}">${x.name||x.code||x.id}</option>`).join('');
+    } catch(e) {
+      select.innerHTML='<option value="">No configured targets</option>';
+    }
+  },
+
+  async postConsumption() {
+    const branch_id=document.getElementById('con-branch')?.value;
+    const product_id=document.getElementById('con-product')?.value;
+    const quantity=parseFloat(document.getElementById('con-qty')?.value)||0;
+    const targetType=document.getElementById('con-target-type')?.value;
+    const target=document.getElementById('con-target');
+    const target_id=target?.value;
+    const target_label=target?.options[target.selectedIndex]?.dataset?.label||target?.options[target.selectedIndex]?.text||null;
+    if(!branch_id||!product_id||quantity<=0||!target_id){this.alert('Branch, product, quantity and cost target are required','error');return;}
+    const payload={
+      branch_id:Number(branch_id),notes:document.getElementById('con-notes')?.value||null,
+      items:[{product_id:Number(product_id),quantity,bin_id:document.getElementById('con-bin')?.value||null,
+        purpose:document.getElementById('con-purpose')?.value||null,
+        allocations:[{target_type:targetType,target_id,target_label,allocation_percent:100,
+          expense_category:document.getElementById('con-category')?.value||'other',
+          purpose:document.getElementById('con-purpose')?.value||null}]}]
+    };
+    try{
+      const posted=await this.api('POST','/cost-allocations/consumptions',payload);
+      this.closeModal();this.alert(`Consumption ${posted.consumption_number} posted`);this.renderPurchasing('consumables');
+    }catch(e){this.alert(e.message,'error');}
   },
 
   // ─── Purchase Requests ────────────────────────────────────
@@ -11577,6 +11703,8 @@ const App = {
     }
     document.querySelectorAll('[id^="pri-itype-"]').forEach(sel => {
       sel.value = type === 'internal_use' ? 'internal' : 'sale';
+      const idx=sel.id.split('-').pop();
+      this._togglePRAllocation(idx);
     });
   },
 
@@ -11614,6 +11742,7 @@ const App = {
     const container = document.getElementById('pr-items');
     const opts = `<option value="">-- Product (optional) --</option>${(this._prAllProducts||[]).map(p=>`<option value="${p.id}" data-cost="${p.cost||0}" data-name="${p.name}" data-sku="${p.sku||''}" ${prefill&&prefill.product_id===p.id?'selected':''}>${p.name} (${p.sku})</option>`).join('')}`;
     const defaultType = prefill ? prefill.item_type : ((this._prRequestType === 'internal_use') ? 'internal' : 'sale');
+    const prefillAlloc = prefill?.allocations?.[0] || null;
     const wrap = document.createElement('div');
     wrap.id = `pr-item-${idx}`;
     wrap.style.cssText = 'border-bottom:1px solid var(--border);padding:8px 0';
@@ -11623,7 +11752,7 @@ const App = {
         <input id="pri-name-${idx}" placeholder="Or type item name" value="${prefill&&!prefill.product_id?this.escapeAttr(prefill.product_name):''}" data-qi-id="${prefill&&prefill.quotation_item_id||''}" oninput="App.calcPRTotal()">
         <input id="pri-qty-${idx}" type="number" min="1" value="${prefill?prefill.quantity:1}" placeholder="Qty" oninput="App.calcPRTotal()">
         <input id="pri-cost-${idx}" type="number" step="0.01" value="${prefill?prefill.unit_cost:''}" placeholder="Est. Cost" oninput="App.calcPRTotal()">
-        <select id="pri-itype-${idx}" style="font-size:12px">
+        <select id="pri-itype-${idx}" style="font-size:12px" onchange="App._togglePRAllocation(${idx})">
           <option value="sale" ${defaultType==='sale'?'selected':''}>Sale</option>
           <option value="internal" ${defaultType==='internal'?'selected':''}>Internal</option>
         </select>
@@ -11634,8 +11763,22 @@ const App = {
           <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;min-width:80px">Product URL:</span>
           <input id="pri-url-${idx}" placeholder="https://..." style="flex:1" value="${this.escapeAttr(prefill&&prefill.product_url)}">
         </div>
+      </div>
+      <div id="pri-allocation-row-${idx}" style="display:${defaultType==='internal'?'':'none'};margin-top:8px;padding:10px;background:var(--bg);border-radius:6px">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase">Cost allocation · 100% of this line</div>
+        <div style="display:grid;grid-template-columns:1.2fr 1.8fr 1.2fr 1.8fr;gap:6px">
+          <select id="pri-target-type-${idx}" onchange="App._loadPRAllocationTargets(${idx},this.value)">
+            ${[['rental_asset','Rental Machine / Asset'],['vehicle','Vehicle'],['equipment','Equipment'],['building','Building / Property'],['branch','Branch'],['department','Department'],['project','Project'],['work_order','Work Order'],['general_overhead','General Overhead']].map(([v,l])=>`<option value="${v}" ${prefillAlloc?.target_type===v?'selected':''}>${l}</option>`).join('')}
+          </select>
+          <select id="pri-target-${idx}"><option value="">-- Select Target --</option></select>
+          <select id="pri-category-${idx}">
+            ${['parts','lubricants','fuel','cleaning','maintenance','office_consumables','safety','other'].map(v=>`<option value="${v}" ${prefillAlloc?.expense_category===v?'selected':''}>${v.replaceAll('_',' ')}</option>`).join('')}
+          </select>
+          <input id="pri-purpose-${idx}" placeholder="Purpose / reason" value="${this.escapeAttr(prefillAlloc?.purpose)}">
+        </div>
       </div>`;
     container.appendChild(wrap);
+    if (defaultType === 'internal') this._loadPRAllocationTargets(idx, prefillAlloc?.target_type || 'rental_asset', prefillAlloc?.target_id || null);
   },
 
   updatePRItem(idx, productId) {
@@ -11645,6 +11788,25 @@ const App = {
     document.getElementById(`pri-name-${idx}`).value = '';
     document.getElementById(`pri-cost-${idx}`).value = opt.dataset.cost || '';
     this.calcPRTotal();
+  },
+
+  _togglePRAllocation(idx) {
+    const internal=document.getElementById(`pri-itype-${idx}`)?.value==='internal';
+    const row=document.getElementById(`pri-allocation-row-${idx}`);
+    if(row)row.style.display=internal?'':'none';
+    if(internal)this._loadPRAllocationTargets(idx,document.getElementById(`pri-target-type-${idx}`)?.value||'rental_asset');
+  },
+
+  async _loadPRAllocationTargets(idx,type,selectedId) {
+    const select=document.getElementById(`pri-target-${idx}`);
+    if(!select)return;
+    select.innerHTML='<option value="">Loading...</option>';
+    try{
+      const rows=await this.api('GET',`/cost-allocations/targets?type=${encodeURIComponent(type)}`);
+      select.innerHTML='<option value="">-- Select Target --</option>'+rows.map(x=>`<option value="${x.id}" data-label="${this.escapeAttr(x.name||x.code||'')}" ${selectedId!=null&&String(selectedId)===String(x.id)?'selected':''}>${x.name||x.code||x.id}</option>`).join('');
+    }catch(e){
+      select.innerHTML='<option value="">No configured targets</option>';
+    }
   },
 
   calcPRTotal() {
@@ -11684,6 +11846,7 @@ const App = {
     const taxRate = this._prIsLocalSupplier ? (this._prTaxRate || 0) : 0;
 
     const items = [];
+    let allocationError = null;
     document.querySelectorAll('[id^="pri-qty-"]').forEach(qEl => {
       if (!qEl.closest('[id^="pr-item-"]')) return;
       const idx = qEl.id.split('-').pop();
@@ -11700,7 +11863,18 @@ const App = {
       const item_type = document.getElementById(`pri-itype-${idx}`)?.value || (request_type === 'internal_use' ? 'internal' : 'sale');
       const product_url = document.getElementById(`pri-url-${idx}`)?.value.trim() || null;
       const quotation_item_id = nameEl?.dataset.qiId || null;
-      items.push({ product_id: product_id || null, product_name, sku, quantity, unit_cost, item_type, product_url, quotation_item_id });
+      let allocations=[];
+      if(item_type==='internal'){
+        const targetType=document.getElementById(`pri-target-type-${idx}`)?.value;
+        const target=document.getElementById(`pri-target-${idx}`);
+        const targetId=target?.value;
+        const targetLabel=target?.options[target.selectedIndex]?.dataset?.label||target?.options[target.selectedIndex]?.text||null;
+        if(!targetId){ allocationError=`Select a cost target for ${product_name}`; return; }
+        allocations=[{target_type:targetType,target_id:targetId,target_label:targetLabel,allocation_percent:100,
+          expense_category:document.getElementById(`pri-category-${idx}`)?.value||'other',
+          purpose:document.getElementById(`pri-purpose-${idx}`)?.value||null}];
+      }
+      items.push({ product_id: product_id || null, product_name, sku, quantity, unit_cost, item_type, product_url, quotation_item_id, allocations });
     });
     if (!items.length) { this.alert('Add at least one item', 'error'); return; }
 

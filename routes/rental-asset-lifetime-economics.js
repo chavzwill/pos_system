@@ -3,11 +3,14 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {requireAnyPermission,requirePermission}=require('../lib/permissions');
+const {ensureCostAllocationSchema}=require('../lib/cost-allocations');
 
 let readyPromise=null;
 async function ensureSchema(){
   if(readyPromise)return readyPromise;
-  readyPromise=db.batch([
+  readyPromise=(async()=>{
+    await ensureCostAllocationSchema();
+    return db.batch([
     {sql:`CREATE TABLE IF NOT EXISTS rental_assets(
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       asset_number TEXT NOT NULL UNIQUE,
@@ -67,7 +70,8 @@ async function ensureSchema(){
       created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
     )`},
     {sql:'CREATE INDEX IF NOT EXISTS idx_rental_asset_economic_events_asset ON rental_asset_economic_events(asset_id,event_date)'}
-  ],'write').catch(e=>{readyPromise=null;throw e;});
+    ],'write');
+  })().catch(e=>{readyPromise=null;throw e;});
   return readyPromise;
 }
 const money=v=>Number(Number(v||0).toFixed(2));
@@ -142,9 +146,16 @@ async function economics(asset){
     ROUND(COALESCE(SUM((julianday(COALESCE(ended_at,CURRENT_TIMESTAMP))-julianday(started_at))*24),0),2) downtime_hours
     FROM rental_asset_maintenance WHERE asset_id=?`,args:[asset.id]});
   const {rows:events}=await db.execute({sql:`SELECT event_type,ROUND(SUM(amount),2) amount,COUNT(*) events FROM rental_asset_economic_events WHERE asset_id=? GROUP BY event_type`,args:[asset.id]});
-  const byType=Object.fromEntries(events.map(x=>[x.event_type,money(x.amount)])),recoveries=money((byType.damage_recovery||0)+(byType.other_recovery||0)),otherCosts=money((byType.unrecovered_damage_loss||0)+(byType.other_direct_cost||0)),acq=money(asset.acquisition_cost),maintenance=money(maint?.maintenance_cost),disposal=['disposed','sold'].includes(String(asset.status))?money(asset.disposal_value):0,revenue=money(rent?.core_rental_revenue),contribution=money(revenue+recoveries+disposal-acq-maintenance-otherCosts),roi=acq>0?money(100*contribution/acq):null;
+  const {rows:[allocated]}=await db.execute({sql:`SELECT
+    ROUND(COALESCE(SUM(CASE WHEN source_type='internal_consumption' THEN allocation_amount ELSE 0 END),0),2) actual_consumed_cost,
+    ROUND(COALESCE(SUM(CASE WHEN source_type='purchase_request' THEN allocation_amount ELSE 0 END),0),2) requested_allocated_cost,
+    COUNT(CASE WHEN source_type='internal_consumption' THEN 1 END) actual_allocation_lines,
+    COUNT(CASE WHEN source_type='purchase_request' THEN 1 END) requested_allocation_lines,
+    COUNT(CASE WHEN source_type='internal_consumption' AND valuation_status!='fully_valued' THEN 1 END) incomplete_valuation_lines
+    FROM cost_allocations WHERE target_type='rental_asset' AND target_id=?`,args:[String(asset.id)]});
+  const byType=Object.fromEntries(events.map(x=>[x.event_type,money(x.amount)])),recoveries=money((byType.damage_recovery||0)+(byType.other_recovery||0)),otherCosts=money((byType.unrecovered_damage_loss||0)+(byType.other_direct_cost||0)),acq=money(asset.acquisition_cost),maintenance=money(maint?.maintenance_cost),allocatedConsumption=money(allocated?.actual_consumed_cost),requestedAllocated=money(allocated?.requested_allocated_cost),disposal=['disposed','sold'].includes(String(asset.status))?money(asset.disposal_value):0,revenue=money(rent?.core_rental_revenue),contribution=money(revenue+recoveries+disposal-acq-maintenance-allocatedConsumption-otherCosts),roi=acq>0?money(100*contribution/acq):null;
   const evidenceGrade=asset.acquisition_evidence_grade==='complete'?'complete':'partial';
-  return {asset_id:asset.id,asset_number:asset.asset_number,product_id:asset.product_id,product_name:asset.product_name,sku:asset.sku,serial_number:asset.serial_number||null,branch_id:asset.branch_id,branch_name:asset.branch_name,status:asset.status,evidence_grade:evidenceGrade,acquisition:{cost:acq,date:asset.acquisition_date,evidence_ref:asset.acquisition_evidence_ref,grade:asset.acquisition_evidence_grade},rentals:{rental_count:Number(rent?.rental_count||0),core_rental_revenue:revenue,first_rental_at:rent?.first_rental_at||null,last_rental_at:rent?.last_rental_at||null},maintenance:{events:Number(maint?.maintenance_events||0),direct_cost:maintenance,downtime_hours:money(maint?.downtime_hours)},other_economics:{recoveries,unrecovered_or_other_direct_costs:otherCosts,event_breakdown:events,disposal_value:disposal},lifetime:{evidenced_contribution:contribution,return_on_acquisition_cost_pct:roi,formula:'core rental revenue + evidenced recoveries + sale/disposal value - acquisition cost - evidenced maintenance - evidenced unrecovered/other direct costs'},limitations:['Rental revenue is allocated equally per issued unit from the authoritative rental-line fee when multiple identical units share one rental line.','Unrecorded maintenance, downtime, insurance, financing, depreciation and overhead are not invented.','Damage/service charges are included only when explicitly linked to this asset through an economic event.']};
+  return {asset_id:asset.id,asset_number:asset.asset_number,product_id:asset.product_id,product_name:asset.product_name,sku:asset.sku,serial_number:asset.serial_number||null,branch_id:asset.branch_id,branch_name:asset.branch_name,status:asset.status,evidence_grade:evidenceGrade,acquisition:{cost:acq,date:asset.acquisition_date,evidence_ref:asset.acquisition_evidence_ref,grade:asset.acquisition_evidence_grade},rentals:{rental_count:Number(rent?.rental_count||0),core_rental_revenue:revenue,first_rental_at:rent?.first_rental_at||null,last_rental_at:rent?.last_rental_at||null},maintenance:{events:Number(maint?.maintenance_events||0),direct_cost:maintenance,downtime_hours:money(maint?.downtime_hours)},allocated_costs:{actual_consumed_cost:allocatedConsumption,requested_allocated_cost:requestedAllocated,actual_allocation_lines:Number(allocated?.actual_allocation_lines||0),requested_allocation_lines:Number(allocated?.requested_allocation_lines||0),incomplete_valuation_lines:Number(allocated?.incomplete_valuation_lines||0)},other_economics:{recoveries,unrecovered_or_other_direct_costs:otherCosts,event_breakdown:events,disposal_value:disposal},lifetime:{evidenced_contribution:contribution,return_on_acquisition_cost_pct:roi,formula:'core rental revenue + evidenced recoveries + sale/disposal value - acquisition cost - evidenced maintenance - actual allocated consumables/parts - evidenced unrecovered/other direct costs'},limitations:['Rental revenue is allocated equally per issued unit from the authoritative rental-line fee when multiple identical units share one rental line.','Unrecorded maintenance, downtime, insurance, financing, depreciation and overhead are not invented.','Damage/service charges are included only when explicitly linked to this asset through an economic event.','Internal consumables/parts reduce lifetime contribution only when issued and valued; purchase requests remain requested spend until actual consumption/receipt evidence exists.']};
 }
 
 router.get('/assets/:id/economics',requireAnyPermission('reports','rentals'),async(req,res)=>{try{const asset=await getAsset(Number(req.params.id));if(!asset)return res.status(404).json({error:'Rental asset not found'});res.json(await economics(asset));}catch(e){res.status(500).json({error:e.message});}});

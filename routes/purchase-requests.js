@@ -4,10 +4,12 @@ const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
 const { enqueuePurchaseRequested } = require('../lib/spendos-outbox');
+const { ensureCostAllocationSchema, normalizeAllocations, insertAllocations, allocationsForSource } = require('../lib/cost-allocations');
 
 // Self-contained feature, not used as a cross-section lookup elsewhere —
 // module-level gate for all of it, matching the frontend's own section gate.
 router.use(requirePermission('purchase_requests'));
+router.use(async (req,res,next) => { try { await ensureCostAllocationSchema(); next(); } catch(e) { res.status(500).json({ error:e.message }); } });
 
 const PR_SELECT = `
   SELECT pr.*,
@@ -50,7 +52,8 @@ router.get('/:id', async (req, res) => {
       sql: 'SELECT pri.*, p.name as linked_product_name FROM purchase_request_items pri LEFT JOIN products p ON pri.product_id = p.id WHERE pri.pr_id = ?',
       args: [req.params.id]
     });
-    pr.items = items;
+    const allocations = await allocationsForSource('purchase_request', req.params.id);
+    pr.items = items.map(item => ({ ...item, allocations: allocations.filter(a => String(a.source_line_id) === String(item.id)) }));
     res.json(pr);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -78,6 +81,7 @@ async function processPRItems(items, request_type) {
       product_url: item.product_url || null,
       notes: item.notes || null,
       quotation_item_id: item.quotation_item_id || null,
+      allocations: item.allocations || [],
       total: parseFloat((unit_cost * qty).toFixed(2))
     });
   }
@@ -105,9 +109,17 @@ router.post('/', async (req, res) => {
       });
       const prId = Number(result.lastInsertRowid);
       for (const item of processedItems) {
-        await tx.execute({
+        if (item.item_type === 'internal' && (!item.allocations || item.allocations.length === 0)) {
+          throw new Error(`Internal-use item "${item.product_name}" must be allocated to a cost target`);
+        }
+        const line = await tx.execute({
           sql: 'INSERT INTO purchase_request_items (pr_id, product_id, product_name, sku, quantity, unit_cost, item_type, product_url, notes, total, quotation_item_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
           args: [prId, item.product_id, item.product_name, item.sku, item.quantity, item.unit_cost, item.item_type, item.product_url, item.notes, item.total, item.quotation_item_id]
+        });
+        item.allocations = normalizeAllocations(item.allocations, item.total);
+        if (item.allocations.length) await insertAllocations(tx, {
+          sourceType:'purchase_request', sourceId:prId, sourceLineId:Number(line.lastInsertRowid),
+          allocations:item.allocations, createdBy:employee_id
         });
       }
       await enqueuePurchaseRequested(tx, {
@@ -165,11 +177,20 @@ router.put('/:id', async (req, res) => {
                request_type, supplier_id||null, currency||null, is_online_purchase?1:0,
                parseFloat(tax_rate)||0, parseFloat(tax_amount)||0, pr.id]
       });
+      await tx.execute({ sql: 'DELETE FROM cost_allocations WHERE source_type=? AND source_id=?', args: ['purchase_request', String(pr.id)] });
       await tx.execute({ sql: 'DELETE FROM purchase_request_items WHERE pr_id = ?', args: [pr.id] });
       for (const item of processedItems) {
-        await tx.execute({
+        if (item.item_type === 'internal' && (!item.allocations || item.allocations.length === 0)) {
+          throw new Error(`Internal-use item "${item.product_name}" must be allocated to a cost target`);
+        }
+        const line = await tx.execute({
           sql: 'INSERT INTO purchase_request_items (pr_id, product_id, product_name, sku, quantity, unit_cost, item_type, product_url, notes, total, quotation_item_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
           args: [pr.id, item.product_id, item.product_name, item.sku, item.quantity, item.unit_cost, item.item_type, item.product_url, item.notes, item.total, item.quotation_item_id]
+        });
+        item.allocations = normalizeAllocations(item.allocations, item.total);
+        if (item.allocations.length) await insertAllocations(tx, {
+          sourceType:'purchase_request', sourceId:pr.id, sourceLineId:Number(line.lastInsertRowid),
+          allocations:item.allocations, createdBy:employee_id || pr.employee_id
         });
       }
       const nextSpendosVersion = Number(pr.spendos_version || 1) + 1;
