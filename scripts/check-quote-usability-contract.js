@@ -2,9 +2,9 @@
 const fs=require('fs'),path=require('path');const root=path.join(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
 let failed=0;const check=(n,o)=>o?console.log('PASS Quote Usability:',n):(failed++,console.error('FAIL Quote Usability:',n));
 const ui=read('public/quotations-workspace.js'),route=read('routes/quotations.js'),pkg=read('package.json');
-check('existing unified search still covers quote and customer',ui.includes('Search quote, customer or branch')&&ui.includes('x.quote_number')&&ui.includes('x.customer_name'));
+check('existing unified search still covers quote and customer',ui.includes('id="tt-quotes-search"')&&ui.includes('Search quote or customer /')&&ui.includes('x.branch_name')&&ui.includes('x.quote_number')&&ui.includes('x.customer_name'));
 check('creation date filter exists',ui.includes('tt-quotes-date')&&ui.includes("String(x.created_at||'').slice(0,10)===state.date"));
-check('my quotes filter exists',ui.includes('My Quotes Only')&&ui.includes("tt-quotes-mine"));
+check('my quotes filter exists',ui.includes('My quotes only')&&ui.includes("tt-quotes-mine"));
 check('my quotes uses signed-in employee identity',ui.includes('window.__TT_WORKSPACE_PROFILE__?.employee?.id')&&ui.includes('x.employee_id'));
 check('quote cards show created date',ui.includes("q.created_at?esc(String(q.created_at).slice(0,10))"));
 check('quote cards show owner',ui.includes("q.employee_name||'Unknown owner'"));

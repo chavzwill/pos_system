@@ -95,9 +95,10 @@ test.describe('Operational reports', () => {
     await loginShell(page);
     await page.evaluate(async()=>window.TotalToolsShellOpen('operational-reports','Reports'));
     await expect(page.locator('#tt-op-reports-title')).toHaveText('Reports');
-    await expect(page.getByRole('button',{name:/Sales Summary/i})).toBeVisible();
-    await expect(page.getByRole('button',{name:/Payments by Method/i})).toBeVisible();
-    await expect(page.getByRole('button',{name:/Sales by Employee/i})).toBeVisible();
+    const catalog = page.locator('.tt-op-reports__card');
+    await expect(catalog.filter({hasText:'Sales Summary'})).toBeVisible();
+    await expect(catalog.filter({hasText:'Payments by Method'})).toBeVisible();
+    await expect(catalog.filter({hasText:'Sales by Employee'})).toBeVisible();
     await expect(page.locator('#tt-op-reports-root')).not.toContainText('Inventory Intelligence');
   });
 });
