@@ -1,25 +1,46 @@
 const express=require('express');
+const bcrypt=require('bcryptjs');
 const router=express.Router();
 const {db}=require('../database');
 const {requireAuth}=require('../lib/permissions');
+const {privilegedPinRateLimit,resetRequestRateLimit}=require('../lib/securityHardening');
 const {syncBinQty}=require('../lib/binSync');
 const {ensureInventoryCostRestoration,restoreTransactionItemCost}=require('../lib/inventory-cost-restoration');
+
+const PIN_COST=12;
+function isBcryptHash(value){return typeof value==='string'&&/^\$2[aby]\$/.test(value);}
+async function verifyPin(stored,supplied){
+  if(!stored||!/^\d{6,10}$/.test(String(supplied||'')))return false;
+  if(isBcryptHash(stored))return bcrypt.compare(String(supplied),stored);
+  return String(stored)===String(supplied);
+}
+async function upgradeLegacyPin(employeeId,stored,supplied){
+  if(isBcryptHash(stored))return;
+  const hashed=await bcrypt.hash(String(supplied),PIN_COST);
+  await db.execute({sql:'UPDATE employees SET pin=? WHERE id=? AND pin=?',args:[hashed,employeeId,stored]});
+}
 
 router.use(async(req,res,next)=>{
   try{await ensureInventoryCostRestoration();next();}
   catch(e){res.status(500).json({error:'Void valuation integrity initialization failed',detail:e.message});}
 });
 
-router.patch('/:id/void',requireAuth,async(req,res)=>{
+router.patch('/:id/void',requireAuth,privilegedPinRateLimit,async(req,res)=>{
   try{
     const {pin,reason}=req.body||{};
-    if(!pin)return res.status(400).json({error:'Override PIN required'});
+    if(!/^\d{6,10}$/.test(String(pin||'')))return res.status(400).json({error:'Override PIN must be 6-10 digits'});
     const {rows:employees}=await db.execute({sql:'SELECT e.id,e.first_name,e.last_name,e.pin,sg.permissions FROM employees e LEFT JOIN security_groups sg ON e.security_group_id=sg.id WHERE e.active=1',args:[]});
-    const authorizer=employees.find(e=>{
-      if(e.pin!==String(pin))return false;
-      try{return JSON.parse(e.permissions||'{}').void_transactions===true;}catch{return false;}
-    });
+    let authorizer=null;
+    for(const employee of employees){
+      let permitted=false;
+      try{permitted=JSON.parse(employee.permissions||'{}').void_transactions===true;}catch{}
+      if(!permitted||!(await verifyPin(employee.pin,pin)))continue;
+      authorizer=employee;
+      await upgradeLegacyPin(employee.id,employee.pin,pin);
+      break;
+    }
     if(!authorizer)return res.status(403).json({error:'Invalid PIN or insufficient privilege'});
+    resetRequestRateLimit(req);
 
     const {rows:[sale]}=await db.execute({sql:'SELECT * FROM transactions WHERE id=?',args:[req.params.id]});
     if(!sale)return res.status(404).json({error:'Transaction not found'});
@@ -37,7 +58,8 @@ router.patch('/:id/void',requireAuth,async(req,res)=>{
     const tx=await db.transaction('write');
     let committed=false;
     try{
-      await tx.execute({sql:"UPDATE transactions SET status='voided',voided_by=?,voided_at=CURRENT_TIMESTAMP,void_reason=? WHERE id=? AND status='completed'",args:[authorizer.id,reason||null,sale.id]});
+      const update=await tx.execute({sql:"UPDATE transactions SET status='voided',voided_by=?,voided_at=CURRENT_TIMESTAMP,void_reason=? WHERE id=? AND status='completed'",args:[authorizer.id,reason||null,sale.id]});
+      if(Number(update.rowsAffected||0)!==1)throw new Error('Transaction state changed before void could commit');
       const {rows:items}=await tx.execute({sql:'SELECT * FROM transaction_items WHERE transaction_id=? ORDER BY id',args:[sale.id]});
       for(const item of items){
         if(!item.product_id)continue;
