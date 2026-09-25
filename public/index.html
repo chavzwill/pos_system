@@ -11574,11 +11574,12 @@ const App = {
     if(!body)return;
     body.innerHTML='<div class="empty-state">Loading verified savings…</div>';
     try{
-      const [data,rollup,targets,attention]=await Promise.all([
+      const [data,rollup,targets,attention,leakage]=await Promise.all([
         this.api('GET','/spendos-management/opportunities'),
         this.api('GET','/spendos-management/verified-rollup'),
         this.api('GET','/spendos-management/targets/performance'),
-        this.api('GET','/spendos-management/attention')
+        this.api('GET','/spendos-management/attention'),
+        this.api('GET','/spendos-management/leakage')
       ]);
       const rows=data.opportunities||[];
       const estimated=rows.reduce((s,x)=>s+Number(x.estimated_savings||0),0);
@@ -11597,6 +11598,8 @@ const App = {
       const targetRows=(targets||[]).map(t=>'<tr><td><div class="fw-600">'+String(t.scope_type||'company').replaceAll('_',' ')+'</div><div style="font-size:12px;color:var(--text-muted)">'+this.escapeHtml(String(t.scope_id||'all'))+'</div></td><td>'+this.escapeHtml(String(t.period_start||''))+' → '+this.escapeHtml(String(t.period_end||''))+'</td><td>'+this.fmt(t.target_amount||0)+'</td><td class="fw-600">'+this.fmt(t.verified_savings||0)+'</td><td>'+this.fmt(t.gap||0)+'</td><td><span class="badge-pill '+(t.performance_status==='met'?'badge-success':t.performance_status==='in_progress'?'badge-warning':'')+'">'+String(t.performance_status||'not_started').replaceAll('_',' ')+'</span></td><td>'+this.escapeHtml(String(t.owner_id||'Unassigned'))+'</td></tr>').join('');
       const attentionRows=(attention?.items||[]).map(a=>'<tr><td><span class="badge-pill '+(a.priority==='high'?'badge-danger':'badge-warning')+'">'+this.escapeHtml(String(a.priority||'medium'))+'</span></td><td>'+this.escapeHtml(String(a.kind||'attention').replaceAll('_',' '))+'</td><td>'+this.escapeHtml(String(a.scopeId||a.opportunityId||a.targetId||'—'))+'</td><td>'+this.escapeHtml(String(a.reason||''))+'</td></tr>').join('');
       body.innerHTML+='<div class="card" style="margin-top:14px"><div class="card-header"><div><div class="card-title">Savings Attention</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Review prompts only. Pace signals do not forecast future savings or guarantee target failure.</div></div></div><div class="table-wrap"><table><thead><tr><th>Priority</th><th>Attention</th><th>Reference</th><th>Reason</th></tr></thead><tbody>'+(attentionRows||'<tr><td colspan="4" class="empty-state">No savings accountability attention items</td></tr>')+'</tbody></table></div></div>';
+      const leakageRows=(leakage?.items||[]).map(x=>'<tr><td><span class="badge-pill badge-danger">'+this.escapeHtml(String(x.priority||'high'))+'</span></td><td>'+this.escapeHtml(String(x.kind||'leakage').replaceAll('_',' '))+'</td><td>'+this.escapeHtml(String(x.sku||'—'))+'</td><td>'+this.escapeHtml(String((x.evidenceEventIds||[]).join(', ')||'—'))+'</td><td>'+this.escapeHtml(String(x.reason||''))+'</td></tr>').join('');
+      body.innerHTML+='<div class="card" style="margin-top:14px"><div class="card-header"><div><div class="card-title">Savings Leakage & Root Cause</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Only causes directly proven by recorded actions and later actual receipt evidence are classified. Unexplained gaps remain unexplained.</div></div></div><div class="table-wrap"><table><thead><tr><th>Priority</th><th>Cause</th><th>SKU</th><th>Evidence</th><th>Reason</th></tr></thead><tbody>'+(leakageRows||'<tr><td colspan="5" class="empty-state">No evidenced savings leakage detected</td></tr>')+'</tbody></table></div></div>';
       body.innerHTML+='<div class="card" style="margin-top:14px"><div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div class="card-title">Savings Accountability</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Targets are management goals. Only verified receipt-backed savings count toward attainment.</div></div><button class="btn btn-primary" onclick="App._showSavingsTargetForm()">Set savings target</button></div><div class="table-wrap"><table><thead><tr><th>Scope</th><th>Period</th><th>Target</th><th>Verified</th><th>Gap</th><th>Status</th><th>Owner</th></tr></thead><tbody>'+(targetRows||'<tr><td colspan="7" class="empty-state">No savings targets have been set</td></tr>')+'</tbody></table></div></div>';
     }catch(e){
       body.innerHTML='<div class="empty-state">Savings verification unavailable: '+this.escapeHtml(e.message||'SpendOS is offline or not configured')+'</div>';

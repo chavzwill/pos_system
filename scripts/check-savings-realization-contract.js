@@ -29,7 +29,10 @@ const checks=[
  ['UI supports company supplier category and department target scopes',ui.includes('<option value="company">Company</option>')&&ui.includes('<option value="supplier">Supplier</option>')&&ui.includes('<option value="category">Savings category</option>')&&ui.includes('<option value="department">Department</option>')],
  ['savings attention stays behind authenticated proxy',route.includes("router.get('/attention'")&&route.includes('/v1/savings/attention?tenantId=')&&!ui.includes('/v1/savings/attention')],
  ['UI labels pace as review signal not forecast',ui.includes('Review prompts only. Pace signals do not forecast future savings or guarantee target failure.')],
- ['UI surfaces savings attention reasons and priority',ui.includes('Savings Attention')&&ui.includes('<th>Priority</th>')&&ui.includes('<th>Reason</th>')]
+ ['UI surfaces savings attention reasons and priority',ui.includes('Savings Attention')&&ui.includes('<th>Priority</th>')&&ui.includes('<th>Reason</th>')],
+ ['savings leakage stays behind authenticated proxy',route.includes("router.get('/leakage'")&&route.includes('/v1/savings/leakage?tenantId=')&&!ui.includes('/v1/savings/leakage')],
+ ['UI limits leakage causes to direct evidence',ui.includes('Only causes directly proven by recorded actions and later actual receipt evidence are classified. Unexplained gaps remain unexplained.')],
+ ['UI exposes leakage cause SKU evidence and reason',ui.includes('Savings Leakage & Root Cause')&&ui.includes('<th>Cause</th>')&&ui.includes('<th>SKU</th>')&&ui.includes('<th>Evidence</th>')]
 ];
 let failed=0;
 for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Savings realization: ${name}`);if(!ok)failed++;}
