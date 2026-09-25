@@ -98,18 +98,59 @@ router.get('/economics',async(req,res)=>{
     for(const row of rows){
       let context={};
       if(type==='vehicle'&&row.target_id){
-        const {rows:[v]}=await db.execute({sql:'SELECT id,vehicle_number,registration_number,description,status,current_branch_id FROM dispatch_vehicles WHERE id=?',args:[row.target_id]});
-        const {rows:[jobs]}=await db.execute({sql:`SELECT
-          COUNT(*) jobs,
-          COUNT(CASE WHEN dj.status='completed' THEN 1 END) completed_jobs,
-          COUNT(CASE WHEN dj.status IN ('failed','delayed') THEN 1 END) exception_jobs
-          FROM dispatch_jobs dj
-          JOIN dispatch_executions de ON de.dispatch_job_id=dj.id
-          WHERE de.vehicle_id=?`,args:[row.target_id]});
-        context={vehicle:v||null,dispatch:jobs||{jobs:0,completed_jobs:0,exception_jobs:0}};
+        let v=null,jobs={jobs:0,completed_jobs:0,exception_jobs:0,recent_completed_jobs:0,prior_completed_jobs:0};
+        try{
+          ({rows:[v]}=await db.execute({sql:'SELECT id,vehicle_number,registration_number,description,status,current_branch_id FROM dispatch_vehicles WHERE id=?',args:[row.target_id]}));
+          ({rows:[jobs]}=await db.execute({sql:`SELECT
+            COUNT(*) jobs,
+            COUNT(CASE WHEN dj.status='completed' THEN 1 END) completed_jobs,
+            COUNT(CASE WHEN dj.status IN ('failed','delayed') THEN 1 END) exception_jobs,
+            COUNT(CASE WHEN dj.status='completed' AND datetime(COALESCE(dj.completed_at,dj.created_at))>=datetime('now','-30 days') THEN 1 END) recent_completed_jobs,
+            COUNT(CASE WHEN dj.status='completed' AND datetime(COALESCE(dj.completed_at,dj.created_at))>=datetime('now','-60 days') AND datetime(COALESCE(dj.completed_at,dj.created_at))<datetime('now','-30 days') THEN 1 END) prior_completed_jobs
+            FROM dispatch_jobs dj
+            JOIN dispatch_executions de ON de.dispatch_job_id=dj.id
+            WHERE de.vehicle_id=?`,args:[row.target_id]}));
+        }catch{}
+        const recentJobs=Number(jobs?.recent_completed_jobs||0),priorJobs=Number(jobs?.prior_completed_jobs||0);
+        const recentCostPerJob=recentJobs>0?Number((Number(row.trailing_30d_cost||0)/recentJobs).toFixed(2)):null;
+        const priorCostPerJob=priorJobs>0?Number((Number(row.prior_30d_cost||0)/priorJobs).toFixed(2)):null;
+        const efficiencyChangePct=recentCostPerJob!=null&&priorCostPerJob>0?Number((((recentCostPerJob-priorCostPerJob)/priorCostPerJob)*100).toFixed(2)):null;
+        context={vehicle:v||null,dispatch:jobs||{},efficiency:{
+          metric:'allocated_cost_per_completed_dispatch',
+          recent_output:recentJobs,prior_output:priorJobs,
+          recent_cost_per_output:recentCostPerJob,prior_cost_per_output:priorCostPerJob,
+          change_pct:efficiencyChangePct,
+          state:recentJobs<=0?'no_recent_output':priorJobs<=0?'new_output_baseline':efficiencyChangePct>=15?'efficiency_worsening':efficiencyChangePct<=-15?'efficiency_improving':'efficiency_stable'
+        }};
       }else if(type==='branch'&&row.target_id){
         const {rows:[b]}=await db.execute({sql:'SELECT id,branch_code,name,active FROM branches WHERE id=?',args:[row.target_id]});
-        context={branch:b||null};
+        let activity={recent_transactions:0,prior_transactions:0,recent_sales_value:0,prior_sales_value:0};
+        try{
+          const {rows:[a]}=await db.execute({sql:`SELECT
+            COUNT(CASE WHEN status='completed' AND datetime(created_at)>=datetime('now','-30 days') THEN 1 END) recent_transactions,
+            COUNT(CASE WHEN status='completed' AND datetime(created_at)>=datetime('now','-60 days') AND datetime(created_at)<datetime('now','-30 days') THEN 1 END) prior_transactions,
+            COALESCE(SUM(CASE WHEN status='completed' AND datetime(created_at)>=datetime('now','-30 days') THEN total ELSE 0 END),0) recent_sales_value,
+            COALESCE(SUM(CASE WHEN status='completed' AND datetime(created_at)>=datetime('now','-60 days') AND datetime(created_at)<datetime('now','-30 days') THEN total ELSE 0 END),0) prior_sales_value
+            FROM transactions WHERE branch_id=?`,args:[row.target_id]});
+          activity=a||activity;
+        }catch{}
+        const recentTx=Number(activity.recent_transactions||0),priorTx=Number(activity.prior_transactions||0),
+          recentSales=Number(activity.recent_sales_value||0),priorSales=Number(activity.prior_sales_value||0);
+        const recentCostPerTx=recentTx>0?Number((Number(row.trailing_30d_cost||0)/recentTx).toFixed(2)):null;
+        const priorCostPerTx=priorTx>0?Number((Number(row.prior_30d_cost||0)/priorTx).toFixed(2)):null;
+        const recentCostToSales=recentSales>0?Number((100*Number(row.trailing_30d_cost||0)/recentSales).toFixed(2)):null;
+        const priorCostToSales=priorSales>0?Number((100*Number(row.prior_30d_cost||0)/priorSales).toFixed(2)):null;
+        const efficiencyChangePct=recentCostPerTx!=null&&priorCostPerTx>0?Number((((recentCostPerTx-priorCostPerTx)/priorCostPerTx)*100).toFixed(2)):
+          (recentCostToSales!=null&&priorCostToSales>0?Number((((recentCostToSales-priorCostToSales)/priorCostToSales)*100).toFixed(2)):null);
+        context={branch:b||null,activity,efficiency:{
+          metric:'allocated_cost_intensity',
+          recent_cost_per_transaction:recentCostPerTx,
+          prior_cost_per_transaction:priorCostPerTx,
+          recent_cost_to_recorded_sales_pct:recentCostToSales,
+          prior_cost_to_recorded_sales_pct:priorCostToSales,
+          change_pct:efficiencyChangePct,
+          state:recentTx<=0&&recentSales<=0?'no_recent_output':priorTx<=0&&priorSales<=0?'new_output_baseline':efficiencyChangePct>=15?'efficiency_worsening':efficiencyChangePct<=-15?'efficiency_improving':'efficiency_stable'
+        }};
       }else if(['building','equipment','department','project','general_overhead'].includes(type)&&row.target_id){
         const {rows:[o]}=await db.execute({sql:'SELECT * FROM cost_objects WHERE id=? AND object_type=?',args:[row.target_id,type]});
         context={object:o||null};
