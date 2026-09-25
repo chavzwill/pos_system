@@ -4,11 +4,12 @@ const root=path.join(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const route=read('routes/supplier-returns.js');
 const rec=read('routes/supplier-recoverables.js');
+const confirmation=read('lib/supplier-recoverable-confirmation.js');
 const sync=read('routes/accounting-source-sync.js');
 const posting=read('lib/accounting-posting.js');
 const server=read('server.js');
 const ui=read('public/index.html');
-for(const [name,src] of Object.entries({route,rec,sync,posting}))new vm.Script(src,{filename:name});
+for(const [name,src] of Object.entries({route,rec,confirmation,sync,posting}))new vm.Script(src,{filename:name});
 const checks=[
  ['supplier return route mounted',server.includes("app.use('/api/supplier-returns'")],
  ['supplier returns require purchasing authority',route.includes("requireAnyPermission('purchasing','purchasing_receive','purchasing_approve','reports_financial')")],
@@ -41,11 +42,11 @@ const checks=[
  ['chart of accounts has pending supplier-return credit asset',posting.includes("['1160','Supplier Returns Pending Credit','asset','debit']")],
  ['dispatch accounting debits pending credit and credits inventory',sync.includes("sourceType:'supplier_return_dispatch'")&&sync.includes("code:'1160',debit:amount")&&sync.includes("code:'1200',debit:0,credit:amount")],
  ['incomplete carrying value becomes evidence gap not invented posting',sync.includes('supplier_return_inventory_value_incomplete')&&sync.includes('Accounting will not invent the missing inventory value')],
- ['supplier-return confirmation requires exact dispatched return',rec.includes('Supplier return accounting basis requires the exact dispatched return')],
- ['supplier-return confirmation preserves operational receivable when accounting is unresolved',rec.includes("accountingBasis={status:'unresolved'")&&rec.includes('Returned inventory does not have complete auditable carrying-value evidence.')],
- ['supplier confirmed credit mismatch is surfaced rather than invented as variance',rec.includes('differs from returned inventory carrying value')],
+ ['supplier-return confirmation requires exact dispatched return',confirmation.includes('Supplier return accounting basis requires the exact dispatched return')],
+ ['supplier-return confirmation preserves operational receivable when accounting is unresolved',confirmation.includes("accountingBasis={status:'unresolved'")&&confirmation.includes('Returned inventory does not have complete auditable carrying-value evidence.')],
+ ['supplier confirmed credit mismatch is surfaced rather than invented as variance',confirmation.includes('differs from returned inventory carrying value')],
  ['recoverables UI exposes accounting reconciliation status',ui.includes('Accounting: '+"'+this.escapeHtml(accountingStatus.replaceAll('_',' '))")],
- ['confirmed reconciled supplier return uses supplier_return_clearing basis',rec.includes("'supplier_return_clearing'")],
+ ['confirmed reconciled supplier return uses supplier_return_clearing basis',confirmation.includes("'supplier_return_clearing'")],
  ['confirmation accounting moves pending credit to Supplier Recoverables',sync.includes("x.basis_type==='supplier_return_clearing'")&&sync.includes("code:'1150',debit:amount")&&sync.includes("code:'1160',debit:0,credit:amount")],
  ['settlement can then use existing AP offset or cash bank refund controls',rec.includes("if(type==='ap_offset')")&&rec.includes("'cash_refund','bank_refund','ap_offset'")]
 ];

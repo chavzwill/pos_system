@@ -11373,6 +11373,7 @@ const App = {
           ${tabBtn('consumables','Consumables')}
           ${tabBtn('recoverables','Supplier Recoverables')}
           ${tabBtn('supplier-returns','Supplier Returns')}
+          ${tabBtn('supplier-credit-notes','Credit Notes')}
         </div>
         <div class="card">
           <div class="table-wrap">
@@ -11405,6 +11406,8 @@ const App = {
       return this.renderSupplierRecoverables();
     } else if (tab === 'supplier-returns') {
       return this.renderSupplierReturns();
+    } else if (tab === 'supplier-credit-notes') {
+      return this.renderSupplierCreditNotes();
     } else if (tab === 'consumables') {
       const [consumptions,costSummary,reconciliations,attention] = await Promise.all([
         this.api('GET', '/cost-allocations/consumptions?limit=200'),
@@ -11432,6 +11435,7 @@ const App = {
           ${tabBtn('consumables','Consumables')}
           ${tabBtn('recoverables','Supplier Recoverables')}
           ${tabBtn('supplier-returns','Supplier Returns')}
+          ${tabBtn('supplier-credit-notes','Credit Notes')}
         </div>
         <div class="stats-grid" style="margin-bottom:16px">
           <div class="stat-card"><div class="stat-label">Requested allocation</div><div class="stat-value">${this.fmt(totalRequested)}</div><div class="stat-meta">Planned internal-use cost</div></div>
@@ -11538,6 +11542,7 @@ const App = {
           ${tabBtn('consumables','Consumables')}
           ${tabBtn('recoverables','Supplier Recoverables')}
           ${tabBtn('supplier-returns','Supplier Returns')}
+          ${tabBtn('supplier-credit-notes','Credit Notes')}
         </div>
         <div class="card" style="margin-bottom:0;border-bottom:none;border-radius:8px 8px 0 0;padding:10px 16px 0">
           <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
@@ -11579,6 +11584,100 @@ const App = {
     }
   },
 
+  async renderSupplierCreditNotes() {
+    this._purchasingTab='supplier-credit-notes';
+    const c=document.getElementById('content');
+    c.innerHTML='<div class="empty-state"><p>Loading supplier credit notes...</p></div>';
+    try{
+      const [notes,suppliers,branches]=await Promise.all([
+        this.api('GET','/supplier-credit-notes'),
+        this.api('GET','/suppliers'),
+        this.api('GET','/branches')
+      ]);
+      this._supplierCreditSuppliers=suppliers||[];
+      this._supplierCreditBranches=branches||[];
+      const tabButton=(key,label)=>'<button class="btn btn-sm '+(key==='supplier-credit-notes'?'btn-primary':'btn-outline')+'" onclick="App.renderPurchasing(\''+key+'\')">'+label+'</button>';
+      const rows=(notes||[]).map(n=>{
+        const statusClass=n.status==='fully_matched'?'badge-success':n.status==='partially_matched'?'badge-info':'badge-warning';
+        return '<tr><td class="fw-600">'+this.escapeHtml(n.credit_note_number||'')+'</td><td>'+this.escapeHtml(n.supplier_name||'')+'</td><td>'+this.escapeHtml(n.credit_date||'')+'</td><td>'+this.fmt(n.amount||0)+'</td><td>'+this.fmt(n.applied_amount||0)+'</td><td>'+this.fmt(n.settled_amount||0)+'</td><td class="fw-600">'+this.fmt(n.remaining_amount||0)+'</td><td><span class="badge-pill '+statusClass+'">'+this.escapeHtml(String(n.status||'').replaceAll('_',' '))+'</span></td><td>'+this.escapeHtml(n.supplier_reference||'—')+'</td><td style="white-space:nowrap"><button class="btn btn-sm btn-primary" onclick="App._matchSupplierCreditNote('+n.id+')">Match to claim</button> '+(n.stored_name?'<a class="btn btn-sm btn-outline" href="/api/supplier-credit-notes/'+n.id+'/file">Evidence</a>':'')+'</td></tr>';
+      }).join('');
+      c.innerHTML='<div class="section-header"><div><h2>Supplier Credit Notes</h2><p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Record supplier-issued credits, match them to recoverable claims, and apply matched credit to Accounts Payable without duplicate use.</p></div><button class="btn btn-primary" onclick="App.showSupplierCreditNoteForm()">+ Record Credit Note</button></div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+tabButton('supplier-returns','Supplier Returns')+tabButton('supplier-credit-notes','Credit Notes')+'</div>'+
+        '<div class="card"><div class="table-wrap"><table><thead><tr><th>Credit note</th><th>Supplier</th><th>Date</th><th>Amount</th><th>Matched</th><th>Settled to AP</th><th>Remaining to match</th><th>Status</th><th>Supplier reference</th><th>Actions</th></tr></thead><tbody>'+(rows||'<tr><td colspan="10" class="empty-state">No supplier credit notes recorded</td></tr>')+'</tbody></table></div></div>';
+    }catch(e){c.innerHTML='<div class="empty-state">Unable to load supplier credit notes: '+this.escapeHtml(e.message||'Unknown error')+'</div>';}
+  },
+
+  showSupplierCreditNoteForm() {
+    const suppliers=(this._supplierCreditSuppliers||[]).map(s=>'<option value="'+s.id+'">'+this.escapeHtml(s.name||('Supplier '+s.id))+'</option>').join('');
+    const branches=(this._supplierCreditBranches||[]).map(b=>'<option value="'+b.id+'">'+this.escapeHtml(b.name||('Branch '+b.id))+'</option>').join('');
+    this.showModal('<div class="modal" style="max-width:650px"><div class="modal-header"><span class="modal-title">Record Supplier Credit Note</span><button class="modal-close" onclick="App.closeModal()">x</button></div><div class="modal-body">'+
+      '<div class="input-row"><div class="form-group"><label>Supplier</label><select id="scn-supplier">'+suppliers+'</select></div><div class="form-group"><label>Branch</label><select id="scn-branch"><option value="">Not branch-specific</option>'+branches+'</select></div></div>'+
+      '<div class="input-row"><div class="form-group"><label>Credit note number</label><input id="scn-number"></div><div class="form-group"><label>Credit date</label><input id="scn-date" type="date"></div></div>'+
+      '<div class="input-row"><div class="form-group"><label>Amount</label><input id="scn-amount" type="number" min="0.01" step="0.01"></div><div class="form-group"><label>Currency</label><input id="scn-currency" value="JMD"></div></div>'+
+      '<div class="form-group"><label>Supplier/source reference</label><input id="scn-reference" placeholder="Return #, PO #, invoice #, claim reference"></div>'+
+      '<div class="form-group"><label>Evidence file (optional)</label><input id="scn-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.docx,.xlsx"></div>'+
+      '<div class="form-group"><label>Notes</label><textarea id="scn-notes" rows="2"></textarea></div>'+
+      '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" onclick="App._saveSupplierCreditNote()">Record credit note</button></div></div>');
+  },
+
+  async _saveSupplierCreditNote() {
+    try{
+      const fd=new FormData();
+      fd.append('supplier_id',document.getElementById('scn-supplier')?.value||'');
+      fd.append('branch_id',document.getElementById('scn-branch')?.value||'');
+      fd.append('credit_note_number',document.getElementById('scn-number')?.value?.trim()||'');
+      fd.append('credit_date',document.getElementById('scn-date')?.value||'');
+      fd.append('amount',document.getElementById('scn-amount')?.value||'');
+      fd.append('currency',document.getElementById('scn-currency')?.value?.trim()||'');
+      fd.append('supplier_reference',document.getElementById('scn-reference')?.value?.trim()||'');
+      fd.append('notes',document.getElementById('scn-notes')?.value?.trim()||'');
+      const file=document.getElementById('scn-file')?.files?.[0];if(file)fd.append('file',file);
+      const res=await fetch('/api/supplier-credit-notes',{method:'POST',body:fd});
+      const json=await res.json();if(!res.ok)throw new Error(json.error||'Unable to record credit note');
+      this.closeModal();this.alert('Supplier credit note recorded');this.renderSupplierCreditNotes();
+    }catch(e){this.alert(e.message||'Unable to record supplier credit note','error');}
+  },
+
+  async _matchSupplierCreditNote(id) {
+    try{
+      const data=await this.api('GET','/supplier-credit-notes/'+id+'/matches');
+      const candidates=data.matches||[];
+      if(!candidates.length)return this.alert('No open recoverable claims exist for this supplier','warning');
+      const choices=candidates.map(c=>c.id+' | '+c.claim_number+' | '+String(c.claim_type||'').replaceAll('_',' ')+' | unconfirmed '+this.fmt(c.unconfirmed_amount||0)+' | '+(c.source_reference||'')).join('\n');
+      const claimId=Number(window.prompt('Enter claim ID to match:\n'+choices));
+      const claim=candidates.find(c=>Number(c.id)===claimId);
+      if(!claim)return this.alert('Select a valid recoverable claim','warning');
+      const max=Math.min(Number(data.credit_note.remaining_amount||0),Number(claim.matchable_amount||0));
+      const amount=Number(window.prompt('Amount of this credit note to match',String(max)));
+      if(!Number.isFinite(amount)||amount<=0)return;
+      await this.api('POST','/supplier-credit-notes/'+id+'/applications',{claim_id:claimId,amount});
+      this.alert('Supplier credit note matched to recoverable claim');
+      this._showSupplierCreditNoteApplications(id);
+    }catch(e){this.alert(e.message||'Unable to match supplier credit note','error');}
+  },
+
+  async _showSupplierCreditNoteApplications(id) {
+    try{
+      const note=await this.api('GET','/supplier-credit-notes/'+id);
+      const open=(note.applications||[]).filter(a=>Number(a.unsettled_amount||0)>0);
+      if(!open.length){this.alert('All matched credit-note amounts are already settled or no applications exist');return this.renderSupplierCreditNotes();}
+      const choices=open.map(a=>a.id+' | '+a.claim_number+' | unmatched '+this.fmt(a.unsettled_amount||0)).join('\n');
+      const appId=Number(window.prompt('Apply a matched credit amount to Accounts Payable now? Enter application ID, or Cancel:\n'+choices));
+      const app=open.find(a=>Number(a.id)===appId);if(!app)return this.renderSupplierCreditNotes();
+      const claim=await this.api('GET','/supplier-recoverables/'+app.claim_id);
+      const invoices=await this.api('GET','/supplier-ledger/invoices?supplier_id='+claim.supplier_id+'&status=open&limit=100');
+      if(!invoices.length){this.alert('No open invoice exists for this supplier; the credit remains matched but unsettled','warning');return this.renderSupplierCreditNotes();}
+      const invoiceChoices=invoices.map(x=>x.id+' | '+x.invoice_number+' | balance '+this.fmt(x.balance_due||0)).join('\n');
+      const invoiceId=Number(window.prompt('Enter invoice ID to offset:\n'+invoiceChoices));
+      if(!invoices.some(x=>Number(x.id)===invoiceId))return this.alert('Select a valid open invoice','warning');
+      const amount=Number(window.prompt('Amount to apply to AP',String(app.unsettled_amount||0)));
+      if(!Number.isFinite(amount)||amount<=0)return;
+      await this.api('POST','/supplier-credit-notes/'+id+'/applications/'+appId+'/settle-ap',{supplier_invoice_id:invoiceId,amount});
+      this.alert('Supplier credit note applied to Accounts Payable');
+      this.renderSupplierCreditNotes();
+    }catch(e){this.alert(e.message||'Unable to settle supplier credit note','error');}
+  },
+
   async renderSupplierReturns() {
     this._purchasingTab='supplier-returns';
     const c=document.getElementById('content');
@@ -11601,7 +11700,7 @@ const App = {
         return '<tr><td class="fw-600">'+this.escapeHtml(x.return_number||'')+'</td><td>'+this.escapeHtml(x.supplier_name||'')+'</td><td>'+this.escapeHtml(x.branch_name||'')+'</td><td>'+this.fmt(x.expected_credit_amount||0)+'</td><td>'+this.fmt(x.inventory_tracked_value||0)+'</td><td>'+this.escapeHtml(String(x.inventory_legacy_quantity||0))+'</td><td><span class="badge-pill '+(statusClass[x.status]||'badge-info')+'">'+this.escapeHtml(String(x.status||''))+'</span></td><td>'+this.escapeHtml(x.supplier_rma||'—')+'</td><td>'+this.escapeHtml(x.recoverable_claim_id?String(x.recoverable_claim_id):'—')+'</td><td>'+action+'</td></tr>';
       }).join('');
       c.innerHTML='<div class="section-header"><div><h2>Supplier Returns</h2><p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Return stock to suppliers with physical, valuation, and recoverable evidence kept in one chain.</p></div><button class="btn btn-primary" onclick="App.showSupplierReturnForm()">+ New Supplier Return</button></div>'+
-        '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+tabButton('supplier-returns','Supplier Returns')+'</div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+tabButton('supplier-returns','Supplier Returns')+tabButton('supplier-credit-notes','Credit Notes')+'</div>'+
         '<div class="card" style="margin-bottom:16px"><div class="card-header"><div><div class="card-title">Return control</div><div style="font-size:12px;color:var(--text-muted)">Draft → Approved → Dispatched. A recoverable claim is created only when stock physically leaves and valuation evidence commits.</div></div></div></div>'+
         '<div class="card"><div class="table-wrap"><table><thead><tr><th>Return</th><th>Supplier</th><th>Branch</th><th>Expected credit</th><th>Tracked carrying value</th><th>Unvalued qty</th><th>Status</th><th>RMA</th><th>Claim</th><th>Action</th></tr></thead><tbody>'+(body||'<tr><td colspan="10" class="empty-state">No supplier returns yet</td></tr>')+'</tbody></table></div></div>';
     }catch(e){c.innerHTML='<div class="empty-state">Unable to load supplier returns: '+this.escapeHtml(e.message||'Unknown error')+'</div>';}
@@ -11672,7 +11771,7 @@ const App = {
       }).join('');
       const aging=summary.aging||{};
       c.innerHTML='<div class="section-header"><div><h2>Supplier Recoverables</h2><p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Track money suppliers owe us from shortages, returns, credit notes, overcharges, rebates and reimbursements.</p></div><button class="btn btn-primary" onclick="App.showSupplierRecoverableForm()">+ New Claim</button></div>'+
-        '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+tabButton('supplier-returns','Supplier Returns')+'</div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+tabButton('supplier-returns','Supplier Returns')+tabButton('supplier-credit-notes','Credit Notes')+'</div>'+
         '<div class="stats-grid" style="margin-bottom:16px"><div class="stat-card"><div class="stat-label">Identified exposure</div><div class="stat-value">'+this.fmt(summary.identified_exposure||0)+'</div><div class="stat-meta">Potential claim, not yet confirmed</div></div><div class="stat-card"><div class="stat-label">Confirmed outstanding</div><div class="stat-value">'+this.fmt(summary.confirmed_outstanding||0)+'</div><div class="stat-meta">Documented amount owed to us</div></div><div class="stat-card"><div class="stat-label">Overdue confirmed</div><div class="stat-value">'+this.fmt(summary.overdue_confirmed||0)+'</div><div class="stat-meta">Past supplier due date</div></div><div class="stat-card"><div class="stat-label">Recovered</div><div class="stat-value">'+this.fmt(summary.recovered_total||0)+'</div><div class="stat-meta">Credits, refunds and offsets received</div></div></div>'+
         '<div class="card" style="margin-bottom:16px"><div class="card-header"><div><div class="card-title">Confirmed Recoverables Aging</div><div style="font-size:12px;color:var(--text-muted)">Only confirmed supplier obligations appear here.</div></div></div><div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:0 16px 16px">'+
         [['Current','current'],['1-30','1_30'],['31-60','31_60'],['61-90','61_90'],['90+','90_plus']].map(p=>'<div class="stat-card"><div class="stat-label">'+p[0]+'</div><div class="stat-value" style="font-size:18px">'+this.fmt(aging[p[1]]||0)+'</div></div>').join('')+'</div></div>'+

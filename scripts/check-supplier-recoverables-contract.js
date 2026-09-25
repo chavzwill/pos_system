@@ -4,6 +4,7 @@ const root=path.join(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const lib=read('lib/supplier-recoverables.js');
 const route=read('routes/supplier-recoverables.js');
+const confirmation=read('lib/supplier-recoverable-confirmation.js');
 const po=read('routes/purchase-order-hardening.js');
 const ledger=read('routes/supplier-ledger.js');
 const sync=read('routes/accounting-source-sync.js');
@@ -12,6 +13,7 @@ const ui=read('public/index.html');
 const server=read('server.js');
 new vm.Script(lib,{filename:'supplier-recoverables.js'});
 new vm.Script(route,{filename:'supplier-recoverables-route.js'});
+new vm.Script(confirmation,{filename:'supplier-recoverable-confirmation.js'});
 new vm.Script(ledger,{filename:'supplier-ledger.js'});
 new vm.Script(sync,{filename:'accounting-source-sync.js'});
 const checks=[
@@ -27,7 +29,7 @@ const checks=[
  ['shortage amount derives from missing quantity and PO unit cost',lib.includes('quantity_ordered')&&lib.includes('quantity_received')&&lib.includes('missing_value:money(qty*Number(x.unit_cost||0))')],
  ['shortage claim remains identified instead of automatically confirmed',lib.includes("'shorted_goods','identified'")],
  ['duplicate shortage claim is prevented per purchase order',lib.includes("claim_type='shorted_goods'")&&lib.includes("source_type='purchase_order'")&&lib.includes('UNIQUE(claim_type,source_type,source_id)')],
- ['confirmation requires supplier document or confirmation note',route.includes('Supplier document number or confirmation note is required')],
+ ['confirmation requires supplier document or confirmation note',confirmation.includes('Supplier document number or confirmation note is required')],
  ['recovery requires confirmed claim',route.includes('Claim must be confirmed before recovery is recorded')],
  ['recovery cannot exceed confirmed outstanding',route.includes('Recovery amount exceeds confirmed outstanding balance')],
  ['settlements support credit note refund AP offset replacement and other',route.includes("'credit_note','cash_refund','bank_refund','ap_offset','replacement_value','other'")],
@@ -40,8 +42,8 @@ const checks=[
  ['UI exposes aging and claim lifecycle amounts',ui.includes('Confirmed Recoverables Aging')&&ui.includes('Identified')&&ui.includes('Confirmed')&&ui.includes('Recovered')&&ui.includes('Outstanding')],
  ['UI can confirm supplier obligation and record recovery',ui.includes('_confirmSupplierRecoverable')&&ui.includes('_recoverSupplierRecoverable')],
  ['chart of accounts includes Supplier Recoverables asset',posting.includes("['1150','Supplier Recoverables','asset','debit']")],
- ['accounting basis is limited to evidenced shortage or invoice overcharge claims',route.includes("claim.claim_type==='shorted_goods'&&claim.source_type==='purchase_order'")&&route.includes("claim.claim_type==='overcharge'&&claim.source_type==='supplier_invoice'")],
- ['confirmed amount cannot fall below recovered amount',route.includes('Confirmed amount cannot be below amount already recovered')],
+ ['accounting basis is limited to evidenced shortage or invoice overcharge claims',confirmation.includes("claim.claim_type==='shorted_goods'&&claim.source_type==='purchase_order'")&&confirmation.includes("claim.claim_type==='overcharge'&&claim.source_type==='supplier_invoice'")],
+ ['confirmed amount cannot fall below recovered amount',confirmation.includes('Confirmed amount cannot be below amount already recovered')],
  ['AP offset requires recognized accounting basis and exact invoice',route.includes('AP offset requires a recognized supplier recoverable accounting basis')&&route.includes('supplier_invoice_id is required for AP offset')],
  ['AP offset invoice must belong to same supplier',route.includes('AP offset invoice must belong to the same supplier')],
  ['AP offset cannot exceed invoice balance',route.includes('AP offset exceeds supplier invoice balance')],
