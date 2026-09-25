@@ -32,6 +32,13 @@ router.get('/opportunities',async(req,res)=>{
   }catch(e){res.status(e.statusCode||502).json({error:e.message});}
 });
 
+router.get('/verified-rollup',async(req,res)=>{
+  try{
+    const {tenant}=config();
+    res.json(await callSpendOS(`/v1/savings/verified-rollup?tenantId=${encodeURIComponent(tenant)}`));
+  }catch(e){res.status(e.statusCode||502).json({error:e.message});}
+});
+
 router.get('/opportunities/:id',async(req,res)=>{
   try{
     const {tenant}=config();

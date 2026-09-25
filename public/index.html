@@ -11574,7 +11574,10 @@ const App = {
     if(!body)return;
     body.innerHTML='<div class="empty-state">Loading verified savings…</div>';
     try{
-      const data=await this.api('GET','/spendos-management/opportunities');
+      const [data,rollup]=await Promise.all([
+        this.api('GET','/spendos-management/opportunities'),
+        this.api('GET','/spendos-management/verified-rollup')
+      ]);
       const rows=data.opportunities||[];
       const estimated=rows.reduce((s,x)=>s+Number(x.estimated_savings||0),0);
       const verified=rows.reduce((s,x)=>s+Number(x.verified_savings||0),0);
@@ -11587,6 +11590,8 @@ const App = {
         return '<tr><td><div class="fw-600">'+String(x.kind||'opportunity').replaceAll('_',' ')+'</div><div style="font-size:12px;color:var(--text-muted)">'+String(x.opportunity_key||'')+'</div></td><td><span class="badge-pill '+(x.status==='verified'?'badge-success':x.status==='actioned'?'badge-warning':'')+'">'+String(x.status||'identified').replaceAll('_',' ')+'</span></td><td>'+this.fmt(x.estimated_savings||0)+'</td><td class="fw-600">'+this.fmt(x.verified_savings||0)+'</td><td style="white-space:nowrap">'+action+'</td></tr>';
       }).join('');
       body.innerHTML='<div class="stats-grid" style="margin:0 0 12px"><div class="stat-card"><div class="stat-label">Estimated opportunities</div><div class="stat-value">'+this.fmt(estimated)+'</div><div class="stat-meta">Potential only — not booked as savings</div></div><div class="stat-card"><div class="stat-label">Verified savings</div><div class="stat-value">'+this.fmt(verified)+'</div><div class="stat-meta">Proven from post-action received-cost evidence</div></div><div class="stat-card"><div class="stat-label">Actioned</div><div class="stat-value">'+rows.filter(x=>x.status==='actioned').length+'</div><div class="stat-meta">Waiting for verification evidence</div></div><div class="stat-card"><div class="stat-label">Verified cases</div><div class="stat-value">'+rows.filter(x=>x.status==='verified').length+'</div><div class="stat-meta">Savings evidence accepted</div></div></div><div class="table-wrap"><table><thead><tr><th>Opportunity</th><th>Status</th><th>Estimated</th><th>Verified</th><th>Action</th></tr></thead><tbody>'+(rowHtml||'<tr><td colspan="5" class="empty-state">No savings opportunities detected yet</td></tr>')+'</tbody></table></div>';
+      const rollupBlock=(title,items)=>'<div class="card" style="padding:12px"><div class="fw-600" style="margin-bottom:8px">'+title+'</div>'+((items||[]).slice(0,5).map(x=>'<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:4px 0"><span>'+this.escapeHtml(String(x.dimension||'unattributed'))+' · '+this.escapeHtml(String(x.currency||''))+'</span><strong>'+this.fmt(x.verifiedSavings||0)+'</strong></div>').join('')||'<div style="font-size:12px;color:var(--text-muted)">No verified evidence yet</div>')+'</div>';
+      body.innerHTML+='<div style="margin-top:14px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div class="fw-600">Verified savings reconciliation</div><div style="font-size:12px;color:var(--text-muted)">'+Number(rollup.claimedEvidenceCount||0)+' uniquely claimed receipt evidence item(s)</div></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'+rollupBlock('By supplier',rollup.bySupplier)+rollupBlock('By category',rollup.byCategory)+rollupBlock('By department',rollup.byDepartment)+rollupBlock('By period',rollup.byPeriod)+'</div></div>';
     }catch(e){
       body.innerHTML='<div class="empty-state">Savings verification unavailable: '+this.escapeHtml(e.message||'SpendOS is offline or not configured')+'</div>';
     }

@@ -18,7 +18,10 @@ const checks=[
  ['verified savings require post-action received-cost evidence in staff copy',ui.includes('post-action received-cost evidence')],
  ['UI supports action then verification lifecycle',ui.includes('_recordSavingsAction')&&ui.includes("x.status==='actioned'")&&ui.includes('>Verify<')],
  ['offline SpendOS fails soft instead of blocking purchasing',ui.includes('Savings verification unavailable')&&route.includes("SpendOS is not configured")],
- ['verified and not-verified outcomes are different staff messages',ui.includes('Verified savings:')&&ui.includes('does not verify a saving yet')]
+ ['verified and not-verified outcomes are different staff messages',ui.includes('Verified savings:')&&ui.includes('does not verify a saving yet')],
+ ['verified rollup stays behind the authenticated server proxy',route.includes('/verified-rollup')&&route.includes('/v1/savings/verified-rollup?tenantId=')&&!ui.includes('/v1/savings/verified-rollup')],
+ ['UI reconciles verified savings by supplier category department and period',ui.includes('Verified savings reconciliation')&&ui.includes('By supplier')&&ui.includes('By category')&&ui.includes('By department')&&ui.includes('By period')],
+ ['UI identifies uniquely claimed receipt evidence',ui.includes('uniquely claimed receipt evidence item(s)')]
 ];
 let failed=0;
 for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Savings realization: ${name}`);if(!ok)failed++;}
