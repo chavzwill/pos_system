@@ -26,7 +26,10 @@ const checks=[
  ['target owner defaults to authenticated employee when omitted',route.includes("ownerId:req.body?.ownerId|| (req.employee?.id?String(req.employee.id):null)")],
  ['UI separates management target from realized savings',ui.includes('This is a management goal, not realized savings')&&ui.includes('Only verified receipt-backed savings count toward attainment')],
  ['UI exposes savings accountability period target verified gap status and owner',ui.includes('Savings Accountability')&&ui.includes('<th>Target</th>')&&ui.includes('<th>Verified</th>')&&ui.includes('<th>Gap</th>')&&ui.includes('<th>Owner</th>')],
- ['UI supports company supplier category and department target scopes',ui.includes('<option value="company">Company</option>')&&ui.includes('<option value="supplier">Supplier</option>')&&ui.includes('<option value="category">Savings category</option>')&&ui.includes('<option value="department">Department</option>')]
+ ['UI supports company supplier category and department target scopes',ui.includes('<option value="company">Company</option>')&&ui.includes('<option value="supplier">Supplier</option>')&&ui.includes('<option value="category">Savings category</option>')&&ui.includes('<option value="department">Department</option>')],
+ ['savings attention stays behind authenticated proxy',route.includes("router.get('/attention'")&&route.includes('/v1/savings/attention?tenantId=')&&!ui.includes('/v1/savings/attention')],
+ ['UI labels pace as review signal not forecast',ui.includes('Review prompts only. Pace signals do not forecast future savings or guarantee target failure.')],
+ ['UI surfaces savings attention reasons and priority',ui.includes('Savings Attention')&&ui.includes('<th>Priority</th>')&&ui.includes('<th>Reason</th>')]
 ];
 let failed=0;
 for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Savings realization: ${name}`);if(!ok)failed++;}

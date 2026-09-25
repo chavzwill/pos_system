@@ -32,6 +32,13 @@ router.get('/opportunities',async(req,res)=>{
   }catch(e){res.status(e.statusCode||502).json({error:e.message});}
 });
 
+router.get('/attention',async(req,res)=>{
+  try{
+    const {tenant}=config();
+    res.json(await callSpendOS(`/v1/savings/attention?tenantId=${encodeURIComponent(tenant)}`));
+  }catch(e){res.status(e.statusCode||502).json({error:e.message});}
+});
+
 router.get('/targets/performance',async(req,res)=>{
   try{
     const {tenant}=config();
