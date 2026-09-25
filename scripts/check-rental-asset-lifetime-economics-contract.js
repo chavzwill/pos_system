@@ -39,7 +39,7 @@ const checks=[
  ['missing disposition avoids double-counting asset economic loss',integration.includes('double-counting is explicitly avoided')&&!integration.includes("event_type,'unrecovered_damage_loss'" )],
  ['full physical return automatically releases asset allocations',integration.includes("release_reason='Physical rental returned'")&&integration.includes("agreement?.status)==='returned'" )],
  ['return inspection can automatically send damaged assets to maintenance',integration.includes('asset_conditions')&&integration.includes("status='maintenance'")&&integration.includes('return_inspection')],
- ['native rental workspace loads asset assignment evidence',workspace.includes('/asset-candidates')&&workspace.includes('assetAssignments')&&workspace.includes('Physical asset assignment')],
+ ['native rental workspace loads asset assignment evidence',workspace.includes('/asset-candidates')&&workspace.includes('assetAssignments')&&workspace.includes('Assigned equipment')&&workspace.includes('${assetControl()}')],
  ['native rental workspace assigns exact physical assets before issue',workspace.includes('/asset-assignments')&&workspace.includes('Assign physical rental assets')&&workspace.includes('Select physical asset')],
  ['native missing workflow captures exact allocated asset identity',workspace.includes('rental_asset_id')&&workspace.includes('Missing physical asset')&&workspace.includes('Select exact asset')],
  ['retirement is a distinct controlled lifecycle action',lifecycle.includes("/assets/:id/retire")&&lifecycle.includes('retired_from_rental')&&lifecycle.includes('retirement_reason')],
