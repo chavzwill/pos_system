@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
 const { requirePermission, requireAnyPermission } = require('../lib/permissions');
+const { ensureCostAllocationSchema, recordInvoiceReconciliation } = require('../lib/cost-allocations');
 
 let schemaPromise = null;
 async function ensureColumn(table,name,definition){
@@ -10,6 +11,7 @@ async function ensureColumn(table,name,definition){
 }
 async function ensureSchema() {
   if (!schemaPromise) schemaPromise = (async()=>{
+    await ensureCostAllocationSchema();
     await db.batch([
       { sql: `CREATE TABLE IF NOT EXISTS supplier_invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -159,6 +161,7 @@ router.post('/invoices', requireAnyPermission('purchasing_approve','reports_fina
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[supplierId,poId,branchId,String(b.invoice_number).trim(),b.invoice_date,b.due_date||null,subtotal,tax,freight,duty,otherLanded,taxTreatment,total,b.notes||null,actor(req)]});
       const id=Number(r.lastInsertRowid);
       await tx.execute({sql:`INSERT INTO supplier_ledger_events(supplier_id,event_type,entity_type,entity_id,amount,details,actor_employee_id) VALUES(?,?,?,?,?,?,?)`,args:[supplierId,'invoice_posted','supplier_invoice',id,total,`Supplier invoice ${String(b.invoice_number).trim()} posted; merchandise ${subtotal.toFixed(2)}, tax ${tax.toFixed(2)}, landed costs ${(freight+duty+otherLanded).toFixed(2)}`,actor(req)]});
+      if(poId) await recordInvoiceReconciliation(tx,{supplierInvoiceId:id,purchaseOrderId:poId,invoiceSubtotal:subtotal});
       await tx.commit(); const {rows:[row]}=await db.execute({sql:'SELECT * FROM supplier_invoices WHERE id=?',args:[id]}); res.status(201).json(row);
     }catch(e){await tx.rollback();throw e;}
   }catch(e){res.status(400).json({error:e.message});}

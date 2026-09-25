@@ -33,3 +33,28 @@ test('purchase event carries allocation evidence to SpendOS',()=>{
   assert.equal(a.amount,1000);
   assert.equal(a.expenseCategory,'parts');
 });
+
+test('partial receipt copies proportional allocation',async()=>{
+  const inserted=[];
+  const executor={
+    execute:async({sql,args})=>{
+      if(sql.startsWith('SELECT * FROM cost_allocations'))return {rows:[{
+        target_type:'rental_asset',target_id:'7',target_label:'RA-7',
+        allocation_amount:1000,allocation_quantity:10,allocation_percent:100,
+        purpose:'repair',expense_category:'parts',valuation_status:'committed'
+      }]};
+      if(sql.startsWith('INSERT INTO cost_allocations')){inserted.push(args);return {lastInsertRowid:1};}
+      return {rows:[]};
+    }
+  };
+  const {copyAllocations}=require('../lib/cost-allocations');
+  const rows=await copyAllocations(executor,{
+    fromSourceType:'purchase_order',fromSourceId:1,fromSourceLineId:2,
+    toSourceType:'purchase_receipt',toSourceId:3,toSourceLineId:4,
+    ratio:0.4,createdBy:9,valuationStatus:'actual'
+  });
+  assert.equal(rows[0].allocation_amount,400);
+  assert.equal(rows[0].allocation_quantity,4);
+  assert.equal(rows[0].valuation_status,'actual');
+  assert.equal(inserted.length,1);
+});

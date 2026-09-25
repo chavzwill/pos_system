@@ -4,7 +4,7 @@ const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
 const { enqueuePurchaseRequested } = require('../lib/spendos-outbox');
-const { ensureCostAllocationSchema, normalizeAllocations, insertAllocations, allocationsForSource } = require('../lib/cost-allocations');
+const { ensureCostAllocationSchema, normalizeAllocations, insertAllocations, allocationsForSource, copyAllocations } = require('../lib/cost-allocations');
 
 // Self-contained feature, not used as a cross-section lookup elsewhere —
 // module-level gate for all of it, matching the frontend's own section gate.
@@ -283,9 +283,14 @@ router.post('/:id/convert', async (req, res) => {
       for (const item of prItems) {
         // Internal-use items are added to PO but without a product link (won't update stock on receive)
         const productId = item.item_type === 'internal' ? null : item.product_id;
-        await tx.execute({
+        const poLine = await tx.execute({
           sql: 'INSERT INTO purchase_order_items (po_id, product_id, product_name, sku, quantity_ordered, unit_cost, total, quotation_item_id, work_order_item_id) VALUES (?,?,?,?,?,?,?,?,?)',
           args: [poId, productId, item.product_name, item.sku, item.quantity, item.unit_cost, item.total, item.quotation_item_id, item.work_order_item_id]
+        });
+        await copyAllocations(tx,{
+          fromSourceType:'purchase_request',fromSourceId:pr.id,fromSourceLineId:item.id,
+          toSourceType:'purchase_order',toSourceId:poId,toSourceLineId:Number(poLine.lastInsertRowid),
+          ratio:1,createdBy:req.employee?.id||pr.employee_id,valuationStatus:'committed'
         });
       }
 

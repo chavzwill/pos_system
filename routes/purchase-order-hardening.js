@@ -3,10 +3,13 @@ const router = express.Router();
 const { db } = require('../database');
 const { syncBinQty } = require('../lib/binSync');
 const { requirePermission, can } = require('../lib/permissions');
+const { ensureCostAllocationSchema, copyAllocations, recordInvoiceReconciliation } = require('../lib/cost-allocations');
+const { enqueueSpendEvent } = require('../lib/spendos-outbox');
 
 let receiptSchemaReady = false;
 async function ensureReceiptSchema() {
   if (receiptSchemaReady) return;
+  await ensureCostAllocationSchema();
   await db.batch([
     { sql: `CREATE TABLE IF NOT EXISTS purchase_receipts (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -202,8 +205,25 @@ router.patch('/:id/receive', requirePermission('purchasing_receive'), async (req
       receiptNumber = `RCV-${po.id}-${Date.now()}`;
       const receiptResult = await tx.execute({sql:`INSERT INTO purchase_receipts(receipt_number,po_id,supplier_id,branch_id,received_by_employee_id,total_cost) VALUES (?,?,?,?,?,?)`,args:[receiptNumber,po.id,po.supplier_id||null,po.branch_id||null,actor(req),receiptTotal]});
       receiptId = Number(receiptResult.lastInsertRowid);
+      const spendosReceiptItems=[];
       for (const { item, qty, unitCost, lineCost } of validated) {
-        await tx.execute({sql:`INSERT INTO purchase_receipt_items(receipt_id,po_item_id,product_id,product_name,sku,quantity_received,unit_cost,line_cost) VALUES (?,?,?,?,?,?,?,?)`,args:[receiptId,item.id,item.product_id||null,item.product_name||null,item.sku||null,qty,unitCost,lineCost]});
+        const receiptLine=await tx.execute({sql:`INSERT INTO purchase_receipt_items(receipt_id,po_item_id,product_id,product_name,sku,quantity_received,unit_cost,line_cost) VALUES (?,?,?,?,?,?,?,?)`,args:[receiptId,item.id,item.product_id||null,item.product_name||null,item.sku||null,qty,unitCost,lineCost]});
+        const ratio=Number(item.quantity_ordered)>0?qty/Number(item.quantity_ordered):0;
+        const allocations=await copyAllocations(tx,{
+          fromSourceType:'purchase_order',fromSourceId:po.id,fromSourceLineId:item.id,
+          toSourceType:'purchase_receipt',toSourceId:receiptId,toSourceLineId:Number(receiptLine.lastInsertRowid),
+          ratio,createdBy:actor(req),valuationStatus:'actual'
+        });
+        spendosReceiptItems.push({
+          poItemId:String(item.id),receiptItemId:String(receiptLine.lastInsertRowid),
+          productId:item.product_id?String(item.product_id):null,sku:item.sku||null,
+          description:item.product_name||null,quantity:qty,unitCost,lineCost,
+          allocations:allocations.map(a=>({
+            targetType:a.target_type,targetId:a.target_id,targetLabel:a.target_label,
+            amount:a.allocation_amount,quantity:a.allocation_quantity,percent:a.allocation_percent,
+            purpose:a.purpose,expenseCategory:a.expense_category,valuationStatus:a.valuation_status
+          }))
+        });
         await tx.execute({ sql: 'UPDATE purchase_order_items SET quantity_received = quantity_received + ? WHERE id = ?', args: [qty, item.id] });
         if (!item.product_id) continue;
         await tx.execute({ sql: 'UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?', args: [qty, item.product_id] });
@@ -219,6 +239,17 @@ router.patch('/:id/receive', requirePermission('purchasing_receive'), async (req
       const newStatus = allReceived ? 'received' : 'partial';
       await tx.execute({ sql: 'UPDATE purchase_orders SET status = ?, received_at = ? WHERE id = ?', args: [newStatus, allReceived ? new Date().toISOString() : po.received_at, req.params.id] });
       if (allReceived) await tx.execute({ sql: `UPDATE purchase_requests SET status = 'received' WHERE converted_to_po_id = ? AND status != 'received'`, args: [req.params.id] });
+      const {rows:[branchCurrencyRow]}=po.branch_id?await tx.execute({sql:'SELECT currency FROM branches WHERE id=?',args:[po.branch_id]}):{rows:[]};
+      await enqueueSpendEvent(tx,{
+        id:`total-tools:purchase-receipt:${receiptId}:1`,type:'purchase.received',
+        occurredAt:new Date().toISOString(),tenantId:process.env.SPENDOS_TENANT_ID||'total-tools',
+        source:'total-tools-pos',sourceRecordId:String(receiptId),sourceVersion:1,
+        actorId:actor(req)?String(actor(req)):null,locationId:po.branch_id?String(po.branch_id):null,departmentId:null,
+        payload:{receiptNumber,poId:String(po.id),poNumber:po.po_number,supplierId:po.supplier_id?String(po.supplier_id):null,
+          currency:branchCurrencyRow?.currency||null,totalCost:receiptTotal,items:spendosReceiptItems}
+      });
+      const {rows:linkedInvoices}=await tx.execute({sql:'SELECT id,subtotal FROM supplier_invoices WHERE purchase_order_id=? AND status!=\'void\'',args:[po.id]});
+      for(const invoice of linkedInvoices) await recordInvoiceReconciliation(tx,{supplierInvoiceId:invoice.id,purchaseOrderId:po.id,invoiceSubtotal:invoice.subtotal});
       await tx.commit();committed = true;
     } catch (e) {if (!committed) await tx.rollback();return res.status(committed ? 500 : 400).json({ error: e.message });}
     const { rows: [updated] } = await db.execute({sql:`SELECT po.*, s.name supplier_name, b.name branch_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id LEFT JOIN branches b ON b.id=po.branch_id WHERE po.id=?`,args:[req.params.id]});
