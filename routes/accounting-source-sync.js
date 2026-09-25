@@ -31,8 +31,36 @@ async function syncSupplierInvoices(req,stats){if(!(await exists('supplier_invoi
 async function syncSupplierPayments(req,stats){if(!(await exists('supplier_payments')))return;const {rows}=await db.execute({sql:`SELECT * FROM supplier_payments ORDER BY id`,args:[]});for(const x of rows){try{const method=String(x.payment_method||'').toLowerCase();const cash=method.includes('cash');const j=await postSourceJournal({sourceType:'supplier_payment',sourceId:x.id,sourceReference:x.payment_number,entryDate:x.payment_date,description:`Supplier payment ${x.payment_number}`,branchId:x.branch_id,actorId:actor(req),lines:[{code:'2000',debit:x.amount,credit:0,description:'Reduce accounts payable'},{code:cash?'1000':'1010',debit:0,credit:x.amount,description:cash?'Cash paid':'Bank payment'}]});stats.supplier_payments[j.existing?'existing':'posted']++;}catch(e){stats.errors.push(`supplier_payment:${x.id}: ${e.message}`);}}}
 async function syncSupplierRecoverables(req,stats){
   if(!(await exists('supplier_recoverable_claims'))||!(await exists('supplier_recoverable_accounting_basis')))return;
+  stats.supplier_return_dispatch ||= {posted:0,existing:0};
   stats.supplier_recoverable_recognition ||= {posted:0,existing:0};
   stats.supplier_recoverable_settlements ||= {posted:0,existing:0};
+
+  if(await exists('supplier_returns')){
+    const {rows:returns}=await db.execute({sql:`SELECT * FROM supplier_returns
+      WHERE status='dispatched' ORDER BY id`,args:[]});
+    for(const x of returns){
+      try{
+        if(Number(x.inventory_legacy_quantity||0)>0.0001||Number(x.inventory_untracked_quantity||0)>0.0001){
+          stats.evidence_gaps.push({supplier_return_id:x.id,return_number:x.return_number,type:'supplier_return_inventory_value_incomplete',automatic_posting:false,
+            tracked_value:money(x.inventory_tracked_value),legacy_quantity:Number(x.inventory_legacy_quantity||0),untracked_quantity:Number(x.inventory_untracked_quantity||0),
+            reason:'Supplier return left physical stock with incomplete auditable carrying-value evidence. Accounting will not invent the missing inventory value.'});
+          continue;
+        }
+        const amount=money(x.inventory_tracked_value);
+        if(amount<=0)continue;
+        const j=await postSourceJournal({
+          sourceType:'supplier_return_dispatch',sourceId:x.id,sourceReference:x.return_number,
+          entryDate:String(x.dispatched_at||new Date().toISOString()).slice(0,10),
+          description:`Inventory dispatched to supplier ${x.return_number}`,branchId:x.branch_id,actorId:actor(req),
+          lines:[
+            {code:'1160',debit:amount,credit:0,description:'Supplier return pending confirmed credit'},
+            {code:'1200',debit:0,credit:amount,description:'Inventory returned to supplier'}
+          ]
+        });
+        stats.supplier_return_dispatch[j.existing?'existing':'posted']++;
+      }catch(e){stats.errors.push(`supplier_return_dispatch:${x.id}: ${e.message}`);}
+    }
+  }
 
   const {rows:bases}=await db.execute({sql:`SELECT b.*,c.claim_number,c.branch_id,c.confirmed_at,c.supplier_id,c.claim_type
     FROM supplier_recoverable_accounting_basis b
@@ -46,10 +74,15 @@ async function syncSupplierRecoverables(req,stats){
         sourceType:'supplier_recoverable_recognition',sourceId:x.claim_id,sourceReference:x.claim_number,
         entryDate:String(x.confirmed_at||x.created_at||new Date().toISOString()).slice(0,10),
         description:`Recognize supplier recoverable ${x.claim_number}`,branchId:x.branch_id,actorId:actor(req),
-        lines:[
-          {code:'1150',debit:amount,credit:0,description:'Supplier recoverable confirmed from purchasing evidence'},
-          {code:'1250',debit:0,credit:amount,description:'Clear purchasing/receiving difference'}
-        ]
+        lines:x.basis_type==='supplier_return_clearing'
+          ?[
+            {code:'1150',debit:amount,credit:0,description:'Supplier recoverable confirmed from supplier return'},
+            {code:'1160',debit:0,credit:amount,description:'Clear supplier return pending credit'}
+          ]
+          :[
+            {code:'1150',debit:amount,credit:0,description:'Supplier recoverable confirmed from purchasing evidence'},
+            {code:'1250',debit:0,credit:amount,description:'Clear purchasing/receiving difference'}
+          ]
       });
       stats.supplier_recoverable_recognition[j.existing?'existing':'posted']++;
     }catch(e){stats.errors.push(`supplier_recoverable_recognition:${x.claim_id}: ${e.message}`);}
@@ -226,7 +259,7 @@ async function syncRepairFinancials(req,stats){
 }
 router.post('/sync',async(req,res)=>{try{
   await ensureBridgeAccounts();
-  const stats={supplier_invoices:{posted:0,existing:0},supplier_payments:{posted:0,existing:0},supplier_recoverable_recognition:{posted:0,existing:0},supplier_recoverable_settlements:{posted:0,existing:0},purchase_receipts:{posted:0,existing:0},settlements:{posted:0,existing:0},retail_sales:{posted:0,existing:0},retail_returns:{posted:0,existing:0},retail_return_inventory:{posted:0,existing:0},retail_replacement_fulfillment:{posted:0,existing:0},rental_checkout:{posted:0,existing:0},rental_settlement:{posted:0,existing:0},repair_part_usage:{posted:0,existing:0},repair_assessments:{posted:0,existing:0},repair_deposits:{posted:0,existing:0},repair_service_revenue:{posted:0,existing:0},repair_final_payments:{posted:0,existing:0},reconciliation_issues:[],evidence_gaps:[],errors:[]};
+  const stats={supplier_invoices:{posted:0,existing:0},supplier_payments:{posted:0,existing:0},supplier_return_dispatch:{posted:0,existing:0},supplier_recoverable_recognition:{posted:0,existing:0},supplier_recoverable_settlements:{posted:0,existing:0},purchase_receipts:{posted:0,existing:0},settlements:{posted:0,existing:0},retail_sales:{posted:0,existing:0},retail_returns:{posted:0,existing:0},retail_return_inventory:{posted:0,existing:0},retail_replacement_fulfillment:{posted:0,existing:0},rental_checkout:{posted:0,existing:0},rental_settlement:{posted:0,existing:0},repair_part_usage:{posted:0,existing:0},repair_assessments:{posted:0,existing:0},repair_deposits:{posted:0,existing:0},repair_service_revenue:{posted:0,existing:0},repair_final_payments:{posted:0,existing:0},reconciliation_issues:[],evidence_gaps:[],errors:[]};
   await syncPurchasingAccounting({actorId:actor(req),stats});
   await syncSupplierInvoices(req,stats);
   await syncSupplierPayments(req,stats);

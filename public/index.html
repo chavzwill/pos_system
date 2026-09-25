@@ -11372,6 +11372,7 @@ const App = {
           ${this.can('purchase_requests') ? tabBtn('requests','Purchase Requests') : ''}
           ${tabBtn('consumables','Consumables')}
           ${tabBtn('recoverables','Supplier Recoverables')}
+          ${tabBtn('supplier-returns','Supplier Returns')}
         </div>
         <div class="card">
           <div class="table-wrap">
@@ -11402,6 +11403,8 @@ const App = {
 
     } else if (tab === 'recoverables') {
       return this.renderSupplierRecoverables();
+    } else if (tab === 'supplier-returns') {
+      return this.renderSupplierReturns();
     } else if (tab === 'consumables') {
       const [consumptions,costSummary,reconciliations,attention] = await Promise.all([
         this.api('GET', '/cost-allocations/consumptions?limit=200'),
@@ -11428,6 +11431,7 @@ const App = {
           ${this.can('purchase_requests') ? tabBtn('requests','Purchase Requests') : ''}
           ${tabBtn('consumables','Consumables')}
           ${tabBtn('recoverables','Supplier Recoverables')}
+          ${tabBtn('supplier-returns','Supplier Returns')}
         </div>
         <div class="stats-grid" style="margin-bottom:16px">
           <div class="stat-card"><div class="stat-label">Requested allocation</div><div class="stat-value">${this.fmt(totalRequested)}</div><div class="stat-meta">Planned internal-use cost</div></div>
@@ -11533,6 +11537,7 @@ const App = {
           ${tabBtn('requests','Purchase Requests')}
           ${tabBtn('consumables','Consumables')}
           ${tabBtn('recoverables','Supplier Recoverables')}
+          ${tabBtn('supplier-returns','Supplier Returns')}
         </div>
         <div class="card" style="margin-bottom:0;border-bottom:none;border-radius:8px 8px 0 0;padding:10px 16px 0">
           <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
@@ -11574,6 +11579,73 @@ const App = {
     }
   },
 
+  async renderSupplierReturns() {
+    this._purchasingTab='supplier-returns';
+    const c=document.getElementById('content');
+    c.innerHTML='<div class="empty-state"><p>Loading supplier returns...</p></div>';
+    try{
+      const [rows,suppliers,branches]=await Promise.all([
+        this.api('GET','/supplier-returns'),
+        this.api('GET','/suppliers'),
+        this.api('GET','/branches')
+      ]);
+      this._supplierReturnSuppliers=suppliers||[];
+      this._supplierReturnBranches=branches||[];
+      const statusClass={draft:'badge-muted',approved:'badge-info',dispatched:'badge-success'};
+      const tabButton=(key,label)=>'<button class="btn btn-sm '+(key==='supplier-returns'?'btn-primary':'btn-outline')+'" onclick="App.renderPurchasing(\''+key+'\')">'+label+'</button>';
+      const body=(rows||[]).map(x=>{
+        let action='';
+        if(x.status==='draft'&&this.can('purchasing_approve'))action='<button class="btn btn-sm btn-primary" onclick="App._approveSupplierReturn('+x.id+')">Approve</button>';
+        else if(x.status==='approved'&&this.can('purchasing_receive'))action='<button class="btn btn-sm btn-success" onclick="App._dispatchSupplierReturn('+x.id+')">Dispatch</button>';
+        else if(x.recoverable_claim_id)action='<button class="btn btn-sm btn-outline" onclick="App.renderSupplierRecoverables()">View claim</button>';
+        return '<tr><td class="fw-600">'+this.escapeHtml(x.return_number||'')+'</td><td>'+this.escapeHtml(x.supplier_name||'')+'</td><td>'+this.escapeHtml(x.branch_name||'')+'</td><td>'+this.fmt(x.expected_credit_amount||0)+'</td><td>'+this.fmt(x.inventory_tracked_value||0)+'</td><td>'+this.escapeHtml(String(x.inventory_legacy_quantity||0))+'</td><td><span class="badge-pill '+(statusClass[x.status]||'badge-info')+'">'+this.escapeHtml(String(x.status||''))+'</span></td><td>'+this.escapeHtml(x.supplier_rma||'—')+'</td><td>'+this.escapeHtml(x.recoverable_claim_id?String(x.recoverable_claim_id):'—')+'</td><td>'+action+'</td></tr>';
+      }).join('');
+      c.innerHTML='<div class="section-header"><div><h2>Supplier Returns</h2><p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Return stock to suppliers with physical, valuation, and recoverable evidence kept in one chain.</p></div><button class="btn btn-primary" onclick="App.showSupplierReturnForm()">+ New Supplier Return</button></div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+tabButton('supplier-returns','Supplier Returns')+'</div>'+
+        '<div class="card" style="margin-bottom:16px"><div class="card-header"><div><div class="card-title">Return control</div><div style="font-size:12px;color:var(--text-muted)">Draft → Approved → Dispatched. A recoverable claim is created only when stock physically leaves and valuation evidence commits.</div></div></div></div>'+
+        '<div class="card"><div class="table-wrap"><table><thead><tr><th>Return</th><th>Supplier</th><th>Branch</th><th>Expected credit</th><th>Tracked carrying value</th><th>Unvalued qty</th><th>Status</th><th>RMA</th><th>Claim</th><th>Action</th></tr></thead><tbody>'+(body||'<tr><td colspan="10" class="empty-state">No supplier returns yet</td></tr>')+'</tbody></table></div></div>';
+    }catch(e){c.innerHTML='<div class="empty-state">Unable to load supplier returns: '+this.escapeHtml(e.message||'Unknown error')+'</div>';}
+  },
+
+  async showSupplierReturnForm() {
+    try{
+      const products=await this.api('GET','/products?active=1');
+      const supplierOptions=(this._supplierReturnSuppliers||[]).map(s=>'<option value="'+s.id+'">'+this.escapeHtml(s.name||('Supplier '+s.id))+'</option>').join('');
+      const branchOptions=(this._supplierReturnBranches||[]).map(b=>'<option value="'+b.id+'">'+this.escapeHtml(b.name||('Branch '+b.id))+'</option>').join('');
+      const productOptions=(products||[]).map(p=>'<option value="'+p.id+'">'+this.escapeHtml((p.sku?p.sku+' — ':'')+(p.name||('Product '+p.id)))+'</option>').join('');
+      this.showModal('<div class="modal" style="max-width:700px"><div class="modal-header"><span class="modal-title">New Supplier Return</span><button class="modal-close" onclick="App.closeModal()">x</button></div><div class="modal-body">'+
+        '<div class="input-row"><div class="form-group"><label>Supplier</label><select id="srt-supplier">'+supplierOptions+'</select></div><div class="form-group"><label>Branch</label><select id="srt-branch">'+branchOptions+'</select></div></div>'+
+        '<div class="form-group"><label>Reason</label><textarea id="srt-reason" rows="2" placeholder="Why are these goods being returned?"></textarea></div>'+
+        '<div class="form-group"><label>Supplier RMA / authorization (optional)</label><input id="srt-rma"></div>'+
+        '<div class="form-group"><label>Product</label><select id="srt-product">'+productOptions+'</select></div>'+
+        '<div class="input-row"><div class="form-group"><label>Source stock status</label><select id="srt-status"><option value="available">Available</option><option value="damaged">Damaged</option><option value="quarantine">Quarantine</option><option value="inspection">Inspection</option><option value="blocked">Blocked</option><option value="expired">Expired</option></select></div><div class="form-group"><label>Quantity</label><input id="srt-qty" type="number" min="0.0001" step="0.0001"></div><div class="form-group"><label>Expected unit credit</label><input id="srt-unit-credit" type="number" min="0" step="0.01"></div></div>'+
+        '<div class="form-group"><label>Receipt line ID (optional exact evidence)</label><input id="srt-receipt-line" type="number" min="1" placeholder="Purchase receipt item ID"></div>'+
+        '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" onclick="App._saveSupplierReturn()">Create return</button></div></div>');
+    }catch(e){this.alert(e.message||'Unable to open supplier return form','error');}
+  },
+
+  async _saveSupplierReturn() {
+    const reason=document.getElementById('srt-reason')?.value?.trim()||'';
+    const item={product_id:Number(document.getElementById('srt-product')?.value),source_status:document.getElementById('srt-status')?.value||'available',quantity:Number(document.getElementById('srt-qty')?.value),expected_unit_credit:Number(document.getElementById('srt-unit-credit')?.value||0)};
+    const receiptLine=Number(document.getElementById('srt-receipt-line')?.value);
+    if(receiptLine)item.source_purchase_receipt_item_id=receiptLine;
+    try{
+      await this.api('POST','/supplier-returns',{supplier_id:Number(document.getElementById('srt-supplier')?.value),branch_id:Number(document.getElementById('srt-branch')?.value),reason,supplier_rma:document.getElementById('srt-rma')?.value?.trim()||null,items:[item]});
+      this.closeModal();this.alert('Supplier return created');this.renderSupplierReturns();
+    }catch(e){this.alert(e.message||'Unable to create supplier return','error');}
+  },
+
+  async _approveSupplierReturn(id) {
+    try{await this.api('POST','/supplier-returns/'+id+'/approve',{});this.alert('Supplier return approved');this.renderSupplierReturns();}
+    catch(e){this.alert(e.message||'Unable to approve supplier return','error');}
+  },
+
+  async _dispatchSupplierReturn(id) {
+    if(!window.confirm('Dispatch this supplier return? Physical stock and valuation will leave inventory and an identified supplier recoverable claim will be created.'))return;
+    try{await this.api('POST','/supplier-returns/'+id+'/dispatch',{});this.alert('Supplier return dispatched and recoverable claim created');this.renderSupplierReturns();}
+    catch(e){this.alert(e.message||'Unable to dispatch supplier return','error');}
+  },
+
   async renderSupplierRecoverables() {
     this._purchasingTab='recoverables';
     const c=document.getElementById('content');
@@ -11593,11 +11665,14 @@ const App = {
         let actions='';
         if(x.status==='identified')actions='<button class="btn btn-sm btn-primary" onclick="App._confirmSupplierRecoverable('+x.id+')">Confirm</button>';
         else if(x.status==='confirmed'||x.status==='partially_recovered')actions='<button class="btn btn-sm btn-success" onclick="App._recoverSupplierRecoverable('+x.id+','+Number(x.outstanding_amount||0)+')">Record recovery</button>';
-        return '<tr><td class="fw-600">'+this.escapeHtml(x.claim_number||'')+'</td><td>'+this.escapeHtml(x.supplier_name||'')+'</td><td>'+this.escapeHtml(labels[x.claim_type]||String(x.claim_type||'').replaceAll('_',' '))+'</td><td>'+this.escapeHtml(x.source_reference||x.source_id||'Manual')+'</td><td>'+this.fmt(x.identified_amount||0)+'</td><td>'+this.fmt(x.confirmed_amount||0)+'</td><td>'+this.fmt(x.recovered_amount||0)+'</td><td class="fw-600">'+this.fmt(x.outstanding_amount||0)+'</td><td>'+this.escapeHtml(String(x.aging_bucket||'').replaceAll('_','-'))+'</td><td><span class="badge-pill '+(statusClass[x.status]||'badge-info')+'">'+this.escapeHtml(String(x.status||'').replaceAll('_',' '))+'</span></td><td>'+actions+'</td></tr>';
+        let evidence={};try{evidence=JSON.parse(x.evidence_json||'{}');}catch{}
+        const accountingStatus=evidence?.accountingBasis?.status;
+        const source='<div>'+this.escapeHtml(x.source_reference||x.source_id||'Manual')+'</div>'+(accountingStatus?'<div style="font-size:11px;color:var(--text-muted)">Accounting: '+this.escapeHtml(accountingStatus.replaceAll('_',' '))+'</div>':'');
+        return '<tr><td class="fw-600">'+this.escapeHtml(x.claim_number||'')+'</td><td>'+this.escapeHtml(x.supplier_name||'')+'</td><td>'+this.escapeHtml(labels[x.claim_type]||String(x.claim_type||'').replaceAll('_',' '))+'</td><td>'+source+'</td><td>'+this.fmt(x.identified_amount||0)+'</td><td>'+this.fmt(x.confirmed_amount||0)+'</td><td>'+this.fmt(x.recovered_amount||0)+'</td><td class="fw-600">'+this.fmt(x.outstanding_amount||0)+'</td><td>'+this.escapeHtml(String(x.aging_bucket||'').replaceAll('_','-'))+'</td><td><span class="badge-pill '+(statusClass[x.status]||'badge-info')+'">'+this.escapeHtml(String(x.status||'').replaceAll('_',' '))+'</span></td><td>'+actions+'</td></tr>';
       }).join('');
       const aging=summary.aging||{};
       c.innerHTML='<div class="section-header"><div><h2>Supplier Recoverables</h2><p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Track money suppliers owe us from shortages, returns, credit notes, overcharges, rebates and reimbursements.</p></div><button class="btn btn-primary" onclick="App.showSupplierRecoverableForm()">+ New Claim</button></div>'+
-        '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+'</div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+tabButton('supplier-returns','Supplier Returns')+'</div>'+
         '<div class="stats-grid" style="margin-bottom:16px"><div class="stat-card"><div class="stat-label">Identified exposure</div><div class="stat-value">'+this.fmt(summary.identified_exposure||0)+'</div><div class="stat-meta">Potential claim, not yet confirmed</div></div><div class="stat-card"><div class="stat-label">Confirmed outstanding</div><div class="stat-value">'+this.fmt(summary.confirmed_outstanding||0)+'</div><div class="stat-meta">Documented amount owed to us</div></div><div class="stat-card"><div class="stat-label">Overdue confirmed</div><div class="stat-value">'+this.fmt(summary.overdue_confirmed||0)+'</div><div class="stat-meta">Past supplier due date</div></div><div class="stat-card"><div class="stat-label">Recovered</div><div class="stat-value">'+this.fmt(summary.recovered_total||0)+'</div><div class="stat-meta">Credits, refunds and offsets received</div></div></div>'+
         '<div class="card" style="margin-bottom:16px"><div class="card-header"><div><div class="card-title">Confirmed Recoverables Aging</div><div style="font-size:12px;color:var(--text-muted)">Only confirmed supplier obligations appear here.</div></div></div><div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:0 16px 16px">'+
         [['Current','current'],['1-30','1_30'],['31-60','31_60'],['61-90','61_90'],['90+','90_plus']].map(p=>'<div class="stat-card"><div class="stat-label">'+p[0]+'</div><div class="stat-value" style="font-size:18px">'+this.fmt(aging[p[1]]||0)+'</div></div>').join('')+'</div></div>'+

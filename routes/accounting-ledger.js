@@ -68,7 +68,7 @@ async function ensureSchema(){
   ],'write');
 
   const defaults=[
-    ['1000','Cash','asset','debit'],['1010','Bank','asset','debit'],['1100','Accounts Receivable','asset','debit'],['1150','Supplier Recoverables','asset','debit'],['1200','Inventory','asset','debit'],
+    ['1000','Cash','asset','debit'],['1010','Bank','asset','debit'],['1100','Accounts Receivable','asset','debit'],['1150','Supplier Recoverables','asset','debit'],['1160','Supplier Returns Pending Credit','asset','debit'],['1200','Inventory','asset','debit'],
     ['2000','Accounts Payable','liability','credit'],['2100','Taxes Payable','liability','credit'],
     ['3000','Owner Equity','equity','credit'],
     ['4000','Sales Revenue','revenue','credit'],['4100','Service Revenue','revenue','credit'],['4200','Rental Revenue','revenue','credit'],

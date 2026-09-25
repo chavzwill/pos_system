@@ -100,8 +100,8 @@ router.post('/:id/confirm',async(req,res)=>{
         confirmed_amount=?,due_date=COALESCE(?,due_date),supplier_document_number=COALESCE(?,supplier_document_number),
         notes=CASE WHEN ?!='' THEN COALESCE(notes||char(10),'')||? ELSE notes END,confirmed_at=COALESCE(confirmed_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP
         WHERE id=?`,args:[amount,req.body?.due_date||null,doc||null,note,note,req.params.id]});
-      const autoBasis=(claim.claim_type==='shorted_goods'&&claim.source_type==='purchase_order')||(claim.claim_type==='overcharge'&&claim.source_type==='supplier_invoice');
-      if(autoBasis){
+      const purchasingBasis=(claim.claim_type==='shorted_goods'&&claim.source_type==='purchase_order')||(claim.claim_type==='overcharge'&&claim.source_type==='supplier_invoice');
+      if(purchasingBasis){
         let sourceInvoiceId=null;
         if(claim.claim_type==='overcharge'){
           sourceInvoiceId=Number(claim.source_id);
@@ -111,6 +111,25 @@ router.post('/:id/confirm',async(req,res)=>{
         await tx.execute({sql:`INSERT INTO supplier_recoverable_accounting_basis(claim_id,basis_type,recognized_amount,source_invoice_id,evidence_json)
           VALUES(?,?,?,?,?) ON CONFLICT(claim_id) DO UPDATE SET recognized_amount=excluded.recognized_amount,source_invoice_id=excluded.source_invoice_id,evidence_json=excluded.evidence_json`,
           args:[claim.id,'purchasing_receiving_clearing',amount,sourceInvoiceId,JSON.stringify({supplierDocumentNumber:doc||null,confirmationNote:note||null})]});
+      }
+      if(claim.claim_type==='supplier_return'&&claim.source_type==='supplier_return'){
+        const {rows:[ret]}=await tx.execute({sql:'SELECT * FROM supplier_returns WHERE id=?',args:[Number(claim.source_id)]});
+        if(!ret||Number(ret.supplier_id)!==Number(claim.supplier_id))throw new Error('Supplier return accounting basis requires the exact dispatched return');
+        const legacy=Number(ret.inventory_legacy_quantity||0),untracked=Number(ret.inventory_untracked_quantity||0),carrying=money(ret.inventory_tracked_value||0);
+        let evidence={};try{evidence=JSON.parse(claim.evidence_json||'{}');}catch{}
+        if(legacy>0.0001||untracked>0.0001||Math.abs(amount-carrying)>0.01){
+          const reason=(legacy>0.0001||untracked>0.0001)
+            ?'Returned inventory does not have complete auditable carrying-value evidence.'
+            :`Supplier-confirmed credit ${amount.toFixed(2)} differs from returned inventory carrying value ${carrying.toFixed(2)}.`;
+          evidence.accountingBasis={status:'unresolved',reason,confirmedCreditAmount:amount,inventoryCarryingValue:carrying,legacyQuantity:legacy,untrackedQuantity:untracked};
+          await tx.execute({sql:'UPDATE supplier_recoverable_claims SET evidence_json=? WHERE id=?',args:[JSON.stringify(evidence),claim.id]});
+        }else{
+          evidence.accountingBasis={status:'reconciled',confirmedCreditAmount:amount,inventoryCarryingValue:carrying};
+          await tx.execute({sql:'UPDATE supplier_recoverable_claims SET evidence_json=? WHERE id=?',args:[JSON.stringify(evidence),claim.id]});
+          await tx.execute({sql:`INSERT INTO supplier_recoverable_accounting_basis(claim_id,basis_type,recognized_amount,source_invoice_id,evidence_json)
+            VALUES(?,?,?,?,?) ON CONFLICT(claim_id) DO UPDATE SET basis_type=excluded.basis_type,recognized_amount=excluded.recognized_amount,evidence_json=excluded.evidence_json`,
+            args:[claim.id,'supplier_return_clearing',amount,null,JSON.stringify({supplierReturnId:ret.id,returnNumber:ret.return_number,inventoryCarryingValue:carrying,supplierDocumentNumber:doc||null,confirmationNote:note||null})]});
+        }
       }
       await tx.commit();committed=true;
     }catch(e){if(!committed)try{await tx.rollback();}catch{}throw e;}
