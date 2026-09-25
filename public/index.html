@@ -11574,9 +11574,10 @@ const App = {
     if(!body)return;
     body.innerHTML='<div class="empty-state">Loading verified savings…</div>';
     try{
-      const [data,rollup]=await Promise.all([
+      const [data,rollup,targets]=await Promise.all([
         this.api('GET','/spendos-management/opportunities'),
-        this.api('GET','/spendos-management/verified-rollup')
+        this.api('GET','/spendos-management/verified-rollup'),
+        this.api('GET','/spendos-management/targets/performance')
       ]);
       const rows=data.opportunities||[];
       const estimated=rows.reduce((s,x)=>s+Number(x.estimated_savings||0),0);
@@ -11592,9 +11593,59 @@ const App = {
       body.innerHTML='<div class="stats-grid" style="margin:0 0 12px"><div class="stat-card"><div class="stat-label">Estimated opportunities</div><div class="stat-value">'+this.fmt(estimated)+'</div><div class="stat-meta">Potential only — not booked as savings</div></div><div class="stat-card"><div class="stat-label">Verified savings</div><div class="stat-value">'+this.fmt(verified)+'</div><div class="stat-meta">Proven from post-action received-cost evidence</div></div><div class="stat-card"><div class="stat-label">Actioned</div><div class="stat-value">'+rows.filter(x=>x.status==='actioned').length+'</div><div class="stat-meta">Waiting for verification evidence</div></div><div class="stat-card"><div class="stat-label">Verified cases</div><div class="stat-value">'+rows.filter(x=>x.status==='verified').length+'</div><div class="stat-meta">Savings evidence accepted</div></div></div><div class="table-wrap"><table><thead><tr><th>Opportunity</th><th>Status</th><th>Estimated</th><th>Verified</th><th>Action</th></tr></thead><tbody>'+(rowHtml||'<tr><td colspan="5" class="empty-state">No savings opportunities detected yet</td></tr>')+'</tbody></table></div>';
       const rollupBlock=(title,items)=>'<div class="card" style="padding:12px"><div class="fw-600" style="margin-bottom:8px">'+title+'</div>'+((items||[]).slice(0,5).map(x=>'<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:4px 0"><span>'+this.escapeHtml(String(x.dimension||'unattributed'))+' · '+this.escapeHtml(String(x.currency||''))+'</span><strong>'+this.fmt(x.verifiedSavings||0)+'</strong></div>').join('')||'<div style="font-size:12px;color:var(--text-muted)">No verified evidence yet</div>')+'</div>';
       body.innerHTML+='<div style="margin-top:14px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div class="fw-600">Verified savings reconciliation</div><div style="font-size:12px;color:var(--text-muted)">'+Number(rollup.claimedEvidenceCount||0)+' uniquely claimed receipt evidence item(s)</div></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'+rollupBlock('By supplier',rollup.bySupplier)+rollupBlock('By category',rollup.byCategory)+rollupBlock('By department',rollup.byDepartment)+rollupBlock('By period',rollup.byPeriod)+'</div></div>';
+      const targetRows=(targets||[]).map(t=>'<tr><td><div class="fw-600">'+String(t.scope_type||'company').replaceAll('_',' ')+'</div><div style="font-size:12px;color:var(--text-muted)">'+this.escapeHtml(String(t.scope_id||'all'))+'</div></td><td>'+this.escapeHtml(String(t.period_start||''))+' → '+this.escapeHtml(String(t.period_end||''))+'</td><td>'+this.fmt(t.target_amount||0)+'</td><td class="fw-600">'+this.fmt(t.verified_savings||0)+'</td><td>'+this.fmt(t.gap||0)+'</td><td><span class="badge-pill '+(t.performance_status==='met'?'badge-success':t.performance_status==='in_progress'?'badge-warning':'')+'">'+String(t.performance_status||'not_started').replaceAll('_',' ')+'</span></td><td>'+this.escapeHtml(String(t.owner_id||'Unassigned'))+'</td></tr>').join('');
+      body.innerHTML+='<div class="card" style="margin-top:14px"><div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div class="card-title">Savings Accountability</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Targets are management goals. Only verified receipt-backed savings count toward attainment.</div></div><button class="btn btn-primary" onclick="App._showSavingsTargetForm()">Set savings target</button></div><div class="table-wrap"><table><thead><tr><th>Scope</th><th>Period</th><th>Target</th><th>Verified</th><th>Gap</th><th>Status</th><th>Owner</th></tr></thead><tbody>'+(targetRows||'<tr><td colspan="7" class="empty-state">No savings targets have been set</td></tr>')+'</tbody></table></div></div>';
     }catch(e){
       body.innerHTML='<div class="empty-state">Savings verification unavailable: '+this.escapeHtml(e.message||'SpendOS is offline or not configured')+'</div>';
     }
+  },
+
+  _showSavingsTargetForm() {
+    const currency=this.activeCurrency||'JMD';
+    this.showModal(`
+      <div class="modal" style="max-width:620px">
+        <div class="modal-header"><span class="modal-title">Set Savings Target</span><button class="modal-close" onclick="App.closeModal()">✕</button></div>
+        <div class="modal-body">
+          <p style="margin:0 0 14px;color:var(--text-muted);font-size:13px">This is a management goal, not realized savings. Only receipt-backed verified savings count toward attainment.</p>
+          <div class="input-row">
+            <div class="form-group"><label>Scope</label><select id="sav-target-scope"><option value="company">Company</option><option value="supplier">Supplier</option><option value="category">Savings category</option><option value="department">Department</option></select></div>
+            <div class="form-group"><label>Scope ID / Name</label><input id="sav-target-id" value="all" placeholder="all, supplier ID, category, or department ID"></div>
+          </div>
+          <div class="input-row">
+            <div class="form-group"><label>Currency</label><input id="sav-target-currency" value="${this.escapeHtml(currency)}"></div>
+            <div class="form-group"><label>Target Amount</label><input id="sav-target-amount" type="number" min="0" step="0.01" placeholder="0.00"></div>
+          </div>
+          <div class="input-row">
+            <div class="form-group"><label>Period Start</label><input id="sav-target-start" type="date"></div>
+            <div class="form-group"><label>Period End</label><input id="sav-target-end" type="date"></div>
+          </div>
+          <div class="form-group"><label>Owner</label><input id="sav-target-owner" value="${this.currentUser?.id||''}" placeholder="Employee ID"></div>
+          <div class="form-group"><label>Management Note</label><textarea id="sav-target-note" rows="3" placeholder="Why this target exists and who is accountable for delivery"></textarea></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" onclick="App._saveSavingsTarget()">Save target</button></div>
+      </div>`);
+  },
+
+  async _saveSavingsTarget() {
+    const payload={
+      scopeType:document.getElementById('sav-target-scope')?.value,
+      scopeId:document.getElementById('sav-target-id')?.value?.trim(),
+      currency:document.getElementById('sav-target-currency')?.value?.trim(),
+      targetAmount:Number(document.getElementById('sav-target-amount')?.value),
+      periodStart:document.getElementById('sav-target-start')?.value,
+      periodEnd:document.getElementById('sav-target-end')?.value,
+      ownerId:document.getElementById('sav-target-owner')?.value?.trim()||null,
+      note:document.getElementById('sav-target-note')?.value?.trim()||null
+    };
+    if(!payload.scopeId||!payload.currency||!payload.periodStart||!payload.periodEnd||!Number.isFinite(payload.targetAmount)||payload.targetAmount<0){
+      return this.alert('Complete the savings target scope, currency, period and amount','warning');
+    }
+    try{
+      await this.api('POST','/spendos-management/targets',payload);
+      this.closeModal();
+      this.alert('Savings target saved');
+      this._loadSavingsRealization();
+    }catch(e){this.alert(e.message||'Unable to save savings target','error');}
   },
 
   async _recordSavingsAction(id) {

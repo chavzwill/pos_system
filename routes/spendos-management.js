@@ -32,6 +32,23 @@ router.get('/opportunities',async(req,res)=>{
   }catch(e){res.status(e.statusCode||502).json({error:e.message});}
 });
 
+router.get('/targets/performance',async(req,res)=>{
+  try{
+    const {tenant}=config();
+    res.json(await callSpendOS(`/v1/savings/targets/performance?tenantId=${encodeURIComponent(tenant)}`));
+  }catch(e){res.status(e.statusCode||502).json({error:e.message});}
+});
+
+router.post('/targets',async(req,res)=>{
+  try{
+    const {tenant}=config();
+    const payload={...req.body,ownerId:req.body?.ownerId|| (req.employee?.id?String(req.employee.id):null)};
+    res.status(201).json(await callSpendOS(`/v1/savings/targets?tenantId=${encodeURIComponent(tenant)}`,{
+      method:'POST',body:JSON.stringify(payload)
+    }));
+  }catch(e){res.status(e.statusCode||502).json({error:e.message});}
+});
+
 router.get('/verified-rollup',async(req,res)=>{
   try{
     const {tenant}=config();
