@@ -11452,6 +11452,13 @@ const App = {
         </div>
         <div class="card" style="margin-bottom:16px">
           <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div><div class="card-title">Savings Realization</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Estimated savings are not counted as achieved until post-action received-cost evidence verifies them.</div></div>
+            <button class="btn btn-secondary" onclick="App._loadSavingsRealization()">Refresh savings</button>
+          </div>
+          <div id="savings-realization-body" style="padding:0 16px 16px"><div class="empty-state">Loading verified savings…</div></div>
+        </div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
             <div><div class="card-title">Cost intelligence</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">30-day cost trend by business object. Profit is only shown where real revenue attribution exists.</div></div>
             <select id="cost-econ-type" onchange="App._loadCostEconomics(this.value)" style="max-width:220px">
               <option value="vehicle">Vehicles</option>
@@ -11497,7 +11504,7 @@ const App = {
             </table>
           </div>
         </div>`;
-      setTimeout(()=>this._loadCostEconomics('vehicle'),0);
+      setTimeout(()=>{this._loadCostEconomics('vehicle');this._loadSavingsRealization();},0);
     } else {
       // Purchase Requests tab
       const filter = this._prFilter || 'all';
@@ -11560,6 +11567,51 @@ const App = {
           </div>
         </div>`;
     }
+  },
+
+  async _loadSavingsRealization() {
+    const body=document.getElementById('savings-realization-body');
+    if(!body)return;
+    body.innerHTML='<div class="empty-state">Loading verified savings…</div>';
+    try{
+      const data=await this.api('GET','/spendos-management/opportunities');
+      const rows=data.opportunities||[];
+      const estimated=rows.reduce((s,x)=>s+Number(x.estimated_savings||0),0);
+      const verified=rows.reduce((s,x)=>s+Number(x.verified_savings||0),0);
+      const rowHtml=rows.map(x=>{
+        const action=x.status==='identified'
+          ? '<button class="btn btn-sm btn-secondary" onclick="App._recordSavingsAction('+x.id+')">Record action</button>'
+          : x.status==='actioned'
+            ? '<button class="btn btn-sm btn-primary" onclick="App._verifySavingsOpportunity('+x.id+')">Verify</button>'
+            : '';
+        return '<tr><td><div class="fw-600">'+String(x.kind||'opportunity').replaceAll('_',' ')+'</div><div style="font-size:12px;color:var(--text-muted)">'+String(x.opportunity_key||'')+'</div></td><td><span class="badge-pill '+(x.status==='verified'?'badge-success':x.status==='actioned'?'badge-warning':'')+'">'+String(x.status||'identified').replaceAll('_',' ')+'</span></td><td>'+this.fmt(x.estimated_savings||0)+'</td><td class="fw-600">'+this.fmt(x.verified_savings||0)+'</td><td style="white-space:nowrap">'+action+'</td></tr>';
+      }).join('');
+      body.innerHTML='<div class="stats-grid" style="margin:0 0 12px"><div class="stat-card"><div class="stat-label">Estimated opportunities</div><div class="stat-value">'+this.fmt(estimated)+'</div><div class="stat-meta">Potential only — not booked as savings</div></div><div class="stat-card"><div class="stat-label">Verified savings</div><div class="stat-value">'+this.fmt(verified)+'</div><div class="stat-meta">Proven from post-action received-cost evidence</div></div><div class="stat-card"><div class="stat-label">Actioned</div><div class="stat-value">'+rows.filter(x=>x.status==='actioned').length+'</div><div class="stat-meta">Waiting for verification evidence</div></div><div class="stat-card"><div class="stat-label">Verified cases</div><div class="stat-value">'+rows.filter(x=>x.status==='verified').length+'</div><div class="stat-meta">Savings evidence accepted</div></div></div><div class="table-wrap"><table><thead><tr><th>Opportunity</th><th>Status</th><th>Estimated</th><th>Verified</th><th>Action</th></tr></thead><tbody>'+(rowHtml||'<tr><td colspan="5" class="empty-state">No savings opportunities detected yet</td></tr>')+'</tbody></table></div>';
+    }catch(e){
+      body.innerHTML='<div class="empty-state">Savings verification unavailable: '+this.escapeHtml(e.message||'SpendOS is offline or not configured')+'</div>';
+    }
+  },
+
+  async _recordSavingsAction(id) {
+    const actionType=window.prompt('What action was taken? e.g. switch_supplier, renegotiate, reduce_usage');
+    if(!actionType)return;
+    const actionNote=window.prompt('Describe the management action and evidence/reference.');
+    if(!actionNote)return;
+    try{
+      await this.api('POST','/spendos-management/opportunities/'+id+'/actions',{actionType,actionNote});
+      this.alert('Savings action recorded');
+      this._loadSavingsRealization();
+    }catch(e){this.alert(e.message||'Unable to record savings action','error');}
+  },
+
+  async _verifySavingsOpportunity(id) {
+    try{
+      const result=await this.api('POST','/spendos-management/opportunities/'+id+'/verify',{});
+      if(result.status==='verified')this.alert('Verified savings: '+this.fmt(result.verifiedSavings||0));
+      else if(result.status==='not_verified')this.alert('Action recorded, but later actual cost does not verify a saving yet','warning');
+      else this.alert('Not enough post-action received-cost evidence to verify savings yet','warning');
+      this._loadSavingsRealization();
+    }catch(e){this.alert(e.message||'Unable to verify savings','error');}
   },
 
   async _loadCostEconomics(type='vehicle') {
