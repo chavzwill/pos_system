@@ -32,6 +32,28 @@ router.get('/opportunities',async(req,res)=>{
   }catch(e){res.status(e.statusCode||502).json({error:e.message});}
 });
 
+router.post('/leakage/cases',async(req,res)=>{
+  try{
+    const {tenant}=config();
+    res.json(await callSpendOS(`/v1/savings/leakage/cases?tenantId=${encodeURIComponent(tenant)}`,{method:'POST'}));
+  }catch(e){res.status(e.statusCode||502).json({error:e.message});}
+});
+
+router.post('/leakage/cases/:id/state',async(req,res)=>{
+  try{
+    const {tenant}=config();
+    const payload={...req.body,actorId:req.employee?.id?String(req.employee.id):null};
+    res.json(await callSpendOS(`/v1/savings/leakage/cases/${req.params.id}/state?tenantId=${encodeURIComponent(tenant)}`,{method:'POST',body:JSON.stringify(payload)}));
+  }catch(e){res.status(e.statusCode||502).json({error:e.message});}
+});
+
+router.post('/leakage/cases/:id/verify',async(req,res)=>{
+  try{
+    const {tenant}=config();
+    res.json(await callSpendOS(`/v1/savings/leakage/cases/${req.params.id}/verify?tenantId=${encodeURIComponent(tenant)}`,{method:'POST'}));
+  }catch(e){res.status(e.statusCode||502).json({error:e.message});}
+});
+
 router.get('/leakage',async(req,res)=>{
   try{
     const {tenant}=config();

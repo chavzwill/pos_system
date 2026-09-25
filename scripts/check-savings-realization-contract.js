@@ -32,7 +32,11 @@ const checks=[
  ['UI surfaces savings attention reasons and priority',ui.includes('Savings Attention')&&ui.includes('<th>Priority</th>')&&ui.includes('<th>Reason</th>')],
  ['savings leakage stays behind authenticated proxy',route.includes("router.get('/leakage'")&&route.includes('/v1/savings/leakage?tenantId=')&&!ui.includes('/v1/savings/leakage')],
  ['UI limits leakage causes to direct evidence',ui.includes('Only causes directly proven by recorded actions and later actual receipt evidence are classified. Unexplained gaps remain unexplained.')],
- ['UI exposes leakage cause SKU evidence and reason',ui.includes('Savings Leakage & Root Cause')&&ui.includes('<th>Cause</th>')&&ui.includes('<th>SKU</th>')&&ui.includes('<th>Evidence</th>')]
+ ['UI exposes leakage cause SKU evidence and reason',ui.includes('Savings Leakage & Root Cause')&&ui.includes('<th>Cause</th>')&&ui.includes('<th>SKU</th>')&&ui.includes('<th>Evidence</th>')],
+ ['leakage remediation cases stay behind authenticated proxy',route.includes("router.post('/leakage/cases'")&&route.includes("router.post('/leakage/cases/:id/state'")&&route.includes("router.post('/leakage/cases/:id/verify'")&&!ui.includes('/v1/savings/leakage/cases')],
+ ['POS records corrective action before closure verification',ui.includes('_actionLeakageCase')&&ui.includes('Corrective action recorded')&&ui.includes('_verifyLeakageCase')],
+ ['UI states leakage closure requires new receipt evidence',ui.includes('Cases close only after new post-remediation receipt evidence proves the leakage stopped.')],
+ ['UI distinguishes resolved persistent and insufficient-evidence closure outcomes',ui.includes('Leakage closure verified from new receipt evidence')&&ui.includes('Leakage still persists in post-remediation receipt evidence')&&ui.includes('Not enough post-remediation receipt evidence to close this case')]
 ];
 let failed=0;
 for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Savings realization: ${name}`);if(!ok)failed++;}

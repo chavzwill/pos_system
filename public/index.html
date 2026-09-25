@@ -11574,12 +11574,13 @@ const App = {
     if(!body)return;
     body.innerHTML='<div class="empty-state">Loading verified savings…</div>';
     try{
-      const [data,rollup,targets,attention,leakage]=await Promise.all([
+      const [data,rollup,targets,attention,leakage,leakageCases]=await Promise.all([
         this.api('GET','/spendos-management/opportunities'),
         this.api('GET','/spendos-management/verified-rollup'),
         this.api('GET','/spendos-management/targets/performance'),
         this.api('GET','/spendos-management/attention'),
-        this.api('GET','/spendos-management/leakage')
+        this.api('GET','/spendos-management/leakage'),
+        this.api('POST','/spendos-management/leakage/cases',{})
       ]);
       const rows=data.opportunities||[];
       const estimated=rows.reduce((s,x)=>s+Number(x.estimated_savings||0),0);
@@ -11600,10 +11601,47 @@ const App = {
       body.innerHTML+='<div class="card" style="margin-top:14px"><div class="card-header"><div><div class="card-title">Savings Attention</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Review prompts only. Pace signals do not forecast future savings or guarantee target failure.</div></div></div><div class="table-wrap"><table><thead><tr><th>Priority</th><th>Attention</th><th>Reference</th><th>Reason</th></tr></thead><tbody>'+(attentionRows||'<tr><td colspan="4" class="empty-state">No savings accountability attention items</td></tr>')+'</tbody></table></div></div>';
       const leakageRows=(leakage?.items||[]).map(x=>'<tr><td><span class="badge-pill badge-danger">'+this.escapeHtml(String(x.priority||'high'))+'</span></td><td>'+this.escapeHtml(String(x.kind||'leakage').replaceAll('_',' '))+'</td><td>'+this.escapeHtml(String(x.sku||'—'))+'</td><td>'+this.escapeHtml(String((x.evidenceEventIds||[]).join(', ')||'—'))+'</td><td>'+this.escapeHtml(String(x.reason||''))+'</td></tr>').join('');
       body.innerHTML+='<div class="card" style="margin-top:14px"><div class="card-header"><div><div class="card-title">Savings Leakage & Root Cause</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Only causes directly proven by recorded actions and later actual receipt evidence are classified. Unexplained gaps remain unexplained.</div></div></div><div class="table-wrap"><table><thead><tr><th>Priority</th><th>Cause</th><th>SKU</th><th>Evidence</th><th>Reason</th></tr></thead><tbody>'+(leakageRows||'<tr><td colspan="5" class="empty-state">No evidenced savings leakage detected</td></tr>')+'</tbody></table></div></div>';
+      const caseRows=(leakageCases||[]).map(c=>{
+        const action=c.status==='identified'?'<button class="btn btn-sm btn-secondary" onclick="App._setLeakageCaseState('+c.id+',\'reviewing\')">Review</button>':
+          (c.status==='reviewing'||c.status==='leakage_persists')?'<button class="btn btn-sm btn-primary" onclick="App._actionLeakageCase('+c.id+')">Record correction</button>':
+          c.status==='actioned'?'<button class="btn btn-sm btn-success" onclick="App._verifyLeakageCase('+c.id+')">Verify closure</button>':'';
+        return '<tr><td>'+this.escapeHtml(String(c.leakage_kind||'').replaceAll('_',' '))+'</td><td>'+this.escapeHtml(String(c.sku||''))+'</td><td>'+this.escapeHtml(String(c.status||'' ).replaceAll('_',' '))+'</td><td>'+this.escapeHtml(String(c.owner_id||'Unassigned'))+'</td><td>'+this.escapeHtml(String(c.due_at||'—'))+'</td><td>'+action+'</td></tr>';
+      }).join('');
+      body.innerHTML+='<div class="card" style="margin-top:14px"><div class="card-header"><div><div class="card-title">Leakage Corrective Actions</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Cases close only after new post-remediation receipt evidence proves the leakage stopped.</div></div></div><div class="table-wrap"><table><thead><tr><th>Leakage</th><th>SKU</th><th>Status</th><th>Owner</th><th>Due</th><th>Action</th></tr></thead><tbody>'+(caseRows||'<tr><td colspan="6" class="empty-state">No leakage corrective-action cases</td></tr>')+'</tbody></table></div></div>';
       body.innerHTML+='<div class="card" style="margin-top:14px"><div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div class="card-title">Savings Accountability</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Targets are management goals. Only verified receipt-backed savings count toward attainment.</div></div><button class="btn btn-primary" onclick="App._showSavingsTargetForm()">Set savings target</button></div><div class="table-wrap"><table><thead><tr><th>Scope</th><th>Period</th><th>Target</th><th>Verified</th><th>Gap</th><th>Status</th><th>Owner</th></tr></thead><tbody>'+(targetRows||'<tr><td colspan="7" class="empty-state">No savings targets have been set</td></tr>')+'</tbody></table></div></div>';
     }catch(e){
       body.innerHTML='<div class="empty-state">Savings verification unavailable: '+this.escapeHtml(e.message||'SpendOS is offline or not configured')+'</div>';
     }
+  },
+
+  async _setLeakageCaseState(id,status) {
+    try{
+      await this.api('POST','/spendos-management/leakage/cases/'+id+'/state',{status});
+      this._loadSavingsRealization();
+    }catch(e){this.alert(e.message||'Unable to update leakage case','error');}
+  },
+
+  async _actionLeakageCase(id) {
+    const correctiveAction=window.prompt('What corrective action was taken?');
+    if(!correctiveAction)return;
+    const correctiveNote=window.prompt('Describe the corrective action and supporting reference.');
+    if(!correctiveNote)return;
+    const dueAt=window.prompt('Due date (optional, YYYY-MM-DD)');
+    try{
+      await this.api('POST','/spendos-management/leakage/cases/'+id+'/state',{status:'actioned',correctiveAction,correctiveNote,dueAt:dueAt||null});
+      this.alert('Corrective action recorded');
+      this._loadSavingsRealization();
+    }catch(e){this.alert(e.message||'Unable to record corrective action','error');}
+  },
+
+  async _verifyLeakageCase(id) {
+    try{
+      const result=await this.api('POST','/spendos-management/leakage/cases/'+id+'/verify',{});
+      if(result.status==='verified_resolved')this.alert('Leakage closure verified from new receipt evidence');
+      else if(result.status==='leakage_persists')this.alert('Leakage still persists in post-remediation receipt evidence','warning');
+      else this.alert('Not enough post-remediation receipt evidence to close this case','warning');
+      this._loadSavingsRealization();
+    }catch(e){this.alert(e.message||'Unable to verify leakage closure','error');}
   },
 
   _showSavingsTargetForm() {
