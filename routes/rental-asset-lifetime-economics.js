@@ -217,6 +217,52 @@ router.get('/assets/:id/replacement-assessments/latest',requireAnyPermission('re
   }catch(e){res.status(400).json({error:e.message});}
 });
 
+function attentionBand(econ,replacementSignal){
+  const reasons=[...(econ.economic_health?.reasons||[])];
+  let band='routine';
+  if(econ.economic_health?.state==='economically_stressed'||Number(econ.lifetime?.evidenced_contribution||0)<0)band='urgent_review';
+  else if(replacementSignal==='replacement_case_stronger'||econ.economic_health?.state==='watch')band='review';
+  else if(econ.economic_health?.state==='underutilized')band='optimize';
+  if(replacementSignal)reasons.push('latest replacement assessment: '+replacementSignal.replace(/_/g,' '));
+  return {band,reasons};
+}
+
+async function latestReplacementSignal(assetId){
+  const {rows:[row]}=await db.execute({sql:'SELECT * FROM rental_asset_replacement_assessments WHERE asset_id=? ORDER BY id DESC LIMIT 1',args:[assetId]});
+  if(!row)return null;
+  const comparison=await replacementComparison(assetId,row);
+  return {id:row.id,created_at:row.created_at,evidence_ref:row.evidence_ref,signal:comparison.signal,contribution_delta:comparison.contribution_delta};
+}
+
+router.get('/portfolio',requireAnyPermission('reports','rentals'),async(req,res)=>{
+  try{
+    const args=[];let sql=`SELECT a.*,p.name product_name,p.sku,b.name branch_name,s.serial_number FROM rental_assets a JOIN products p ON p.id=a.product_id JOIN branches b ON b.id=a.branch_id LEFT JOIN inventory_serials s ON s.id=a.serial_id WHERE a.status NOT IN ('sold','disposed','lost')`;
+    if(req.query.branch_id){sql+=' AND a.branch_id=?';args.push(req.query.branch_id);}
+    sql+=' ORDER BY a.created_at DESC LIMIT 500';
+    const {rows}=await db.execute({sql,args});
+    const assets=[];
+    for(const asset of rows){
+      const econ=await economics(asset);
+      const latest=await latestReplacementSignal(asset.id);
+      const attention=attentionBand(econ,latest?.signal||null);
+      assets.push({...econ,attention,latest_replacement_assessment:latest});
+    }
+    const order={urgent_review:0,review:1,optimize:2,routine:3};
+    assets.sort((a,b)=>(order[a.attention.band]-order[b.attention.band])||Number(a.lifetime.evidenced_contribution)-Number(b.lifetime.evidenced_contribution));
+    const summary={
+      total:assets.length,
+      urgent_review:assets.filter(x=>x.attention.band==='urgent_review').length,
+      review:assets.filter(x=>x.attention.band==='review').length,
+      optimize:assets.filter(x=>x.attention.band==='optimize').length,
+      routine:assets.filter(x=>x.attention.band==='routine').length,
+      total_lifetime_contribution:money(assets.reduce((s,x)=>s+Number(x.lifetime.evidenced_contribution||0),0)),
+      total_rental_revenue:money(assets.reduce((s,x)=>s+Number(x.rentals.core_rental_revenue||0),0)),
+      total_operating_cost:money(assets.reduce((s,x)=>s+Number(x.maintenance.direct_cost||0)+Number(x.allocated_costs.actual_operating_cost||0),0))
+    };
+    res.json({summary,assets,methodology:{ranking:'Deterministic attention bands from economic health, contribution and latest evidence-backed replacement signal.',automatic_actions:false}});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 async function economics(asset){
   const {rows:[rent]}=await db.execute({sql:`SELECT COUNT(DISTINCT aa.agreement_id) rental_count,MIN(aa.allocated_at) first_rental_at,MAX(aa.allocated_at) last_rental_at,
     ROUND(COALESCE(SUM(CASE WHEN COALESCE(rai.quantity,0)>0 THEN COALESCE(rai.rental_fee,0)*(aa.quantity/rai.quantity) ELSE 0 END),0),2) core_rental_revenue,
