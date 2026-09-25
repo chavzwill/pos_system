@@ -11754,9 +11754,11 @@ const App = {
         this.api('GET','/supplier-recoverables'),
         this.api('GET','/supplier-recoverables/summary'),
         this.api('GET','/suppliers'),
-        this.api('GET','/supplier-recovery-attention')
+        this.api('GET','/supplier-recovery-attention'),
+        this.api('GET','/supplier-recovery-cases')
       ]);
-      const claims=results[0]||[],summary=results[1]||{},suppliers=results[2]||[],recoveryAttention=results[3]||{summary:{},items:[]};
+      const claims=results[0]||[],summary=results[1]||{},suppliers=results[2]||[],recoveryAttention=results[3]||{summary:{},items:[]},recoveryCases=results[4]||[];
+      const recoveryCaseByClaim=new Map(recoveryCases.map(x=>[Number(x.claim_id),x]));
       this._recoverableSuppliers=suppliers;
       const tabButton=(key,label)=>'<button class="btn btn-sm '+(key==='recoverables'?'btn-primary':'btn-outline')+'" onclick="App.renderPurchasing(\''+key+'\')">'+label+'</button>';
       const statusClass={identified:'badge-warning',confirmed:'badge-info',partially_recovered:'badge-purple',recovered:'badge-success',disputed:'badge-danger',cancelled:'badge-muted'};
@@ -11775,7 +11777,13 @@ const App = {
       const attnRows=(recoveryAttention.items||[]).map(a=>{
         const badge=a.severity==='critical'?'badge-danger':a.severity==='high'?'badge-warning':a.severity==='medium'?'badge-info':'badge-muted';
         const ref=a.claim_number||a.source_reference||('Claim '+(a.claim_id||''));
-        return '<tr><td><span class="badge-pill '+badge+'">'+this.escapeHtml(String(a.severity||'low'))+'</span></td><td>'+this.escapeHtml(a.supplier_name||'')+'</td><td>'+this.escapeHtml(String(a.type||'').replaceAll('_',' '))+'</td><td>'+this.escapeHtml(ref)+'</td><td class="fw-600">'+this.fmt(a.amount_at_risk||0)+'</td><td>'+this.escapeHtml(a.age_days===null?'—':String(a.age_days)+'d')+'</td><td>'+this.escapeHtml(a.reason||'')+'</td><td>'+this.escapeHtml(a.next_action||'')+'</td></tr>';
+        const recoveryCase=a.claim_id?recoveryCaseByClaim.get(Number(a.claim_id)):null;
+        let action='';
+        if(a.claim_id) action=recoveryCase
+          ?'<button class="btn btn-sm btn-outline" onclick="App._manageSupplierRecoveryCase('+recoveryCase.id+')">Manage case</button>'
+          :'<button class="btn btn-sm btn-primary" onclick="App._openSupplierRecoveryCase('+a.claim_id+',\''+this.escapeHtml(String(a.severity||'medium'))+'\')">Open case</button>';
+        else if(a.credit_note_id) action='<button class="btn btn-sm btn-outline" onclick="App.renderSupplierCreditNotes()">Open credit notes</button>';
+        return '<tr><td><span class="badge-pill '+badge+'">'+this.escapeHtml(String(a.severity||'low'))+'</span></td><td>'+this.escapeHtml(a.supplier_name||'')+'</td><td>'+this.escapeHtml(String(a.type||'').replaceAll('_',' '))+'</td><td>'+this.escapeHtml(ref)+'</td><td class="fw-600">'+this.fmt(a.amount_at_risk||0)+'</td><td>'+this.escapeHtml(a.age_days===null?'—':String(a.age_days)+'d')+'</td><td>'+this.escapeHtml(a.reason||'')+'</td><td>'+this.escapeHtml(a.next_action||'')+'<div style="margin-top:6px">'+action+'</div></td></tr>';
       }).join('');
       c.innerHTML='<div class="section-header"><div><h2>Supplier Recoverables</h2><p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Track money suppliers owe us from shortages, returns, credit notes, overcharges, rebates and reimbursements.</p></div><button class="btn btn-primary" onclick="App.showSupplierRecoverableForm()">+ New Claim</button></div>'+
         '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+tabButton('supplier-returns','Supplier Returns')+tabButton('supplier-credit-notes','Credit Notes')+'</div>'+
@@ -11828,6 +11836,74 @@ const App = {
     const reference=window.prompt('Recovery reference / document number')||'';
     if(!reference)return;
     try{await this.api('POST','/supplier-recoverables/'+id+'/settlements',{amount,settlement_type,reference,supplier_invoice_id});this.alert(settlement_type==='ap_offset'?'Supplier credit applied to Accounts Payable':'Supplier recovery recorded');this.renderSupplierRecoverables();}catch(e){this.alert(e.message||'Unable to record recovery','error');}
+  },
+
+  async _openSupplierRecoveryCase(claimId,priority='medium') {
+    const note=window.prompt('Recovery case opening note (optional)')||'';
+    const next_follow_up_at=window.prompt('Next follow-up date/time (optional, YYYY-MM-DD or ISO)')||null;
+    try{
+      await this.api('POST','/supplier-recovery-cases/from-claim/'+claimId,{
+        priority:['low','medium','high','critical'].includes(priority)?priority:'medium',
+        owner_employee_id:this.currentUser?.id||null,
+        next_follow_up_at,
+        note
+      });
+      this.alert('Supplier recovery case opened');
+      this.renderSupplierRecoverables();
+    }catch(e){this.alert(e.message||'Unable to open supplier recovery case','error');}
+  },
+
+  async _manageSupplierRecoveryCase(id) {
+    try{
+      const c=await this.api('GET','/supplier-recovery-cases/'+id);
+      const outstanding=Number(c.outstanding_amount||0);
+      const choice=window.prompt(
+        'Recovery case '+c.id+' — '+(c.supplier_name||'Supplier')+' — '+(c.claim_number||'')+
+        '\nStatus: '+String(c.status||'open').replaceAll('_',' ')+
+        '\nOwner: '+(c.owner_name||'Unassigned')+
+        '\nOutstanding: '+this.fmt(outstanding)+
+        '\n\nChoose action: follow_up, promised, disputed, escalated, reassign, close'
+      );
+      if(!choice)return;
+      const action=choice.trim().toLowerCase();
+      if(action==='follow_up'){
+        const note=window.prompt('Follow-up note');if(!note)return;
+        const next_follow_up_at=window.prompt('Next follow-up date/time (optional)')||null;
+        await this.api('POST','/supplier-recovery-cases/'+id+'/follow-ups',{note,next_follow_up_at});
+        this.alert('Supplier follow-up recorded');
+      }else if(action==='promised'){
+        const promised_amount=Number(window.prompt('Amount supplier promised',String(outstanding)));
+        if(!Number.isFinite(promised_amount)||promised_amount<=0)return;
+        const promised_settlement_date=window.prompt('Promised settlement date (YYYY-MM-DD)');
+        if(!promised_settlement_date)return;
+        const note=window.prompt('Promise details / contact / reference')||'Supplier settlement promise recorded';
+        await this.api('PATCH','/supplier-recovery-cases/'+id,{status:'promised',promised_amount,promised_settlement_date,note,next_follow_up_at:promised_settlement_date});
+        this.alert('Supplier promise recorded');
+      }else if(action==='disputed'){
+        const dispute_reason=window.prompt('Why is the supplier disputing this claim?');if(!dispute_reason)return;
+        const note=window.prompt('Dispute follow-up / evidence reference')||dispute_reason;
+        await this.api('PATCH','/supplier-recovery-cases/'+id,{status:'disputed',dispute_reason,note});
+        this.alert('Supplier dispute recorded');
+      }else if(action==='escalated'){
+        const escalation_level=Number(window.prompt('Escalation level 1–5','1'));
+        if(!Number.isInteger(escalation_level)||escalation_level<1||escalation_level>5)return;
+        const note=window.prompt('Escalation reason / next escalation action');if(!note)return;
+        await this.api('PATCH','/supplier-recovery-cases/'+id,{status:'escalated',escalation_level,priority:escalation_level>=4?'critical':'high',note});
+        this.alert('Supplier recovery case escalated');
+      }else if(action==='reassign'){
+        const owner_employee_id=Number(window.prompt('New active employee ID'));if(!owner_employee_id)return;
+        const note=window.prompt('Reassignment note')||'Recovery case reassigned';
+        await this.api('PATCH','/supplier-recovery-cases/'+id,{owner_employee_id,note});
+        this.alert('Recovery case reassigned');
+      }else if(action==='close'){
+        const note=window.prompt('Closure note')||'Recovery case closed after financial resolution';
+        await this.api('PATCH','/supplier-recovery-cases/'+id,{status:'closed',note});
+        this.alert('Recovery case closed');
+      }else{
+        return this.alert('Choose follow_up, promised, disputed, escalated, reassign, or close','warning');
+      }
+      this.renderSupplierRecoverables();
+    }catch(e){this.alert(e.message||'Unable to manage supplier recovery case','error');}
   },
 
   async _loadSavingsRealization() {

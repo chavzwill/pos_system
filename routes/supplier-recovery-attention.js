@@ -5,6 +5,7 @@ const {db}=require('../database');
 const {requireAnyPermission}=require('../lib/permissions');
 const {ensureSupplierRecoverablesSchema,money}=require('../lib/supplier-recoverables');
 const creditNotes=require('./supplier-credit-notes');
+const recoveryCases=require('./supplier-recovery-cases');
 
 function daysSince(value){
   if(!value)return null;
@@ -27,6 +28,7 @@ router.use(requireAnyPermission('purchasing','reports_financial','accounts'));
 router.use(async(req,res,next)=>{try{
   await ensureSupplierRecoverablesSchema();
   if(creditNotes.ensureSchema)await creditNotes.ensureSchema();
+  if(recoveryCases.ensureSchema)await recoveryCases.ensureSchema();
   next();
 }catch(e){res.status(500).json({error:'Supplier recovery attention initialization failed'});}});
 
@@ -145,6 +147,50 @@ router.get('/',async(req,res)=>{
           amount_at_risk:unsettled,age_days:matchedAge,
           reason:'Supplier credit note is matched to claims but has not been applied to Accounts Payable.',
           next_action:'Apply matched credit to an eligible open supplier invoice.'
+        });
+      }
+    }
+
+    const {rows:cases}=await db.execute({sql:`SELECT rc.*,c.claim_number,c.claim_type,c.confirmed_amount,c.recovered_amount,c.supplier_id,
+      s.name supplier_name
+      FROM supplier_recovery_cases rc
+      JOIN supplier_recoverable_claims c ON c.id=rc.claim_id
+      JOIN suppliers s ON s.id=c.supplier_id
+      WHERE rc.status!='closed'
+      ORDER BY rc.id DESC`,args:[]}).catch(()=>({rows:[]}));
+    for(const c of cases){
+      const outstanding=money(Math.max(0,Number(c.confirmed_amount||0)-Number(c.recovered_amount||0)));
+      if(c.next_follow_up_at&&new Date(c.next_follow_up_at).getTime()<Date.now()){
+        const late=daysSince(c.next_follow_up_at);
+        const rank=late>=14?90:late>=7?70:45;
+        items.push({
+          key:itemKey('missed_follow_up',c.id),type:'missed_follow_up',severity:severity(rank),rank,
+          supplier_id:c.supplier_id,supplier_name:c.supplier_name,claim_id:c.claim_id,claim_number:c.claim_number,
+          recovery_case_id:c.id,amount_at_risk:outstanding,age_days:late,
+          reason:'Recovery case follow-up date has passed without the case being resolved.',
+          next_action:'Contact the supplier and record the follow-up outcome or update the next follow-up date.'
+        });
+      }
+      if(c.status==='promised'&&c.promised_settlement_date&&new Date(c.promised_settlement_date).getTime()<Date.now()){
+        const late=daysSince(c.promised_settlement_date);
+        const promised=money(c.promised_amount||0);
+        const rank=late>=14?100:late>=7?85:65;
+        items.push({
+          key:itemKey('broken_supplier_promise',c.id),type:'broken_supplier_promise',severity:severity(rank),rank,
+          supplier_id:c.supplier_id,supplier_name:c.supplier_name,claim_id:c.claim_id,claim_number:c.claim_number,
+          recovery_case_id:c.id,amount_at_risk:money(Math.min(outstanding,promised||outstanding)),age_days:late,
+          reason:'Supplier-promised settlement date has passed and the linked recoverable is still outstanding.',
+          next_action:'Escalate the supplier commitment and obtain a new evidenced settlement date.'
+        });
+      }
+      if(c.status==='disputed'){
+        const rank=80;
+        items.push({
+          key:itemKey('supplier_dispute',c.id),type:'supplier_dispute',severity:severity(rank),rank,
+          supplier_id:c.supplier_id,supplier_name:c.supplier_name,claim_id:c.claim_id,claim_number:c.claim_number,
+          recovery_case_id:c.id,amount_at_risk:outstanding,age_days:daysSince(c.updated_at),
+          reason:c.dispute_reason||'Supplier has disputed the recoverable claim.',
+          next_action:'Resolve the dispute using source documents, receipt/return evidence, and supplier correspondence.'
         });
       }
     }
