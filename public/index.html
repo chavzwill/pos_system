@@ -11430,6 +11430,21 @@ const App = {
           <div class="stat-card"><div class="stat-label">Valuation gaps</div><div class="stat-value">${incompleteLines}</div><div class="stat-meta">Actual lines needing cost evidence</div></div>
         </div>
         <div class="card" style="margin-bottom:16px">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div><div class="card-title">Cost intelligence</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">30-day cost trend by business object. Profit is only shown where real revenue attribution exists.</div></div>
+            <select id="cost-econ-type" onchange="App._loadCostEconomics(this.value)" style="max-width:220px">
+              <option value="vehicle">Vehicles</option>
+              <option value="building">Buildings</option>
+              <option value="department">Departments</option>
+              <option value="equipment">Equipment</option>
+              <option value="branch">Branches</option>
+              <option value="project">Projects</option>
+              <option value="general_overhead">General overhead</option>
+            </select>
+          </div>
+          <div id="cost-econ-body" style="padding:0 16px 16px"><div class="empty-state">Loading cost intelligence…</div></div>
+        </div>
+        <div class="card" style="margin-bottom:16px">
           <div class="card-header"><div class="card-title">Highest-cost targets</div></div>
           <div class="table-wrap"><table>
             <thead><tr><th>Target</th><th>Type</th><th>Requested</th><th>Committed</th><th>Actual</th><th>Evidence gaps</th></tr></thead>
@@ -11461,6 +11476,7 @@ const App = {
             </table>
           </div>
         </div>`;
+      setTimeout(()=>this._loadCostEconomics('vehicle'),0);
     } else {
       // Purchase Requests tab
       const filter = this._prFilter || 'all';
@@ -11522,6 +11538,40 @@ const App = {
             </table>
           </div>
         </div>`;
+    }
+  },
+
+  async _loadCostEconomics(type='vehicle') {
+    const body=document.getElementById('cost-econ-body');
+    if(!body)return;
+    body.innerHTML='<div class="empty-state">Loading cost intelligence…</div>';
+    try{
+      const data=await this.api('GET',`/cost-allocations/economics?target_type=${encodeURIComponent(type)}`);
+      const rows=data.items||[];
+      const method=data.methodology||{};
+      body.innerHTML=`
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${method.statement||''}</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Target</th><th>30d Cost</th><th>Prior 30d</th><th>Trend</th><th>Actual Cost</th><th>Context</th><th>Evidence</th></tr></thead>
+          <tbody>${rows.length?rows.map(x=>{
+            const trend=x.cost_change_pct==null?'new activity':(Number(x.cost_change_pct)>=0?'+':'')+Number(x.cost_change_pct).toFixed(1)+'%';
+            const ctx=x.context?.vehicle?(`${x.context.vehicle.vehicle_number||''} · ${Number(x.context.dispatch?.completed_jobs||0)} completed jobs`):
+              x.context?.branch?(x.context.branch.name||x.context.branch.branch_code||'Branch'):
+              x.context?.object?(x.context.object.name||x.target_label||'Cost object'):'—';
+            const badge=x.cost_state==='cost_rising'?'badge-warning':x.cost_state==='cost_improving'?'badge-success':x.cost_state==='evidence_gap'?'badge-danger':'';
+            return `<tr>
+              <td class="fw-600">${x.target_label||x.target_id||'General overhead'}</td>
+              <td>${this.fmt(x.trailing_30d_cost||0)}</td>
+              <td>${this.fmt(x.prior_30d_cost||0)}</td>
+              <td><span class="badge-pill ${badge}">${String(x.cost_state||'stable').replaceAll('_',' ')} · ${trend}</span></td>
+              <td class="fw-600">${this.fmt(x.actual_cost||0)}</td>
+              <td>${ctx}</td>
+              <td>${Number(x.incomplete_actual_lines||0)?`${x.incomplete_actual_lines} gap(s)`:'Complete'}</td>
+            </tr>`;
+          }).join(''):'<tr><td colspan="7" class="empty-state">No allocated costs for this target type yet</td></tr>'}</tbody>
+        </table></div>`;
+    }catch(e){
+      body.innerHTML=`<div class="empty-state">Unable to load cost intelligence: ${this.escapeHtml(e.message||'Unknown error')}</div>`;
     }
   },
 

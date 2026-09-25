@@ -76,6 +76,57 @@ router.post('/objects',async(req,res)=>{
   }catch(e){res.status(400).json({error:e.message});}
 });
 
+router.get('/economics',async(req,res)=>{
+  try{
+    const type=String(req.query.target_type||'').trim();
+    if(!type)return res.status(400).json({error:'target_type is required'});
+    const {rows}=await db.execute({sql:`SELECT
+      ca.target_type,ca.target_id,MAX(ca.target_label) target_label,
+      ROUND(SUM(CASE WHEN ca.source_type='purchase_request' THEN ca.allocation_amount ELSE 0 END),2) requested_cost,
+      ROUND(SUM(CASE WHEN ca.source_type='purchase_order' THEN ca.allocation_amount ELSE 0 END),2) committed_cost,
+      ROUND(SUM(CASE WHEN ca.source_type IN ('purchase_receipt','internal_consumption') THEN ca.allocation_amount ELSE 0 END),2) actual_cost,
+      ROUND(SUM(CASE WHEN ca.source_type IN ('purchase_receipt','internal_consumption') AND datetime(ca.created_at)>=datetime('now','-30 days') THEN ca.allocation_amount ELSE 0 END),2) trailing_30d_cost,
+      ROUND(SUM(CASE WHEN ca.source_type IN ('purchase_receipt','internal_consumption') AND datetime(ca.created_at)>=datetime('now','-60 days') AND datetime(ca.created_at)<datetime('now','-30 days') THEN ca.allocation_amount ELSE 0 END),2) prior_30d_cost,
+      COUNT(CASE WHEN ca.source_type IN ('purchase_receipt','internal_consumption') AND ca.valuation_status NOT IN ('actual','fully_valued') THEN 1 END) incomplete_actual_lines,
+      COUNT(CASE WHEN ca.target_type='general_overhead' THEN 1 END) overhead_lines,
+      MAX(ca.created_at) last_activity
+      FROM cost_allocations ca
+      WHERE ca.target_type=?
+      GROUP BY ca.target_type,ca.target_id
+      ORDER BY actual_cost DESC,requested_cost DESC`,args:[type]});
+    const out=[];
+    for(const row of rows){
+      let context={};
+      if(type==='vehicle'&&row.target_id){
+        const {rows:[v]}=await db.execute({sql:'SELECT id,vehicle_number,registration_number,description,status,current_branch_id FROM dispatch_vehicles WHERE id=?',args:[row.target_id]});
+        const {rows:[jobs]}=await db.execute({sql:`SELECT
+          COUNT(*) jobs,
+          COUNT(CASE WHEN dj.status='completed' THEN 1 END) completed_jobs,
+          COUNT(CASE WHEN dj.status IN ('failed','delayed') THEN 1 END) exception_jobs
+          FROM dispatch_jobs dj
+          JOIN dispatch_executions de ON de.dispatch_job_id=dj.id
+          WHERE de.vehicle_id=?`,args:[row.target_id]});
+        context={vehicle:v||null,dispatch:jobs||{jobs:0,completed_jobs:0,exception_jobs:0}};
+      }else if(type==='branch'&&row.target_id){
+        const {rows:[b]}=await db.execute({sql:'SELECT id,branch_code,name,active FROM branches WHERE id=?',args:[row.target_id]});
+        context={branch:b||null};
+      }else if(['building','equipment','department','project','general_overhead'].includes(type)&&row.target_id){
+        const {rows:[o]}=await db.execute({sql:'SELECT * FROM cost_objects WHERE id=? AND object_type=?',args:[row.target_id,type]});
+        context={object:o||null};
+      }
+      const trailing=Number(row.trailing_30d_cost||0),prior=Number(row.prior_30d_cost||0);
+      const changePct=prior>0?Number((((trailing-prior)/prior)*100).toFixed(2)):(trailing>0?null:0);
+      const state=Number(row.incomplete_actual_lines||0)>0?'evidence_gap':(changePct!=null&&changePct>=25?'cost_rising':changePct!=null&&changePct<=-15?'cost_improving':'stable');
+      out.push({...row,requested_cost:Number(row.requested_cost||0),committed_cost:Number(row.committed_cost||0),actual_cost:Number(row.actual_cost||0),trailing_30d_cost:trailing,prior_30d_cost:prior,cost_change_pct:changePct,cost_state:state,context});
+    }
+    res.json({target_type:type,items:out,methodology:{
+      profitability_applicable:type==='rental_asset',
+      statement:type==='rental_asset'?'Use rental economics for revenue-linked profitability.':'This view measures cost efficiency and trend only; no revenue or profit is invented.',
+      trailing_window_days:30
+    }});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 router.get('/summary',async(req,res)=>{
   try{
     const {target_type}=req.query;
