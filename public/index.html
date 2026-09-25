@@ -11400,7 +11400,15 @@ const App = {
       this._poBranches = branches;
 
     } else if (tab === 'consumables') {
-      const consumptions = await this.api('GET', '/cost-allocations/consumptions?limit=200');
+      const [consumptions,costSummary,reconciliations] = await Promise.all([
+        this.api('GET', '/cost-allocations/consumptions?limit=200'),
+        this.api('GET', '/cost-allocations/summary'),
+        this.api('GET', '/cost-allocations/reconciliations?limit=100')
+      ]);
+      const totalActual=costSummary.reduce((s,x)=>s+Number(x.received_actual_cost||0)+Number(x.consumed_actual_cost||0),0);
+      const totalRequested=costSummary.reduce((s,x)=>s+Number(x.requested_cost||0),0);
+      const incompleteLines=costSummary.reduce((s,x)=>s+Number(x.incomplete_actual_lines||0),0);
+      const invoiceVariance=reconciliations.reduce((s,x)=>s+Math.abs(Number(x.variance||0)),0);
       if (this.section !== 'purchasing' && this.section !== 'purchase-requests') return;
       c.innerHTML = `
         <div class="section-header">
@@ -11414,6 +11422,26 @@ const App = {
           ${tabBtn('orders','Purchase Orders')}
           ${this.can('purchase_requests') ? tabBtn('requests','Purchase Requests') : ''}
           ${tabBtn('consumables','Consumables')}
+        </div>
+        <div class="stats-grid" style="margin-bottom:16px">
+          <div class="stat-card"><div class="stat-label">Requested allocation</div><div class="stat-value">${this.fmt(totalRequested)}</div><div class="stat-meta">Planned internal-use cost</div></div>
+          <div class="stat-card"><div class="stat-label">Actual allocated cost</div><div class="stat-value">${this.fmt(totalActual)}</div><div class="stat-meta">Received direct-use + issued inventory</div></div>
+          <div class="stat-card"><div class="stat-label">Invoice variance</div><div class="stat-value">${this.fmt(invoiceVariance)}</div><div class="stat-meta">${reconciliations.filter(x=>x.status==='variance').length} invoice reconciliation issue(s)</div></div>
+          <div class="stat-card"><div class="stat-label">Valuation gaps</div><div class="stat-value">${incompleteLines}</div><div class="stat-meta">Actual lines needing cost evidence</div></div>
+        </div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header"><div class="card-title">Highest-cost targets</div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Target</th><th>Type</th><th>Requested</th><th>Committed</th><th>Actual</th><th>Evidence gaps</th></tr></thead>
+            <tbody>${costSummary.slice(0,10).map(x=>`<tr>
+              <td class="fw-600">${x.target_label||x.target_id||'General overhead'}</td>
+              <td>${String(x.target_type||'').replaceAll('_',' ')}</td>
+              <td>${this.fmt(x.requested_cost||0)}</td>
+              <td>${this.fmt(x.committed_cost||0)}</td>
+              <td class="fw-600">${this.fmt(Number(x.received_actual_cost||0)+Number(x.consumed_actual_cost||0))}</td>
+              <td>${Number(x.incomplete_actual_lines||0)?`<span class="badge-pill badge-warning">${x.incomplete_actual_lines}</span>`:'—'}</td>
+            </tr>`).join('')||'<tr><td colspan="6" class="empty-state">No allocated costs yet</td></tr>'}</tbody>
+          </table></div>
         </div>
         <div class="card">
           <div class="table-wrap">

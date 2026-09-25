@@ -76,6 +76,51 @@ router.post('/objects',async(req,res)=>{
   }catch(e){res.status(400).json({error:e.message});}
 });
 
+router.get('/summary',async(req,res)=>{
+  try{
+    const {target_type}=req.query;
+    let sql=`SELECT target_type,target_id,MAX(target_label) target_label,
+      ROUND(SUM(CASE WHEN source_type='purchase_request' THEN allocation_amount ELSE 0 END),2) requested_cost,
+      ROUND(SUM(CASE WHEN source_type='purchase_order' THEN allocation_amount ELSE 0 END),2) committed_cost,
+      ROUND(SUM(CASE WHEN source_type='purchase_receipt' THEN allocation_amount ELSE 0 END),2) received_actual_cost,
+      ROUND(SUM(CASE WHEN source_type='internal_consumption' THEN allocation_amount ELSE 0 END),2) consumed_actual_cost,
+      COUNT(CASE WHEN source_type IN ('purchase_receipt','internal_consumption') AND valuation_status NOT IN ('actual','fully_valued') THEN 1 END) incomplete_actual_lines,
+      COUNT(*) allocation_lines,
+      MAX(created_at) last_activity
+      FROM cost_allocations WHERE 1=1`;
+    const args=[];
+    if(target_type){sql+=' AND target_type=?';args.push(target_type);}
+    sql+=' GROUP BY target_type,target_id ORDER BY (received_actual_cost+consumed_actual_cost) DESC,requested_cost DESC LIMIT 500';
+    const {rows}=await db.execute({sql,args});
+    res.json(rows);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.get('/reconciliations',async(req,res)=>{
+  try{
+    const {status,limit=200}=req.query;
+    let sql=`SELECT r.*,si.invoice_number,si.invoice_date,po.po_number,s.name supplier_name
+      FROM cost_allocation_invoice_reconciliations r
+      JOIN supplier_invoices si ON si.id=r.supplier_invoice_id
+      JOIN purchase_orders po ON po.id=r.purchase_order_id
+      LEFT JOIN suppliers s ON s.id=si.supplier_id WHERE 1=1`;
+    const args=[];
+    if(status){sql+=' AND r.status=?';args.push(status);}
+    sql+=' ORDER BY r.updated_at DESC,r.id DESC LIMIT ?';args.push(Math.min(500,Number(limit)||200));
+    const {rows}=await db.execute({sql,args});
+    res.json(rows);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.get('/target/:type/:id/history',async(req,res)=>{
+  try{
+    const {rows}=await db.execute({sql:`SELECT * FROM cost_allocations
+      WHERE target_type=? AND target_id=? ORDER BY created_at DESC,id DESC LIMIT 500`,
+      args:[req.params.type,String(req.params.id)]});
+    res.json(rows);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 router.get('/consumptions',async(req,res)=>{
   try{
     const {branch_id,limit=100}=req.query;
