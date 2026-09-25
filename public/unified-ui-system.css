@@ -591,6 +591,21 @@ html,body{background:#FBF5E9!important}
  .tt-guide-exact-highlight,[data-guide-hardened-target="true"],.tt-guide-fallback-highlight,[data-guide-fallback-target="true"]{animation:none!important}
 }
 
+/* Keep identity decorations within the canonical shell layout. */
+.shell-brand{min-width:0;gap:10px!important;background:#FBF5E9!important}
+.shell-brand::before,.shell-brand::after{content:none!important;display:none!important}
+.shell-brand>div:not(.shell-mark){min-width:0}
+.shell-brand strong{display:block;font-size:17px!important;color:#111714!important}
+.shell-brand span{font-size:11px!important;letter-spacing:0!important;white-space:normal}
+.shell-command-button{min-width:0}
+.shell-command-button .shell-search-icon::after{content:none!important}
+.shell-guide-top{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;border:1px solid #DCE5DF;border-radius:12px;background:#fff;color:#075C31;font:inherit;font-size:13px;font-weight:700;white-space:nowrap}
+@media(max-width:640px){
+ .shell-topbar{gap:8px!important}
+ .shell-command-button .shell-search-icon{font-size:21px!important}
+ .shell-command-button .shell-search-label{font-size:0!important}
+ .shell-command-button .shell-search-label::after{content:'Search'!important;font-size:13px!important}
+}
 @media(prefers-reduced-motion:reduce){
   *,*:before,*:after{scroll-behavior:auto!important;animation:none!important;transition:none!important}
 }
