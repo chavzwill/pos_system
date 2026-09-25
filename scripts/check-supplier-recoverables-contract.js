@@ -5,10 +5,15 @@ const read=p=>fs.readFileSync(path.join(root,p),'utf8');
 const lib=read('lib/supplier-recoverables.js');
 const route=read('routes/supplier-recoverables.js');
 const po=read('routes/purchase-order-hardening.js');
+const ledger=read('routes/supplier-ledger.js');
+const sync=read('routes/accounting-source-sync.js');
+const posting=read('lib/accounting-posting.js');
 const ui=read('public/index.html');
 const server=read('server.js');
 new vm.Script(lib,{filename:'supplier-recoverables.js'});
 new vm.Script(route,{filename:'supplier-recoverables-route.js'});
+new vm.Script(ledger,{filename:'supplier-ledger.js'});
+new vm.Script(sync,{filename:'accounting-source-sync.js'});
 const checks=[
  ['supplier recoverables route is mounted',server.includes("app.use('/api/supplier-recoverables'")],
  ['recoverables require purchasing or finance authority',route.includes("requireAnyPermission('purchasing','reports_financial','accounts')")],
@@ -33,7 +38,22 @@ const checks=[
  ['UI exposes Supplier Recoverables in purchasing navigation',ui.includes("tabBtn('recoverables','Supplier Recoverables')")&&ui.includes('renderSupplierRecoverables')],
  ['UI explicitly separates potential exposure from documented amount owed',ui.includes('Potential claim, not yet confirmed')&&ui.includes('Documented amount owed to us')],
  ['UI exposes aging and claim lifecycle amounts',ui.includes('Confirmed Recoverables Aging')&&ui.includes('Identified')&&ui.includes('Confirmed')&&ui.includes('Recovered')&&ui.includes('Outstanding')],
- ['UI can confirm supplier obligation and record recovery',ui.includes('_confirmSupplierRecoverable')&&ui.includes('_recoverSupplierRecoverable')]
+ ['UI can confirm supplier obligation and record recovery',ui.includes('_confirmSupplierRecoverable')&&ui.includes('_recoverSupplierRecoverable')],
+ ['chart of accounts includes Supplier Recoverables asset',posting.includes("['1150','Supplier Recoverables','asset','debit']")],
+ ['accounting basis is limited to evidenced shortage or invoice overcharge claims',route.includes("claim.claim_type==='shorted_goods'&&claim.source_type==='purchase_order'")&&route.includes("claim.claim_type==='overcharge'&&claim.source_type==='supplier_invoice'")],
+ ['confirmed amount cannot fall below recovered amount',route.includes('Confirmed amount cannot be below amount already recovered')],
+ ['AP offset requires recognized accounting basis and exact invoice',route.includes('AP offset requires a recognized supplier recoverable accounting basis')&&route.includes('supplier_invoice_id is required for AP offset')],
+ ['AP offset invoice must belong to same supplier',route.includes('AP offset invoice must belong to the same supplier')],
+ ['AP offset cannot exceed invoice balance',route.includes('AP offset exceeds supplier invoice balance')],
+ ['AP allocation is durable and unique per settlement',lib.includes('supplier_recoverable_ap_allocations')&&lib.includes('settlement_id INTEGER NOT NULL UNIQUE')],
+ ['supplier AP ledger includes recoverable offsets in invoice balances',ledger.includes('supplier_recoverable_ap_allocations')&&ledger.includes('UNION ALL SELECT supplier_invoice_id,amount FROM supplier_recoverable_ap_allocations')],
+ ['supplier payment safety check also includes prior recoverable offsets',ledger.includes('UNION ALL SELECT amount FROM supplier_recoverable_ap_allocations WHERE supplier_invoice_id=?')],
+ ['recoverable recognition posts Dr Supplier Recoverables and Cr purchasing clearing',sync.includes("code:'1150',debit:amount")&&sync.includes("code:'1250',debit:0,credit:amount")],
+ ['AP offset journal posts Dr AP and Cr Supplier Recoverables',sync.includes("code:'2000',debit:amount")&&sync.includes("code:'1150',debit:0,credit:amount")&&sync.includes("sourceType:'supplier_recoverable_settlement'")],
+ ['cash and bank refunds clear Supplier Recoverables without AP mutation',sync.includes("x.settlement_type==='cash_refund'?'1000':'1010'")],
+ ['accounting sync posts supplier recoverables after invoices and payments',sync.indexOf('await syncSupplierRecoverables(req,stats);')>sync.indexOf('await syncSupplierPayments(req,stats);')],
+ ['UI AP offset loads open invoices for same supplier',ui.includes("/supplier-ledger/invoices?supplier_id=")&&ui.includes('Select a valid open supplier invoice')],
+ ['UI sends selected supplier invoice with AP offset',ui.includes("supplier_invoice_id});this.alert(settlement_type==='ap_offset'")]
 ];
 let failed=0;
 for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Supplier recoverables: ${name}`);if(!ok)failed++;}

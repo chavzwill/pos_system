@@ -90,13 +90,30 @@ router.post('/:id/confirm',async(req,res)=>{
     if(['recovered','cancelled'].includes(claim.status))return res.status(409).json({error:'Closed recoverable claim cannot be confirmed'});
     const amount=money(req.body?.confirmed_amount??claim.identified_amount);
     if(!Number.isFinite(amount)||amount<=0)return res.status(400).json({error:'Confirmed amount must be greater than zero'});
+    if(amount+0.01<Number(claim.recovered_amount||0))return res.status(409).json({error:'Confirmed amount cannot be below amount already recovered'});
     const doc=String(req.body?.supplier_document_number||claim.supplier_document_number||'').trim();
     const note=String(req.body?.confirmation_note||'').trim();
     if(!doc&&!note)return res.status(400).json({error:'Supplier document number or confirmation note is required'});
-    await db.execute({sql:`UPDATE supplier_recoverable_claims SET status=CASE WHEN recovered_amount>0 THEN 'partially_recovered' ELSE 'confirmed' END,
-      confirmed_amount=?,due_date=COALESCE(?,due_date),supplier_document_number=COALESCE(?,supplier_document_number),
-      notes=CASE WHEN ?!='' THEN COALESCE(notes||char(10),'')||? ELSE notes END,confirmed_at=COALESCE(confirmed_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP
-      WHERE id=?`,args:[amount,req.body?.due_date||null,doc||null,note,note,req.params.id]});
+    const tx=await db.transaction('write');let committed=false;
+    try{
+      await tx.execute({sql:`UPDATE supplier_recoverable_claims SET status=CASE WHEN recovered_amount>0 THEN 'partially_recovered' ELSE 'confirmed' END,
+        confirmed_amount=?,due_date=COALESCE(?,due_date),supplier_document_number=COALESCE(?,supplier_document_number),
+        notes=CASE WHEN ?!='' THEN COALESCE(notes||char(10),'')||? ELSE notes END,confirmed_at=COALESCE(confirmed_at,CURRENT_TIMESTAMP),updated_at=CURRENT_TIMESTAMP
+        WHERE id=?`,args:[amount,req.body?.due_date||null,doc||null,note,note,req.params.id]});
+      const autoBasis=(claim.claim_type==='shorted_goods'&&claim.source_type==='purchase_order')||(claim.claim_type==='overcharge'&&claim.source_type==='supplier_invoice');
+      if(autoBasis){
+        let sourceInvoiceId=null;
+        if(claim.claim_type==='overcharge'){
+          sourceInvoiceId=Number(claim.source_id);
+          const {rows:[inv]}=await tx.execute({sql:"SELECT id,supplier_id FROM supplier_invoices WHERE id=? AND status!='void'",args:[sourceInvoiceId]});
+          if(!inv||Number(inv.supplier_id)!==Number(claim.supplier_id))throw new Error('Overcharge accounting basis requires the exact supplier invoice');
+        }
+        await tx.execute({sql:`INSERT INTO supplier_recoverable_accounting_basis(claim_id,basis_type,recognized_amount,source_invoice_id,evidence_json)
+          VALUES(?,?,?,?,?) ON CONFLICT(claim_id) DO UPDATE SET recognized_amount=excluded.recognized_amount,source_invoice_id=excluded.source_invoice_id,evidence_json=excluded.evidence_json`,
+          args:[claim.id,'purchasing_receiving_clearing',amount,sourceInvoiceId,JSON.stringify({supplierDocumentNumber:doc||null,confirmationNote:note||null})]});
+      }
+      await tx.commit();committed=true;
+    }catch(e){if(!committed)try{await tx.rollback();}catch{}throw e;}
     const {rows:[row]}=await db.execute({sql:'SELECT * FROM supplier_recoverable_claims WHERE id=?',args:[req.params.id]});
     res.json(row);
   }catch(e){res.status(400).json({error:e.message});}
@@ -116,9 +133,28 @@ router.post('/:id/settlements',async(req,res)=>{
     if(!['credit_note','cash_refund','bank_refund','ap_offset','replacement_value','other'].includes(type))throw new Error('Unsupported recovery settlement type');
     const reference=String(req.body?.reference||'').trim();
     if(!reference)throw new Error('Recovery reference is required');
-    await tx.execute({sql:`INSERT INTO supplier_recoverable_settlements(
+    const {rows:[basis]}=await tx.execute({sql:'SELECT * FROM supplier_recoverable_accounting_basis WHERE claim_id=?',args:[claim.id]});
+    if(basis&&['credit_note','replacement_value','other'].includes(type))throw new Error('Accounting-recognized recoverable must settle through AP offset or evidenced cash/bank refund');
+    let invoiceId=null;
+    if(type==='ap_offset'){
+      invoiceId=Number(req.body?.supplier_invoice_id);
+      if(!invoiceId)throw new Error('supplier_invoice_id is required for AP offset');
+      if(!basis)throw new Error('AP offset requires a recognized supplier recoverable accounting basis');
+      const {rows:[inv]}=await tx.execute({sql:"SELECT * FROM supplier_invoices WHERE id=? AND status!='void'",args:[invoiceId]});
+      if(!inv||Number(inv.supplier_id)!==Number(claim.supplier_id))throw new Error('AP offset invoice must belong to the same supplier');
+      const {rows:[paid]}=await tx.execute({sql:'SELECT COALESCE(SUM(amount),0) amount FROM supplier_payment_allocations WHERE supplier_invoice_id=?',args:[invoiceId]});
+      const {rows:[offset]}=await tx.execute({sql:'SELECT COALESCE(SUM(amount),0) amount FROM supplier_recoverable_ap_allocations WHERE supplier_invoice_id=?',args:[invoiceId]});
+      const invoiceBalance=money(Number(inv.total||0)-Number(paid?.amount||0)-Number(offset?.amount||0));
+      if(amount>invoiceBalance+0.01)throw new Error('AP offset exceeds supplier invoice balance');
+    }
+    const settlement=await tx.execute({sql:`INSERT INTO supplier_recoverable_settlements(
       claim_id,settlement_type,amount,reference,settlement_date,evidence_json,recorded_by_employee_id
     ) VALUES(?,?,?,?,?,?,?)`,args:[claim.id,type,amount,reference,req.body?.settlement_date||new Date().toISOString(),JSON.stringify(req.body?.evidence||{}),actor(req)]});
+    const settlementId=Number(settlement.lastInsertRowid);
+    if(type==='ap_offset'){
+      await tx.execute({sql:`INSERT INTO supplier_recoverable_ap_allocations(settlement_id,claim_id,supplier_invoice_id,amount)
+        VALUES(?,?,?,?)`,args:[settlementId,claim.id,invoiceId,amount]});
+    }
     const newRecovered=money(Number(claim.recovered_amount||0)+amount);
     const status=newRecovered+0.01>=Number(claim.confirmed_amount||0)?'recovered':'partially_recovered';
     await tx.execute({sql:`UPDATE supplier_recoverable_claims SET recovered_amount=?,status=?,updated_at=CURRENT_TIMESTAMP,

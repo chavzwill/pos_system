@@ -11629,10 +11629,21 @@ const App = {
   async _recoverSupplierRecoverable(id,outstanding) {
     const amount=Number(window.prompt('Recovery amount',String(outstanding||'')));
     if(!Number.isFinite(amount)||amount<=0)return;
-    const settlement_type=window.prompt('Recovery type: credit_note, cash_refund, bank_refund, ap_offset, replacement_value, other','credit_note')||'';
+    const settlement_type=window.prompt('Recovery type: credit_note, cash_refund, bank_refund, ap_offset, replacement_value, other','ap_offset')||'';
+    let supplier_invoice_id=null;
+    if(settlement_type==='ap_offset'){
+      try{
+        const claim=await this.api('GET','/supplier-recoverables/'+id);
+        const invoices=await this.api('GET','/supplier-ledger/invoices?supplier_id='+claim.supplier_id+'&status=open&limit=100');
+        if(!invoices.length)return this.alert('This supplier has no open invoice available for an AP offset','warning');
+        const choices=invoices.map(x=>x.id+' | '+x.invoice_number+' | balance '+this.fmt(x.balance_due||0)).join('\n');
+        supplier_invoice_id=Number(window.prompt('Enter the invoice ID to offset:\n'+choices));
+        if(!supplier_invoice_id||!invoices.some(x=>Number(x.id)===supplier_invoice_id))return this.alert('Select a valid open supplier invoice','warning');
+      }catch(e){return this.alert(e.message||'Unable to load supplier invoices','error');}
+    }
     const reference=window.prompt('Recovery reference / document number')||'';
     if(!reference)return;
-    try{await this.api('POST','/supplier-recoverables/'+id+'/settlements',{amount,settlement_type,reference});this.alert('Supplier recovery recorded');this.renderSupplierRecoverables();}catch(e){this.alert(e.message||'Unable to record recovery','error');}
+    try{await this.api('POST','/supplier-recoverables/'+id+'/settlements',{amount,settlement_type,reference,supplier_invoice_id});this.alert(settlement_type==='ap_offset'?'Supplier credit applied to Accounts Payable':'Supplier recovery recorded');this.renderSupplierRecoverables();}catch(e){this.alert(e.message||'Unable to record recovery','error');}
   },
 
   async _loadSavingsRealization() {

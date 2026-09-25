@@ -29,6 +29,57 @@ function paymentDebitCode(method){
 }
 async function syncSupplierInvoices(req,stats){if(!(await exists('supplier_invoices')))return;const {rows}=await db.execute({sql:`SELECT * FROM supplier_invoices WHERE status!='void' ORDER BY id`,args:[]});for(const x of rows){try{const j=await postSourceJournal({sourceType:'supplier_invoice',sourceId:x.id,sourceReference:x.invoice_number,entryDate:x.invoice_date,description:`Supplier invoice ${x.invoice_number}`,branchId:x.branch_id,actorId:actor(req),lines:[{code:'1250',debit:x.total,credit:0,description:'Purchasing/receiving clearing'},{code:'2000',debit:0,credit:x.total,description:'Accounts payable'}]});stats.supplier_invoices[j.existing?'existing':'posted']++;}catch(e){stats.errors.push(`supplier_invoice:${x.id}: ${e.message}`);}}}
 async function syncSupplierPayments(req,stats){if(!(await exists('supplier_payments')))return;const {rows}=await db.execute({sql:`SELECT * FROM supplier_payments ORDER BY id`,args:[]});for(const x of rows){try{const method=String(x.payment_method||'').toLowerCase();const cash=method.includes('cash');const j=await postSourceJournal({sourceType:'supplier_payment',sourceId:x.id,sourceReference:x.payment_number,entryDate:x.payment_date,description:`Supplier payment ${x.payment_number}`,branchId:x.branch_id,actorId:actor(req),lines:[{code:'2000',debit:x.amount,credit:0,description:'Reduce accounts payable'},{code:cash?'1000':'1010',debit:0,credit:x.amount,description:cash?'Cash paid':'Bank payment'}]});stats.supplier_payments[j.existing?'existing':'posted']++;}catch(e){stats.errors.push(`supplier_payment:${x.id}: ${e.message}`);}}}
+async function syncSupplierRecoverables(req,stats){
+  if(!(await exists('supplier_recoverable_claims'))||!(await exists('supplier_recoverable_accounting_basis')))return;
+  stats.supplier_recoverable_recognition ||= {posted:0,existing:0};
+  stats.supplier_recoverable_settlements ||= {posted:0,existing:0};
+
+  const {rows:bases}=await db.execute({sql:`SELECT b.*,c.claim_number,c.branch_id,c.confirmed_at,c.supplier_id,c.claim_type
+    FROM supplier_recoverable_accounting_basis b
+    JOIN supplier_recoverable_claims c ON c.id=b.claim_id
+    WHERE c.status!='cancelled' ORDER BY b.id`,args:[]});
+  for(const x of bases){
+    try{
+      const amount=money(x.recognized_amount);
+      if(amount<=0)continue;
+      const j=await postSourceJournal({
+        sourceType:'supplier_recoverable_recognition',sourceId:x.claim_id,sourceReference:x.claim_number,
+        entryDate:String(x.confirmed_at||x.created_at||new Date().toISOString()).slice(0,10),
+        description:`Recognize supplier recoverable ${x.claim_number}`,branchId:x.branch_id,actorId:actor(req),
+        lines:[
+          {code:'1150',debit:amount,credit:0,description:'Supplier recoverable confirmed from purchasing evidence'},
+          {code:'1250',debit:0,credit:amount,description:'Clear purchasing/receiving difference'}
+        ]
+      });
+      stats.supplier_recoverable_recognition[j.existing?'existing':'posted']++;
+    }catch(e){stats.errors.push(`supplier_recoverable_recognition:${x.claim_id}: ${e.message}`);}
+  }
+
+  if(!(await exists('supplier_recoverable_settlements')))return;
+  const {rows:settlements}=await db.execute({sql:`SELECT s.*,c.claim_number,c.branch_id,b.id basis_id,
+      a.supplier_invoice_id
+    FROM supplier_recoverable_settlements s
+    JOIN supplier_recoverable_claims c ON c.id=s.claim_id
+    LEFT JOIN supplier_recoverable_accounting_basis b ON b.claim_id=c.id
+    LEFT JOIN supplier_recoverable_ap_allocations a ON a.settlement_id=s.id
+    WHERE b.id IS NOT NULL AND s.settlement_type IN ('ap_offset','cash_refund','bank_refund')
+    ORDER BY s.id`,args:[]});
+  for(const x of settlements){
+    try{
+      const amount=money(x.amount);
+      if(amount<=0)continue;
+      const lines=x.settlement_type==='ap_offset'
+        ?[{code:'2000',debit:amount,credit:0,description:`Apply supplier recoverable to invoice ${x.supplier_invoice_id}`},{code:'1150',debit:0,credit:amount,description:'Clear supplier recoverable through AP offset'}]
+        :[{code:x.settlement_type==='cash_refund'?'1000':'1010',debit:amount,credit:0,description:x.settlement_type==='cash_refund'?'Supplier cash refund received':'Supplier bank refund received'},{code:'1150',debit:0,credit:amount,description:'Clear supplier recoverable'}];
+      const j=await postSourceJournal({
+        sourceType:'supplier_recoverable_settlement',sourceId:x.id,sourceReference:x.reference,
+        entryDate:String(x.settlement_date||new Date().toISOString()).slice(0,10),
+        description:`Settle supplier recoverable ${x.claim_number}`,branchId:x.branch_id,actorId:actor(req),lines
+      });
+      stats.supplier_recoverable_settlements[j.existing?'existing':'posted']++;
+    }catch(e){stats.errors.push(`supplier_recoverable_settlement:${x.id}: ${e.message}`);}
+  }
+}
 async function syncSettlements(req,stats){if(!(await exists('settlement_batches')))return;const {rows}=await db.execute({sql:`SELECT sb.* FROM settlement_batches sb WHERE sb.status='reconciled' ORDER BY sb.id`,args:[]});for(const x of rows){try{const gross=Number(x.gross_amount||0),fees=Number(x.fees||0),net=Number(x.net_amount||0);const lines=[{code:'1010',debit:net,credit:0,description:'Bank settlement received'}];if(fees>0)lines.push({code:'5300',debit:fees,credit:0,description:'Processor/bank fees'});lines.push({code:'1050',debit:0,credit:gross,description:'Clear electronic settlement receivable'});const j=await postSourceJournal({sourceType:'settlement_batch',sourceId:x.id,sourceReference:x.reference,entryDate:x.settlement_date,description:`Reconciled settlement ${x.reference||x.id}`,branchId:x.branch_id,actorId:actor(req),lines});stats.settlements[j.existing?'existing':'posted']++;}catch(e){stats.errors.push(`settlement_batch:${x.id}: ${e.message}`);}}}
 async function syncRetailSales(req,stats){
   if(!(await exists('transactions')))return;
@@ -175,10 +226,11 @@ async function syncRepairFinancials(req,stats){
 }
 router.post('/sync',async(req,res)=>{try{
   await ensureBridgeAccounts();
-  const stats={supplier_invoices:{posted:0,existing:0},supplier_payments:{posted:0,existing:0},purchase_receipts:{posted:0,existing:0},settlements:{posted:0,existing:0},retail_sales:{posted:0,existing:0},retail_returns:{posted:0,existing:0},retail_return_inventory:{posted:0,existing:0},retail_replacement_fulfillment:{posted:0,existing:0},rental_checkout:{posted:0,existing:0},rental_settlement:{posted:0,existing:0},repair_part_usage:{posted:0,existing:0},repair_assessments:{posted:0,existing:0},repair_deposits:{posted:0,existing:0},repair_service_revenue:{posted:0,existing:0},repair_final_payments:{posted:0,existing:0},reconciliation_issues:[],evidence_gaps:[],errors:[]};
+  const stats={supplier_invoices:{posted:0,existing:0},supplier_payments:{posted:0,existing:0},supplier_recoverable_recognition:{posted:0,existing:0},supplier_recoverable_settlements:{posted:0,existing:0},purchase_receipts:{posted:0,existing:0},settlements:{posted:0,existing:0},retail_sales:{posted:0,existing:0},retail_returns:{posted:0,existing:0},retail_return_inventory:{posted:0,existing:0},retail_replacement_fulfillment:{posted:0,existing:0},rental_checkout:{posted:0,existing:0},rental_settlement:{posted:0,existing:0},repair_part_usage:{posted:0,existing:0},repair_assessments:{posted:0,existing:0},repair_deposits:{posted:0,existing:0},repair_service_revenue:{posted:0,existing:0},repair_final_payments:{posted:0,existing:0},reconciliation_issues:[],evidence_gaps:[],errors:[]};
   await syncPurchasingAccounting({actorId:actor(req),stats});
   await syncSupplierInvoices(req,stats);
   await syncSupplierPayments(req,stats);
+  await syncSupplierRecoverables(req,stats);
   await syncSettlements(req,stats);
   await syncRetailSales(req,stats);
   await syncRetailReturns({actorId:actor(req),stats});
