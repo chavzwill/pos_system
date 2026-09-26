@@ -11370,6 +11370,11 @@ const App = {
         <div style="display:flex;gap:8px;margin-bottom:16px">
           ${tabBtn('orders','Purchase Orders')}
           ${this.can('purchase_requests') ? tabBtn('requests','Purchase Requests') : ''}
+          ${tabBtn('consumables','Consumables')}
+          ${tabBtn('recoverables','Supplier Recoverables')}
+          ${tabBtn('supplier-returns','Supplier Returns')}
+          ${tabBtn('supplier-credit-notes','Credit Notes')}
+          ${tabBtn('supplier-statements','Statements')}
         </div>
         <div class="card">
           <div class="table-wrap">
@@ -11398,6 +11403,124 @@ const App = {
       this._poSuppliers = suppliers;
       this._poBranches = branches;
 
+    } else if (tab === 'recoverables') {
+      return this.renderSupplierRecoverables();
+    } else if (tab === 'supplier-returns') {
+      return this.renderSupplierReturns();
+    } else if (tab === 'supplier-credit-notes') {
+      return this.renderSupplierCreditNotes();
+    } else if (tab === 'supplier-statements') {
+      return this.renderSupplierStatements();
+    } else if (tab === 'consumables') {
+      const [consumptions,costSummary,reconciliations,attention] = await Promise.all([
+        this.api('GET', '/cost-allocations/consumptions?limit=200'),
+        this.api('GET', '/cost-allocations/summary'),
+        this.api('GET', '/cost-allocations/reconciliations?limit=100'),
+        this.api('POST', '/cost-allocations/attention/refresh', {})
+      ]);
+      const attentionCases=(attention?.cases||[]).filter(x=>['identified','reviewing'].includes(x.status));
+      const totalActual=costSummary.reduce((s,x)=>s+Number(x.received_actual_cost||0)+Number(x.consumed_actual_cost||0),0);
+      const totalRequested=costSummary.reduce((s,x)=>s+Number(x.requested_cost||0),0);
+      const incompleteLines=costSummary.reduce((s,x)=>s+Number(x.incomplete_actual_lines||0),0);
+      const invoiceVariance=reconciliations.reduce((s,x)=>s+Math.abs(Number(x.variance||0)),0);
+      if (this.section !== 'purchasing' && this.section !== 'purchase-requests') return;
+      c.innerHTML = `
+        <div class="section-header">
+          <div>
+            <h2>Consumables & Internal Cost Allocation</h2>
+            <p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Issue company stock to the machine, vehicle, equipment, building, branch, department, project, or work order that consumed it.</p>
+          </div>
+          <button class="btn btn-primary" onclick="App.showConsumptionForm()">+ Issue Consumable</button>
+        </div>
+        <div style="display:flex;gap:8px;margin-bottom:16px">
+          ${tabBtn('orders','Purchase Orders')}
+          ${this.can('purchase_requests') ? tabBtn('requests','Purchase Requests') : ''}
+          ${tabBtn('consumables','Consumables')}
+          ${tabBtn('recoverables','Supplier Recoverables')}
+          ${tabBtn('supplier-returns','Supplier Returns')}
+          ${tabBtn('supplier-credit-notes','Credit Notes')}
+          ${tabBtn('supplier-statements','Statements')}
+        </div>
+        <div class="stats-grid" style="margin-bottom:16px">
+          <div class="stat-card"><div class="stat-label">Requested allocation</div><div class="stat-value">${this.fmt(totalRequested)}</div><div class="stat-meta">Planned internal-use cost</div></div>
+          <div class="stat-card"><div class="stat-label">Actual allocated cost</div><div class="stat-value">${this.fmt(totalActual)}</div><div class="stat-meta">Received direct-use + issued inventory</div></div>
+          <div class="stat-card"><div class="stat-label">Invoice variance</div><div class="stat-value">${this.fmt(invoiceVariance)}</div><div class="stat-meta">${reconciliations.filter(x=>x.status==='variance').length} invoice reconciliation issue(s)</div></div>
+          <div class="stat-card"><div class="stat-label">Valuation gaps</div><div class="stat-value">${incompleteLines}</div><div class="stat-meta">Actual lines needing cost evidence</div></div>
+          <div class="stat-card"><div class="stat-label">Cost attention</div><div class="stat-value">${attentionCases.length}</div><div class="stat-meta">Open evidence-backed review case(s)</div></div>
+        </div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div><div class="card-title">Cost Attention</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Cases appear only when evidence supports review: worsening efficiency, cost with no recent output, rising unnormalized cost, or valuation gaps.</div></div>
+            <button class="btn btn-secondary" onclick="App.renderPurchasing('consumables')">Refresh evidence</button>
+          </div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Priority</th><th>Target</th><th>Reason</th><th>Status</th><th>Evidence</th><th>Owner</th><th>Action</th></tr></thead>
+            <tbody>${attentionCases.length?attentionCases.map(x=>{let ev={};try{ev=JSON.parse(x.evidence_json||'{}')}catch{};const summary=x.reason_code==='efficiency_worsening'?`Efficiency +${Number(ev.efficiencyChangePct||0).toFixed(1)}% worse`:x.reason_code==='cost_without_recent_output'?`${this.fmt(ev.trailing30dCost||0)} cost with no recent output`:x.reason_code==='valuation_evidence_gap'?`${Number(ev.incompleteActualLines||0)} valuation gap(s)`:x.reason_code==='cost_rising_review'?`Cost +${Number(ev.costChangePct||0).toFixed(1)}%`:'Review evidence';return `<tr>
+              <td><span class="badge-pill ${x.priority==='high'?'badge-danger':'badge-warning'}">${x.priority}</span></td>
+              <td class="fw-600">${x.target_label||x.target_id||x.target_type}</td>
+              <td>${String(x.reason_code||'').replaceAll('_',' ')}</td>
+              <td>${String(x.status||'identified').replaceAll('_',' ')}</td>
+              <td>${summary}</td>
+              <td>${x.assigned_to_name||'Unassigned'}</td>
+              <td style="white-space:nowrap">${x.status==='identified'?`<button class="btn btn-sm btn-secondary" onclick="App._setCostAttentionState(${x.id},'reviewing')">Review</button>`:''}<button class="btn btn-sm btn-success" onclick="App._setCostAttentionState(${x.id},'resolved')">Resolve</button><button class="btn btn-sm btn-ghost" onclick="App._setCostAttentionState(${x.id},'dismissed')">Dismiss</button></td>
+            </tr>`}).join(''):'<tr><td colspan="7" class="empty-state">No evidence-backed cost attention cases</td></tr>'}</tbody>
+          </table></div>
+        </div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div><div class="card-title">Savings Realization</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Estimated savings are not counted as achieved until post-action received-cost evidence verifies them.</div></div>
+            <button class="btn btn-secondary" onclick="App._loadSavingsRealization()">Refresh savings</button>
+          </div>
+          <div id="savings-realization-body" style="padding:0 16px 16px"><div class="empty-state">Loading verified savings…</div></div>
+        </div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px">
+            <div><div class="card-title">Cost intelligence</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">30-day cost trend by business object. Profit is only shown where real revenue attribution exists.</div></div>
+            <select id="cost-econ-type" onchange="App._loadCostEconomics(this.value)" style="max-width:220px">
+              <option value="vehicle">Vehicles</option>
+              <option value="building">Buildings</option>
+              <option value="department">Departments</option>
+              <option value="equipment">Equipment</option>
+              <option value="branch">Branches</option>
+              <option value="project">Projects</option>
+              <option value="general_overhead">General overhead</option>
+            </select>
+          </div>
+          <div id="cost-econ-body" style="padding:0 16px 16px"><div class="empty-state">Loading cost intelligence…</div></div>
+        </div>
+        <div class="card" style="margin-bottom:16px">
+          <div class="card-header"><div class="card-title">Highest-cost targets</div></div>
+          <div class="table-wrap"><table>
+            <thead><tr><th>Target</th><th>Type</th><th>Requested</th><th>Committed</th><th>Actual</th><th>Evidence gaps</th></tr></thead>
+            <tbody>${costSummary.slice(0,10).map(x=>`<tr>
+              <td class="fw-600">${x.target_label||x.target_id||'General overhead'}</td>
+              <td>${String(x.target_type||'').replaceAll('_',' ')}</td>
+              <td>${this.fmt(x.requested_cost||0)}</td>
+              <td>${this.fmt(x.committed_cost||0)}</td>
+              <td class="fw-600">${this.fmt(Number(x.received_actual_cost||0)+Number(x.consumed_actual_cost||0))}</td>
+              <td>${Number(x.incomplete_actual_lines||0)?`<span class="badge-pill badge-warning">${x.incomplete_actual_lines}</span>`:'—'}</td>
+            </tr>`).join('')||'<tr><td colspan="6" class="empty-state">No allocated costs yet</td></tr>'}</tbody>
+          </table></div>
+        </div>
+        <div class="card">
+          <div class="table-wrap">
+            <table>
+              <thead><tr><th>Issue #</th><th>Branch</th><th>Issued By</th><th>Tracked Cost</th><th>Valuation</th><th>Date</th></tr></thead>
+              <tbody>
+                ${consumptions.length ? consumptions.map(x=>`
+                  <tr>
+                    <td class="fw-600">${x.consumption_number}</td>
+                    <td>${x.branch_name||'-'}</td>
+                    <td>${x.employee_name||'-'}</td>
+                    <td class="fw-600">${this.fmt(x.total_tracked_value||0)}</td>
+                    <td><span class="badge-pill ${x.valuation_status==='fully_valued'?'badge-success':x.valuation_status==='partial'?'badge-warning':'badge-danger'}">${x.valuation_status||'unknown'}</span></td>
+                    <td style="color:var(--text-muted)">${this.fmtDate(x.created_at)}</td>
+                  </tr>`).join('') : '<tr><td colspan="6" class="empty-state">No internal consumptions posted yet</td></tr>'}
+              </tbody>
+            </table>
+          </div>
+        </div>`;
+      setTimeout(()=>{this._loadCostEconomics('vehicle');this._loadSavingsRealization();},0);
     } else {
       // Purchase Requests tab
       const filter = this._prFilter || 'all';
@@ -11420,6 +11543,11 @@ const App = {
         <div style="display:flex;gap:8px;margin-bottom:16px">
           ${tabBtn('orders','Purchase Orders')}
           ${tabBtn('requests','Purchase Requests')}
+          ${tabBtn('consumables','Consumables')}
+          ${tabBtn('recoverables','Supplier Recoverables')}
+          ${tabBtn('supplier-returns','Supplier Returns')}
+          ${tabBtn('supplier-credit-notes','Credit Notes')}
+          ${tabBtn('supplier-statements','Statements')}
         </div>
         <div class="card" style="margin-bottom:0;border-bottom:none;border-radius:8px 8px 0 0;padding:10px 16px 0">
           <div style="display:flex;gap:12px;align-items:center;flex-wrap:wrap">
@@ -11459,6 +11587,735 @@ const App = {
           </div>
         </div>`;
     }
+  },
+
+  async renderSupplierStatements() {
+    this._purchasingTab='supplier-statements';
+    const c=document.getElementById('content');
+    c.innerHTML='<div class="empty-state"><p>Loading supplier statements...</p></div>';
+    try{
+      const [rows,suppliers,branches,exceptions]=await Promise.all([
+        this.api('GET','/supplier-statements'),
+        this.api('GET','/suppliers'),
+        this.api('GET','/branches'),
+        this.api('GET','/supplier-statement-exceptions')
+      ]);
+      this._supplierStatementSuppliers=suppliers||[];
+      this._supplierStatementBranches=branches||[];
+      const tabButton=(key,label)=>'<button class="btn btn-sm '+(key==='supplier-statements'?'btn-primary':'btn-outline')+'" onclick="App.renderPurchasing(\''+key+'\')">'+label+'</button>';
+      const body=(rows||[]).map(x=>'<tr><td class="fw-600">'+this.escapeHtml(x.statement_reference||('Statement '+x.id))+'</td><td>'+this.escapeHtml(x.supplier_name||'')+'</td><td>'+this.escapeHtml(x.period_start||'—')+'</td><td>'+this.escapeHtml(x.period_end||'')+'</td><td>'+this.fmt(x.opening_balance||0)+'</td><td class="fw-600">'+this.fmt(x.closing_balance||0)+'</td><td>'+this.escapeHtml(x.currency||'')+'</td><td style="white-space:nowrap"><button class="btn btn-sm btn-primary" onclick="App._reconcileSupplierStatement('+x.id+')">Reconcile</button> '+(x.stored_name?'<a class="btn btn-sm btn-outline" href="/api/supplier-statements/'+x.id+'/file">Evidence</a>':'')+'</td></tr>').join('');
+      const exRows=(exceptions||[]).map(e=>{
+        const badge=e.status==='accepted_difference'?'badge-purple':e.status==='resolved'?'badge-success':e.priority==='critical'?'badge-danger':e.priority==='high'?'badge-warning':'badge-info';
+        let actions='';
+        if(!['resolved','accepted_difference'].includes(e.status)){
+          actions='<button class="btn btn-sm btn-outline" onclick="App._investigateStatementException('+e.id+')">Investigate</button> <button class="btn btn-sm btn-success" onclick="App._resolveStatementException('+e.id+')">Resolve</button>';
+          if(this.can('reports_financial'))actions+=' <button class="btn btn-sm btn-secondary" onclick="App._acceptStatementDifference('+e.id+')">Accept difference</button>';
+        }
+        return '<tr><td><span class="badge-pill '+badge+'">'+this.escapeHtml(String(e.status||'').replaceAll('_',' '))+'</span></td><td>'+this.escapeHtml(e.supplier_name||'')+'</td><td>'+this.escapeHtml(String(e.exception_type||'').replaceAll('_',' '))+'</td><td>'+this.fmt(e.amount||0)+'</td><td>'+this.escapeHtml(e.summary||'')+'</td><td>'+this.escapeHtml(e.owner_name||'Unassigned')+'</td><td>'+this.escapeHtml(e.due_at?String(e.due_at).slice(0,10):'—')+'</td><td>'+actions+'</td></tr>';
+      }).join('');
+      c.innerHTML='<div class="section-header"><div><h2>Supplier Statements</h2><p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Compare the supplier\'s own statement with our Accounts Payable and credit-note evidence for the same period.</p></div><button class="btn btn-primary" onclick="App.showSupplierStatementForm()">+ Record Statement</button></div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+tabButton('supplier-returns','Supplier Returns')+tabButton('supplier-credit-notes','Credit Notes')+tabButton('supplier-statements','Statements')+'</div>'+
+        '<div class="card" style="margin-bottom:16px"><div class="card-header"><div><div class="card-title">Statement Exceptions</div><div style="font-size:12px;color:var(--text-muted)">Exceptions are coordination records only. Resolving a case never changes AP; the underlying reconciliation must actually be clean, unless finance explicitly accepts a documented difference.</div></div></div><div class="table-wrap"><table><thead><tr><th>Status</th><th>Supplier</th><th>Issue</th><th>Amount</th><th>Summary</th><th>Owner</th><th>Due</th><th>Actions</th></tr></thead><tbody>'+(exRows||'<tr><td colspan="8" class="empty-state">No statement exceptions</td></tr>')+'</tbody></table></div></div>'+
+        '<div class="card"><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Supplier</th><th>From</th><th>To</th><th>Opening</th><th>Closing</th><th>Currency</th><th>Actions</th></tr></thead><tbody>'+(body||'<tr><td colspan="8" class="empty-state">No supplier statements recorded</td></tr>')+'</tbody></table></div></div>';
+    }catch(e){c.innerHTML='<div class="empty-state">Unable to load supplier statements: '+this.escapeHtml(e.message||'Unknown error')+'</div>';}
+  },
+
+  showSupplierStatementForm() {
+    const suppliers=(this._supplierStatementSuppliers||[]).map(s=>'<option value="'+s.id+'">'+this.escapeHtml(s.name||('Supplier '+s.id))+'</option>').join('');
+    const branches=(this._supplierStatementBranches||[]).map(b=>'<option value="'+b.id+'">'+this.escapeHtml(b.name||('Branch '+b.id))+'</option>').join('');
+    this.showModal('<div class="modal" style="max-width:760px"><div class="modal-header"><span class="modal-title">Record Supplier Statement</span><button class="modal-close" onclick="App.closeModal()">x</button></div><div class="modal-body">'+
+      '<div class="input-row"><div class="form-group"><label>Supplier</label><select id="sst-supplier">'+suppliers+'</select></div><div class="form-group"><label>Branch</label><select id="sst-branch"><option value="">All / not branch-specific</option>'+branches+'</select></div></div>'+
+      '<div class="input-row"><div class="form-group"><label>Period start</label><input id="sst-start" type="date"></div><div class="form-group"><label>Period end</label><input id="sst-end" type="date"></div></div>'+
+      '<div class="input-row"><div class="form-group"><label>Statement reference</label><input id="sst-reference"></div><div class="form-group"><label>Currency</label><input id="sst-currency" value="JMD"></div></div>'+
+      '<div class="input-row"><div class="form-group"><label>Opening balance</label><input id="sst-opening" type="number" step="0.01"></div><div class="form-group"><label>Closing balance</label><input id="sst-closing" type="number" step="0.01"></div></div>'+
+      '<div class="form-group"><label>Statement lines (optional)</label><textarea id="sst-lines" rows="6" placeholder="credit_note | 2026-09-20 | CN-1045 | -12500 | Returned goods credit&#10;invoice | 2026-09-21 | INV-889 | 47000 | September invoice"></textarea><div style="font-size:11px;color:var(--text-muted);margin-top:4px">Format: type | date | reference | amount | description. Types: invoice, payment, credit_note, debit_note, adjustment, other.</div></div>'+
+      '<div class="form-group"><label>Statement evidence file (optional)</label><input id="sst-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.docx,.xlsx"></div>'+
+      '<div class="form-group"><label>Notes</label><textarea id="sst-notes" rows="2"></textarea></div>'+
+      '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" onclick="App._saveSupplierStatement()">Record statement</button></div></div>');
+  },
+
+  async _saveSupplierStatement() {
+    try{
+      const raw=(document.getElementById('sst-lines')?.value||'').trim();
+      const lines=raw?raw.split(/\r?\n/).filter(Boolean).map((line,index)=>{
+        const p=line.split('|').map(x=>x.trim());
+        if(p.length<4)throw new Error('Statement line '+(index+1)+' must include type, date, reference and amount');
+        const amount=Number(p[3]);if(!Number.isFinite(amount)||amount===0)throw new Error('Statement line '+(index+1)+' has an invalid amount');
+        return {line_type:p[0],line_date:p[1]||null,reference:p[2]||null,amount,description:p.slice(4).join(' | ')||null};
+      }):[];
+      const fd=new FormData();
+      fd.append('supplier_id',document.getElementById('sst-supplier')?.value||'');
+      fd.append('branch_id',document.getElementById('sst-branch')?.value||'');
+      fd.append('period_start',document.getElementById('sst-start')?.value||'');
+      fd.append('period_end',document.getElementById('sst-end')?.value||'');
+      fd.append('statement_reference',document.getElementById('sst-reference')?.value?.trim()||'');
+      fd.append('opening_balance',document.getElementById('sst-opening')?.value||'');
+      fd.append('closing_balance',document.getElementById('sst-closing')?.value||'');
+      fd.append('currency',document.getElementById('sst-currency')?.value?.trim()||'');
+      fd.append('lines',JSON.stringify(lines));
+      fd.append('notes',document.getElementById('sst-notes')?.value?.trim()||'');
+      const file=document.getElementById('sst-file')?.files?.[0];if(file)fd.append('file',file);
+      const res=await fetch('/api/supplier-statements',{method:'POST',body:fd});
+      const json=await res.json();if(!res.ok)throw new Error(json.error||'Unable to record supplier statement');
+      this.closeModal();this.alert('Supplier statement recorded');this.renderSupplierStatements();
+    }catch(e){this.alert(e.message||'Unable to record supplier statement','error');}
+  },
+
+  async _reconcileSupplierStatement(id) {
+    try{
+      const payload=await this.api('POST','/supplier-statement-exceptions/refresh/'+id,{});
+      const r=payload.reconciliation||{};
+      const missing=(r.missing_internal_credit_notes||[]).map(x=>'Supplier statement credit '+(x.reference||('#'+x.statement_line_id))+' '+this.fmt(Math.abs(Number(x.amount||0)))+' is not in our Credit Notes register.').join('\n');
+      const internal=(r.internal_credit_notes_not_on_statement||[]).map(x=>'Internal credit note '+x.credit_note_number+' '+this.fmt(x.amount||0)+' is not evidenced on this supplier statement.').join('\n');
+      const message='Supplier statement closing: '+this.fmt(r.supplier_statement_closing_balance||0)+'\nInternal AP as of '+r.period_end+': '+this.fmt(r.internal_ap_balance_as_of||0)+'\nVariance: '+this.fmt(r.variance||0)+'\nStatus: '+String(r.status||'').replaceAll('_',' ')+'\nOpen/managed exceptions: '+(payload.exceptions||[]).filter(x=>!['resolved','accepted_difference'].includes(x.status)).length+'\n\n'+(missing?missing+'\n':'')+(internal?internal+'\n':'')+'\nReconciliation refreshes coordination cases only. It does not change AP.';
+      window.alert(message);this.renderSupplierStatements();
+    }catch(e){this.alert(e.message||'Unable to reconcile supplier statement','error');}
+  },
+
+  async _investigateStatementException(id) {
+    try{
+      const note=window.prompt('Investigation note');
+      if(!note||note.trim().length<3)return;
+      const due=window.prompt('Next review due date (optional, YYYY-MM-DD)')||null;
+      await this.api('PATCH','/supplier-statement-exceptions/'+id,{status:'investigating',owner_employee_id:this.currentUser?.id||null,due_at:due,note:note.trim()});
+      this.alert('Statement exception moved to investigation');this.renderSupplierStatements();
+    }catch(e){this.alert(e.message||'Unable to update statement exception','error');}
+  },
+
+  async _resolveStatementException(id) {
+    try{
+      const note=window.prompt('Resolution note (optional)')||'';
+      await this.api('POST','/supplier-statement-exceptions/'+id+'/resolve',{note});
+      this.alert('Statement exception resolved from clean reconciliation evidence');this.renderSupplierStatements();
+    }catch(e){this.alert(e.message||'Exception cannot be resolved yet','error');}
+  },
+
+  async _acceptStatementDifference(id) {
+    try{
+      const reason=window.prompt('Finance reason for accepting this difference');
+      if(!reason||reason.trim().length<10)return this.alert('A meaningful finance reason is required','warning');
+      const evidence_reference=window.prompt('Evidence reference (document, approval, email, memo, etc.)')||'';
+      if(!evidence_reference.trim())return this.alert('An evidence reference is required','warning');
+      await this.api('POST','/supplier-statement-exceptions/'+id+'/accept-difference',{reason:reason.trim(),evidence_reference:evidence_reference.trim()});
+      this.alert('Statement difference accepted with finance evidence');this.renderSupplierStatements();
+    }catch(e){this.alert(e.message||'Unable to accept statement difference','error');}
+  },
+
+  async renderSupplierCreditNotes() {
+    this._purchasingTab='supplier-credit-notes';
+    const c=document.getElementById('content');
+    c.innerHTML='<div class="empty-state"><p>Loading supplier credit notes...</p></div>';
+    try{
+      const [notes,suppliers,branches]=await Promise.all([
+        this.api('GET','/supplier-credit-notes'),
+        this.api('GET','/suppliers'),
+        this.api('GET','/branches')
+      ]);
+      this._supplierCreditSuppliers=suppliers||[];
+      this._supplierCreditBranches=branches||[];
+      const tabButton=(key,label)=>'<button class="btn btn-sm '+(key==='supplier-credit-notes'?'btn-primary':'btn-outline')+'" onclick="App.renderPurchasing(\''+key+'\')">'+label+'</button>';
+      const rows=(notes||[]).map(n=>{
+        const statusClass=n.status==='fully_matched'?'badge-success':n.status==='partially_matched'?'badge-info':'badge-warning';
+        return '<tr><td class="fw-600">'+this.escapeHtml(n.credit_note_number||'')+'</td><td>'+this.escapeHtml(n.supplier_name||'')+'</td><td>'+this.escapeHtml(n.credit_date||'')+'</td><td>'+this.fmt(n.amount||0)+'</td><td>'+this.fmt(n.applied_amount||0)+'</td><td>'+this.fmt(n.settled_amount||0)+'</td><td class="fw-600">'+this.fmt(n.remaining_amount||0)+'</td><td><span class="badge-pill '+statusClass+'">'+this.escapeHtml(String(n.status||'').replaceAll('_',' '))+'</span></td><td>'+this.escapeHtml(n.supplier_reference||'—')+'</td><td style="white-space:nowrap"><button class="btn btn-sm btn-primary" onclick="App._matchSupplierCreditNote('+n.id+')">Match to claim</button> '+(n.stored_name?'<a class="btn btn-sm btn-outline" href="/api/supplier-credit-notes/'+n.id+'/file">Evidence</a>':'')+'</td></tr>';
+      }).join('');
+      c.innerHTML='<div class="section-header"><div><h2>Supplier Credit Notes</h2><p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Record supplier-issued credits, match them to recoverable claims, and apply matched credit to Accounts Payable without duplicate use.</p></div><button class="btn btn-primary" onclick="App.showSupplierCreditNoteForm()">+ Record Credit Note</button></div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+tabButton('supplier-returns','Supplier Returns')+tabButton('supplier-credit-notes','Credit Notes')+'</div>'+
+        '<div class="card"><div class="table-wrap"><table><thead><tr><th>Credit note</th><th>Supplier</th><th>Date</th><th>Amount</th><th>Matched</th><th>Settled to AP</th><th>Remaining to match</th><th>Status</th><th>Supplier reference</th><th>Actions</th></tr></thead><tbody>'+(rows||'<tr><td colspan="10" class="empty-state">No supplier credit notes recorded</td></tr>')+'</tbody></table></div></div>';
+    }catch(e){c.innerHTML='<div class="empty-state">Unable to load supplier credit notes: '+this.escapeHtml(e.message||'Unknown error')+'</div>';}
+  },
+
+  showSupplierCreditNoteForm() {
+    const suppliers=(this._supplierCreditSuppliers||[]).map(s=>'<option value="'+s.id+'">'+this.escapeHtml(s.name||('Supplier '+s.id))+'</option>').join('');
+    const branches=(this._supplierCreditBranches||[]).map(b=>'<option value="'+b.id+'">'+this.escapeHtml(b.name||('Branch '+b.id))+'</option>').join('');
+    this.showModal('<div class="modal" style="max-width:650px"><div class="modal-header"><span class="modal-title">Record Supplier Credit Note</span><button class="modal-close" onclick="App.closeModal()">x</button></div><div class="modal-body">'+
+      '<div class="input-row"><div class="form-group"><label>Supplier</label><select id="scn-supplier">'+suppliers+'</select></div><div class="form-group"><label>Branch</label><select id="scn-branch"><option value="">Not branch-specific</option>'+branches+'</select></div></div>'+
+      '<div class="input-row"><div class="form-group"><label>Credit note number</label><input id="scn-number"></div><div class="form-group"><label>Credit date</label><input id="scn-date" type="date"></div></div>'+
+      '<div class="input-row"><div class="form-group"><label>Amount</label><input id="scn-amount" type="number" min="0.01" step="0.01"></div><div class="form-group"><label>Currency</label><input id="scn-currency" value="JMD"></div></div>'+
+      '<div class="form-group"><label>Supplier/source reference</label><input id="scn-reference" placeholder="Return #, PO #, invoice #, claim reference"></div>'+
+      '<div class="form-group"><label>Evidence file (optional)</label><input id="scn-file" type="file" accept=".pdf,.jpg,.jpeg,.png,.webp,.txt,.docx,.xlsx"></div>'+
+      '<div class="form-group"><label>Notes</label><textarea id="scn-notes" rows="2"></textarea></div>'+
+      '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" onclick="App._saveSupplierCreditNote()">Record credit note</button></div></div>');
+  },
+
+  async _saveSupplierCreditNote() {
+    try{
+      const fd=new FormData();
+      fd.append('supplier_id',document.getElementById('scn-supplier')?.value||'');
+      fd.append('branch_id',document.getElementById('scn-branch')?.value||'');
+      fd.append('credit_note_number',document.getElementById('scn-number')?.value?.trim()||'');
+      fd.append('credit_date',document.getElementById('scn-date')?.value||'');
+      fd.append('amount',document.getElementById('scn-amount')?.value||'');
+      fd.append('currency',document.getElementById('scn-currency')?.value?.trim()||'');
+      fd.append('supplier_reference',document.getElementById('scn-reference')?.value?.trim()||'');
+      fd.append('notes',document.getElementById('scn-notes')?.value?.trim()||'');
+      const file=document.getElementById('scn-file')?.files?.[0];if(file)fd.append('file',file);
+      const res=await fetch('/api/supplier-credit-notes',{method:'POST',body:fd});
+      const json=await res.json();if(!res.ok)throw new Error(json.error||'Unable to record credit note');
+      this.closeModal();this.alert('Supplier credit note recorded');this.renderSupplierCreditNotes();
+    }catch(e){this.alert(e.message||'Unable to record supplier credit note','error');}
+  },
+
+  async _matchSupplierCreditNote(id) {
+    try{
+      const data=await this.api('GET','/supplier-credit-notes/'+id+'/matches');
+      const candidates=data.matches||[];
+      if(!candidates.length)return this.alert('No open recoverable claims exist for this supplier','warning');
+      const choices=candidates.map(c=>c.id+' | '+c.claim_number+' | '+String(c.claim_type||'').replaceAll('_',' ')+' | unconfirmed '+this.fmt(c.unconfirmed_amount||0)+' | '+(c.source_reference||'')).join('\n');
+      const claimId=Number(window.prompt('Enter claim ID to match:\n'+choices));
+      const claim=candidates.find(c=>Number(c.id)===claimId);
+      if(!claim)return this.alert('Select a valid recoverable claim','warning');
+      const max=Math.min(Number(data.credit_note.remaining_amount||0),Number(claim.matchable_amount||0));
+      const amount=Number(window.prompt('Amount of this credit note to match',String(max)));
+      if(!Number.isFinite(amount)||amount<=0)return;
+      await this.api('POST','/supplier-credit-notes/'+id+'/applications',{claim_id:claimId,amount});
+      this.alert('Supplier credit note matched to recoverable claim');
+      this._showSupplierCreditNoteApplications(id);
+    }catch(e){this.alert(e.message||'Unable to match supplier credit note','error');}
+  },
+
+  async _showSupplierCreditNoteApplications(id) {
+    try{
+      const note=await this.api('GET','/supplier-credit-notes/'+id);
+      const open=(note.applications||[]).filter(a=>Number(a.unsettled_amount||0)>0);
+      if(!open.length){this.alert('All matched credit-note amounts are already settled or no applications exist');return this.renderSupplierCreditNotes();}
+      const choices=open.map(a=>a.id+' | '+a.claim_number+' | unmatched '+this.fmt(a.unsettled_amount||0)).join('\n');
+      const appId=Number(window.prompt('Apply a matched credit amount to Accounts Payable now? Enter application ID, or Cancel:\n'+choices));
+      const app=open.find(a=>Number(a.id)===appId);if(!app)return this.renderSupplierCreditNotes();
+      const claim=await this.api('GET','/supplier-recoverables/'+app.claim_id);
+      const invoices=await this.api('GET','/supplier-ledger/invoices?supplier_id='+claim.supplier_id+'&status=open&limit=100');
+      if(!invoices.length){this.alert('No open invoice exists for this supplier; the credit remains matched but unsettled','warning');return this.renderSupplierCreditNotes();}
+      const invoiceChoices=invoices.map(x=>x.id+' | '+x.invoice_number+' | balance '+this.fmt(x.balance_due||0)).join('\n');
+      const invoiceId=Number(window.prompt('Enter invoice ID to offset:\n'+invoiceChoices));
+      if(!invoices.some(x=>Number(x.id)===invoiceId))return this.alert('Select a valid open invoice','warning');
+      const amount=Number(window.prompt('Amount to apply to AP',String(app.unsettled_amount||0)));
+      if(!Number.isFinite(amount)||amount<=0)return;
+      await this.api('POST','/supplier-credit-notes/'+id+'/applications/'+appId+'/settle-ap',{supplier_invoice_id:invoiceId,amount});
+      this.alert('Supplier credit note applied to Accounts Payable');
+      this.renderSupplierCreditNotes();
+    }catch(e){this.alert(e.message||'Unable to settle supplier credit note','error');}
+  },
+
+  async renderSupplierReturns() {
+    this._purchasingTab='supplier-returns';
+    const c=document.getElementById('content');
+    c.innerHTML='<div class="empty-state"><p>Loading supplier returns...</p></div>';
+    try{
+      const [rows,suppliers,branches]=await Promise.all([
+        this.api('GET','/supplier-returns'),
+        this.api('GET','/suppliers'),
+        this.api('GET','/branches')
+      ]);
+      this._supplierReturnSuppliers=suppliers||[];
+      this._supplierReturnBranches=branches||[];
+      const statusClass={draft:'badge-muted',approved:'badge-info',dispatched:'badge-success'};
+      const tabButton=(key,label)=>'<button class="btn btn-sm '+(key==='supplier-returns'?'btn-primary':'btn-outline')+'" onclick="App.renderPurchasing(\''+key+'\')">'+label+'</button>';
+      const body=(rows||[]).map(x=>{
+        let action='';
+        if(x.status==='draft'&&this.can('purchasing_approve'))action='<button class="btn btn-sm btn-primary" onclick="App._approveSupplierReturn('+x.id+')">Approve</button>';
+        else if(x.status==='approved'&&this.can('purchasing_receive'))action='<button class="btn btn-sm btn-success" onclick="App._dispatchSupplierReturn('+x.id+')">Dispatch</button>';
+        else if(x.recoverable_claim_id)action='<button class="btn btn-sm btn-outline" onclick="App.renderSupplierRecoverables()">View claim</button>';
+        return '<tr><td class="fw-600">'+this.escapeHtml(x.return_number||'')+'</td><td>'+this.escapeHtml(x.supplier_name||'')+'</td><td>'+this.escapeHtml(x.branch_name||'')+'</td><td>'+this.fmt(x.expected_credit_amount||0)+'</td><td>'+this.fmt(x.inventory_tracked_value||0)+'</td><td>'+this.escapeHtml(String(x.inventory_legacy_quantity||0))+'</td><td><span class="badge-pill '+(statusClass[x.status]||'badge-info')+'">'+this.escapeHtml(String(x.status||''))+'</span></td><td>'+this.escapeHtml(x.supplier_rma||'—')+'</td><td>'+this.escapeHtml(x.recoverable_claim_id?String(x.recoverable_claim_id):'—')+'</td><td>'+action+'</td></tr>';
+      }).join('');
+      c.innerHTML='<div class="section-header"><div><h2>Supplier Returns</h2><p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Return stock to suppliers with physical, valuation, and recoverable evidence kept in one chain.</p></div><button class="btn btn-primary" onclick="App.showSupplierReturnForm()">+ New Supplier Return</button></div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+tabButton('supplier-returns','Supplier Returns')+tabButton('supplier-credit-notes','Credit Notes')+'</div>'+
+        '<div class="card" style="margin-bottom:16px"><div class="card-header"><div><div class="card-title">Return control</div><div style="font-size:12px;color:var(--text-muted)">Draft → Approved → Dispatched. A recoverable claim is created only when stock physically leaves and valuation evidence commits.</div></div></div></div>'+
+        '<div class="card"><div class="table-wrap"><table><thead><tr><th>Return</th><th>Supplier</th><th>Branch</th><th>Expected credit</th><th>Tracked carrying value</th><th>Unvalued qty</th><th>Status</th><th>RMA</th><th>Claim</th><th>Action</th></tr></thead><tbody>'+(body||'<tr><td colspan="10" class="empty-state">No supplier returns yet</td></tr>')+'</tbody></table></div></div>';
+    }catch(e){c.innerHTML='<div class="empty-state">Unable to load supplier returns: '+this.escapeHtml(e.message||'Unknown error')+'</div>';}
+  },
+
+  async showSupplierReturnForm() {
+    try{
+      const products=await this.api('GET','/products?active=1');
+      const supplierOptions=(this._supplierReturnSuppliers||[]).map(s=>'<option value="'+s.id+'">'+this.escapeHtml(s.name||('Supplier '+s.id))+'</option>').join('');
+      const branchOptions=(this._supplierReturnBranches||[]).map(b=>'<option value="'+b.id+'">'+this.escapeHtml(b.name||('Branch '+b.id))+'</option>').join('');
+      const productOptions=(products||[]).map(p=>'<option value="'+p.id+'">'+this.escapeHtml((p.sku?p.sku+' — ':'')+(p.name||('Product '+p.id)))+'</option>').join('');
+      this.showModal('<div class="modal" style="max-width:700px"><div class="modal-header"><span class="modal-title">New Supplier Return</span><button class="modal-close" onclick="App.closeModal()">x</button></div><div class="modal-body">'+
+        '<div class="input-row"><div class="form-group"><label>Supplier</label><select id="srt-supplier">'+supplierOptions+'</select></div><div class="form-group"><label>Branch</label><select id="srt-branch">'+branchOptions+'</select></div></div>'+
+        '<div class="form-group"><label>Reason</label><textarea id="srt-reason" rows="2" placeholder="Why are these goods being returned?"></textarea></div>'+
+        '<div class="form-group"><label>Supplier RMA / authorization (optional)</label><input id="srt-rma"></div>'+
+        '<div class="form-group"><label>Product</label><select id="srt-product">'+productOptions+'</select></div>'+
+        '<div class="input-row"><div class="form-group"><label>Source stock status</label><select id="srt-status"><option value="available">Available</option><option value="damaged">Damaged</option><option value="quarantine">Quarantine</option><option value="inspection">Inspection</option><option value="blocked">Blocked</option><option value="expired">Expired</option></select></div><div class="form-group"><label>Quantity</label><input id="srt-qty" type="number" min="0.0001" step="0.0001"></div><div class="form-group"><label>Expected unit credit</label><input id="srt-unit-credit" type="number" min="0" step="0.01"></div></div>'+
+        '<div class="form-group"><label>Receipt line ID (optional exact evidence)</label><input id="srt-receipt-line" type="number" min="1" placeholder="Purchase receipt item ID"></div>'+
+        '</div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" onclick="App._saveSupplierReturn()">Create return</button></div></div>');
+    }catch(e){this.alert(e.message||'Unable to open supplier return form','error');}
+  },
+
+  async _saveSupplierReturn() {
+    const reason=document.getElementById('srt-reason')?.value?.trim()||'';
+    const item={product_id:Number(document.getElementById('srt-product')?.value),source_status:document.getElementById('srt-status')?.value||'available',quantity:Number(document.getElementById('srt-qty')?.value),expected_unit_credit:Number(document.getElementById('srt-unit-credit')?.value||0)};
+    const receiptLine=Number(document.getElementById('srt-receipt-line')?.value);
+    if(receiptLine)item.source_purchase_receipt_item_id=receiptLine;
+    try{
+      await this.api('POST','/supplier-returns',{supplier_id:Number(document.getElementById('srt-supplier')?.value),branch_id:Number(document.getElementById('srt-branch')?.value),reason,supplier_rma:document.getElementById('srt-rma')?.value?.trim()||null,items:[item]});
+      this.closeModal();this.alert('Supplier return created');this.renderSupplierReturns();
+    }catch(e){this.alert(e.message||'Unable to create supplier return','error');}
+  },
+
+  async _approveSupplierReturn(id) {
+    try{await this.api('POST','/supplier-returns/'+id+'/approve',{});this.alert('Supplier return approved');this.renderSupplierReturns();}
+    catch(e){this.alert(e.message||'Unable to approve supplier return','error');}
+  },
+
+  async _dispatchSupplierReturn(id) {
+    if(!window.confirm('Dispatch this supplier return? Physical stock and valuation will leave inventory and an identified supplier recoverable claim will be created.'))return;
+    try{await this.api('POST','/supplier-returns/'+id+'/dispatch',{});this.alert('Supplier return dispatched and recoverable claim created');this.renderSupplierReturns();}
+    catch(e){this.alert(e.message||'Unable to dispatch supplier return','error');}
+  },
+
+  async renderSupplierRecoverables() {
+    this._purchasingTab='recoverables';
+    const c=document.getElementById('content');
+    c.innerHTML='<div class="empty-state"><p>Loading supplier recoverables...</p></div>';
+    try{
+      const results=await Promise.all([
+        this.api('GET','/supplier-recoverables'),
+        this.api('GET','/supplier-recoverables/summary'),
+        this.api('GET','/suppliers'),
+        this.api('GET','/supplier-recovery-attention'),
+        this.api('GET','/supplier-recovery-cases'),
+        this.api('GET','/supplier-recovery-performance')
+      ]);
+      const claims=results[0]||[],summary=results[1]||{},suppliers=results[2]||[],recoveryAttention=results[3]||{summary:{},items:[]},recoveryCases=results[4]||[],recoveryPerformance=results[5]||{summary:{},suppliers:[]};
+      const recoveryCaseByClaim=new Map(recoveryCases.map(x=>[Number(x.claim_id),x]));
+      this._recoverableSuppliers=suppliers;
+      const tabButton=(key,label)=>'<button class="btn btn-sm '+(key==='recoverables'?'btn-primary':'btn-outline')+'" onclick="App.renderPurchasing(\''+key+'\')">'+label+'</button>';
+      const statusClass={identified:'badge-warning',confirmed:'badge-info',partially_recovered:'badge-purple',recovered:'badge-success',disputed:'badge-danger',cancelled:'badge-muted'};
+      const labels={credit_note:'Credit note',supplier_return:'Supplier return',shorted_goods:'Shorted goods',overcharge:'Overcharge',damaged_goods:'Damaged goods',rebate:'Rebate',reimbursement:'Reimbursement',other:'Other'};
+      const rows=claims.map(x=>{
+        let actions='';
+        if(x.status==='identified')actions='<button class="btn btn-sm btn-primary" onclick="App._confirmSupplierRecoverable('+x.id+')">Confirm</button>';
+        else if(x.status==='confirmed'||x.status==='partially_recovered')actions='<button class="btn btn-sm btn-success" onclick="App._recoverSupplierRecoverable('+x.id+','+Number(x.outstanding_amount||0)+')">Record recovery</button>';
+        let evidence={};try{evidence=JSON.parse(x.evidence_json||'{}');}catch{}
+        const accountingStatus=evidence?.accountingBasis?.status;
+        const source='<div>'+this.escapeHtml(x.source_reference||x.source_id||'Manual')+'</div>'+(accountingStatus?'<div style="font-size:11px;color:var(--text-muted)">Accounting: '+this.escapeHtml(accountingStatus.replaceAll('_',' '))+'</div>':'');
+        return '<tr><td class="fw-600">'+this.escapeHtml(x.claim_number||'')+'</td><td>'+this.escapeHtml(x.supplier_name||'')+'</td><td>'+this.escapeHtml(labels[x.claim_type]||String(x.claim_type||'').replaceAll('_',' '))+'</td><td>'+source+'</td><td>'+this.fmt(x.identified_amount||0)+'</td><td>'+this.fmt(x.confirmed_amount||0)+'</td><td>'+this.fmt(x.recovered_amount||0)+'</td><td class="fw-600">'+this.fmt(x.outstanding_amount||0)+'</td><td>'+this.escapeHtml(String(x.aging_bucket||'').replaceAll('_','-'))+'</td><td><span class="badge-pill '+(statusClass[x.status]||'badge-info')+'">'+this.escapeHtml(String(x.status||'').replaceAll('_',' '))+'</span></td><td>'+actions+'</td></tr>';
+      }).join('');
+      const aging=summary.aging||{};
+      const perfSummary=recoveryPerformance.summary||{};
+      const perfRows=(recoveryPerformance.suppliers||[]).map(s=>{
+        const badge=s.advisory_level==='high'?'badge-danger':s.advisory_level==='elevated'?'badge-warning':s.advisory_level==='watch'?'badge-info':'badge-muted';
+        const reasons=(s.advisory_reasons||[]).join('; ')||'No recovery exception threshold triggered';
+        return '<tr><td><div class="fw-600">'+this.escapeHtml(s.supplier_name||'')+'</div><div style="font-size:11px;color:var(--text-muted)">'+this.escapeHtml(reasons)+'</div></td><td><span class="badge-pill '+badge+'">'+this.escapeHtml(String(s.advisory_level||'normal'))+'</span></td><td>'+Number(s.total_claims||0)+'</td><td>'+this.fmt(s.outstanding_total||0)+'</td><td>'+this.fmt(s.overdue_outstanding||0)+'</td><td>'+this.escapeHtml(s.recovery_rate_pct===null?'—':String(s.recovery_rate_pct)+'%')+'</td><td>'+this.escapeHtml(s.avg_confirmation_days===null?'—':String(s.avg_confirmation_days)+'d')+'</td><td>'+this.escapeHtml(s.avg_recovery_days===null?'—':String(s.avg_recovery_days)+'d')+'</td><td>'+Number(s.dispute_count||0)+'</td><td>'+Number(s.broken_promise_count||0)+'</td><td>'+Number(s.unresolved_accounting_count||0)+'</td><td>'+this.fmt(s.unmatched_credit_note_value||0)+'</td></tr>';
+      }).join('');
+      const attnSummary=recoveryAttention.summary||{};
+      const attnRows=(recoveryAttention.items||[]).map(a=>{
+        const badge=a.severity==='critical'?'badge-danger':a.severity==='high'?'badge-warning':a.severity==='medium'?'badge-info':'badge-muted';
+        const ref=a.claim_number||a.source_reference||('Claim '+(a.claim_id||''));
+        const recoveryCase=a.claim_id?recoveryCaseByClaim.get(Number(a.claim_id)):null;
+        let action='';
+        if(a.claim_id) action=recoveryCase
+          ?'<button class="btn btn-sm btn-outline" onclick="App._manageSupplierRecoveryCase('+recoveryCase.id+')">Manage case</button>'
+          :'<button class="btn btn-sm btn-primary" onclick="App._openSupplierRecoveryCase('+a.claim_id+',\''+this.escapeHtml(String(a.severity||'medium'))+'\')">Open case</button>';
+        else if(a.credit_note_id) action='<button class="btn btn-sm btn-outline" onclick="App.renderSupplierCreditNotes()">Open credit notes</button>';
+        return '<tr><td><span class="badge-pill '+badge+'">'+this.escapeHtml(String(a.severity||'low'))+'</span></td><td>'+this.escapeHtml(a.supplier_name||'')+'</td><td>'+this.escapeHtml(String(a.type||'').replaceAll('_',' '))+'</td><td>'+this.escapeHtml(ref)+'</td><td class="fw-600">'+this.fmt(a.amount_at_risk||0)+'</td><td>'+this.escapeHtml(a.age_days===null?'—':String(a.age_days)+'d')+'</td><td>'+this.escapeHtml(a.reason||'')+'</td><td>'+this.escapeHtml(a.next_action||'')+'<div style="margin-top:6px">'+action+'</div></td></tr>';
+      }).join('');
+      c.innerHTML='<div class="section-header"><div><h2>Supplier Recoverables</h2><p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Track money suppliers owe us from shortages, returns, credit notes, overcharges, rebates and reimbursements.</p></div><button class="btn btn-primary" onclick="App.showSupplierRecoverableForm()">+ New Claim</button></div>'+
+        '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+tabButton('supplier-returns','Supplier Returns')+tabButton('supplier-credit-notes','Credit Notes')+'</div>'+
+        '<div class="stats-grid" style="margin-bottom:16px"><div class="stat-card"><div class="stat-label">Identified exposure</div><div class="stat-value">'+this.fmt(summary.identified_exposure||0)+'</div><div class="stat-meta">Potential claim, not yet confirmed</div></div><div class="stat-card"><div class="stat-label">Confirmed outstanding</div><div class="stat-value">'+this.fmt(summary.confirmed_outstanding||0)+'</div><div class="stat-meta">Documented amount owed to us</div></div><div class="stat-card"><div class="stat-label">Overdue confirmed</div><div class="stat-value">'+this.fmt(summary.overdue_confirmed||0)+'</div><div class="stat-meta">Past supplier due date</div></div><div class="stat-card"><div class="stat-label">Recovered</div><div class="stat-value">'+this.fmt(summary.recovered_total||0)+'</div><div class="stat-meta">Credits, refunds and offsets received</div></div></div>'+
+        '<div class="card" style="margin-bottom:16px"><div class="card-header"><div><div class="card-title">Recovery Attention</div><div style="font-size:12px;color:var(--text-muted)">Derived from authoritative supplier-return, recoverable, credit-note and AP evidence. This queue does not change balances.</div></div></div>'+
+        '<div class="stats-grid" style="padding:0 16px 16px"><div class="stat-card"><div class="stat-label">Amount at risk</div><div class="stat-value">'+this.fmt(attnSummary.total_amount_at_risk||0)+'</div></div><div class="stat-card"><div class="stat-label">Critical</div><div class="stat-value">'+Number(attnSummary.critical||0)+'</div></div><div class="stat-card"><div class="stat-label">High</div><div class="stat-value">'+Number(attnSummary.high||0)+'</div></div><div class="stat-card"><div class="stat-label">Open attention</div><div class="stat-value">'+Number(attnSummary.total_items||0)+'</div></div></div>'+
+        '<div class="table-wrap"><table><thead><tr><th>Priority</th><th>Supplier</th><th>Issue</th><th>Reference</th><th>Amount at risk</th><th>Age</th><th>Why it matters</th><th>Next action</th></tr></thead><tbody>'+(attnRows||'<tr><td colspan="8" class="empty-state">No supplier recovery exceptions need attention</td></tr>')+'</tbody></table></div></div>'+
+        '<div class="card" style="margin-bottom:16px"><div class="card-header"><div><div class="card-title">Supplier Recovery Performance</div><div style="font-size:12px;color:var(--text-muted)">Advisory evidence only. No supplier is automatically blocked or ranked by a hidden score; each flag states the concrete recovery condition that triggered it.</div></div></div>'+
+        '<div class="stats-grid" style="padding:0 16px 16px"><div class="stat-card"><div class="stat-label">Suppliers with history</div><div class="stat-value">'+Number(perfSummary.suppliers_with_recovery_history||0)+'</div></div><div class="stat-card"><div class="stat-label">High / elevated</div><div class="stat-value">'+Number(perfSummary.suppliers_high_or_elevated||0)+'</div></div><div class="stat-card"><div class="stat-label">Outstanding</div><div class="stat-value">'+this.fmt(perfSummary.total_outstanding||0)+'</div></div><div class="stat-card"><div class="stat-label">Overdue</div><div class="stat-value">'+this.fmt(perfSummary.total_overdue||0)+'</div></div></div>'+
+        '<div class="table-wrap"><table><thead><tr><th>Supplier</th><th>Advisory</th><th>Claims</th><th>Outstanding</th><th>Overdue</th><th>Recovery rate</th><th>Avg confirmation</th><th>Avg recovery</th><th>Disputes</th><th>Broken promises</th><th>Accounting gaps</th><th>Unmatched credits</th></tr></thead><tbody>'+(perfRows||'<tr><td colspan="12" class="empty-state">No supplier recovery history yet</td></tr>')+'</tbody></table></div></div>'+
+        '<div class="card" style="margin-bottom:16px"><div class="card-header"><div><div class="card-title">Confirmed Recoverables Aging</div><div style="font-size:12px;color:var(--text-muted)">Only confirmed supplier obligations appear here.</div></div></div><div style="display:grid;grid-template-columns:repeat(5,minmax(0,1fr));gap:10px;padding:0 16px 16px">'+
+        [['Current','current'],['1-30','1_30'],['31-60','31_60'],['61-90','61_90'],['90+','90_plus']].map(p=>'<div class="stat-card"><div class="stat-label">'+p[0]+'</div><div class="stat-value" style="font-size:18px">'+this.fmt(aging[p[1]]||0)+'</div></div>').join('')+'</div></div>'+
+        '<div class="card"><div class="table-wrap"><table><thead><tr><th>Claim</th><th>Supplier</th><th>Type</th><th>Source</th><th>Identified</th><th>Confirmed</th><th>Recovered</th><th>Outstanding</th><th>Aging</th><th>Status</th><th>Actions</th></tr></thead><tbody>'+(rows||'<tr><td colspan="11" class="empty-state">No supplier recoverables yet</td></tr>')+'</tbody></table></div></div>';
+    }catch(e){c.innerHTML='<div class="empty-state">Unable to load supplier recoverables: '+this.escapeHtml(e.message||'Unknown error')+'</div>';}
+  },
+
+  showSupplierRecoverableForm() {
+    const suppliers=this._recoverableSuppliers||[];
+    const options=suppliers.map(s=>'<option value="'+s.id+'">'+this.escapeHtml(s.name||('Supplier '+s.id))+'</option>').join('');
+    this.showModal('<div class="modal" style="max-width:620px"><div class="modal-header"><span class="modal-title">New Supplier Recoverable</span><button class="modal-close" onclick="App.closeModal()">x</button></div><div class="modal-body"><div class="form-group"><label>Supplier</label><select id="src-supplier">'+options+'</select></div><div class="input-row"><div class="form-group"><label>Type</label><select id="src-type"><option value="credit_note">Credit note</option><option value="supplier_return">Supplier return</option><option value="shorted_goods">Shorted goods</option><option value="overcharge">Overcharge</option><option value="damaged_goods">Damaged goods</option><option value="rebate">Rebate</option><option value="reimbursement">Reimbursement</option><option value="other">Other</option></select></div><div class="form-group"><label>Amount</label><input id="src-amount" type="number" min="0.01" step="0.01"></div></div><div class="input-row"><div class="form-group"><label>Currency</label><input id="src-currency" value="JMD"></div><div class="form-group"><label>Due date</label><input id="src-due" type="date"></div></div><div class="form-group"><label>Source / Reference</label><input id="src-reference" placeholder="Return #, invoice #, claim reference"></div><div class="form-group"><label>Notes</label><textarea id="src-notes" rows="3"></textarea></div></div><div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" onclick="App._saveSupplierRecoverable()">Create claim</button></div></div>');
+  },
+
+  async _saveSupplierRecoverable() {
+    const payload={supplier_id:Number(document.getElementById('src-supplier')?.value),claim_type:document.getElementById('src-type')?.value,identified_amount:Number(document.getElementById('src-amount')?.value),currency:document.getElementById('src-currency')?.value?.trim(),due_date:document.getElementById('src-due')?.value||null,source_reference:document.getElementById('src-reference')?.value?.trim()||null,notes:document.getElementById('src-notes')?.value?.trim()||null};
+    try{await this.api('POST','/supplier-recoverables',payload);this.closeModal();this.alert('Supplier recoverable claim created');this.renderSupplierRecoverables();}catch(e){this.alert(e.message||'Unable to create claim','error');}
+  },
+
+  async _confirmSupplierRecoverable(id) {
+    const confirmed_amount=Number(window.prompt('Confirmed amount supplier owes us'));
+    if(!Number.isFinite(confirmed_amount)||confirmed_amount<=0)return;
+    const supplier_document_number=window.prompt('Supplier credit note / claim / acknowledgement number (optional)')||'';
+    const confirmation_note=window.prompt('Supplier confirmation note (required if no document number)')||'';
+    if(!supplier_document_number&&!confirmation_note)return;
+    const due_date=window.prompt('Due date (optional, YYYY-MM-DD)')||null;
+    try{await this.api('POST','/supplier-recoverables/'+id+'/confirm',{confirmed_amount,supplier_document_number,confirmation_note,due_date});this.alert('Supplier obligation confirmed');this.renderSupplierRecoverables();}catch(e){this.alert(e.message||'Unable to confirm claim','error');}
+  },
+
+  async _recoverSupplierRecoverable(id,outstanding) {
+    const amount=Number(window.prompt('Recovery amount',String(outstanding||'')));
+    if(!Number.isFinite(amount)||amount<=0)return;
+    const settlement_type=window.prompt('Recovery type: credit_note, cash_refund, bank_refund, ap_offset, replacement_value, other','ap_offset')||'';
+    let supplier_invoice_id=null;
+    if(settlement_type==='ap_offset'){
+      try{
+        const claim=await this.api('GET','/supplier-recoverables/'+id);
+        const invoices=await this.api('GET','/supplier-ledger/invoices?supplier_id='+claim.supplier_id+'&status=open&limit=100');
+        if(!invoices.length)return this.alert('This supplier has no open invoice available for an AP offset','warning');
+        const choices=invoices.map(x=>x.id+' | '+x.invoice_number+' | balance '+this.fmt(x.balance_due||0)).join('\n');
+        supplier_invoice_id=Number(window.prompt('Enter the invoice ID to offset:\n'+choices));
+        if(!supplier_invoice_id||!invoices.some(x=>Number(x.id)===supplier_invoice_id))return this.alert('Select a valid open supplier invoice','warning');
+      }catch(e){return this.alert(e.message||'Unable to load supplier invoices','error');}
+    }
+    const reference=window.prompt('Recovery reference / document number')||'';
+    if(!reference)return;
+    try{await this.api('POST','/supplier-recoverables/'+id+'/settlements',{amount,settlement_type,reference,supplier_invoice_id});this.alert(settlement_type==='ap_offset'?'Supplier credit applied to Accounts Payable':'Supplier recovery recorded');this.renderSupplierRecoverables();}catch(e){this.alert(e.message||'Unable to record recovery','error');}
+  },
+
+  async _openSupplierRecoveryCase(claimId,priority='medium') {
+    const note=window.prompt('Recovery case opening note (optional)')||'';
+    const next_follow_up_at=window.prompt('Next follow-up date/time (optional, YYYY-MM-DD or ISO)')||null;
+    try{
+      await this.api('POST','/supplier-recovery-cases/from-claim/'+claimId,{
+        priority:['low','medium','high','critical'].includes(priority)?priority:'medium',
+        owner_employee_id:this.currentUser?.id||null,
+        next_follow_up_at,
+        note
+      });
+      this.alert('Supplier recovery case opened');
+      this.renderSupplierRecoverables();
+    }catch(e){this.alert(e.message||'Unable to open supplier recovery case','error');}
+  },
+
+  async _manageSupplierRecoveryCase(id) {
+    try{
+      const c=await this.api('GET','/supplier-recovery-cases/'+id);
+      const outstanding=Number(c.outstanding_amount||0);
+      const choice=window.prompt(
+        'Recovery case '+c.id+' — '+(c.supplier_name||'Supplier')+' — '+(c.claim_number||'')+
+        '\nStatus: '+String(c.status||'open').replaceAll('_',' ')+
+        '\nOwner: '+(c.owner_name||'Unassigned')+
+        '\nOutstanding: '+this.fmt(outstanding)+
+        '\n\nChoose action: follow_up, promised, disputed, escalated, reassign, close'
+      );
+      if(!choice)return;
+      const action=choice.trim().toLowerCase();
+      if(action==='follow_up'){
+        const note=window.prompt('Follow-up note');if(!note)return;
+        const next_follow_up_at=window.prompt('Next follow-up date/time (optional)')||null;
+        await this.api('POST','/supplier-recovery-cases/'+id+'/follow-ups',{note,next_follow_up_at});
+        this.alert('Supplier follow-up recorded');
+      }else if(action==='promised'){
+        const promised_amount=Number(window.prompt('Amount supplier promised',String(outstanding)));
+        if(!Number.isFinite(promised_amount)||promised_amount<=0)return;
+        const promised_settlement_date=window.prompt('Promised settlement date (YYYY-MM-DD)');
+        if(!promised_settlement_date)return;
+        const note=window.prompt('Promise details / contact / reference')||'Supplier settlement promise recorded';
+        await this.api('PATCH','/supplier-recovery-cases/'+id,{status:'promised',promised_amount,promised_settlement_date,note,next_follow_up_at:promised_settlement_date});
+        this.alert('Supplier promise recorded');
+      }else if(action==='disputed'){
+        const dispute_reason=window.prompt('Why is the supplier disputing this claim?');if(!dispute_reason)return;
+        const note=window.prompt('Dispute follow-up / evidence reference')||dispute_reason;
+        await this.api('PATCH','/supplier-recovery-cases/'+id,{status:'disputed',dispute_reason,note});
+        this.alert('Supplier dispute recorded');
+      }else if(action==='escalated'){
+        const escalation_level=Number(window.prompt('Escalation level 1–5','1'));
+        if(!Number.isInteger(escalation_level)||escalation_level<1||escalation_level>5)return;
+        const note=window.prompt('Escalation reason / next escalation action');if(!note)return;
+        await this.api('PATCH','/supplier-recovery-cases/'+id,{status:'escalated',escalation_level,priority:escalation_level>=4?'critical':'high',note});
+        this.alert('Supplier recovery case escalated');
+      }else if(action==='reassign'){
+        const owner_employee_id=Number(window.prompt('New active employee ID'));if(!owner_employee_id)return;
+        const note=window.prompt('Reassignment note')||'Recovery case reassigned';
+        await this.api('PATCH','/supplier-recovery-cases/'+id,{owner_employee_id,note});
+        this.alert('Recovery case reassigned');
+      }else if(action==='close'){
+        const note=window.prompt('Closure note')||'Recovery case closed after financial resolution';
+        await this.api('PATCH','/supplier-recovery-cases/'+id,{status:'closed',note});
+        this.alert('Recovery case closed');
+      }else{
+        return this.alert('Choose follow_up, promised, disputed, escalated, reassign, or close','warning');
+      }
+      this.renderSupplierRecoverables();
+    }catch(e){this.alert(e.message||'Unable to manage supplier recovery case','error');}
+  },
+
+  async _loadSavingsRealization() {
+    const body=document.getElementById('savings-realization-body');
+    if(!body)return;
+    body.innerHTML='<div class="empty-state">Loading verified savings…</div>';
+    try{
+      const [data,rollup,targets,attention,leakage,leakageCases]=await Promise.all([
+        this.api('GET','/spendos-management/opportunities'),
+        this.api('GET','/spendos-management/verified-rollup'),
+        this.api('GET','/spendos-management/targets/performance'),
+        this.api('GET','/spendos-management/attention'),
+        this.api('GET','/spendos-management/leakage'),
+        this.api('POST','/spendos-management/leakage/cases',{})
+      ]);
+      const rows=data.opportunities||[];
+      const estimated=rows.reduce((s,x)=>s+Number(x.estimated_savings||0),0);
+      const verified=rows.reduce((s,x)=>s+Number(x.verified_savings||0),0);
+      const rowHtml=rows.map(x=>{
+        const action=x.status==='identified'
+          ? '<button class="btn btn-sm btn-secondary" onclick="App._recordSavingsAction('+x.id+')">Record action</button>'
+          : x.status==='actioned'
+            ? '<button class="btn btn-sm btn-primary" onclick="App._verifySavingsOpportunity('+x.id+')">Verify</button>'
+            : '';
+        return '<tr><td><div class="fw-600">'+String(x.kind||'opportunity').replaceAll('_',' ')+'</div><div style="font-size:12px;color:var(--text-muted)">'+String(x.opportunity_key||'')+'</div></td><td><span class="badge-pill '+(x.status==='verified'?'badge-success':x.status==='actioned'?'badge-warning':'')+'">'+String(x.status||'identified').replaceAll('_',' ')+'</span></td><td>'+this.fmt(x.estimated_savings||0)+'</td><td class="fw-600">'+this.fmt(x.verified_savings||0)+'</td><td style="white-space:nowrap">'+action+'</td></tr>';
+      }).join('');
+      body.innerHTML='<div class="stats-grid" style="margin:0 0 12px"><div class="stat-card"><div class="stat-label">Estimated opportunities</div><div class="stat-value">'+this.fmt(estimated)+'</div><div class="stat-meta">Potential only — not booked as savings</div></div><div class="stat-card"><div class="stat-label">Verified savings</div><div class="stat-value">'+this.fmt(verified)+'</div><div class="stat-meta">Proven from post-action received-cost evidence</div></div><div class="stat-card"><div class="stat-label">Actioned</div><div class="stat-value">'+rows.filter(x=>x.status==='actioned').length+'</div><div class="stat-meta">Waiting for verification evidence</div></div><div class="stat-card"><div class="stat-label">Verified cases</div><div class="stat-value">'+rows.filter(x=>x.status==='verified').length+'</div><div class="stat-meta">Savings evidence accepted</div></div></div><div class="table-wrap"><table><thead><tr><th>Opportunity</th><th>Status</th><th>Estimated</th><th>Verified</th><th>Action</th></tr></thead><tbody>'+(rowHtml||'<tr><td colspan="5" class="empty-state">No savings opportunities detected yet</td></tr>')+'</tbody></table></div>';
+      const rollupBlock=(title,items)=>'<div class="card" style="padding:12px"><div class="fw-600" style="margin-bottom:8px">'+title+'</div>'+((items||[]).slice(0,5).map(x=>'<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:4px 0"><span>'+this.escapeHtml(String(x.dimension||'unattributed'))+' · '+this.escapeHtml(String(x.currency||''))+'</span><strong>'+this.fmt(x.verifiedSavings||0)+'</strong></div>').join('')||'<div style="font-size:12px;color:var(--text-muted)">No verified evidence yet</div>')+'</div>';
+      body.innerHTML+='<div style="margin-top:14px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div class="fw-600">Verified savings reconciliation</div><div style="font-size:12px;color:var(--text-muted)">'+Number(rollup.claimedEvidenceCount||0)+' uniquely claimed receipt evidence item(s)</div></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'+rollupBlock('By supplier',rollup.bySupplier)+rollupBlock('By category',rollup.byCategory)+rollupBlock('By department',rollup.byDepartment)+rollupBlock('By period',rollup.byPeriod)+'</div></div>';
+      const targetRows=(targets||[]).map(t=>'<tr><td><div class="fw-600">'+String(t.scope_type||'company').replaceAll('_',' ')+'</div><div style="font-size:12px;color:var(--text-muted)">'+this.escapeHtml(String(t.scope_id||'all'))+'</div></td><td>'+this.escapeHtml(String(t.period_start||''))+' → '+this.escapeHtml(String(t.period_end||''))+'</td><td>'+this.fmt(t.target_amount||0)+'</td><td class="fw-600">'+this.fmt(t.verified_savings||0)+'</td><td>'+this.fmt(t.gap||0)+'</td><td><span class="badge-pill '+(t.performance_status==='met'?'badge-success':t.performance_status==='in_progress'?'badge-warning':'')+'">'+String(t.performance_status||'not_started').replaceAll('_',' ')+'</span></td><td>'+this.escapeHtml(String(t.owner_id||'Unassigned'))+'</td></tr>').join('');
+      const attentionRows=(attention?.items||[]).map(a=>'<tr><td><span class="badge-pill '+(a.priority==='high'?'badge-danger':'badge-warning')+'">'+this.escapeHtml(String(a.priority||'medium'))+'</span></td><td>'+this.escapeHtml(String(a.kind||'attention').replaceAll('_',' '))+'</td><td>'+this.escapeHtml(String(a.scopeId||a.opportunityId||a.targetId||'—'))+'</td><td>'+this.escapeHtml(String(a.reason||''))+'</td></tr>').join('');
+      body.innerHTML+='<div class="card" style="margin-top:14px"><div class="card-header"><div><div class="card-title">Savings Attention</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Review prompts only. Pace signals do not forecast future savings or guarantee target failure.</div></div></div><div class="table-wrap"><table><thead><tr><th>Priority</th><th>Attention</th><th>Reference</th><th>Reason</th></tr></thead><tbody>'+(attentionRows||'<tr><td colspan="4" class="empty-state">No savings accountability attention items</td></tr>')+'</tbody></table></div></div>';
+      const leakageRows=(leakage?.items||[]).map(x=>'<tr><td><span class="badge-pill badge-danger">'+this.escapeHtml(String(x.priority||'high'))+'</span></td><td>'+this.escapeHtml(String(x.kind||'leakage').replaceAll('_',' '))+'</td><td>'+this.escapeHtml(String(x.sku||'—'))+'</td><td>'+this.escapeHtml(String((x.evidenceEventIds||[]).join(', ')||'—'))+'</td><td>'+this.escapeHtml(String(x.reason||''))+'</td></tr>').join('');
+      body.innerHTML+='<div class="card" style="margin-top:14px"><div class="card-header"><div><div class="card-title">Savings Leakage & Root Cause</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Only causes directly proven by recorded actions and later actual receipt evidence are classified. Unexplained gaps remain unexplained.</div></div></div><div class="table-wrap"><table><thead><tr><th>Priority</th><th>Cause</th><th>SKU</th><th>Evidence</th><th>Reason</th></tr></thead><tbody>'+(leakageRows||'<tr><td colspan="5" class="empty-state">No evidenced savings leakage detected</td></tr>')+'</tbody></table></div></div>';
+      const caseRows=(leakageCases||[]).map(c=>{
+        const action=c.status==='identified'?'<button class="btn btn-sm btn-secondary" onclick="App._setLeakageCaseState('+c.id+',\'reviewing\')">Review</button>':
+          (c.status==='reviewing'||c.status==='leakage_persists')?'<button class="btn btn-sm btn-primary" onclick="App._actionLeakageCase('+c.id+')">Record correction</button>':
+          c.status==='actioned'?'<button class="btn btn-sm btn-success" onclick="App._verifyLeakageCase('+c.id+')">Verify closure</button>':'';
+        return '<tr><td>'+this.escapeHtml(String(c.leakage_kind||'').replaceAll('_',' '))+'</td><td>'+this.escapeHtml(String(c.sku||''))+'</td><td>'+this.escapeHtml(String(c.status||'' ).replaceAll('_',' '))+'</td><td>'+this.escapeHtml(String(c.owner_id||'Unassigned'))+'</td><td>'+this.escapeHtml(String(c.due_at||'—'))+'</td><td>'+action+'</td></tr>';
+      }).join('');
+      body.innerHTML+='<div class="card" style="margin-top:14px"><div class="card-header"><div><div class="card-title">Leakage Corrective Actions</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Cases close only after new post-remediation receipt evidence proves the leakage stopped.</div></div></div><div class="table-wrap"><table><thead><tr><th>Leakage</th><th>SKU</th><th>Status</th><th>Owner</th><th>Due</th><th>Action</th></tr></thead><tbody>'+(caseRows||'<tr><td colspan="6" class="empty-state">No leakage corrective-action cases</td></tr>')+'</tbody></table></div></div>';
+      body.innerHTML+='<div class="card" style="margin-top:14px"><div class="card-header" style="display:flex;align-items:center;justify-content:space-between;gap:12px"><div><div class="card-title">Savings Accountability</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">Targets are management goals. Only verified receipt-backed savings count toward attainment.</div></div><button class="btn btn-primary" onclick="App._showSavingsTargetForm()">Set savings target</button></div><div class="table-wrap"><table><thead><tr><th>Scope</th><th>Period</th><th>Target</th><th>Verified</th><th>Gap</th><th>Status</th><th>Owner</th></tr></thead><tbody>'+(targetRows||'<tr><td colspan="7" class="empty-state">No savings targets have been set</td></tr>')+'</tbody></table></div></div>';
+    }catch(e){
+      body.innerHTML='<div class="empty-state">Savings verification unavailable: '+this.escapeHtml(e.message||'SpendOS is offline or not configured')+'</div>';
+    }
+  },
+
+  async _setLeakageCaseState(id,status) {
+    try{
+      await this.api('POST','/spendos-management/leakage/cases/'+id+'/state',{status});
+      this._loadSavingsRealization();
+    }catch(e){this.alert(e.message||'Unable to update leakage case','error');}
+  },
+
+  async _actionLeakageCase(id) {
+    const correctiveAction=window.prompt('What corrective action was taken?');
+    if(!correctiveAction)return;
+    const correctiveNote=window.prompt('Describe the corrective action and supporting reference.');
+    if(!correctiveNote)return;
+    const dueAt=window.prompt('Due date (optional, YYYY-MM-DD)');
+    try{
+      await this.api('POST','/spendos-management/leakage/cases/'+id+'/state',{status:'actioned',correctiveAction,correctiveNote,dueAt:dueAt||null});
+      this.alert('Corrective action recorded');
+      this._loadSavingsRealization();
+    }catch(e){this.alert(e.message||'Unable to record corrective action','error');}
+  },
+
+  async _verifyLeakageCase(id) {
+    try{
+      const result=await this.api('POST','/spendos-management/leakage/cases/'+id+'/verify',{});
+      if(result.status==='verified_resolved')this.alert('Leakage closure verified from new receipt evidence');
+      else if(result.status==='leakage_persists')this.alert('Leakage still persists in post-remediation receipt evidence','warning');
+      else this.alert('Not enough post-remediation receipt evidence to close this case','warning');
+      this._loadSavingsRealization();
+    }catch(e){this.alert(e.message||'Unable to verify leakage closure','error');}
+  },
+
+  _showSavingsTargetForm() {
+    const currency=this.activeCurrency||'JMD';
+    this.showModal(`
+      <div class="modal" style="max-width:620px">
+        <div class="modal-header"><span class="modal-title">Set Savings Target</span><button class="modal-close" onclick="App.closeModal()">✕</button></div>
+        <div class="modal-body">
+          <p style="margin:0 0 14px;color:var(--text-muted);font-size:13px">This is a management goal, not realized savings. Only receipt-backed verified savings count toward attainment.</p>
+          <div class="input-row">
+            <div class="form-group"><label>Scope</label><select id="sav-target-scope"><option value="company">Company</option><option value="supplier">Supplier</option><option value="category">Savings category</option><option value="department">Department</option></select></div>
+            <div class="form-group"><label>Scope ID / Name</label><input id="sav-target-id" value="all" placeholder="all, supplier ID, category, or department ID"></div>
+          </div>
+          <div class="input-row">
+            <div class="form-group"><label>Currency</label><input id="sav-target-currency" value="${this.escapeHtml(currency)}"></div>
+            <div class="form-group"><label>Target Amount</label><input id="sav-target-amount" type="number" min="0" step="0.01" placeholder="0.00"></div>
+          </div>
+          <div class="input-row">
+            <div class="form-group"><label>Period Start</label><input id="sav-target-start" type="date"></div>
+            <div class="form-group"><label>Period End</label><input id="sav-target-end" type="date"></div>
+          </div>
+          <div class="form-group"><label>Owner</label><input id="sav-target-owner" value="${this.currentUser?.id||''}" placeholder="Employee ID"></div>
+          <div class="form-group"><label>Management Note</label><textarea id="sav-target-note" rows="3" placeholder="Why this target exists and who is accountable for delivery"></textarea></div>
+        </div>
+        <div class="modal-footer"><button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button><button class="btn btn-primary" onclick="App._saveSavingsTarget()">Save target</button></div>
+      </div>`);
+  },
+
+  async _saveSavingsTarget() {
+    const payload={
+      scopeType:document.getElementById('sav-target-scope')?.value,
+      scopeId:document.getElementById('sav-target-id')?.value?.trim(),
+      currency:document.getElementById('sav-target-currency')?.value?.trim(),
+      targetAmount:Number(document.getElementById('sav-target-amount')?.value),
+      periodStart:document.getElementById('sav-target-start')?.value,
+      periodEnd:document.getElementById('sav-target-end')?.value,
+      ownerId:document.getElementById('sav-target-owner')?.value?.trim()||null,
+      note:document.getElementById('sav-target-note')?.value?.trim()||null
+    };
+    if(!payload.scopeId||!payload.currency||!payload.periodStart||!payload.periodEnd||!Number.isFinite(payload.targetAmount)||payload.targetAmount<0){
+      return this.alert('Complete the savings target scope, currency, period and amount','warning');
+    }
+    try{
+      await this.api('POST','/spendos-management/targets',payload);
+      this.closeModal();
+      this.alert('Savings target saved');
+      this._loadSavingsRealization();
+    }catch(e){this.alert(e.message||'Unable to save savings target','error');}
+  },
+
+  async _recordSavingsAction(id) {
+    const actionType=window.prompt('What action was taken? e.g. switch_supplier, renegotiate, reduce_usage');
+    if(!actionType)return;
+    const actionNote=window.prompt('Describe the management action and evidence/reference.');
+    if(!actionNote)return;
+    try{
+      await this.api('POST','/spendos-management/opportunities/'+id+'/actions',{actionType,actionNote});
+      this.alert('Savings action recorded');
+      this._loadSavingsRealization();
+    }catch(e){this.alert(e.message||'Unable to record savings action','error');}
+  },
+
+  async _verifySavingsOpportunity(id) {
+    try{
+      const result=await this.api('POST','/spendos-management/opportunities/'+id+'/verify',{});
+      if(result.status==='verified')this.alert('Verified savings: '+this.fmt(result.verifiedSavings||0));
+      else if(result.status==='not_verified')this.alert('Action recorded, but later actual cost does not verify a saving yet','warning');
+      else this.alert('Not enough post-action received-cost evidence to verify savings yet','warning');
+      this._loadSavingsRealization();
+    }catch(e){this.alert(e.message||'Unable to verify savings','error');}
+  },
+
+  async _loadCostEconomics(type='vehicle') {
+    const body=document.getElementById('cost-econ-body');
+    if(!body)return;
+    body.innerHTML='<div class="empty-state">Loading cost intelligence…</div>';
+    try{
+      const data=await this.api('GET',`/cost-allocations/economics?target_type=${encodeURIComponent(type)}`);
+      const rows=data.items||[];
+      const method=data.methodology||{};
+      body.innerHTML=`
+        <div style="font-size:12px;color:var(--text-muted);margin-bottom:10px">${method.statement||''}</div>
+        <div class="table-wrap"><table>
+          <thead><tr><th>Target</th><th>30d Cost</th><th>Prior 30d</th><th>Spend Trend</th><th>Efficiency</th><th>Actual Cost</th><th>Context</th><th>Evidence</th></tr></thead>
+          <tbody>${rows.length?rows.map(x=>{
+            const trend=x.cost_change_pct==null?'new activity':(Number(x.cost_change_pct)>=0?'+':'')+Number(x.cost_change_pct).toFixed(1)+'%';
+            const eff=x.context?.efficiency||{};
+            const ctx=x.context?.vehicle?(`${x.context.vehicle.vehicle_number||''} · ${Number(x.context.dispatch?.completed_jobs||0)} completed jobs${eff.recent_cost_per_output!=null?` · ${this.fmt(eff.recent_cost_per_output)}/completed dispatch (30d)`:''}`):
+              x.context?.branch?(`${x.context.branch.name||x.context.branch.branch_code||'Branch'}${eff.recent_cost_per_transaction!=null?` · ${this.fmt(eff.recent_cost_per_transaction)}/transaction`:''}${eff.recent_cost_to_recorded_sales_pct!=null?` · ${Number(eff.recent_cost_to_recorded_sales_pct).toFixed(1)}% allocated-cost intensity vs recorded sales`:''}`):
+              x.context?.object?(x.context.object.name||x.target_label||'Cost object'):'—';
+            const badge=x.cost_state==='cost_rising'?'badge-warning':x.cost_state==='cost_improving'?'badge-success':x.cost_state==='evidence_gap'?'badge-danger':'';
+            const effState=eff.state||'not_available';
+            const effBadge=effState==='efficiency_worsening'?'badge-warning':effState==='efficiency_improving'?'badge-success':effState==='no_recent_output'?'badge-danger':'';
+            return `<tr>
+              <td class="fw-600">${x.target_label||x.target_id||'General overhead'}</td>
+              <td>${this.fmt(x.trailing_30d_cost||0)}</td>
+              <td>${this.fmt(x.prior_30d_cost||0)}</td>
+              <td><span class="badge-pill ${badge}">${String(x.cost_state||'stable').replaceAll('_',' ')} · ${trend}</span></td>
+              <td><span class="badge-pill ${effBadge}">${String(effState).replaceAll('_',' ')}${eff.change_pct==null?'':` · ${eff.change_pct>=0?'+':''}${Number(eff.change_pct).toFixed(1)}%`}</span></td>
+              <td class="fw-600">${this.fmt(x.actual_cost||0)}</td>
+              <td>${ctx}</td>
+              <td>${Number(x.incomplete_actual_lines||0)?`${x.incomplete_actual_lines} gap(s)`:'Complete'}</td>
+            </tr>`;
+          }).join(''):'<tr><td colspan="8" class="empty-state">No allocated costs for this target type yet</td></tr>'}</tbody>
+        </table></div>`;
+    }catch(e){
+      body.innerHTML=`<div class="empty-state">Unable to load cost intelligence: ${this.escapeHtml(e.message||'Unknown error')}</div>`;
+    }
+  },
+
+  async _setCostAttentionState(id,status) {
+    let resolution_note=null;
+    if(['resolved','dismissed'].includes(status)){
+      resolution_note=window.prompt(status==='resolved'?'What was done to resolve this cost issue?':'Why is this case being dismissed?');
+      if(!resolution_note)return;
+    }
+    try{
+      await this.api('POST',`/cost-allocations/attention/${id}/state`,{status,resolution_note});
+      this.renderPurchasing('consumables');
+    }catch(e){this.alert(e.message||'Unable to update cost attention case','error');}
+  },
+
+  async showConsumptionForm() {
+    const products = await this.api('GET', '/products');
+    const branches = this.currentUser.branches || [];
+    this._consumptionProducts = products;
+    this.showModal(`
+      <div class="modal" style="max-width:760px">
+        <div class="modal-header"><span class="modal-title">Issue Consumable / Internal Stock</span><button class="modal-close">✕</button></div>
+        <div class="modal-body">
+          <p style="margin:0 0 14px;color:var(--text-muted);font-size:13px">This removes stock from inventory and assigns its evidenced cost to the business object that consumed it.</p>
+          <div class="input-row">
+            <div class="form-group"><label>Branch</label><select id="con-branch"><option value="">-- Select Branch --</option>${branches.map(b=>`<option value="${b.id}">${b.name}</option>`).join('')}</select></div>
+            <div class="form-group"><label>Product / Consumable</label><select id="con-product"><option value="">-- Select Product --</option>${products.map(p=>`<option value="${p.id}">${p.name} (${p.sku||'-'})</option>`).join('')}</select></div>
+            <div class="form-group"><label>Quantity</label><input id="con-qty" type="number" min="0.01" step="0.01" value="1"></div>
+          </div>
+          <div class="input-row">
+            <div class="form-group"><label>Cost Target Type</label>
+              <select id="con-target-type" onchange="App._loadConsumptionTargets(this.value)">
+                <option value="rental_asset">Rental Machine / Asset</option>
+                <option value="vehicle">Vehicle</option>
+                <option value="equipment">Equipment</option>
+                <option value="building">Building / Property</option>
+                <option value="branch">Branch</option>
+                <option value="department">Department</option>
+                <option value="project">Project</option>
+                <option value="work_order">Work Order</option>
+                <option value="general_overhead">General Overhead</option>
+              </select>
+            </div>
+            <div class="form-group"><label>Cost Target</label><select id="con-target"><option value="">Loading...</option></select></div>
+            <div class="form-group"><label>Expense Category</label>
+              <select id="con-category">
+                <option value="parts">Parts</option><option value="lubricants">Lubricants</option>
+                <option value="fuel">Fuel</option><option value="cleaning">Cleaning</option>
+                <option value="maintenance">Maintenance</option><option value="office_consumables">Office Consumables</option>
+                <option value="safety">Safety / PPE</option><option value="other">Other</option>
+              </select>
+            </div>
+          </div>
+          <div class="input-row">
+            <div class="form-group"><label>Purpose</label><input id="con-purpose" placeholder="e.g. scheduled service, repair, cleaning"></div>
+            <div class="form-group"><label>Bin ID <span style="color:var(--text-muted)">(if bin-controlled)</span></label><input id="con-bin" type="number" placeholder="Optional"></div>
+            <div class="form-group"><label>Notes</label><input id="con-notes" placeholder="Additional context"></div>
+          </div>
+          <div style="padding:10px 12px;background:var(--bg);border-radius:6px;font-size:12px;color:var(--text-muted)">
+            Cost is taken from tracked inventory valuation. Missing cost evidence is flagged as partial/unvalued rather than estimated.
+          </div>
+        </div>
+        <div class="modal-footer">
+          <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
+          <button class="btn btn-primary" onclick="App.postConsumption()">Post Consumption</button>
+        </div>
+      </div>`);
+    await this._loadConsumptionTargets('rental_asset');
+  },
+
+  async _loadConsumptionTargets(type) {
+    const select=document.getElementById('con-target');
+    if(!select)return;
+    select.innerHTML='<option value="">Loading...</option>';
+    try {
+      const rows=await this.api('GET', `/cost-allocations/targets?type=${encodeURIComponent(type)}`);
+      select.innerHTML='<option value="">-- Select Target --</option>'+rows.map(x=>`<option value="${x.id}" data-label="${this.escapeAttr(x.name||x.code||'')}">${x.name||x.code||x.id}</option>`).join('');
+    } catch(e) {
+      select.innerHTML='<option value="">No configured targets</option>';
+    }
+  },
+
+  async postConsumption() {
+    const branch_id=document.getElementById('con-branch')?.value;
+    const product_id=document.getElementById('con-product')?.value;
+    const quantity=parseFloat(document.getElementById('con-qty')?.value)||0;
+    const targetType=document.getElementById('con-target-type')?.value;
+    const target=document.getElementById('con-target');
+    const target_id=target?.value;
+    const target_label=target?.options[target.selectedIndex]?.dataset?.label||target?.options[target.selectedIndex]?.text||null;
+    if(!branch_id||!product_id||quantity<=0||!target_id){this.alert('Branch, product, quantity and cost target are required','error');return;}
+    const payload={
+      branch_id:Number(branch_id),notes:document.getElementById('con-notes')?.value||null,
+      items:[{product_id:Number(product_id),quantity,bin_id:document.getElementById('con-bin')?.value||null,
+        purpose:document.getElementById('con-purpose')?.value||null,
+        allocations:[{target_type:targetType,target_id,target_label,allocation_percent:100,
+          expense_category:document.getElementById('con-category')?.value||'other',
+          purpose:document.getElementById('con-purpose')?.value||null}]}]
+    };
+    try{
+      const posted=await this.api('POST','/cost-allocations/consumptions',payload);
+      this.closeModal();this.alert(`Consumption ${posted.consumption_number} posted`);this.renderPurchasing('consumables');
+    }catch(e){this.alert(e.message,'error');}
   },
 
   // ─── Purchase Requests ────────────────────────────────────
@@ -11577,6 +12434,8 @@ const App = {
     }
     document.querySelectorAll('[id^="pri-itype-"]').forEach(sel => {
       sel.value = type === 'internal_use' ? 'internal' : 'sale';
+      const idx=sel.id.split('-').pop();
+      this._togglePRAllocation(idx);
     });
   },
 
@@ -11614,6 +12473,7 @@ const App = {
     const container = document.getElementById('pr-items');
     const opts = `<option value="">-- Product (optional) --</option>${(this._prAllProducts||[]).map(p=>`<option value="${p.id}" data-cost="${p.cost||0}" data-name="${p.name}" data-sku="${p.sku||''}" ${prefill&&prefill.product_id===p.id?'selected':''}>${p.name} (${p.sku})</option>`).join('')}`;
     const defaultType = prefill ? prefill.item_type : ((this._prRequestType === 'internal_use') ? 'internal' : 'sale');
+    const prefillAlloc = prefill?.allocations?.[0] || null;
     const wrap = document.createElement('div');
     wrap.id = `pr-item-${idx}`;
     wrap.style.cssText = 'border-bottom:1px solid var(--border);padding:8px 0';
@@ -11623,7 +12483,7 @@ const App = {
         <input id="pri-name-${idx}" placeholder="Or type item name" value="${prefill&&!prefill.product_id?this.escapeAttr(prefill.product_name):''}" data-qi-id="${prefill&&prefill.quotation_item_id||''}" oninput="App.calcPRTotal()">
         <input id="pri-qty-${idx}" type="number" min="1" value="${prefill?prefill.quantity:1}" placeholder="Qty" oninput="App.calcPRTotal()">
         <input id="pri-cost-${idx}" type="number" step="0.01" value="${prefill?prefill.unit_cost:''}" placeholder="Est. Cost" oninput="App.calcPRTotal()">
-        <select id="pri-itype-${idx}" style="font-size:12px">
+        <select id="pri-itype-${idx}" style="font-size:12px" onchange="App._togglePRAllocation(${idx})">
           <option value="sale" ${defaultType==='sale'?'selected':''}>Sale</option>
           <option value="internal" ${defaultType==='internal'?'selected':''}>Internal</option>
         </select>
@@ -11634,8 +12494,22 @@ const App = {
           <span style="font-size:11px;color:var(--text-muted);white-space:nowrap;min-width:80px">Product URL:</span>
           <input id="pri-url-${idx}" placeholder="https://..." style="flex:1" value="${this.escapeAttr(prefill&&prefill.product_url)}">
         </div>
+      </div>
+      <div id="pri-allocation-row-${idx}" style="display:${defaultType==='internal'?'':'none'};margin-top:8px;padding:10px;background:var(--bg);border-radius:6px">
+        <div style="font-size:11px;font-weight:700;color:var(--text-muted);margin-bottom:6px;text-transform:uppercase">Cost allocation · 100% of this line</div>
+        <div style="display:grid;grid-template-columns:1.2fr 1.8fr 1.2fr 1.8fr;gap:6px">
+          <select id="pri-target-type-${idx}" onchange="App._loadPRAllocationTargets(${idx},this.value)">
+            ${[['rental_asset','Rental Machine / Asset'],['vehicle','Vehicle'],['equipment','Equipment'],['building','Building / Property'],['branch','Branch'],['department','Department'],['project','Project'],['work_order','Work Order'],['general_overhead','General Overhead']].map(([v,l])=>`<option value="${v}" ${prefillAlloc?.target_type===v?'selected':''}>${l}</option>`).join('')}
+          </select>
+          <select id="pri-target-${idx}"><option value="">-- Select Target --</option></select>
+          <select id="pri-category-${idx}">
+            ${['parts','lubricants','fuel','cleaning','maintenance','office_consumables','safety','other'].map(v=>`<option value="${v}" ${prefillAlloc?.expense_category===v?'selected':''}>${v.replaceAll('_',' ')}</option>`).join('')}
+          </select>
+          <input id="pri-purpose-${idx}" placeholder="Purpose / reason" value="${this.escapeAttr(prefillAlloc?.purpose)}">
+        </div>
       </div>`;
     container.appendChild(wrap);
+    if (defaultType === 'internal') this._loadPRAllocationTargets(idx, prefillAlloc?.target_type || 'rental_asset', prefillAlloc?.target_id || null);
   },
 
   updatePRItem(idx, productId) {
@@ -11645,6 +12519,25 @@ const App = {
     document.getElementById(`pri-name-${idx}`).value = '';
     document.getElementById(`pri-cost-${idx}`).value = opt.dataset.cost || '';
     this.calcPRTotal();
+  },
+
+  _togglePRAllocation(idx) {
+    const internal=document.getElementById(`pri-itype-${idx}`)?.value==='internal';
+    const row=document.getElementById(`pri-allocation-row-${idx}`);
+    if(row)row.style.display=internal?'':'none';
+    if(internal)this._loadPRAllocationTargets(idx,document.getElementById(`pri-target-type-${idx}`)?.value||'rental_asset');
+  },
+
+  async _loadPRAllocationTargets(idx,type,selectedId) {
+    const select=document.getElementById(`pri-target-${idx}`);
+    if(!select)return;
+    select.innerHTML='<option value="">Loading...</option>';
+    try{
+      const rows=await this.api('GET',`/cost-allocations/targets?type=${encodeURIComponent(type)}`);
+      select.innerHTML='<option value="">-- Select Target --</option>'+rows.map(x=>`<option value="${x.id}" data-label="${this.escapeAttr(x.name||x.code||'')}" ${selectedId!=null&&String(selectedId)===String(x.id)?'selected':''}>${x.name||x.code||x.id}</option>`).join('');
+    }catch(e){
+      select.innerHTML='<option value="">No configured targets</option>';
+    }
   },
 
   calcPRTotal() {
@@ -11684,6 +12577,7 @@ const App = {
     const taxRate = this._prIsLocalSupplier ? (this._prTaxRate || 0) : 0;
 
     const items = [];
+    let allocationError = null;
     document.querySelectorAll('[id^="pri-qty-"]').forEach(qEl => {
       if (!qEl.closest('[id^="pr-item-"]')) return;
       const idx = qEl.id.split('-').pop();
@@ -11700,7 +12594,18 @@ const App = {
       const item_type = document.getElementById(`pri-itype-${idx}`)?.value || (request_type === 'internal_use' ? 'internal' : 'sale');
       const product_url = document.getElementById(`pri-url-${idx}`)?.value.trim() || null;
       const quotation_item_id = nameEl?.dataset.qiId || null;
-      items.push({ product_id: product_id || null, product_name, sku, quantity, unit_cost, item_type, product_url, quotation_item_id });
+      let allocations=[];
+      if(item_type==='internal'){
+        const targetType=document.getElementById(`pri-target-type-${idx}`)?.value;
+        const target=document.getElementById(`pri-target-${idx}`);
+        const targetId=target?.value;
+        const targetLabel=target?.options[target.selectedIndex]?.dataset?.label||target?.options[target.selectedIndex]?.text||null;
+        if(!targetId){ allocationError=`Select a cost target for ${product_name}`; return; }
+        allocations=[{target_type:targetType,target_id:targetId,target_label:targetLabel,allocation_percent:100,
+          expense_category:document.getElementById(`pri-category-${idx}`)?.value||'other',
+          purpose:document.getElementById(`pri-purpose-${idx}`)?.value||null}];
+      }
+      items.push({ product_id: product_id || null, product_name, sku, quantity, unit_cost, item_type, product_url, quotation_item_id, allocations });
     });
     if (!items.length) { this.alert('Add at least one item', 'error'); return; }
 

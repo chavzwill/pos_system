@@ -2,6 +2,8 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
 const { requirePermission, requireAnyPermission } = require('../lib/permissions');
+const { ensureCostAllocationSchema, recordInvoiceReconciliation } = require('../lib/cost-allocations');
+const { ensureSupplierRecoverablesSchema } = require('../lib/supplier-recoverables');
 
 let schemaPromise = null;
 async function ensureColumn(table,name,definition){
@@ -10,6 +12,8 @@ async function ensureColumn(table,name,definition){
 }
 async function ensureSchema() {
   if (!schemaPromise) schemaPromise = (async()=>{
+    await ensureCostAllocationSchema();
+    await ensureSupplierRecoverablesSchema();
     await db.batch([
       { sql: `CREATE TABLE IF NOT EXISTS supplier_invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -95,7 +99,7 @@ router.get('/overview', requirePermission('reports_financial'), async (req,res)=
       COALESCE(SUM(CASE WHEN MAX(0,si.total-COALESCE(a.paid,0))>0.001 AND si.due_date IS NOT NULL AND date(si.due_date)<date('now') THEN MAX(0,si.total-COALESCE(a.paid,0)) ELSE 0 END),0) overdue_ap,
       COALESCE(SUM(CASE WHEN MAX(0,si.total-COALESCE(a.paid,0))>0.001 AND (si.due_date IS NULL OR date(si.due_date)>=date('now')) THEN MAX(0,si.total-COALESCE(a.paid,0)) ELSE 0 END),0) not_yet_due_ap
       FROM supplier_invoices si
-      LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM supplier_payment_allocations GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id
+      LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM (SELECT supplier_invoice_id,amount FROM supplier_payment_allocations UNION ALL SELECT supplier_invoice_id,amount FROM supplier_recoverable_ap_allocations) applied GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id
       WHERE si.status!='void' AND ${branchWhere}`,args});
     const agingArgs=[]; let agingWhere="si.status!='void'"; if(branchId){agingWhere+=' AND si.branch_id=?';agingArgs.push(branchId);}
     const {rows:[aging]}=await db.execute({sql:`SELECT
@@ -107,7 +111,7 @@ router.get('/overview', requirePermission('reports_financial'), async (req,res)=
       FROM (
         SELECT si.id, MAX(0,si.total-COALESCE(a.paid,0)) balance,
           CASE WHEN si.due_date IS NULL THEN 0 ELSE CAST(julianday('now')-julianday(si.due_date) AS INTEGER) END age_days
-        FROM supplier_invoices si LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM supplier_payment_allocations GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id
+        FROM supplier_invoices si LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM (SELECT supplier_invoice_id,amount FROM supplier_payment_allocations UNION ALL SELECT supplier_invoice_id,amount FROM supplier_recoverable_ap_allocations) applied GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id
         WHERE ${agingWhere}
       ) x WHERE balance>0.001`,args:agingArgs});
     res.json({summary,aging,basis:'AP includes only supplier invoices formally posted in this ledger. Open purchase orders remain commitments and are not counted as payables until invoiced.'});
@@ -121,7 +125,7 @@ router.get('/invoices', requirePermission('reports_financial'), async (req,res)=
       COALESCE(a.paid,0) paid_amount,MAX(0,si.total-COALESCE(a.paid,0)) balance_due
       FROM supplier_invoices si JOIN suppliers s ON s.id=si.supplier_id
       LEFT JOIN branches b ON b.id=si.branch_id LEFT JOIN purchase_orders po ON po.id=si.purchase_order_id
-      LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM supplier_payment_allocations GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id
+      LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM (SELECT supplier_invoice_id,amount FROM supplier_payment_allocations UNION ALL SELECT supplier_invoice_id,amount FROM supplier_recoverable_ap_allocations) applied GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id
       WHERE si.status!='void'`;
     if(supplier_id){sql+=' AND si.supplier_id=?';args.push(supplier_id);} if(branch_id){sql+=' AND si.branch_id=?';args.push(branch_id);}
     if(status==='open')sql+=' AND MAX(0,si.total-COALESCE(a.paid,0))>0.001'; else if(status==='paid')sql+=' AND MAX(0,si.total-COALESCE(a.paid,0))<=0.001';
@@ -159,6 +163,7 @@ router.post('/invoices', requireAnyPermission('purchasing_approve','reports_fina
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[supplierId,poId,branchId,String(b.invoice_number).trim(),b.invoice_date,b.due_date||null,subtotal,tax,freight,duty,otherLanded,taxTreatment,total,b.notes||null,actor(req)]});
       const id=Number(r.lastInsertRowid);
       await tx.execute({sql:`INSERT INTO supplier_ledger_events(supplier_id,event_type,entity_type,entity_id,amount,details,actor_employee_id) VALUES(?,?,?,?,?,?,?)`,args:[supplierId,'invoice_posted','supplier_invoice',id,total,`Supplier invoice ${String(b.invoice_number).trim()} posted; merchandise ${subtotal.toFixed(2)}, tax ${tax.toFixed(2)}, landed costs ${(freight+duty+otherLanded).toFixed(2)}`,actor(req)]});
+      if(poId) await recordInvoiceReconciliation(tx,{supplierInvoiceId:id,purchaseOrderId:poId,invoiceSubtotal:subtotal});
       await tx.commit(); const {rows:[row]}=await db.execute({sql:'SELECT * FROM supplier_invoices WHERE id=?',args:[id]}); res.status(201).json(row);
     }catch(e){await tx.rollback();throw e;}
   }catch(e){res.status(400).json({error:e.message});}
@@ -171,7 +176,7 @@ router.post('/payments', requirePermission('reports_financial'), async (req,res)
     let allocations=Array.isArray(b.allocations)?b.allocations.filter(x=>Number(x.amount)>0).map(x=>({invoice_id:Number(x.invoice_id),amount:Number(x.amount)})):[];
     if(!allocations.length){
       const {rows:open}=await db.execute({sql:`SELECT si.id,MAX(0,si.total-COALESCE(a.paid,0)) balance_due FROM supplier_invoices si
-        LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM supplier_payment_allocations GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id
+        LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM (SELECT supplier_invoice_id,amount FROM supplier_payment_allocations UNION ALL SELECT supplier_invoice_id,amount FROM supplier_recoverable_ap_allocations) applied GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id
         WHERE si.supplier_id=? AND si.status!='void' AND MAX(0,si.total-COALESCE(a.paid,0))>0.001 ORDER BY COALESCE(si.due_date,si.invoice_date),si.id`,args:[supplierId]});
       let left=amount; for(const inv of open){if(left<=0.001)break;const applied=Math.min(left,Number(inv.balance_due));allocations.push({invoice_id:inv.id,amount:Number(applied.toFixed(2))});left=Number((left-applied).toFixed(2));}
     }
@@ -179,7 +184,7 @@ router.post('/payments', requirePermission('reports_financial'), async (req,res)
     const tx=await db.transaction('write'); try{
       const number=paymentNumber(); const r=await tx.execute({sql:`INSERT INTO supplier_payments(payment_number,supplier_id,branch_id,payment_date,amount,payment_method,reference,notes,recorded_by) VALUES(?,?,?,?,?,?,?,?,?)`,args:[number,supplierId,b.branch_id||null,b.payment_date,amount,b.payment_method||null,b.reference||null,b.notes||null,actor(req)]});
       const paymentId=Number(r.lastInsertRowid);
-      for(const a of allocations){const {rows:[inv]}=await tx.execute({sql:'SELECT supplier_id,total FROM supplier_invoices WHERE id=? AND status!=\'void\'',args:[a.invoice_id]});if(!inv||Number(inv.supplier_id)!==supplierId)throw new Error('Payment allocation references an invalid supplier invoice');const {rows:[paid]}=await tx.execute({sql:'SELECT COALESCE(SUM(amount),0) amount FROM supplier_payment_allocations WHERE supplier_invoice_id=?',args:[a.invoice_id]});const balance=Number(inv.total)-Number(paid.amount||0);if(Number(a.amount)-balance>0.001)throw new Error('Payment allocation exceeds invoice balance');await tx.execute({sql:'INSERT INTO supplier_payment_allocations(payment_id,supplier_invoice_id,amount) VALUES(?,?,?)',args:[paymentId,a.invoice_id,a.amount]});}
+      for(const a of allocations){const {rows:[inv]}=await tx.execute({sql:'SELECT supplier_id,total FROM supplier_invoices WHERE id=? AND status!=\'void\'',args:[a.invoice_id]});if(!inv||Number(inv.supplier_id)!==supplierId)throw new Error('Payment allocation references an invalid supplier invoice');const {rows:[paid]}=await tx.execute({sql:`SELECT COALESCE(SUM(amount),0) amount FROM (SELECT amount FROM supplier_payment_allocations WHERE supplier_invoice_id=? UNION ALL SELECT amount FROM supplier_recoverable_ap_allocations WHERE supplier_invoice_id=?)`,args:[a.invoice_id,a.invoice_id]});const balance=Number(inv.total)-Number(paid.amount||0);if(Number(a.amount)-balance>0.001)throw new Error('Payment allocation exceeds invoice balance');await tx.execute({sql:'INSERT INTO supplier_payment_allocations(payment_id,supplier_invoice_id,amount) VALUES(?,?,?)',args:[paymentId,a.invoice_id,a.amount]});}
       await tx.execute({sql:`INSERT INTO supplier_ledger_events(supplier_id,event_type,entity_type,entity_id,amount,details,actor_employee_id) VALUES(?,?,?,?,?,?,?)`,args:[supplierId,'payment_recorded','supplier_payment',paymentId,amount,`Supplier payment ${number} recorded`,actor(req)]});
       await tx.commit(); const {rows:[row]}=await db.execute({sql:'SELECT * FROM supplier_payments WHERE id=?',args:[paymentId]}); res.status(201).json({...row,allocated_amount:allocated,unallocated_amount:Number((amount-allocated).toFixed(2))});
     }catch(e){await tx.rollback();throw e;}

@@ -921,6 +921,7 @@ async function _init() {
       notes TEXT,
       required_date DATE,
       converted_to_po_id INTEGER REFERENCES purchase_orders(id),
+      spendos_version INTEGER NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
     { sql: `CREATE TABLE IF NOT EXISTS purchase_request_items (
@@ -933,6 +934,22 @@ async function _init() {
       unit_cost REAL DEFAULT 0,
       notes TEXT,
       total REAL DEFAULT 0
+    )` },
+    { sql: `CREATE TABLE IF NOT EXISTS spendos_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      event_type TEXT NOT NULL,
+      aggregate_type TEXT NOT NULL,
+      aggregate_id TEXT NOT NULL,
+      source_version INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_error TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      sent_at DATETIME,
+      UNIQUE(aggregate_type,aggregate_id,event_type,source_version)
     )` },
     { sql: `CREATE TABLE IF NOT EXISTS currency_denominations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1087,6 +1104,7 @@ async function _init() {
     'ALTER TABLE purchase_requests ADD COLUMN is_online_purchase INTEGER DEFAULT 0',
     'ALTER TABLE purchase_requests ADD COLUMN tax_rate REAL DEFAULT 0',
     'ALTER TABLE purchase_requests ADD COLUMN tax_amount REAL DEFAULT 0',
+    'ALTER TABLE purchase_requests ADD COLUMN spendos_version INTEGER NOT NULL DEFAULT 1',
     'ALTER TABLE purchase_request_items ADD COLUMN product_url TEXT',
     'ALTER TABLE products ADD COLUMN is_service INTEGER DEFAULT 0',
     'ALTER TABLE products ADD COLUMN unit TEXT',
@@ -1949,6 +1967,8 @@ async function _init() {
     'CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id)',
     'CREATE INDEX IF NOT EXISTS idx_purchase_order_items_po_id ON purchase_order_items(po_id)',
     'CREATE INDEX IF NOT EXISTS idx_purchase_request_items_pr_id ON purchase_request_items(pr_id)',
+    'CREATE INDEX IF NOT EXISTS idx_spendos_outbox_delivery ON spendos_outbox(status,available_at,id)',
+    'CREATE INDEX IF NOT EXISTS idx_spendos_outbox_aggregate ON spendos_outbox(aggregate_type,aggregate_id,source_version)',
     'CREATE INDEX IF NOT EXISTS idx_account_payments_customer_id ON account_payments(customer_id)',
     'CREATE INDEX IF NOT EXISTS idx_commission_records_employee_id ON commission_records(employee_id)',
     'CREATE INDEX IF NOT EXISTS idx_commission_records_source ON commission_records(source_type, source_id)',
