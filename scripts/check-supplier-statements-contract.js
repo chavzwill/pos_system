@@ -33,7 +33,7 @@ const checks=[
  ['UI accepts simple human-readable statement line format',ui.includes('Format: type | date | reference | amount | description')],
  ['UI records statement through multipart FormData',ui.includes("fetch('/api/supplier-statements',{method:'POST',body:fd})")],
  ['UI exposes statement reconciliation',ui.includes('_reconcileSupplierStatement')&&ui.includes('Internal AP as of')],
- ['UI explicitly says reconciliation does not change AP',ui.includes('This reconciliation is diagnostic only and does not change AP.')]
+ ['UI explicitly says reconciliation does not change AP',ui.includes('does not change AP')&&ui.includes('coordination cases only')]
 ];
 let failed=0;
 for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Supplier statements: ${name}`);if(!ok)failed++;}

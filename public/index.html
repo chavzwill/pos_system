@@ -11594,17 +11594,28 @@ const App = {
     const c=document.getElementById('content');
     c.innerHTML='<div class="empty-state"><p>Loading supplier statements...</p></div>';
     try{
-      const [rows,suppliers,branches]=await Promise.all([
+      const [rows,suppliers,branches,exceptions]=await Promise.all([
         this.api('GET','/supplier-statements'),
         this.api('GET','/suppliers'),
-        this.api('GET','/branches')
+        this.api('GET','/branches'),
+        this.api('GET','/supplier-statement-exceptions')
       ]);
       this._supplierStatementSuppliers=suppliers||[];
       this._supplierStatementBranches=branches||[];
       const tabButton=(key,label)=>'<button class="btn btn-sm '+(key==='supplier-statements'?'btn-primary':'btn-outline')+'" onclick="App.renderPurchasing(\''+key+'\')">'+label+'</button>';
       const body=(rows||[]).map(x=>'<tr><td class="fw-600">'+this.escapeHtml(x.statement_reference||('Statement '+x.id))+'</td><td>'+this.escapeHtml(x.supplier_name||'')+'</td><td>'+this.escapeHtml(x.period_start||'—')+'</td><td>'+this.escapeHtml(x.period_end||'')+'</td><td>'+this.fmt(x.opening_balance||0)+'</td><td class="fw-600">'+this.fmt(x.closing_balance||0)+'</td><td>'+this.escapeHtml(x.currency||'')+'</td><td style="white-space:nowrap"><button class="btn btn-sm btn-primary" onclick="App._reconcileSupplierStatement('+x.id+')">Reconcile</button> '+(x.stored_name?'<a class="btn btn-sm btn-outline" href="/api/supplier-statements/'+x.id+'/file">Evidence</a>':'')+'</td></tr>').join('');
+      const exRows=(exceptions||[]).map(e=>{
+        const badge=e.status==='accepted_difference'?'badge-purple':e.status==='resolved'?'badge-success':e.priority==='critical'?'badge-danger':e.priority==='high'?'badge-warning':'badge-info';
+        let actions='';
+        if(!['resolved','accepted_difference'].includes(e.status)){
+          actions='<button class="btn btn-sm btn-outline" onclick="App._investigateStatementException('+e.id+')">Investigate</button> <button class="btn btn-sm btn-success" onclick="App._resolveStatementException('+e.id+')">Resolve</button>';
+          if(this.can('reports_financial'))actions+=' <button class="btn btn-sm btn-secondary" onclick="App._acceptStatementDifference('+e.id+')">Accept difference</button>';
+        }
+        return '<tr><td><span class="badge-pill '+badge+'">'+this.escapeHtml(String(e.status||'').replaceAll('_',' '))+'</span></td><td>'+this.escapeHtml(e.supplier_name||'')+'</td><td>'+this.escapeHtml(String(e.exception_type||'').replaceAll('_',' '))+'</td><td>'+this.fmt(e.amount||0)+'</td><td>'+this.escapeHtml(e.summary||'')+'</td><td>'+this.escapeHtml(e.owner_name||'Unassigned')+'</td><td>'+this.escapeHtml(e.due_at?String(e.due_at).slice(0,10):'—')+'</td><td>'+actions+'</td></tr>';
+      }).join('');
       c.innerHTML='<div class="section-header"><div><h2>Supplier Statements</h2><p style="margin:4px 0 0;color:var(--text-muted);font-size:13px">Compare the supplier\'s own statement with our Accounts Payable and credit-note evidence for the same period.</p></div><button class="btn btn-primary" onclick="App.showSupplierStatementForm()">+ Record Statement</button></div>'+
         '<div style="display:flex;gap:8px;margin-bottom:16px">'+tabButton('orders','Purchase Orders')+tabButton('requests','Purchase Requests')+tabButton('consumables','Consumables')+tabButton('recoverables','Supplier Recoverables')+tabButton('supplier-returns','Supplier Returns')+tabButton('supplier-credit-notes','Credit Notes')+tabButton('supplier-statements','Statements')+'</div>'+
+        '<div class="card" style="margin-bottom:16px"><div class="card-header"><div><div class="card-title">Statement Exceptions</div><div style="font-size:12px;color:var(--text-muted)">Exceptions are coordination records only. Resolving a case never changes AP; the underlying reconciliation must actually be clean, unless finance explicitly accepts a documented difference.</div></div></div><div class="table-wrap"><table><thead><tr><th>Status</th><th>Supplier</th><th>Issue</th><th>Amount</th><th>Summary</th><th>Owner</th><th>Due</th><th>Actions</th></tr></thead><tbody>'+(exRows||'<tr><td colspan="8" class="empty-state">No statement exceptions</td></tr>')+'</tbody></table></div></div>'+
         '<div class="card"><div class="table-wrap"><table><thead><tr><th>Reference</th><th>Supplier</th><th>From</th><th>To</th><th>Opening</th><th>Closing</th><th>Currency</th><th>Actions</th></tr></thead><tbody>'+(body||'<tr><td colspan="8" class="empty-state">No supplier statements recorded</td></tr>')+'</tbody></table></div></div>';
     }catch(e){c.innerHTML='<div class="empty-state">Unable to load supplier statements: '+this.escapeHtml(e.message||'Unknown error')+'</div>';}
   },
@@ -11652,12 +11663,42 @@ const App = {
 
   async _reconcileSupplierStatement(id) {
     try{
-      const r=await this.api('GET','/supplier-statements/'+id+'/reconciliation');
+      const payload=await this.api('POST','/supplier-statement-exceptions/refresh/'+id,{});
+      const r=payload.reconciliation||{};
       const missing=(r.missing_internal_credit_notes||[]).map(x=>'Supplier statement credit '+(x.reference||('#'+x.statement_line_id))+' '+this.fmt(Math.abs(Number(x.amount||0)))+' is not in our Credit Notes register.').join('\n');
       const internal=(r.internal_credit_notes_not_on_statement||[]).map(x=>'Internal credit note '+x.credit_note_number+' '+this.fmt(x.amount||0)+' is not evidenced on this supplier statement.').join('\n');
-      const message='Supplier statement closing: '+this.fmt(r.supplier_statement_closing_balance||0)+'\nInternal AP as of '+r.period_end+': '+this.fmt(r.internal_ap_balance_as_of||0)+'\nVariance: '+this.fmt(r.variance||0)+'\nStatus: '+String(r.status||'').replaceAll('_',' ')+'\n\n'+(missing?missing+'\n':'')+(internal?internal+'\n':'')+'\nThis reconciliation is diagnostic only and does not change AP.';
-      window.alert(message);
+      const message='Supplier statement closing: '+this.fmt(r.supplier_statement_closing_balance||0)+'\nInternal AP as of '+r.period_end+': '+this.fmt(r.internal_ap_balance_as_of||0)+'\nVariance: '+this.fmt(r.variance||0)+'\nStatus: '+String(r.status||'').replaceAll('_',' ')+'\nOpen/managed exceptions: '+(payload.exceptions||[]).filter(x=>!['resolved','accepted_difference'].includes(x.status)).length+'\n\n'+(missing?missing+'\n':'')+(internal?internal+'\n':'')+'\nReconciliation refreshes coordination cases only. It does not change AP.';
+      window.alert(message);this.renderSupplierStatements();
     }catch(e){this.alert(e.message||'Unable to reconcile supplier statement','error');}
+  },
+
+  async _investigateStatementException(id) {
+    try{
+      const note=window.prompt('Investigation note');
+      if(!note||note.trim().length<3)return;
+      const due=window.prompt('Next review due date (optional, YYYY-MM-DD)')||null;
+      await this.api('PATCH','/supplier-statement-exceptions/'+id,{status:'investigating',owner_employee_id:this.currentUser?.id||null,due_at:due,note:note.trim()});
+      this.alert('Statement exception moved to investigation');this.renderSupplierStatements();
+    }catch(e){this.alert(e.message||'Unable to update statement exception','error');}
+  },
+
+  async _resolveStatementException(id) {
+    try{
+      const note=window.prompt('Resolution note (optional)')||'';
+      await this.api('POST','/supplier-statement-exceptions/'+id+'/resolve',{note});
+      this.alert('Statement exception resolved from clean reconciliation evidence');this.renderSupplierStatements();
+    }catch(e){this.alert(e.message||'Exception cannot be resolved yet','error');}
+  },
+
+  async _acceptStatementDifference(id) {
+    try{
+      const reason=window.prompt('Finance reason for accepting this difference');
+      if(!reason||reason.trim().length<10)return this.alert('A meaningful finance reason is required','warning');
+      const evidence_reference=window.prompt('Evidence reference (document, approval, email, memo, etc.)')||'';
+      if(!evidence_reference.trim())return this.alert('An evidence reference is required','warning');
+      await this.api('POST','/supplier-statement-exceptions/'+id+'/accept-difference',{reason:reason.trim(),evidence_reference:evidence_reference.trim()});
+      this.alert('Statement difference accepted with finance evidence');this.renderSupplierStatements();
+    }catch(e){this.alert(e.message||'Unable to accept statement difference','error');}
   },
 
   async renderSupplierCreditNotes() {

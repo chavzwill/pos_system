@@ -104,6 +104,40 @@ async function getStatement(id){
   return {...row,lines};
 }
 
+async function reconcileStatement(id){
+  const st=await getStatement(id);if(!st)return null;
+  const internal=await internalBalanceAsOf(st.supplier_id,st.period_end,st.branch_id||null);
+  const variance=money(Number(st.closing_balance||0)-Number(internal||0));
+  const creditLines=(st.lines||[]).filter(x=>x.line_type==='credit_note');
+  const creditArgs=[st.supplier_id,st.period_end];
+  let creditSql=`SELECT id,credit_note_number,credit_date,amount,applied_amount,status
+    FROM supplier_credit_notes WHERE supplier_id=? AND date(credit_date)<=date(?)`;
+  if(st.period_start){creditSql+=' AND date(credit_date)>=date(?)';creditArgs.push(st.period_start);}
+  creditSql+=' ORDER BY credit_date,id';
+  const {rows:internalCredits}=await db.execute({sql:creditSql,args:creditArgs});
+  const norm=v=>String(v||'').trim().toLowerCase();
+  const matchedInternal=new Set();
+  const missingInternalCredits=[];
+  for(const line of creditLines){
+    const byRef=internalCredits.find(c=>line.reference&&norm(c.credit_note_number)===norm(line.reference));
+    const byAmount=!line.reference?internalCredits.find(c=>!matchedInternal.has(c.id)&&Math.abs(Math.abs(Number(line.amount))-Number(c.amount))<=0.01):null;
+    const match=byRef||byAmount;
+    if(match)matchedInternal.add(match.id);
+    else missingInternalCredits.push({statement_line_id:line.id,reference:line.reference,amount:line.amount,line_date:line.line_date,description:line.description});
+  }
+  const internalCreditsMissingFromStatement=internalCredits
+    .filter(c=>!matchedInternal.has(c.id))
+    .map(c=>({credit_note_id:c.id,credit_note_number:c.credit_note_number,credit_date:c.credit_date,amount:c.amount,status:c.status}));
+  const status=Math.abs(variance)<=0.01&&missingInternalCredits.length===0?'reconciled':'needs_review';
+  return {
+    statement_id:st.id,supplier_id:st.supplier_id,supplier_name:st.supplier_name,branch_id:st.branch_id||null,period_end:st.period_end,
+    supplier_statement_closing_balance:money(st.closing_balance),internal_ap_balance_as_of:internal,variance,status,
+    missing_internal_credit_notes:missingInternalCredits,
+    internal_credit_notes_not_on_statement:internalCreditsMissingFromStatement,
+    note:'Reconciliation is diagnostic only. It does not post invoices, payments, credit notes, AP offsets, or journal entries.'
+  };
+}
+
 router.use(requireAnyPermission('purchasing','reports_financial','accounts'));
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Supplier statement initialization failed'});}});
 
@@ -162,37 +196,9 @@ router.post('/',upload.single('file'),async(req,res)=>{
 
 router.get('/:id/reconciliation',async(req,res)=>{
   try{
-    const st=await getStatement(req.params.id);if(!st)return res.status(404).json({error:'Supplier statement not found'});
-    const internal=await internalBalanceAsOf(st.supplier_id,st.period_end,st.branch_id||null);
-    const variance=money(Number(st.closing_balance||0)-Number(internal||0));
-    const creditLines=(st.lines||[]).filter(x=>x.line_type==='credit_note');
-    const creditArgs=[st.supplier_id,st.period_end];
-    let creditSql=`SELECT id,credit_note_number,credit_date,amount,applied_amount,status
-      FROM supplier_credit_notes WHERE supplier_id=? AND date(credit_date)<=date(?)`;
-    if(st.period_start){creditSql+=' AND date(credit_date)>=date(?)';creditArgs.push(st.period_start);}
-    creditSql+=' ORDER BY credit_date,id';
-    const {rows:internalCredits}=await db.execute({sql:creditSql,args:creditArgs});
-    const norm=v=>String(v||'').trim().toLowerCase();
-    const matchedInternal=new Set();
-    const missingInternalCredits=[];
-    for(const line of creditLines){
-      const byRef=internalCredits.find(c=>line.reference&&norm(c.credit_note_number)===norm(line.reference));
-      const byAmount=!line.reference?internalCredits.find(c=>!matchedInternal.has(c.id)&&Math.abs(Math.abs(Number(line.amount))-Number(c.amount))<=0.01):null;
-      const match=byRef||byAmount;
-      if(match)matchedInternal.add(match.id);
-      else missingInternalCredits.push({statement_line_id:line.id,reference:line.reference,amount:line.amount,line_date:line.line_date,description:line.description});
-    }
-    const internalCreditsMissingFromStatement=internalCredits
-      .filter(c=>!matchedInternal.has(c.id))
-      .map(c=>({credit_note_id:c.id,credit_note_number:c.credit_note_number,credit_date:c.credit_date,amount:c.amount,status:c.status}));
-    const status=Math.abs(variance)<=0.01&&missingInternalCredits.length===0?'reconciled':'needs_review';
-    res.json({
-      statement_id:st.id,supplier_id:st.supplier_id,supplier_name:st.supplier_name,period_end:st.period_end,
-      supplier_statement_closing_balance:money(st.closing_balance),internal_ap_balance_as_of:internal,variance,status,
-      missing_internal_credit_notes:missingInternalCredits,
-      internal_credit_notes_not_on_statement:internalCreditsMissingFromStatement,
-      note:'Reconciliation is diagnostic only. It does not post invoices, payments, credit notes, AP offsets, or journal entries.'
-    });
+    const result=await reconcileStatement(req.params.id);
+    if(!result)return res.status(404).json({error:'Supplier statement not found'});
+    res.json(result);
   }catch(e){res.status(500).json({error:e.message});}
 });
 
@@ -216,3 +222,5 @@ router.get('/:id',async(req,res)=>{
 module.exports=router;
 module.exports.ensureSchema=ensureSchema;
 module.exports.internalBalanceAsOf=internalBalanceAsOf;
+module.exports.reconcileStatement=reconcileStatement;
+module.exports.getStatement=getStatement;
