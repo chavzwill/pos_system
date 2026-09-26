@@ -15,7 +15,7 @@ const checks=[
  ['planner excludes identified unconfirmed claims from cash reduction',!guard.substring(guard.indexOf('async function supplierNetPaymentPlan'),guard.indexOf("router.get('/payments/net-plan'")).includes("status='identified'")],
  ['unmatched formal credit notes are reported separately',guard.includes('unmatched_formal_credit_notes:unmatchedCredits')],
  ['unmatched credit notes do not reduce minimum cash directly',guard.includes('minimum_cash_after_current_offsets:money(Math.max(0,openAp-proposedOffset))')],
- ['planner does not double count matched credit-note applications as separate cash reduction',!guard.substring(guard.indexOf('async function supplierNetPaymentPlan'),guard.indexOf("router.get('/payments/net-plan'")).includes('supplier_credit_note_applications')],
+ ['planner subtracts matched unsettled credit-note reservations from direct-offset capacity',guard.includes('MAX(0,c.confirmed_amount-c.recovered_amount-COALESCE(r.reserved,0)) outstanding_amount')&&guard.includes('supplier_credit_note_applications GROUP BY claim_id')],
  ['planner produces exact claim-to-invoice suggested offsets',guard.includes('claim_id:claim.id')&&guard.includes('supplier_invoice_id:inv.id')&&guard.includes('amount:applied')],
  ['planner applies offsets oldest-due invoice first',guard.includes("ORDER BY CASE WHEN si.due_date IS NULL THEN 1 ELSE 0 END,si.due_date,si.invoice_date,si.id")],
  ['planner never allocates more than invoice or claim balance',guard.includes('Math.min(invoiceLeft,claimLeft)')],
@@ -24,12 +24,12 @@ const checks=[
  ['branch-specific plan scopes recoverables to branch or global claims',guard.includes("claimBranch=' AND (c.branch_id=? OR c.branch_id IS NULL)'")],
  ['branch-specific plan scopes credit notes to branch or global documents',guard.includes("creditBranch=' AND (n.branch_id=? OR n.branch_id IS NULL)'")],
  ['planner explicitly states it is read only',guard.includes('Read-only payment plan. It does not post recoverable settlements')],
- ['planner route contains no mutation statement',!guard.substring(guard.indexOf("router.get('/payments/net-plan'"),guard.indexOf("router.get('/payments/credit-position'")).includes('INSERT INTO')],
+ ['planner preview function contains no mutation statement',!guard.substring(guard.indexOf('async function supplierNetPaymentPlan'),guard.indexOf('function netPlanHash')).includes('INSERT INTO')&&!guard.substring(guard.indexOf('async function supplierNetPaymentPlan'),guard.indexOf('function netPlanHash')).includes('UPDATE ')],
  ['UI runs net plan before creating idempotent payment operation',ui.indexOf("api('/payments/net-plan'+suffix)")<ui.indexOf('paymentOperationFor(d)')],
  ['UI shows open AP proposed offsets and minimum cash',ui.includes('Open AP:')&&ui.includes('Proposed AP offsets:')&&ui.includes('Minimum cash after current offsets:')],
  ['UI shows unmatched formal credits separately',ui.includes('Unmatched formal credit notes:')],
  ['UI displays suggested claim-to-invoice offsets',ui.includes('Suggested offsets:')&&ui.includes("x.claim_number+' → '+x.invoice_number")],
- ['UI explicitly states plan posts nothing',ui.includes('This is a read-only plan; no credit or payment has been posted.')],
+ ['UI explicitly states preview posts nothing',ui.includes('This is a read-only preview; no credit or payment has been posted yet.')],
  ['existing authoritative payment guard remains after planner preflight',ui.indexOf('if(position.requires_override)')>ui.indexOf("api('/payments/net-plan'+suffix)")],
  ['planner does not weaken independent override requirement',ui.includes('Independent finance/supervisor PIN')&&ui.includes('supplier_credit_override_reason')]
 ];

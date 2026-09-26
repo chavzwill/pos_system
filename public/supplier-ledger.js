@@ -34,14 +34,33 @@ function postInvoice(){modal('Post supplier invoice',`<label>Supplier ID<input n
 function recordPayment(){modal('Record supplier payment',`<label>Supplier ID<input name="supplier_id" type="number" required></label><label>Branch ID<input name="branch_id" type="number"></label><label>Payment date<input name="payment_date" type="date" required></label><label>Amount<input name="amount" type="number" step="0.01" required></label><label>Payment method<input name="payment_method" placeholder="Bank transfer, cheque, cash"></label><label>Reference<input name="reference"></label><label>Notes<textarea name="notes"></textarea></label>`,async d=>{
   const supplierId=Number(d.supplier_id),branchId=Number(d.branch_id)||null;
   const suffix='?supplier_id='+encodeURIComponent(supplierId)+(branchId?'&branch_id='+encodeURIComponent(branchId):'');
-  const [position,plan]=await Promise.all([
+  let [position,plan]=await Promise.all([
     api('/payments/credit-position?supplier_id='+encodeURIComponent(supplierId)),
     api('/payments/net-plan'+suffix)
   ]);
   if(plan.proposed_ap_offset>0||plan.unmatched_formal_credit_notes>0){
     const suggested=(plan.suggested_offsets||[]).slice(0,6).map(x=>x.claim_number+' → '+x.invoice_number+': '+money(x.amount)).join('\n');
     const planText='Open AP: '+money(plan.open_ap)+'\nProposed AP offsets: '+money(plan.proposed_ap_offset)+'\nMinimum cash after current offsets: '+money(plan.minimum_cash_after_current_offsets)+'\nUnmatched formal credit notes: '+money(plan.unmatched_formal_credit_notes)+(suggested?'\n\nSuggested offsets:\n'+suggested:'');
-    window.alert('Supplier net-payment plan\n\n'+planText+'\n\nThis is a read-only plan; no credit or payment has been posted.');
+    window.alert('Supplier net-payment plan\n\n'+planText+'\n\nThis is a read-only preview; no credit or payment has been posted yet.');
+    if(plan.proposed_ap_offset>0&&window.confirm('Apply the proposed recoverable offsets to Accounts Payable now before sending cash?')){
+      const netKey='NETPLAN-'+supplierId+'-'+(branchId||0)+'-'+plan.plan_hash;
+      const applied=await api('/payments/net-plan/apply',{method:'POST',headers:{'Idempotency-Key':netKey},body:JSON.stringify({supplier_id:supplierId,branch_id:branchId,plan_hash:plan.plan_hash})});
+      window.alert('Applied '+money(applied.applied_amount)+' in supplier recoverable offsets. Remaining AP after execution: '+money(applied.minimum_cash_after_execution)+'.');
+      if(Number(applied.minimum_cash_after_execution||0)<=0){
+        clearPaymentOperation();
+        window.alert('No cash payment is required after the applied offsets.');
+        return applied;
+      }
+      const cash=Number(window.prompt('Enter the cash/bank amount you still intend to pay after offsets',String(applied.minimum_cash_after_execution)));
+      if(!Number.isFinite(cash)||cash<=0){
+        clearPaymentOperation();
+        window.alert('Offsets were applied. No cash payment was recorded.');
+        return applied;
+      }
+      if(cash>Number(applied.minimum_cash_after_execution||0)+0.01)throw new Error('Cash payment cannot exceed the remaining AP after the offsets you just applied.');
+      d.amount=String(cash);
+      position=await api('/payments/credit-position?supplier_id='+encodeURIComponent(supplierId));
+    }
   }
   if(position.requires_override){
     const details='Offset-ready recoverables: '+money(position.offset_ready_recoverables)+'\nUnmatched formal credit notes: '+money(position.unmatched_credit_notes)+'\nMatched but not yet settled: '+money(position.matched_unsettled_credit)+'\nIdentified/unconfirmed claims: '+money(position.identified_unconfirmed_claims)+'\n\nAvailable supplier credit should be applied before sending more cash.';

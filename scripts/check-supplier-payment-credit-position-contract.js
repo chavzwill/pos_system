@@ -13,7 +13,7 @@ const checks=[
  ['credit-position preflight requires financial permission',guard.includes("router.get('/payments/credit-position',requirePermission('reports_financial')")],
  ['credit-position initializes recoverables and credit-note schemas',guard.includes('ensureSupplierRecoverablesSchema')&&guard.includes('creditNotes.ensureSchema')],
  ['open AP position includes prior cash payments and recoverable offsets',guard.includes('supplier_payment_allocations')&&guard.includes('supplier_recoverable_ap_allocations')],
- ['offset-ready amount only uses confirmed recoverables with accounting basis',guard.includes('JOIN supplier_recoverable_accounting_basis b ON b.claim_id=c.id')&&guard.includes("c.status IN ('confirmed','partially_recovered')")],
+ ['offset-ready amount only uses confirmed recoverables with accounting basis and excludes matched credit reservations',guard.includes('JOIN supplier_recoverable_accounting_basis b ON b.claim_id=c.id')&&guard.includes("c.status IN ('confirmed','partially_recovered')")&&guard.includes('c.confirmed_amount-c.recovered_amount-COALESCE(r.reserved,0)')],
  ['unmatched formal credit-note value is separately measured',guard.includes('MAX(0,n.amount-n.applied_amount)')],
  ['matched but unsettled credit is separately visible',guard.includes('MAX(0,a.amount-a.settled_amount)')],
  ['identified unconfirmed claims remain a separate informational bucket',guard.includes("status='identified'")&&guard.includes('identified_unconfirmed_claims')],
