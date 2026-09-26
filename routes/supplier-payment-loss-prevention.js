@@ -111,6 +111,75 @@ async function authorizeCreditPosition(req,position){
   if(req.employee&&String(req.employee.id)===String(authorizer.id))throw Object.assign(new Error('Independent supervisor authorization is required when paying through usable supplier credit.'),{status:403});
   return {authorizer,reason,message};
 }
+async function supplierNetPaymentPlan(supplierId,branchId=null){
+  const invoiceArgs=[supplierId],claimArgs=[supplierId],creditArgs=[supplierId];
+  let invoiceBranch='',claimBranch='',creditBranch='';
+  if(branchId){
+    invoiceBranch=' AND si.branch_id=?';invoiceArgs.push(branchId);
+    claimBranch=' AND (c.branch_id=? OR c.branch_id IS NULL)';claimArgs.push(branchId);
+    creditBranch=' AND (n.branch_id=? OR n.branch_id IS NULL)';creditArgs.push(branchId);
+  }
+  const {rows:invoices}=await db.execute({sql:`SELECT si.id,si.invoice_number,si.invoice_date,si.due_date,si.branch_id,
+      MAX(0,si.total-COALESCE(a.paid,0)) balance_due
+    FROM supplier_invoices si
+    LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM (
+      SELECT supplier_invoice_id,amount FROM supplier_payment_allocations
+      UNION ALL SELECT supplier_invoice_id,amount FROM supplier_recoverable_ap_allocations
+    ) q GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id
+    WHERE si.supplier_id=? AND si.status!='void' AND MAX(0,si.total-COALESCE(a.paid,0))>0.001${invoiceBranch}
+    ORDER BY CASE WHEN si.due_date IS NULL THEN 1 ELSE 0 END,si.due_date,si.invoice_date,si.id`,args:invoiceArgs});
+  const {rows:claims}=await db.execute({sql:`SELECT c.id,c.claim_number,c.claim_type,c.branch_id,
+      MAX(0,c.confirmed_amount-c.recovered_amount) outstanding_amount
+    FROM supplier_recoverable_claims c
+    JOIN supplier_recoverable_accounting_basis b ON b.claim_id=c.id
+    WHERE c.supplier_id=? AND c.status IN ('confirmed','partially_recovered')
+      AND MAX(0,c.confirmed_amount-c.recovered_amount)>0.001${claimBranch}
+    ORDER BY COALESCE(c.due_date,c.confirmed_at,c.obligation_date),c.id`,args:claimArgs});
+  const {rows:credits}=await db.execute({sql:`SELECT n.id,n.credit_note_number,n.credit_date,n.branch_id,
+      MAX(0,n.amount-n.applied_amount) remaining_amount
+    FROM supplier_credit_notes n
+    WHERE n.supplier_id=? AND MAX(0,n.amount-n.applied_amount)>0.001${creditBranch}
+    ORDER BY n.credit_date,n.id`,args:creditArgs});
+  const allocations=[];
+  let claimIndex=0,claimLeft=claims.length?money(claims[0].outstanding_amount):0;
+  for(const inv of invoices){
+    let invoiceLeft=money(inv.balance_due);
+    while(invoiceLeft>0.009&&claimIndex<claims.length){
+      const claim=claims[claimIndex];
+      const applied=money(Math.min(invoiceLeft,claimLeft));
+      if(applied>0)allocations.push({
+        claim_id:claim.id,claim_number:claim.claim_number,claim_type:claim.claim_type,
+        supplier_invoice_id:inv.id,invoice_number:inv.invoice_number,amount:applied
+      });
+      invoiceLeft=money(invoiceLeft-applied);
+      claimLeft=money(claimLeft-applied);
+      if(claimLeft<=0.009){
+        claimIndex++;
+        claimLeft=claimIndex<claims.length?money(claims[claimIndex].outstanding_amount):0;
+      }
+    }
+  }
+  const openAp=money(invoices.reduce((s,x)=>s+Number(x.balance_due||0),0));
+  const offsetPool=money(claims.reduce((s,x)=>s+Number(x.outstanding_amount||0),0));
+  const proposedOffset=money(allocations.reduce((s,x)=>s+Number(x.amount||0),0));
+  const unmatchedCredits=money(credits.reduce((s,x)=>s+Number(x.remaining_amount||0),0));
+  return {
+    supplier_id:supplierId,branch_id:branchId||null,
+    open_ap:openAp,offset_ready_recoverables:offsetPool,proposed_ap_offset:proposedOffset,
+    minimum_cash_after_current_offsets:money(Math.max(0,openAp-proposedOffset)),
+    unused_offset_ready_recoverables:money(Math.max(0,offsetPool-proposedOffset)),
+    unmatched_formal_credit_notes:unmatchedCredits,
+    invoices,offset_ready_claims:claims,unmatched_credit_notes:credits,suggested_offsets:allocations,
+    note:'Read-only payment plan. It does not post recoverable settlements, apply credit notes, change AP, or create supplier payments.'
+  };
+}
+router.get('/payments/net-plan',requirePermission('reports_financial'),async(req,res)=>{
+  try{
+    const supplierId=Number(req.query.supplier_id),branchId=req.query.branch_id?Number(req.query.branch_id):null;
+    if(!supplierId)return res.status(400).json({error:'supplier_id is required'});
+    res.json(await supplierNetPaymentPlan(supplierId,branchId));
+  }catch(e){res.status(500).json({error:e.message});}
+});
 router.get('/payments/credit-position',requirePermission('reports_financial'),async(req,res)=>{
   try{
     const supplierId=Number(req.query.supplier_id);
