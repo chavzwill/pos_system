@@ -193,6 +193,7 @@ app.use('/api/supplier-recoverables',require('./routes/supplier-recoverables'));
 app.use('/api/supplier-returns',require('./routes/supplier-returns'));
 app.use('/api/supplier-credit-notes',require('./routes/supplier-credit-notes'));
 app.use('/api/supplier-recovery-attention',require('./routes/supplier-recovery-attention'));
+app.use('/api/supplier-statements',require('./routes/supplier-statements'));
 app.use('/api/supplier-recovery-cases',require('./routes/supplier-recovery-cases'));
 app.use('/api/supplier-recovery-performance',require('./routes/supplier-recovery-performance'));
 app.use('/api/spendos-management',require('./routes/spendos-management'));

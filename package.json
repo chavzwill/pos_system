@@ -81,6 +81,7 @@
     "check:supplier-returns": "node scripts/check-supplier-returns-contract.js",
     "check:supplier-credit-notes": "node scripts/check-supplier-credit-notes-contract.js",
     "check:supplier-recovery-attention": "node scripts/check-supplier-recovery-attention-contract.js",
+    "check:supplier-statements": "node scripts/check-supplier-statements-contract.js",
     "check:supplier-recovery-cases": "node scripts/check-supplier-recovery-cases-contract.js",
     "check:supplier-recovery-performance": "node scripts/check-supplier-recovery-performance-contract.js",
     "check:rental-asset-receiving": "node scripts/check-rental-asset-receiving-contract.js",
