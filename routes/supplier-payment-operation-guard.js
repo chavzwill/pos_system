@@ -4,7 +4,7 @@ const crypto=require('crypto');
 const {db}=require('../database');
 const router=express.Router();
 let readyPromise=null;
-function canonical(v){if(Array.isArray(v))return v.map(canonical);if(v&&typeof v==='object')return Object.keys(v).sort().reduce((o,k)=>{if(!['operation_key','idempotency_key'].includes(k))o[k]=canonical(v[k]);return o;},{});return v;}
+function canonical(v){if(Array.isArray(v))return v.map(canonical);if(v&&typeof v==='object')return Object.keys(v).sort().reduce((o,k)=>{if(!['operation_key','idempotency_key','duplicate_payment_override_pin','duplicate_payment_override_reason','payment_similarity_override_pin','payment_similarity_override_reason','supplier_credit_override_pin','supplier_credit_override_reason'].includes(k))o[k]=canonical(v[k]);return o;},{});return v;}
 function hash(body){return crypto.createHash('sha256').update(JSON.stringify(canonical(body||{}))).digest('hex');}
 function key(req){return String(req.get('Idempotency-Key')||req.get('X-Idempotency-Key')||req.body?.operation_key||req.body?.idempotency_key||'').trim();}
 async function ensureSchema(){
