@@ -87,6 +87,7 @@
     "check:supplier-net-payment-plan": "node scripts/check-supplier-net-payment-plan-contract.js",
     "check:supplier-net-payment-execution": "node scripts/check-supplier-net-payment-execution-contract.js",
     "check:supplier-payment-timing": "node scripts/check-supplier-payment-timing-contract.js",
+    "check:supplier-cash-forecast": "node scripts/check-supplier-cash-forecast-contract.js",
     "check:supplier-recovery-cases": "node scripts/check-supplier-recovery-cases-contract.js",
     "check:supplier-recovery-performance": "node scripts/check-supplier-recovery-performance-contract.js",
     "check:rental-asset-receiving": "node scripts/check-rental-asset-receiving-contract.js",

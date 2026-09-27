@@ -4,6 +4,7 @@ const { db } = require('../database');
 const { requirePermission, requireAnyPermission } = require('../lib/permissions');
 const { ensureCostAllocationSchema, recordInvoiceReconciliation } = require('../lib/cost-allocations');
 const { ensureSupplierRecoverablesSchema } = require('../lib/supplier-recoverables');
+const supplierCreditNotes = require('./supplier-credit-notes');
 
 let schemaPromise = null;
 async function ensureColumn(table,name,definition){
@@ -14,6 +15,7 @@ async function ensureSchema() {
   if (!schemaPromise) schemaPromise = (async()=>{
     await ensureCostAllocationSchema();
     await ensureSupplierRecoverablesSchema();
+    if (supplierCreditNotes.ensureSchema) await supplierCreditNotes.ensureSchema();
     await db.batch([
       { sql: `CREATE TABLE IF NOT EXISTS supplier_invoices (
         id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -136,6 +138,122 @@ router.get('/invoices', requirePermission('reports_financial'), async (req,res)=
     if(status==='open')sql+=' AND MAX(0,si.total-COALESCE(a.paid,0))>0.001'; else if(status==='paid')sql+=' AND MAX(0,si.total-COALESCE(a.paid,0))<=0.001';
     sql+=' ORDER BY COALESCE(si.due_date,si.invoice_date),si.id DESC LIMIT ?';args.push(Math.min(Math.max(parseInt(limit)||200,1),500));
     const {rows}=await db.execute({sql,args}); res.json(rows);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.get('/cash-forecast', requirePermission('reports_financial'), async (req,res)=>{
+  try{
+    const branchId=req.query.branch_id?Number(req.query.branch_id):null;
+    const horizon=Math.min(Math.max(Number(req.query.horizon_days)||30,1),90);
+    const invoiceArgs=[];let invoiceBranch='';
+    if(branchId){invoiceBranch=' AND si.branch_id=?';invoiceArgs.push(branchId);}
+    const {rows:invoices}=await db.execute({sql:`SELECT si.*,s.name supplier_name,
+      COALESCE(a.paid,0) paid_amount,MAX(0,si.total-COALESCE(a.paid,0)) balance_due
+      FROM supplier_invoices si JOIN suppliers s ON s.id=si.supplier_id
+      LEFT JOIN (
+        SELECT supplier_invoice_id,SUM(amount) paid FROM (
+          SELECT supplier_invoice_id,amount FROM supplier_payment_allocations
+          UNION ALL SELECT supplier_invoice_id,amount FROM supplier_recoverable_ap_allocations
+        ) x GROUP BY supplier_invoice_id
+      ) a ON a.supplier_invoice_id=si.id
+      WHERE si.status!='void' AND MAX(0,si.total-COALESCE(a.paid,0))>0.001${invoiceBranch}
+      ORDER BY si.supplier_id,CASE WHEN si.due_date IS NULL THEN 1 ELSE 0 END,si.due_date,si.invoice_date,si.id`,args:invoiceArgs});
+    const recoverableArgs=[];let recoverableBranch='';
+    if(branchId){recoverableBranch=' AND (c.branch_id=? OR c.branch_id IS NULL)';recoverableArgs.push(branchId);}
+    const {rows:recoverables}=await db.execute({sql:`SELECT c.supplier_id,
+      COALESCE(SUM(MAX(0,c.confirmed_amount-c.recovered_amount-COALESCE(r.reserved,0))),0) amount
+      FROM supplier_recoverable_claims c
+      JOIN supplier_recoverable_accounting_basis b ON b.claim_id=c.id
+      LEFT JOIN (
+        SELECT claim_id,SUM(MAX(0,amount-settled_amount)) reserved
+        FROM supplier_credit_note_applications GROUP BY claim_id
+      ) r ON r.claim_id=c.id
+      WHERE c.status IN ('confirmed','partially_recovered')${recoverableBranch}
+      GROUP BY c.supplier_id`,args:recoverableArgs});
+    const creditArgs=[];let creditBranch='';
+    if(branchId){creditBranch=' AND (n.branch_id=? OR n.branch_id IS NULL)';creditArgs.push(branchId);}
+    const {rows:credits}=await db.execute({sql:`SELECT n.supplier_id,
+      COALESCE(SUM(MAX(0,n.amount-n.applied_amount)),0) amount
+      FROM supplier_credit_notes n
+      WHERE MAX(0,n.amount-n.applied_amount)>0.001${creditBranch}
+      GROUP BY n.supplier_id`,args:creditArgs});
+    const recoverableMap=new Map(recoverables.map(x=>[Number(x.supplier_id),money(x.amount)]));
+    const creditMap=new Map(credits.map(x=>[Number(x.supplier_id),money(x.amount)]));
+    const bySupplier=new Map();
+    for(const inv of invoices){
+      const id=Number(inv.supplier_id);
+      if(!bySupplier.has(id))bySupplier.set(id,{supplier_id:id,supplier_name:inv.supplier_name,invoices:[]});
+      bySupplier.get(id).invoices.push(inv);
+    }
+    const today=Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00Z');
+    const daysUntil=date=>{if(!date)return null;const t=Date.parse(String(date)+'T00:00:00Z');return Number.isFinite(t)?Math.ceil((t-today)/86400000):null;};
+    const suppliers=[];
+    for(const s of bySupplier.values()){
+      const offsetReady=money(recoverableMap.get(s.supplier_id)||0);
+      const unmatchedCredit=money(creditMap.get(s.supplier_id)||0);
+      let offsetLeft=offsetReady;
+      let openAp=0,due7=0,due14=0,due30=0,dueHorizon=0,overdue=0,notYetDue=0,actionableDiscount=0,lateFeeExposure=0;
+      const planned=[];
+      for(const inv of s.invoices){
+        const balance=money(inv.balance_due);openAp=money(openAp+balance);
+        const offset=money(Math.min(balance,offsetLeft));
+        offsetLeft=money(offsetLeft-offset);
+        const cashRemaining=money(balance-offset);
+        const dueIn=daysUntil(inv.due_date);
+        const discountIn=daysUntil(inv.discount_deadline);
+        const lateFeeIn=daysUntil(inv.late_fee_effective_date);
+        const discount=money(inv.discount_amount||0),paid=money(inv.paid_amount||0),lateFee=money(inv.late_fee_amount||0);
+        const discountActionable=discount>0&&discountIn!==null&&discountIn>=0&&paid<=0.009;
+        if(discountActionable)actionableDiscount=money(actionableDiscount+Math.min(discount,cashRemaining));
+        if(cashRemaining>0.009&&lateFee>0&&lateFeeIn!==null&&lateFeeIn<=horizon)lateFeeExposure=money(lateFeeExposure+lateFee);
+        if(dueIn!==null){
+          if(dueIn<0)overdue=money(overdue+cashRemaining);
+          else{
+            notYetDue=money(notYetDue+cashRemaining);
+            if(dueIn<=7)due7=money(due7+cashRemaining);
+            if(dueIn<=14)due14=money(due14+cashRemaining);
+            if(dueIn<=30)due30=money(due30+cashRemaining);
+            if(dueIn<=horizon)dueHorizon=money(dueHorizon+cashRemaining);
+          }
+        }
+        planned.push({
+          invoice_id:inv.id,invoice_number:inv.invoice_number,due_date:inv.due_date,days_until_due:dueIn,
+          balance_due:balance,planned_recoverable_offset:offset,planned_cash:cashRemaining,
+          discount_deadline:inv.discount_deadline||null,discount_amount:discount,discount_actionable:discountActionable,
+          late_fee_effective_date:inv.late_fee_effective_date||null,late_fee_amount:lateFee
+        });
+      }
+      suppliers.push({
+        supplier_id:s.supplier_id,supplier_name:s.supplier_name,open_ap:money(openAp),
+        offset_ready_recoverables:offsetReady,planned_recoverable_offsets:money(offsetReady-offsetLeft),
+        unmatched_formal_credit_notes:unmatchedCredit,
+        minimum_cash_total:money(Math.max(0,openAp-(offsetReady-offsetLeft))),
+        cash_due_7_days:due7,cash_due_14_days:due14,cash_due_30_days:due30,cash_due_horizon:dueHorizon,
+        overdue_cash:overdue,not_yet_due_cash:notYetDue,actionable_discount_total:actionableDiscount,
+        stated_late_fee_exposure_within_horizon:lateFeeExposure,
+        invoices:planned
+      });
+    }
+    suppliers.sort((a,b)=>b.cash_due_horizon-a.cash_due_horizon||b.overdue_cash-a.overdue_cash||a.supplier_name.localeCompare(b.supplier_name));
+    const sum=k=>money(suppliers.reduce((n,x)=>n+Number(x[k]||0),0));
+    res.json({
+      as_of:new Date().toISOString(),branch_id:branchId||null,horizon_days:horizon,
+      summary:{
+        open_ap:sum('open_ap'),
+        offset_ready_recoverables:sum('planned_recoverable_offsets'),
+        unmatched_formal_credit_notes:sum('unmatched_formal_credit_notes'),
+        minimum_cash_total:sum('minimum_cash_total'),
+        cash_due_7_days:sum('cash_due_7_days'),
+        cash_due_14_days:sum('cash_due_14_days'),
+        cash_due_30_days:sum('cash_due_30_days'),
+        cash_due_horizon:sum('cash_due_horizon'),
+        overdue_cash:sum('overdue_cash'),
+        actionable_discount_total:sum('actionable_discount_total'),
+        stated_late_fee_exposure_within_horizon:sum('stated_late_fee_exposure_within_horizon')
+      },
+      suppliers,
+      basis:'Read-only cash forecast. Eligible recoverables are applied to earliest supplier obligations for planning only. Unmatched credit notes, undocumented discounts, and unconfirmed claims do not reduce forecast cash.'
+    });
   }catch(e){res.status(500).json({error:e.message});}
 });
 
