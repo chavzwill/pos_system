@@ -405,6 +405,100 @@ router.get('/cash-forecast', requirePermission('reports_financial'), async (req,
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+router.get('/payment-priorities', requirePermission('reports_financial'), async (req,res)=>{
+  try{
+    const branchId=req.query.branch_id?Number(req.query.branch_id):null;
+    const invoiceArgs=[];let invoiceBranch='';
+    if(branchId){invoiceBranch=' AND si.branch_id=?';invoiceArgs.push(branchId);}
+    const {rows:invoices}=await db.execute({sql:`SELECT si.*,s.name supplier_name,
+      COALESCE(a.paid,0) paid_amount,MAX(0,si.total-COALESCE(a.paid,0)) balance_due
+      FROM supplier_invoices si JOIN suppliers s ON s.id=si.supplier_id
+      LEFT JOIN (
+        SELECT supplier_invoice_id,SUM(amount) paid FROM (
+          SELECT supplier_invoice_id,amount FROM supplier_payment_allocations
+          UNION ALL SELECT supplier_invoice_id,amount FROM supplier_recoverable_ap_allocations
+        ) x GROUP BY supplier_invoice_id
+      ) a ON a.supplier_invoice_id=si.id
+      WHERE si.status!='void' AND MAX(0,si.total-COALESCE(a.paid,0))>0.001${invoiceBranch}
+      ORDER BY si.supplier_id,COALESCE(si.due_date,si.invoice_date),si.id`,args:invoiceArgs});
+    const recArgs=[];let recBranch='';
+    if(branchId){recBranch=' AND (c.branch_id=? OR c.branch_id IS NULL)';recArgs.push(branchId);}
+    const {rows:recoverables}=await db.execute({sql:`SELECT c.supplier_id,
+      COALESCE(SUM(MAX(0,c.confirmed_amount-c.recovered_amount-COALESCE(r.reserved,0))),0) amount
+      FROM supplier_recoverable_claims c
+      JOIN supplier_recoverable_accounting_basis b ON b.claim_id=c.id
+      LEFT JOIN (
+        SELECT claim_id,SUM(MAX(0,amount-settled_amount)) reserved
+        FROM supplier_credit_note_applications GROUP BY claim_id
+      ) r ON r.claim_id=c.id
+      WHERE c.status IN ('confirmed','partially_recovered')${recBranch}
+      GROUP BY c.supplier_id`,args:recArgs});
+    const creditArgs=[];let creditBranch='';
+    if(branchId){creditBranch=' AND (n.branch_id=? OR n.branch_id IS NULL)';creditArgs.push(branchId);}
+    const {rows:credits}=await db.execute({sql:`SELECT n.supplier_id,
+      COALESCE(SUM(MAX(0,n.amount-n.applied_amount)),0) amount
+      FROM supplier_credit_notes n
+      WHERE MAX(0,n.amount-n.applied_amount)>0.001${creditBranch}
+      GROUP BY n.supplier_id`,args:creditArgs});
+    const recMap=new Map(recoverables.map(x=>[Number(x.supplier_id),money(x.amount)]));
+    const creditMap=new Map(credits.map(x=>[Number(x.supplier_id),money(x.amount)]));
+    const recLeft=new Map(recoverables.map(x=>[Number(x.supplier_id),money(x.amount)]));
+    const today=new Date().toISOString().slice(0,10);
+    const dayDiff=date=>{if(!date)return null;const a=Date.parse(today+'T00:00:00Z'),b=Date.parse(String(date)+'T00:00:00Z');return Number.isFinite(b)?Math.ceil((b-a)/86400000):null;};
+    const items=[];
+    for(const inv of invoices){
+      const supplierId=Number(inv.supplier_id),balance=money(inv.balance_due),available=money(recLeft.get(supplierId)||0);
+      const plannedOffset=money(Math.min(balance,available));recLeft.set(supplierId,money(available-plannedOffset));
+      const cashAfterOffset=money(balance-plannedOffset);
+      const dueIn=dayDiff(inv.due_date),discountIn=dayDiff(inv.discount_deadline),lateFeeIn=dayDiff(inv.late_fee_effective_date);
+      const discount=money(inv.discount_amount||0),paid=money(inv.paid_amount||0),lateFee=money(inv.late_fee_amount||0);
+      const discountActionable=discount>0&&discountIn!==null&&discountIn>=0&&paid<=0.009&&cashAfterOffset>0.009;
+      const lateFeeRisk=lateFee>0&&lateFeeIn!==null&&lateFeeIn>=0&&lateFeeIn<=7&&cashAfterOffset>0.009;
+      let score=0;const reasons=[];
+      if(dueIn!==null&&dueIn<0){score+=100+Math.min(30,Math.abs(dueIn));reasons.push('Overdue '+Math.abs(dueIn)+' day'+(Math.abs(dueIn)===1?'':'s'));}
+      else if(dueIn!==null&&dueIn<=3){score+=75;reasons.push('Due within 3 days');}
+      else if(dueIn!==null&&dueIn<=7){score+=55;reasons.push('Due within 7 days');}
+      else if(dueIn!==null&&dueIn<=14){score+=30;reasons.push('Due within 14 days');}
+      if(discountActionable){
+        score+=discountIn<=2?85:discountIn<=5?60:35;
+        reasons.push('Documented discount expires in '+discountIn+' day'+(discountIn===1?'':'s'));
+      }
+      if(lateFeeRisk){
+        score+=lateFeeIn<=2?70:45;
+        reasons.push('Documented late-fee date in '+lateFeeIn+' day'+(lateFeeIn===1?'':'s'));
+      }
+      if(plannedOffset>0){
+        if(plannedOffset+0.01>=balance){score-=35;reasons.push('Can be fully covered by eligible recoverable offset');}
+        else{score-=15;reasons.push('Partly coverable by eligible recoverable offset');}
+      }
+      const unmatchedCredit=money(creditMap.get(supplierId)||0);
+      if(unmatchedCredit>0){score-=10;reasons.push('Unmatched formal supplier credit exists');}
+      const band=score>=120?'critical':score>=80?'high':score>=40?'medium':'low';
+      items.push({
+        supplier_invoice_id:inv.id,invoice_number:inv.invoice_number,supplier_id:supplierId,supplier_name:inv.supplier_name,branch_id:inv.branch_id,
+        balance_due:balance,planned_recoverable_offset:plannedOffset,cash_after_offset:cashAfterOffset,
+        unmatched_formal_credit_notes:unmatchedCredit,due_date:inv.due_date||null,days_until_due:dueIn,
+        discount_deadline:inv.discount_deadline||null,discount_amount:discount,discount_actionable:discountActionable,
+        late_fee_effective_date:inv.late_fee_effective_date||null,late_fee_amount:lateFee,late_fee_risk:lateFeeRisk,
+        priority_score:score,priority:band,reasons
+      });
+    }
+    items.sort((a,b)=>b.priority_score-a.priority_score||b.cash_after_offset-a.cash_after_offset||String(a.invoice_number).localeCompare(String(b.invoice_number)));
+    res.json({
+      items,
+      summary:{
+        critical:items.filter(x=>x.priority==='critical').length,
+        high:items.filter(x=>x.priority==='high').length,
+        medium:items.filter(x=>x.priority==='medium').length,
+        low:items.filter(x=>x.priority==='low').length,
+        cash_after_offsets:money(items.reduce((s,x)=>s+Number(x.cash_after_offset||0),0)),
+        documented_discount_opportunity:money(items.filter(x=>x.discount_actionable).reduce((s,x)=>s+Math.min(Number(x.discount_amount||0),Number(x.cash_after_offset||0)),0))
+      },
+      basis:'Review priority only. Scores organize finance attention using documented due dates, supplier terms and eligible offsets. They do not approve, schedule, or execute payments.'
+    });
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 router.get('/payment-timing', requirePermission('reports_financial'), async (req,res)=>{
   try{
     const supplierId=req.query.supplier_id?Number(req.query.supplier_id):null;
