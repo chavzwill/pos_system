@@ -45,7 +45,20 @@ async function ensureSchema(){
       )`},
       {sql:'CREATE INDEX IF NOT EXISTS idx_operating_commitments_status_due ON operating_commitments(status,next_due_date)'},
       {sql:'CREATE INDEX IF NOT EXISTS idx_operating_commitments_supplier ON operating_commitments(supplier_id,status)'},
-      {sql:'CREATE INDEX IF NOT EXISTS idx_operating_commitments_branch ON operating_commitments(branch_id,status)'}
+      {sql:'CREATE INDEX IF NOT EXISTS idx_operating_commitments_branch ON operating_commitments(branch_id,status)'},
+      {sql:`CREATE TABLE IF NOT EXISTS operating_commitment_invoice_links(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        commitment_id INTEGER NOT NULL REFERENCES operating_commitments(id),
+        supplier_invoice_id INTEGER NOT NULL REFERENCES supplier_invoices(id),
+        service_period DATE NOT NULL,
+        linked_amount REAL NOT NULL,
+        note TEXT,
+        linked_by_employee_id INTEGER REFERENCES employees(id),
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        UNIQUE(commitment_id,supplier_invoice_id,service_period)
+      )`},
+      {sql:'CREATE INDEX IF NOT EXISTS idx_operating_commitment_invoice_links_commitment ON operating_commitment_invoice_links(commitment_id,service_period)'},
+      {sql:'CREATE INDEX IF NOT EXISTS idx_operating_commitment_invoice_links_invoice ON operating_commitment_invoice_links(supplier_invoice_id)'}
     ],'write');
   })().catch(e=>{readyPromise=null;throw e;});
   return readyPromise;
@@ -185,6 +198,70 @@ router.post('/',async(req,res)=>{
   }catch(e){if(!committed)try{await tx.rollback();}catch{}res.status(400).json({error:e.message});}
 });
 
+router.post('/:id/invoice-links',async(req,res)=>{
+  const tx=await db.transaction('write');let committed=false;
+  try{
+    const commitmentId=Number(req.params.id),invoiceId=Number(req.body?.supplier_invoice_id);
+    const servicePeriod=String(req.body?.service_period||'').trim();
+    const linkedAmount=money(req.body?.linked_amount),note=String(req.body?.note||'').trim()||null;
+    if(!invoiceId||!servicePeriod||!/^\d{4}-\d{2}-\d{2}$/.test(servicePeriod))throw new Error('Supplier invoice and service period date are required');
+    if(!Number.isFinite(linkedAmount)||linkedAmount<=0)throw new Error('Linked invoice amount must be greater than zero');
+    const {rows:[commitment]}=await tx.execute({sql:'SELECT * FROM operating_commitments WHERE id=?',args:[commitmentId]});
+    if(!commitment)throw new Error('Operating commitment not found');
+    if(commitment.status==='cancelled')throw new Error('Cancelled operating commitment cannot receive new invoice links');
+    const {rows:[invoice]}=await tx.execute({sql:"SELECT * FROM supplier_invoices WHERE id=? AND status!='void'",args:[invoiceId]});
+    if(!invoice)throw new Error('Supplier invoice not found or void');
+    if(commitment.supplier_id&&Number(invoice.supplier_id)!==Number(commitment.supplier_id))throw new Error('Supplier invoice must belong to the operating commitment supplier');
+    if(commitment.branch_id&&Number(invoice.branch_id||0)!==Number(commitment.branch_id))throw new Error('Supplier invoice branch must match the operating commitment branch');
+    if(Date.parse(servicePeriod+'T00:00:00Z')<Date.parse(String(commitment.start_date)+'T00:00:00Z'))throw new Error('Service period cannot be before commitment start date');
+    if(commitment.end_date&&Date.parse(servicePeriod+'T00:00:00Z')>Date.parse(String(commitment.end_date)+'T00:00:00Z'))throw new Error('Service period cannot be after commitment end date');
+    const {rows:[already]}=await tx.execute({sql:'SELECT COALESCE(SUM(linked_amount),0) amount FROM operating_commitment_invoice_links WHERE supplier_invoice_id=?',args:[invoiceId]});
+    if(money(Number(already?.amount||0)+linkedAmount)-money(invoice.total)>0.01)throw new Error('Commitment links cannot exceed the supplier invoice total');
+    const r=await tx.execute({sql:`INSERT INTO operating_commitment_invoice_links(
+      commitment_id,supplier_invoice_id,service_period,linked_amount,note,linked_by_employee_id
+    ) VALUES(?,?,?,?,?,?)`,args:[commitmentId,invoiceId,servicePeriod,linkedAmount,note,actor(req)]});
+    const nextVersion=Number(commitment.source_version||1)+1;
+    await tx.execute({sql:'UPDATE operating_commitments SET source_version=?,updated_at=CURRENT_TIMESTAMP WHERE id=?',args:[nextVersion,commitmentId]});
+    const {rows:[row]}=await tx.execute({sql:'SELECT * FROM operating_commitments WHERE id=?',args:[commitmentId]});
+    const {rows:allocations}=await tx.execute({sql:'SELECT * FROM cost_allocations WHERE source_type=? AND source_id=? ORDER BY id',args:['operating_commitment',String(commitmentId)]});
+    const event=eventFor(row,allocations,'operating.commitment.invoice_linked',actor(req));
+    event.payload.invoiceLink={linkId:Number(r.lastInsertRowid),supplierInvoiceId:String(invoiceId),invoiceNumber:invoice.invoice_number,servicePeriod,linkedAmount};
+    await enqueueSpendEvent(tx,event);
+    await tx.commit();committed=true;
+    res.status(201).json({id:Number(r.lastInsertRowid),commitment_id:commitmentId,supplier_invoice_id:invoiceId,invoice_number:invoice.invoice_number,service_period:servicePeriod,linked_amount:linkedAmount});
+  }catch(e){
+    if(!committed)try{await tx.rollback();}catch{}
+    if(String(e.message||'').includes('UNIQUE'))return res.status(409).json({error:'This supplier invoice is already linked to the commitment for that service period'});
+    res.status(400).json({error:e.message});
+  }
+});
+
+router.get('/:id/reconciliation',async(req,res)=>{
+  try{
+    const commitment=await getCommitment(db,req.params.id);
+    if(!commitment)return res.status(404).json({error:'Operating commitment not found'});
+    const {rows:links}=await db.execute({sql:`SELECT l.*,si.invoice_number,si.invoice_date,si.total invoice_total,si.status invoice_status
+      FROM operating_commitment_invoice_links l
+      JOIN supplier_invoices si ON si.id=l.supplier_invoice_id
+      WHERE l.commitment_id=? ORDER BY l.service_period,l.id`,args:[commitment.id]});
+    const periods=new Map();
+    for(const x of links){
+      if(!periods.has(x.service_period))periods.set(x.service_period,{service_period:x.service_period,expected_amount:money(commitment.expected_amount),actual_linked_amount:0,invoices:[]});
+      const p=periods.get(x.service_period);
+      p.actual_linked_amount=money(p.actual_linked_amount+Number(x.linked_amount||0));
+      p.invoices.push({link_id:x.id,supplier_invoice_id:x.supplier_invoice_id,invoice_number:x.invoice_number,invoice_date:x.invoice_date,linked_amount:money(x.linked_amount)});
+    }
+    const reconciled=[...periods.values()].map(p=>{
+      const variance=money(p.actual_linked_amount-p.expected_amount);
+      return {...p,variance,variance_percent:p.expected_amount?Number(((variance/p.expected_amount)*100).toFixed(2)):null,
+        status:Math.abs(variance)<=0.01?'on_target':variance>0?'over_expected':'under_expected'};
+    });
+    res.json({commitment:{id:commitment.id,commitment_number:commitment.commitment_number,name:commitment.name,expected_amount:money(commitment.expected_amount),cadence:commitment.cadence},periods:reconciled,
+      summary:{linked_periods:reconciled.length,over_expected:reconciled.filter(x=>x.status==='over_expected').length,under_expected:reconciled.filter(x=>x.status==='under_expected').length,on_target:reconciled.filter(x=>x.status==='on_target').length,total_variance:money(reconciled.reduce((s,x)=>s+Number(x.variance||0),0))},
+      basis:'Reconciliation compares linked supplier invoice evidence to the commitment expected amount for each service period. It does not alter the supplier invoice, AP, payment, or accounting records.'});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 router.patch('/:id/status',async(req,res)=>{
   const tx=await db.transaction('write');let committed=false;
   try{
@@ -206,9 +283,14 @@ router.get('/attention',async(req,res)=>{
   try{
     const args=[];let where="oc.status='active'";
     if(req.query.branch_id){where+=' AND oc.branch_id=?';args.push(req.query.branch_id);}
-    const {rows}=await db.execute({sql:`SELECT oc.*,s.name supplier_name,b.name branch_name
+    const {rows}=await db.execute({sql:`SELECT oc.*,s.name supplier_name,b.name branch_name,COALESCE(l.linked_amount,0) current_period_linked_amount
       FROM operating_commitments oc LEFT JOIN suppliers s ON s.id=oc.supplier_id
-      LEFT JOIN branches b ON b.id=oc.branch_id WHERE ${where}
+      LEFT JOIN branches b ON b.id=oc.branch_id
+      LEFT JOIN (
+        SELECT commitment_id,service_period,SUM(linked_amount) linked_amount
+        FROM operating_commitment_invoice_links GROUP BY commitment_id,service_period
+      ) l ON l.commitment_id=oc.id AND l.service_period=oc.next_due_date
+      WHERE ${where}
       ORDER BY COALESCE(oc.next_due_date,oc.renewal_date,oc.end_date),oc.id`,args});
     const items=[];
     for(const x of rows){
@@ -216,8 +298,13 @@ router.get('/attention',async(req,res)=>{
       const noticeDeadline=x.renewal_date&&x.cancellation_notice_days!=null
         ?new Date(Date.parse(String(x.renewal_date)+'T00:00:00Z')-Number(x.cancellation_notice_days)*86400000).toISOString().slice(0,10):null;
       const notice=daysUntil(noticeDeadline);
-      if(due!==null&&due<0)items.push({type:'past_due_plan',priority:due<=-30?'critical':'high',commitment_id:x.id,commitment_number:x.commitment_number,name:x.name,supplier_name:x.supplier_name||x.provider_name,amount:money(x.expected_amount),days:due,reason:'Planned operating obligation due date has passed. Confirm whether a supplier bill was received, paid, deferred, or the commitment changed.'});
-      else if(due!==null&&due<=14)items.push({type:'upcoming_due',priority:due<=3?'high':'medium',commitment_id:x.id,commitment_number:x.commitment_number,name:x.name,supplier_name:x.supplier_name||x.provider_name,amount:money(x.expected_amount),days:due,reason:'Operating commitment is approaching its planned due date.'});
+      const linkedForPeriod=money(x.current_period_linked_amount||0),expected=money(x.expected_amount||0),periodVariance=money(linkedForPeriod-expected);
+      if(due!==null&&due<0&&linkedForPeriod<=0.009)items.push({type:'missing_invoice_evidence',priority:due<=-30?'critical':'high',commitment_id:x.id,commitment_number:x.commitment_number,name:x.name,supplier_name:x.supplier_name||x.provider_name,amount:expected,days:due,reason:'Planned operating obligation due date has passed but no supplier invoice is linked for that service period.'});
+      else if(due!==null&&due<=14&&linkedForPeriod<=0.009)items.push({type:'upcoming_due',priority:due<=3?'high':'medium',commitment_id:x.id,commitment_number:x.commitment_number,name:x.name,supplier_name:x.supplier_name||x.provider_name,amount:expected,days:due,reason:'Operating commitment is approaching its planned due date and no supplier invoice is linked yet.'});
+      if(linkedForPeriod>0.009&&Math.abs(periodVariance)>0.01){
+        const pct=expected?Math.abs(periodVariance/expected):1;
+        items.push({type:'invoice_amount_variance',priority:pct>=0.2?'high':'medium',commitment_id:x.id,commitment_number:x.commitment_number,name:x.name,supplier_name:x.supplier_name||x.provider_name,amount:Math.abs(periodVariance),days:due,reason:`Linked supplier invoice evidence differs from expected commitment amount by ${periodVariance.toFixed(2)} for the current service period.`});
+      }
       if(x.auto_renew&&notice!==null&&notice>=0&&notice<=30)items.push({type:'cancellation_window',priority:notice<=7?'high':'medium',commitment_id:x.id,commitment_number:x.commitment_number,name:x.name,supplier_name:x.supplier_name||x.provider_name,amount:money(x.expected_amount),days:notice,reason:'Cancellation/renegotiation notice window is approaching before auto-renewal.'});
       if(x.auto_renew&&renewal!==null&&renewal>=0&&renewal<=30)items.push({type:'renewal_approaching',priority:renewal<=7?'high':'medium',commitment_id:x.id,commitment_number:x.commitment_number,name:x.name,supplier_name:x.supplier_name||x.provider_name,amount:money(x.expected_amount),days:renewal,reason:'Auto-renewal date is approaching. Review utilization, pricing, alternatives, and cancellation terms.'});
       if(!x.supplier_id&&!x.provider_name)items.push({type:'provider_evidence_gap',priority:'high',commitment_id:x.id,commitment_number:x.commitment_number,name:x.name,amount:money(x.expected_amount),days:null,reason:'Recurring commitment has no supplier/provider evidence.'});

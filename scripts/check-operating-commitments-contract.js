@@ -47,7 +47,7 @@ const checks=[
  ['status changes emit SpendOS event with authenticated actor',route.includes("'operating.commitment.status_changed',actor(req)")],
  ['economics are immutable in first slice outside controlled status change',!route.includes("router.put('/:id'")&&!route.includes("router.patch('/:id'")],
  ['attention can be branch scoped',route.includes("if(req.query.branch_id){where+=' AND oc.branch_id=?'")],
- ['past-due planned obligation becomes attention',route.includes("type:'past_due_plan'")],
+ ['past-due planned obligation without linked supplier invoice evidence becomes attention',route.includes("type:'missing_invoice_evidence'")&&route.includes('current_period_linked_amount')],
  ['upcoming obligation within 14 days becomes attention',route.includes("type:'upcoming_due'")&&route.includes('due<=14')],
  ['cancellation notice window is derived before auto renewal',route.includes("type:'cancellation_window'")&&route.includes('cancellation_notice_days')],
  ['auto-renewal approaching becomes attention',route.includes("type:'renewal_approaching'")],

@@ -39,12 +39,39 @@ async function showOperatingCommitments(){
       rootApi('/operating-commitments/attention'+branch)
     ]);
     const a=attention.summary||{};
-    const body=(rows||[]).map(x=>`<tr><td><strong>${esc(x.commitment_number)}</strong><br><small>${esc(String(x.category||'').replaceAll('_',' '))}</small></td><td>${esc(x.name)}</td><td>${esc(x.supplier_name||x.provider_name||'—')}</td><td>${esc(x.cadence)}</td><td>${money(x.expected_amount)}</td><td>${money(x.annualized_amount||0)}</td><td>${esc(x.next_due_date||'—')}</td><td>${esc(x.renewal_date||'—')}</td><td>${esc(String(x.status||''))}</td></tr>`).join('');
+    const body=(rows||[]).map(x=>`<tr><td><strong>${esc(x.commitment_number)}</strong><br><small>${esc(String(x.category||'').replaceAll('_',' '))}</small></td><td>${esc(x.name)}</td><td>${esc(x.supplier_name||x.provider_name||'—')}</td><td>${esc(x.cadence)}</td><td>${money(x.expected_amount)}</td><td>${money(x.annualized_amount||0)}</td><td>${esc(x.next_due_date||'—')}</td><td>${esc(x.renewal_date||'—')}</td><td>${esc(String(x.status||''))}</td><td style="white-space:nowrap"><button type="button" data-commit-link="${x.id}">Match invoice</button> <button type="button" data-commit-reconcile="${x.id}">Reconcile</button></td></tr>`).join('');
     const alerts=(attention.items||[]).slice(0,12).map(x=>`<tr><td><strong>${esc(String(x.priority||'').toUpperCase())}</strong></td><td>${esc(x.commitment_number)}</td><td>${esc(x.name)}</td><td>${money(x.amount)}</td><td>${esc(x.reason)}</td></tr>`).join('');
     const host=document.createElement('div');host.className='tt-supplier-ledger-modal';
-    host.innerHTML=`<div class="tt-supplier-ledger-modal__card" style="max-width:1180px"><header><div><span class="eyebrow">Spend control</span><h3>Operating commitments</h3></div><div style="display:flex;gap:8px"><button type="button" id="tt-operating-commitment-new">+ New commitment</button><button type="button" data-dismiss>×</button></div></header><div style="padding:16px"><div class="tt-supplier-ledger-kpis">${kpi('Annualized active',money(a.annualized_active_commitment||0))}${kpi('Attention',a.total||0)}${kpi('Critical',a.critical||0)}${kpi('High',a.high||0)}</div><div class="tt-supplier-ledger-note" style="margin:16px 0"><strong>Control rule:</strong> Operating commitments are planning evidence only. Supplier invoices, AP and payments remain authoritative in Supplier Ledger.</div><div class="tt-supplier-ledger-table"><table><thead><tr><th>Commitment</th><th>Name</th><th>Supplier/provider</th><th>Cadence</th><th>Expected</th><th>Annualized</th><th>Next due</th><th>Renewal</th><th>Status</th></tr></thead><tbody>${body||'<tr><td colspan="9">No operating commitments recorded.</td></tr>'}</tbody></table></div><h4 style="margin-top:18px">Attention</h4><div class="tt-supplier-ledger-table"><table><thead><tr><th>Priority</th><th>Commitment</th><th>Name</th><th>Amount</th><th>Why review</th></tr></thead><tbody>${alerts||'<tr><td colspan="5">No recurring commitment attention items.</td></tr>'}</tbody></table></div></div></div>`;
+    host.innerHTML=`<div class="tt-supplier-ledger-modal__card" style="max-width:1180px"><header><div><span class="eyebrow">Spend control</span><h3>Operating commitments</h3></div><div style="display:flex;gap:8px"><button type="button" id="tt-operating-commitment-new">+ New commitment</button><button type="button" data-dismiss>×</button></div></header><div style="padding:16px"><div class="tt-supplier-ledger-kpis">${kpi('Annualized active',money(a.annualized_active_commitment||0))}${kpi('Attention',a.total||0)}${kpi('Critical',a.critical||0)}${kpi('High',a.high||0)}</div><div class="tt-supplier-ledger-note" style="margin:16px 0"><strong>Control rule:</strong> Operating commitments are planning evidence only. Supplier invoices, AP and payments remain authoritative in Supplier Ledger.</div><div class="tt-supplier-ledger-table"><table><thead><tr><th>Commitment</th><th>Name</th><th>Supplier/provider</th><th>Cadence</th><th>Expected</th><th>Annualized</th><th>Next due</th><th>Renewal</th><th>Status</th><th>Actions</th></tr></thead><tbody>${body||'<tr><td colspan="10">No operating commitments recorded.</td></tr>'}</tbody></table></div><h4 style="margin-top:18px">Attention</h4><div class="tt-supplier-ledger-table"><table><thead><tr><th>Priority</th><th>Commitment</th><th>Name</th><th>Amount</th><th>Why review</th></tr></thead><tbody>${alerts||'<tr><td colspan="5">No recurring commitment attention items.</td></tr>'}</tbody></table></div></div></div>`;
     shell().appendChild(host);host.querySelectorAll('[data-dismiss]').forEach(x=>x.addEventListener('click',()=>host.remove()));
     host.querySelector('#tt-operating-commitment-new')?.addEventListener('click',()=>showOperatingCommitmentForm(host));
+    host.querySelectorAll('[data-commit-link]').forEach(btn=>btn.addEventListener('click',()=>linkOperatingCommitmentInvoice((rows||[]).find(x=>Number(x.id)===Number(btn.dataset.commitLink)))));
+    host.querySelectorAll('[data-commit-reconcile]').forEach(btn=>btn.addEventListener('click',()=>reconcileOperatingCommitment(Number(btn.dataset.commitReconcile))));
+  }catch(e){notice(e.message,'error');}
+}
+async function linkOperatingCommitmentInvoice(commitment){
+  if(!commitment)return;
+  try{
+    const candidates=(state.invoices||[]).filter(x=>(!commitment.supplier_id||Number(x.supplier_id)===Number(commitment.supplier_id))&&(!commitment.branch_id||Number(x.branch_id||0)===Number(commitment.branch_id)));
+    const choices=candidates.slice(0,12).map(x=>x.id+' | '+x.invoice_number+' | '+money(x.balance_due||x.total||0)).join('\n');
+    const invoiceId=Number(window.prompt('Enter supplier invoice ID to match'+(choices?'\n\nOpen candidates:\n'+choices:'')));
+    if(!invoiceId)return;
+    const servicePeriod=window.prompt('Service period date (YYYY-MM-DD)',commitment.next_due_date||commitment.start_date||'');
+    if(!servicePeriod)return;
+    const amount=Number(window.prompt('Amount of this supplier invoice that belongs to the commitment period',String(commitment.expected_amount||'')));
+    if(!Number.isFinite(amount)||amount<=0)throw new Error('Linked amount must be greater than zero.');
+    const note=window.prompt('Link note / evidence reference (optional)')||'';
+    await rootApi('/operating-commitments/'+commitment.id+'/invoice-links',{method:'POST',body:JSON.stringify({supplier_invoice_id:invoiceId,service_period:servicePeriod,linked_amount:amount,note})});
+    notice('Supplier invoice matched to '+commitment.commitment_number,'success');
+    await showOperatingCommitments();
+  }catch(e){notice(e.message,'error');}
+}
+async function reconcileOperatingCommitment(id){
+  try{
+    const r=await rootApi('/operating-commitments/'+id+'/reconciliation');
+    const rows=(r.periods||[]).slice(-8).map(x=>x.service_period+': expected '+money(x.expected_amount)+', linked '+money(x.actual_linked_amount)+', variance '+money(x.variance)+' ('+String(x.status||'').replaceAll('_',' ')+')').join('\n');
+    const s=r.summary||{};
+    window.alert('Operating commitment reconciliation\n\nLinked periods: '+(s.linked_periods||0)+'\nOn target: '+(s.on_target||0)+'\nOver expected: '+(s.over_expected||0)+'\nUnder expected: '+(s.under_expected||0)+'\nTotal variance: '+money(s.total_variance||0)+(rows?'\n\nRecent periods:\n'+rows:'')+'\n\n'+(r.basis||''));
   }catch(e){notice(e.message,'error');}
 }
 function showOperatingCommitmentForm(parent){
