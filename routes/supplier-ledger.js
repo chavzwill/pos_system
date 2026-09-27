@@ -78,6 +78,11 @@ async function ensureSchema() {
     await ensureColumn('supplier_invoices','duty_amount','REAL NOT NULL DEFAULT 0');
     await ensureColumn('supplier_invoices','other_landed_cost_amount','REAL NOT NULL DEFAULT 0');
     await ensureColumn('supplier_invoices','tax_treatment','TEXT');
+    await ensureColumn('supplier_invoices','payment_terms_reference','TEXT');
+    await ensureColumn('supplier_invoices','discount_deadline','DATE');
+    await ensureColumn('supplier_invoices','discount_amount','REAL NOT NULL DEFAULT 0');
+    await ensureColumn('supplier_invoices','late_fee_effective_date','DATE');
+    await ensureColumn('supplier_invoices','late_fee_amount','REAL NOT NULL DEFAULT 0');
   })().catch(err => { schemaPromise = null; throw err; });
   return schemaPromise;
 }
@@ -134,17 +139,78 @@ router.get('/invoices', requirePermission('reports_financial'), async (req,res)=
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+router.get('/payment-timing', requirePermission('reports_financial'), async (req,res)=>{
+  try{
+    const supplierId=req.query.supplier_id?Number(req.query.supplier_id):null;
+    const branchId=req.query.branch_id?Number(req.query.branch_id):null;
+    const args=[];let where="si.status!='void'";
+    if(supplierId){where+=' AND si.supplier_id=?';args.push(supplierId);}
+    if(branchId){where+=' AND si.branch_id=?';args.push(branchId);}
+    const {rows}=await db.execute({sql:`SELECT si.*,s.name supplier_name,
+      COALESCE(a.paid,0) paid_amount,MAX(0,si.total-COALESCE(a.paid,0)) balance_due
+      FROM supplier_invoices si JOIN suppliers s ON s.id=si.supplier_id
+      LEFT JOIN (
+        SELECT supplier_invoice_id,SUM(amount) paid FROM (
+          SELECT supplier_invoice_id,amount FROM supplier_payment_allocations
+          UNION ALL SELECT supplier_invoice_id,amount FROM supplier_recoverable_ap_allocations
+        ) x GROUP BY supplier_invoice_id
+      ) a ON a.supplier_invoice_id=si.id
+      WHERE ${where} AND MAX(0,si.total-COALESCE(a.paid,0))>0.001
+      ORDER BY COALESCE(si.due_date,si.invoice_date),si.id`,args});
+    const now=new Date();const today=now.toISOString().slice(0,10);
+    const days=(date)=>{if(!date)return null;const t=Date.parse(String(date)+'T00:00:00Z');const b=Date.parse(today+'T00:00:00Z');return Number.isFinite(t)?Math.ceil((t-b)/86400000):null;};
+    let actionableDiscount=0,lateFeeExposure=0,notYetDue=0,overdue=0;
+    const invoices=rows.map(x=>{
+      const balance=money(x.balance_due),paid=money(x.paid_amount),discount=money(x.discount_amount||0),lateFee=money(x.late_fee_amount||0);
+      const dueIn=days(x.due_date),discountIn=days(x.discount_deadline),lateFeeIn=days(x.late_fee_effective_date);
+      const discountActionable=discount>0&&x.discount_deadline&&discountIn!==null&&discountIn>=0&&paid<=0.009;
+      const partialDiscountNeedsVerification=discount>0&&x.discount_deadline&&discountIn!==null&&discountIn>=0&&paid>0.009;
+      if(discountActionable)actionableDiscount=money(actionableDiscount+Math.min(discount,balance));
+      if(lateFee>0&&x.late_fee_effective_date)lateFeeExposure=money(lateFeeExposure+Math.min(lateFee,balance+lateFee));
+      if(dueIn!==null&&dueIn>0)notYetDue=money(notYetDue+balance);
+      if(dueIn!==null&&dueIn<0)overdue=money(overdue+balance);
+      return {
+        invoice_id:x.id,invoice_number:x.invoice_number,supplier_id:x.supplier_id,supplier_name:x.supplier_name,branch_id:x.branch_id,
+        balance_due:balance,paid_amount:paid,due_date:x.due_date,days_until_due:dueIn,payment_terms_reference:x.payment_terms_reference||null,
+        discount_deadline:x.discount_deadline||null,discount_amount:discount,days_until_discount_deadline:discountIn,
+        discount_actionable:discountActionable,partial_discount_needs_verification:partialDiscountNeedsVerification,
+        late_fee_effective_date:x.late_fee_effective_date||null,late_fee_amount:lateFee,days_until_late_fee:lateFeeIn,
+        timing_status:discountActionable?'capture_discount':(dueIn!==null&&dueIn<0?'overdue':(lateFee>0&&lateFeeIn!==null&&lateFeeIn<=3?'late_fee_risk':(dueIn!==null&&dueIn>0?'not_yet_due':'due')))
+      };
+    });
+    res.json({
+      summary:{
+        actionable_discount_total:money(actionableDiscount),
+        stated_late_fee_exposure:money(lateFeeExposure),
+        not_yet_due_ap:money(notYetDue),
+        overdue_ap:money(overdue),
+        invoices_with_partial_discount_terms:invoices.filter(x=>x.partial_discount_needs_verification).length
+      },
+      invoices,
+      basis:'Timing guidance uses only explicit supplier invoice terms. Discounts on partially paid invoices require verification; late-fee amounts are exposure only and are not posted as liabilities.'
+    });
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 router.post('/invoices', requireAnyPermission('purchasing_approve','reports_financial'), async (req,res)=>{
   try{
     const b=req.body||{};
     const supplierId=Number(b.supplier_id),poId=b.purchase_order_id?Number(b.purchase_order_id):null;
     const subtotal=money(b.subtotal||0),tax=money(b.tax_amount||0),freight=money(b.freight_amount||0),duty=money(b.duty_amount||0),otherLanded=money(b.other_landed_cost_amount||0);
+    const discountAmount=money(b.discount_amount||0),lateFeeAmount=money(b.late_fee_amount||0);
     const components=[subtotal,tax,freight,duty,otherLanded];
-    if(components.some(v=>!Number.isFinite(v)||v<0))return res.status(400).json({error:'Supplier invoice monetary components must be non-negative numbers'});
+    if(components.some(v=>!Number.isFinite(v)||v<0)||!Number.isFinite(discountAmount)||discountAmount<0||!Number.isFinite(lateFeeAmount)||lateFeeAmount<0)return res.status(400).json({error:'Supplier invoice monetary components and payment-term amounts must be non-negative numbers'});
+    const termsReference=String(b.payment_terms_reference||'').trim();
+    if(discountAmount>0&&!b.discount_deadline)return res.status(400).json({error:'A documented discount deadline is required when an early-payment discount amount is recorded'});
+    if(lateFeeAmount>0&&!b.late_fee_effective_date)return res.status(400).json({error:'A documented late-fee effective date is required when a late-fee amount is recorded'});
+    if((discountAmount>0||lateFeeAmount>0)&&!termsReference)return res.status(400).json({error:'Supplier payment-term reference is required for documented discount or late-fee amounts'});
+    if(b.discount_deadline&&Date.parse(String(b.discount_deadline)+'T00:00:00Z')<Date.parse(String(b.invoice_date)+'T00:00:00Z'))return res.status(400).json({error:'Discount deadline cannot be before supplier invoice date'});
+    if(b.late_fee_effective_date&&Date.parse(String(b.late_fee_effective_date)+'T00:00:00Z')<Date.parse(String(b.invoice_date)+'T00:00:00Z'))return res.status(400).json({error:'Late-fee effective date cannot be before supplier invoice date'});
     const calculated=Number(components.reduce((s,v)=>s+v,0).toFixed(2));
     const total=b.total===undefined?calculated:money(b.total);
     if(!supplierId||!String(b.invoice_number||'').trim()||!b.invoice_date||!Number.isFinite(total)||total<=0)return res.status(400).json({error:'supplier_id, invoice_number, invoice_date and a positive total are required'});
     if(Math.abs(total-calculated)>0.01)return res.status(400).json({error:`Invoice components total ${calculated.toFixed(2)} does not match invoice total ${total.toFixed(2)}`});
+    if(discountAmount-total>0.01)return res.status(400).json({error:'Documented early-payment discount cannot exceed supplier invoice total'});
     let taxTreatment=null;
     if(tax>0){
       taxTreatment=String(b.tax_treatment||'').trim().toLowerCase();
@@ -159,8 +225,8 @@ router.post('/invoices', requireAnyPermission('purchasing_approve','reports_fina
     }
     const branchId=b.branch_id||po?.branch_id||null;
     const tx=await db.transaction('write'); try{
-      const r=await tx.execute({sql:`INSERT INTO supplier_invoices(supplier_id,purchase_order_id,branch_id,invoice_number,invoice_date,due_date,subtotal,tax_amount,freight_amount,duty_amount,other_landed_cost_amount,tax_treatment,total,notes,posted_by)
-        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[supplierId,poId,branchId,String(b.invoice_number).trim(),b.invoice_date,b.due_date||null,subtotal,tax,freight,duty,otherLanded,taxTreatment,total,b.notes||null,actor(req)]});
+      const r=await tx.execute({sql:`INSERT INTO supplier_invoices(supplier_id,purchase_order_id,branch_id,invoice_number,invoice_date,due_date,subtotal,tax_amount,freight_amount,duty_amount,other_landed_cost_amount,tax_treatment,total,payment_terms_reference,discount_deadline,discount_amount,late_fee_effective_date,late_fee_amount,notes,posted_by)
+        VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[supplierId,poId,branchId,String(b.invoice_number).trim(),b.invoice_date,b.due_date||null,subtotal,tax,freight,duty,otherLanded,taxTreatment,total,termsReference||null,b.discount_deadline||null,discountAmount,b.late_fee_effective_date||null,lateFeeAmount,b.notes||null,actor(req)]});
       const id=Number(r.lastInsertRowid);
       await tx.execute({sql:`INSERT INTO supplier_ledger_events(supplier_id,event_type,entity_type,entity_id,amount,details,actor_employee_id) VALUES(?,?,?,?,?,?,?)`,args:[supplierId,'invoice_posted','supplier_invoice',id,total,`Supplier invoice ${String(b.invoice_number).trim()} posted; merchandise ${subtotal.toFixed(2)}, tax ${tax.toFixed(2)}, landed costs ${(freight+duty+otherLanded).toFixed(2)}`,actor(req)]});
       if(poId) await recordInvoiceReconciliation(tx,{supplierInvoiceId:id,purchaseOrderId:poId,invoiceSubtotal:subtotal});
