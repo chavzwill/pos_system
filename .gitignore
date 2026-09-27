@@ -20,4 +20,5 @@ uploads/rental-po-attachments/*
 test-results/
 spendos-runtime-test.db*
 spendos-dead-letter-runtime.db*
+spendos-backfill-runtime.db*
 /data
