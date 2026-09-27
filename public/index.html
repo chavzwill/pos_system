@@ -12038,13 +12038,14 @@ const App = {
     if(!body)return;
     body.innerHTML='<div class="empty-state">Loading verified savings…</div>';
     try{
-      const [data,rollup,targets,attention,leakage,leakageCases]=await Promise.all([
+      const [data,rollup,targets,attention,leakage,leakageCases,outboxHealth]=await Promise.all([
         this.api('GET','/spendos-management/opportunities'),
         this.api('GET','/spendos-management/verified-rollup'),
         this.api('GET','/spendos-management/targets/performance'),
         this.api('GET','/spendos-management/attention'),
         this.api('GET','/spendos-management/leakage'),
-        this.api('POST','/spendos-management/leakage/cases',{})
+        this.api('POST','/spendos-management/leakage/cases',{}),
+        this.api('GET','/spendos-management/outbox/health')
       ]);
       const rows=data.opportunities||[];
       const estimated=rows.reduce((s,x)=>s+Number(x.estimated_savings||0),0);
@@ -12058,6 +12059,10 @@ const App = {
         return '<tr><td><div class="fw-600">'+String(x.kind||'opportunity').replaceAll('_',' ')+'</div><div style="font-size:12px;color:var(--text-muted)">'+String(x.opportunity_key||'')+'</div></td><td><span class="badge-pill '+(x.status==='verified'?'badge-success':x.status==='actioned'?'badge-warning':'')+'">'+String(x.status||'identified').replaceAll('_',' ')+'</span></td><td>'+this.fmt(x.estimated_savings||0)+'</td><td class="fw-600">'+this.fmt(x.verified_savings||0)+'</td><td style="white-space:nowrap">'+action+'</td></tr>';
       }).join('');
       body.innerHTML='<div class="stats-grid" style="margin:0 0 12px"><div class="stat-card"><div class="stat-label">Estimated opportunities</div><div class="stat-value">'+this.fmt(estimated)+'</div><div class="stat-meta">Potential only — not booked as savings</div></div><div class="stat-card"><div class="stat-label">Verified savings</div><div class="stat-value">'+this.fmt(verified)+'</div><div class="stat-meta">Proven from post-action received-cost evidence</div></div><div class="stat-card"><div class="stat-label">Actioned</div><div class="stat-value">'+rows.filter(x=>x.status==='actioned').length+'</div><div class="stat-meta">Waiting for verification evidence</div></div><div class="stat-card"><div class="stat-label">Verified cases</div><div class="stat-value">'+rows.filter(x=>x.status==='verified').length+'</div><div class="stat-meta">Savings evidence accepted</div></div></div><div class="table-wrap"><table><thead><tr><th>Opportunity</th><th>Status</th><th>Estimated</th><th>Verified</th><th>Action</th></tr></thead><tbody>'+(rowHtml||'<tr><td colspan="5" class="empty-state">No savings opportunities detected yet</td></tr>')+'</tbody></table></div>';
+      const outboxStatus=String(outboxHealth?.status||'unknown');
+      const outboxBadge=outboxStatus==='healthy'?'badge-success':outboxStatus==='critical'?'badge-danger':'badge-warning';
+      const deadRows=(outboxHealth?.dead_letters||[]).map(x=>'<tr><td>'+this.escapeHtml(String(x.event_type||''))+'</td><td>'+this.escapeHtml(String(x.aggregate_type||''))+' '+this.escapeHtml(String(x.aggregate_id||''))+'</td><td>'+Number(x.attempts||0)+'</td><td>'+this.escapeHtml(String(x.last_error||''))+'</td><td><button class="btn btn-sm btn-secondary" onclick="App._requeueSpendOSOutbox('+x.id+')">Requeue</button></td></tr>').join('');
+      body.innerHTML+='<div class="card" style="margin-top:14px"><div class="card-header"><div><div class="card-title">SpendOS Delivery Health</div><div style="font-size:12px;color:var(--text-muted);margin-top:3px">'+this.escapeHtml(String(outboxHealth?.basis||''))+'</div></div><span class="badge-pill '+outboxBadge+'">'+this.escapeHtml(outboxStatus)+'</span></div><div class="stats-grid" style="padding:0 16px 16px"><div class="stat-card"><div class="stat-label">Failed</div><div class="stat-value">'+Number(outboxHealth?.failed||0)+'</div></div><div class="stat-card"><div class="stat-label">Dead letter</div><div class="stat-value">'+Number(outboxHealth?.dead_letter||0)+'</div></div><div class="stat-card"><div class="stat-label">Stale pending</div><div class="stat-value">'+Number(outboxHealth?.stale_pending||0)+'</div></div><div class="stat-card"><div class="stat-label">Expired sending lease</div><div class="stat-value">'+Number(outboxHealth?.expired_sending||0)+'</div></div></div><div class="table-wrap"><table><thead><tr><th>Event</th><th>Source</th><th>Attempts</th><th>Last error</th><th>Action</th></tr></thead><tbody>'+(deadRows||'<tr><td colspan="5" class="empty-state">No dead-letter SpendOS events</td></tr>')+'</tbody></table></div></div>';
       const rollupBlock=(title,items)=>'<div class="card" style="padding:12px"><div class="fw-600" style="margin-bottom:8px">'+title+'</div>'+((items||[]).slice(0,5).map(x=>'<div style="display:flex;justify-content:space-between;gap:12px;font-size:12px;padding:4px 0"><span>'+this.escapeHtml(String(x.dimension||'unattributed'))+' · '+this.escapeHtml(String(x.currency||''))+'</span><strong>'+this.fmt(x.verifiedSavings||0)+'</strong></div>').join('')||'<div style="font-size:12px;color:var(--text-muted)">No verified evidence yet</div>')+'</div>';
       body.innerHTML+='<div style="margin-top:14px"><div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px"><div class="fw-600">Verified savings reconciliation</div><div style="font-size:12px;color:var(--text-muted)">'+Number(rollup.claimedEvidenceCount||0)+' uniquely claimed receipt evidence item(s)</div></div><div style="display:grid;grid-template-columns:repeat(auto-fit,minmax(180px,1fr));gap:10px">'+rollupBlock('By supplier',rollup.bySupplier)+rollupBlock('By category',rollup.byCategory)+rollupBlock('By department',rollup.byDepartment)+rollupBlock('By period',rollup.byPeriod)+'</div></div>';
       const targetRows=(targets||[]).map(t=>'<tr><td><div class="fw-600">'+String(t.scope_type||'company').replaceAll('_',' ')+'</div><div style="font-size:12px;color:var(--text-muted)">'+this.escapeHtml(String(t.scope_id||'all'))+'</div></td><td>'+this.escapeHtml(String(t.period_start||''))+' → '+this.escapeHtml(String(t.period_end||''))+'</td><td>'+this.fmt(t.target_amount||0)+'</td><td class="fw-600">'+this.fmt(t.verified_savings||0)+'</td><td>'+this.fmt(t.gap||0)+'</td><td><span class="badge-pill '+(t.performance_status==='met'?'badge-success':t.performance_status==='in_progress'?'badge-warning':'')+'">'+String(t.performance_status||'not_started').replaceAll('_',' ')+'</span></td><td>'+this.escapeHtml(String(t.owner_id||'Unassigned'))+'</td></tr>').join('');
@@ -12076,6 +12081,14 @@ const App = {
     }catch(e){
       body.innerHTML='<div class="empty-state">Savings verification unavailable: '+this.escapeHtml(e.message||'SpendOS is offline or not configured')+'</div>';
     }
+  },
+
+  async _requeueSpendOSOutbox(id) {
+    try{
+      await this.api('POST','/spendos-management/outbox/'+id+'/requeue',{});
+      this.alert('SpendOS event requeued for delivery');
+      this._loadSavingsRealization();
+    }catch(e){this.alert(e.message||'Unable to requeue SpendOS event','error');}
   },
 
   async _setLeakageCaseState(id,status) {

@@ -1,6 +1,7 @@
 const test = require('node:test');
 const assert = require('node:assert/strict');
 const {
+  aggregateTypeForEvent,
   buildPurchaseRequestedEvent,
   enqueuePurchaseRequested,
   deliveryBackoffSeconds,
@@ -25,6 +26,15 @@ test('purchase.requested event has stable identity and source version', () => {
   assert.equal(event.payload.items[0].lineTotal, 48000);
 });
 
+test('generic SpendOS events preserve real aggregate identity', () => {
+  assert.equal(aggregateTypeForEvent({ type: 'purchase.requested' }), 'purchase_request');
+  assert.equal(aggregateTypeForEvent({ type: 'purchase.received' }), 'purchase_receipt');
+  assert.equal(aggregateTypeForEvent({ type: 'consumable.issued' }), 'internal_consumption');
+  assert.equal(aggregateTypeForEvent({ type: 'operating.commitment.status_changed' }), 'operating_commitment');
+  assert.equal(aggregateTypeForEvent({ type: 'custom.family.changed' }), 'custom');
+  assert.equal(aggregateTypeForEvent({ type: 'anything', aggregateType: 'explicit_aggregate' }), 'explicit_aggregate');
+});
+
 test('enqueue is idempotency-shaped at the database boundary', async () => {
   const calls = [];
   const tx = { execute: async statement => { calls.push(statement); return { rowsAffected: 1 }; } };
@@ -37,6 +47,7 @@ test('enqueue is idempotency-shaped at the database boundary', async () => {
   assert.equal(calls.length, 1);
   assert.match(calls[0].sql, /ON CONFLICT\(event_id\) DO NOTHING/);
   assert.equal(calls[0].args[0], event.id);
+  assert.equal(calls[0].args[2], 'purchase_request');
   assert.equal(calls[0].args[4], 1);
 });
 

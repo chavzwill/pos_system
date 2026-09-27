@@ -5,6 +5,7 @@ const { deliveryBackoffSeconds } = require('../lib/spendos-outbox');
 const endpoint = process.env.SPENDOS_INGEST_URL;
 const apiKey = process.env.SPENDOS_API_KEY || '';
 const batchSize = Math.max(1, Math.min(100, Number(process.env.SPENDOS_OUTBOX_BATCH || 25)));
+const maxAttempts = Math.max(1, Math.min(50, Number(process.env.SPENDOS_OUTBOX_MAX_ATTEMPTS || 8)));
 
 async function claimRows() {
   const { rows } = await db.execute({
@@ -51,15 +52,16 @@ async function deliver(row) {
     return { id: row.event_id, status: 'sent' };
   } catch (error) {
     const attempts = Number(row.attempts || 0) + 1;
+    const terminal = attempts >= maxAttempts;
     const backoff = deliveryBackoffSeconds(attempts);
     await db.execute({
       sql: `UPDATE spendos_outbox
-        SET status='failed', attempts=attempts+1, last_error=?,
-            available_at=datetime('now', ?)
+        SET status=?, attempts=attempts+1, last_error=?,
+            available_at=CASE WHEN ?='dead_letter' THEN CURRENT_TIMESTAMP ELSE datetime('now', ?) END
         WHERE id=?`,
-      args: [String(error.message || error).slice(0, 1000), `+${backoff} seconds`, row.id],
+      args: [terminal ? 'dead_letter' : 'failed', String(error.message || error).slice(0, 1000), terminal ? 'dead_letter' : 'failed', `+${backoff} seconds`, row.id],
     });
-    return { id: row.event_id, status: 'failed', error: error.message };
+    return { id: row.event_id, status: terminal ? 'dead_letter' : 'failed', attempts, error: error.message };
   }
 }
 
@@ -70,7 +72,7 @@ async function main() {
   const results = [];
   for (const row of rows) results.push(await deliver(row));
   console.log(JSON.stringify({ processed: results.length, results }, null, 2));
-  if (results.some(result => result.status === 'failed')) process.exitCode = 1;
+  if (results.some(result => result.status === 'failed' || result.status === 'dead_letter')) process.exitCode = 1;
 }
 
 if (require.main === module) {

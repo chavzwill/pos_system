@@ -18,4 +18,6 @@ uploads/rental-po-attachments/*
 .env
 .vercel
 test-results/
+spendos-runtime-test.db*
+spendos-dead-letter-runtime.db*
 /data
