@@ -279,6 +279,100 @@ router.patch('/:id/status',async(req,res)=>{
   }catch(e){if(!committed)try{await tx.rollback();}catch{}res.status(400).json({error:e.message});}
 });
 
+router.get('/performance',async(req,res)=>{
+  try{
+    const args=[];let where="oc.status='active'";
+    if(req.query.branch_id){where+=' AND oc.branch_id=?';args.push(req.query.branch_id);}
+    if(req.query.category){where+=' AND oc.category=?';args.push(req.query.category);}
+    const {rows:commitments}=await db.execute({sql:`SELECT oc.*,s.name supplier_name,b.name branch_name
+      FROM operating_commitments oc
+      LEFT JOIN suppliers s ON s.id=oc.supplier_id
+      LEFT JOIN branches b ON b.id=oc.branch_id
+      WHERE ${where}
+      ORDER BY oc.id`,args});
+    const ids=commitments.map(x=>Number(x.id));
+    let periodRows=[];
+    if(ids.length){
+      const placeholders=ids.map(()=>'?').join(',');
+      const result=await db.execute({sql:`SELECT l.commitment_id,l.service_period,
+        SUM(l.linked_amount) actual_linked_amount,
+        COUNT(DISTINCT l.supplier_invoice_id) invoice_count
+        FROM operating_commitment_invoice_links l
+        WHERE l.commitment_id IN (${placeholders})
+        GROUP BY l.commitment_id,l.service_period
+        ORDER BY l.commitment_id,l.service_period`,args:ids});
+      periodRows=result.rows;
+    }
+    const byCommitment=new Map();
+    for(const p of periodRows){
+      const id=Number(p.commitment_id);
+      if(!byCommitment.has(id))byCommitment.set(id,[]);
+      byCommitment.get(id).push({service_period:p.service_period,actual_linked_amount:money(p.actual_linked_amount),invoice_count:Number(p.invoice_count||0)});
+    }
+    const items=[];
+    for(const c of commitments){
+      const periods=byCommitment.get(Number(c.id))||[];
+      const expected=money(c.expected_amount),count=periods.length;
+      const actualTotal=money(periods.reduce((s,p)=>s+Number(p.actual_linked_amount||0),0));
+      const expectedTotal=money(expected*count),totalVariance=money(actualTotal-expectedTotal);
+      const over=periods.filter(p=>Number(p.actual_linked_amount)>expected+0.01).length;
+      const under=periods.filter(p=>Number(p.actual_linked_amount)<expected-0.01).length;
+      const onTarget=count-over-under;
+      let consecutiveOver=0;
+      for(let i=periods.length-1;i>=0;i--){if(Number(periods[i].actual_linked_amount)>expected+0.01)consecutiveOver++;else break;}
+      const latest=count?periods[count-1]:null,previous=count>1?periods[count-2]:null;
+      const latestActual=money(latest?.actual_linked_amount||0);
+      const latestVariance=count?money(latestActual-expected):0;
+      const latestVariancePct=count&&expected?Number(((latestVariance/expected)*100).toFixed(2)):null;
+      const priorActual=money(previous?.actual_linked_amount||0);
+      const periodDriftPct=previous&&priorActual?Number((((latestActual-priorActual)/priorActual)*100).toFixed(2)):null;
+      const annualizedExpected=annualized(expected,c.cadence,c.custom_interval_days);
+      const annualizedLatest=count?annualized(latestActual,c.cadence,c.custom_interval_days):null;
+      const renewalDays=daysUntil(c.renewal_date);
+      const reasons=[];let severity='normal';
+      if(consecutiveOver>=2){severity='high';reasons.push(`${consecutiveOver} consecutive linked periods are above the expected amount`);}
+      else if(over>=2){severity='medium';reasons.push(`${over} linked periods are above expected`);}
+      if(periodDriftPct!==null&&periodDriftPct>=10){severity=severity==='high'?'high':'medium';reasons.push(`Latest linked bill increased ${periodDriftPct.toFixed(2)}% versus the previous linked period`);}
+      if(latestVariancePct!==null&&latestVariancePct>=20){severity='high';reasons.push(`Latest linked period is ${latestVariancePct.toFixed(2)}% above expected`);}
+      if(c.auto_renew&&renewalDays!==null&&renewalDays>=0&&renewalDays<=90&&(consecutiveOver>0||totalVariance>0.01)){
+        severity='high';reasons.push(`Renewal is in ${renewalDays} days while linked spend is above expectation`);
+      }
+      if(count===0){severity='watch';reasons.push('No supplier invoice periods have been linked yet');}
+      items.push({
+        commitment_id:c.id,commitment_number:c.commitment_number,name:c.name,category:c.category,status:c.status,
+        supplier_id:c.supplier_id||null,supplier_name:c.supplier_name||c.provider_name||null,branch_id:c.branch_id||null,branch_name:c.branch_name||null,
+        cadence:c.cadence,expected_amount:expected,annualized_expected:annualizedExpected,history_periods:count,
+        actual_linked_total:actualTotal,expected_total_for_linked_periods:expectedTotal,total_variance:totalVariance,
+        total_variance_percent:expectedTotal?Number(((totalVariance/expectedTotal)*100).toFixed(2)):null,
+        over_expected_periods:over,under_expected_periods:under,on_target_periods:onTarget,consecutive_over_expected:consecutiveOver,
+        latest_service_period:latest?.service_period||null,latest_actual_amount:latestActual,latest_variance:latestVariance,
+        latest_variance_percent:latestVariancePct,prior_actual_amount:priorActual,period_over_period_drift_percent:periodDriftPct,
+        annualized_latest_run_rate:annualizedLatest,auto_renew:!!c.auto_renew,renewal_date:c.renewal_date||null,days_until_renewal:renewalDays,
+        review_priority:severity,reasons
+      });
+    }
+    const rank={high:3,medium:2,watch:1,normal:0};
+    items.sort((a,b)=>(rank[b.review_priority]||0)-(rank[a.review_priority]||0)||Math.abs(b.total_variance)-Math.abs(a.total_variance)||String(a.commitment_number).localeCompare(String(b.commitment_number)));
+    const historyItems=items.filter(x=>x.history_periods>0);
+    res.json({
+      summary:{
+        active_commitments:items.length,
+        commitments_with_history:historyItems.length,
+        high_review:items.filter(x=>x.review_priority==='high').length,
+        medium_review:items.filter(x=>x.review_priority==='medium').length,
+        cumulative_expected:money(historyItems.reduce((s,x)=>s+Number(x.expected_total_for_linked_periods||0),0)),
+        cumulative_linked_actual:money(historyItems.reduce((s,x)=>s+Number(x.actual_linked_total||0),0)),
+        cumulative_variance:money(historyItems.reduce((s,x)=>s+Number(x.total_variance||0),0)),
+        annualized_expected_active:money(items.reduce((s,x)=>s+Number(x.annualized_expected||0),0)),
+        annualized_latest_run_rate:money(historyItems.reduce((s,x)=>s+Number(x.annualized_latest_run_rate||0),0)),
+        renewal_review_within_90_days:items.filter(x=>x.auto_renew&&x.days_until_renewal!==null&&x.days_until_renewal>=0&&x.days_until_renewal<=90&&x.review_priority!=='normal').length
+      },
+      items,
+      basis:'Diagnostic commitment performance only. Variance and price-drift signals compare linked supplier invoice evidence with recorded commitment expectations. They do not amend contracts, invoices, AP, payments, allocations, or accounting entries.'
+    });
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
 router.get('/attention',async(req,res)=>{
   try{
     const args=[];let where="oc.status='active'";
