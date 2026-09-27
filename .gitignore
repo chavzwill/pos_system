@@ -21,4 +21,5 @@ test-results/
 spendos-runtime-test.db*
 spendos-dead-letter-runtime.db*
 spendos-backfill-runtime.db*
+spendos-business-journey-runtime.db*
 /data

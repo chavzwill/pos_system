@@ -12,6 +12,7 @@
     "check:guided-mode": "node scripts/check-guided-mode-contract.js",
     "check:spendos-guide-me": "node scripts/check-spendos-guide-me-contract.js",
     "check:spendos-backfill": "node scripts/check-spendos-backfill-contract.js && node scripts/check-spendos-backfill-runtime.js",
+    "check:spendos-business-journey": "node scripts/check-accounting-journal-identity.js && node scripts/check-spendos-business-journey-runtime.js",
     "check:predictive-lookup": "node scripts/check-predictive-lookup-contract.js",
     "check:predictive-lookup-runtime": "node scripts/check-predictive-lookup-runtime.js && node scripts/check-predictive-lookup-http-runtime.js",
     "check:catalog-integrity": "node scripts/check-catalog-integrity-contract.js",
