@@ -13,6 +13,7 @@ const { router: repairNotificationWorkerRouter, processQueue: processRepairNotif
 const { apiKeyAuth } = require('./lib/apiKeyAuth');
 const { sessionAuth } = require('./lib/sessionAuth');
 const { logActivity } = require('./routes/crm');
+const { flushSmartCommerceSyncOutbox } = require('./lib/smartcommerceSyncPublisher');
 const {
   securityHeaders,
   sameOriginMutationGuard,
@@ -128,6 +129,15 @@ app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.
 
 app.use('/api', apiKeyAuth);
 app.use('/api', sessionAuth);
+app.use('/api', (req, res, next) => {
+  const method = String(req.method || 'GET').toUpperCase();
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    res.on('finish', () => {
+      if (res.statusCode >= 200 && res.statusCode < 300) flushSmartCommerceSyncOutbox().catch(() => {});
+    });
+  }
+  next();
+});
 app.use('/api', sameOriginMutationGuard);
 app.use('/api', require('./routes/multi-branch-integrity-guard'));
 app.use('/api/department-approvals', require('./routes/department-approval-admin'));
@@ -239,6 +249,7 @@ app.get('*', (req,res)=> req.path.startsWith('/legacy') ? sendEnhancedIndex(req,
 
 if (!process.env.VERCEL) {
   app.listen(PORT, () => { console.log(`\n  POS System running at http://localhost:${PORT}\n`); });
+  setInterval(() => { flushSmartCommerceSyncOutbox().catch(() => {}); }, 30000);
   setInterval(async()=>{try{await ensureReady();const{rows:[iRow]}=await db.execute({sql:"SELECT value FROM settings WHERE key='woo_sync_interval'",args:[]});const mins=parseInt(iRow?.value||'0');if(!mins)return;const{rows:[lRow]}=await db.execute({sql:"SELECT value FROM settings WHERE key='woo_last_auto_sync'",args:[]});const last=lRow?.value?new Date(lRow.value):new Date(0);if((Date.now()-last.getTime())/60000>=mins)wooSyncAll().catch(()=>{});}catch(e){}},60000);
   setInterval(async()=>{try{await ensureReady();const{rows:overdue}=await db.execute({sql:"SELECT * FROM rental_agreements WHERE status='active' AND due_date < date('now') AND overdue_notified_at IS NULL",args:[]});for(const agreement of overdue){try{await db.execute({sql:'UPDATE rental_agreements SET overdue_notified_at = CURRENT_TIMESTAMP WHERE id = ?',args:[agreement.id]});await logActivity({customerId:agreement.customer_id,employeeId:agreement.employee_id,type:'rental',subject:`Rental ${agreement.agreement_number} is overdue (due ${agreement.due_date})`,dueDate:agreement.due_date,completed:false});}catch(e){} } }catch(e){}},30*60000);
   setInterval(()=>{ processRepairNotificationQueue(20).catch(e=>console.error('Repair notification worker failed:',e&&e.message||e)); },60000);
