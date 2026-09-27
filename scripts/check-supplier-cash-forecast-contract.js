@@ -48,7 +48,7 @@ const checks=[
  ['UI shows overdue and discount opportunity',ui.includes("kpi('Overdue'")&&ui.includes("kpi('Discounts available'")],
  ['UI shows supplier-level planned offsets and unmatched credits separately',ui.includes('<th>Planned offsets</th>')&&ui.includes('<th>Unmatched credits</th>')],
  ['UI presents forecast basis to finance',ui.includes('<strong>Forecast basis:</strong>')],
- ['forecast UI is read-only with no posting action',!ui.substring(ui.indexOf('async function showCashForecast'),ui.indexOf('function postInvoice')).includes("method:'POST'")]
+ ['forecast UI has no financial posting action; POST is limited to immutable baseline evidence',ui.substring(ui.indexOf('async function showCashForecast'),ui.indexOf('function postInvoice')).includes("api('/cash-forecast/snapshots',{method:'POST'")&&!ui.substring(ui.indexOf('async function showCashForecast'),ui.indexOf('function postInvoice')).includes("api('/payments'")&&!ui.substring(ui.indexOf('async function showCashForecast'),ui.indexOf('function postInvoice')).includes("/payments/net-plan/apply")]
 ];
 let failed=0;
 for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Supplier cash forecast: ${name}`);if(!ok)failed++;}

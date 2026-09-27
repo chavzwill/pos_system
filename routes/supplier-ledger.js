@@ -75,6 +75,34 @@ async function ensureSchema() {
       { sql: 'CREATE INDEX IF NOT EXISTS idx_supplier_invoices_due ON supplier_invoices(status,due_date,supplier_id)' },
       { sql: 'CREATE INDEX IF NOT EXISTS idx_supplier_payments_supplier ON supplier_payments(supplier_id,payment_date)' },
       { sql: 'CREATE INDEX IF NOT EXISTS idx_supplier_ledger_events_supplier ON supplier_ledger_events(supplier_id,created_at)' },
+      { sql: `CREATE TABLE IF NOT EXISTS supplier_cash_forecast_snapshots (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        branch_id INTEGER REFERENCES branches(id),
+        horizon_days INTEGER NOT NULL,
+        as_of DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        horizon_end DATE NOT NULL,
+        summary_json TEXT NOT NULL DEFAULT '{}',
+        created_by_employee_id INTEGER REFERENCES employees(id),
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )` },
+      { sql: `CREATE TABLE IF NOT EXISTS supplier_cash_forecast_snapshot_lines (
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        snapshot_id INTEGER NOT NULL REFERENCES supplier_cash_forecast_snapshots(id) ON DELETE CASCADE,
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+        supplier_invoice_id INTEGER NOT NULL REFERENCES supplier_invoices(id),
+        due_date DATE,
+        balance_due REAL NOT NULL,
+        planned_recoverable_offset REAL NOT NULL DEFAULT 0,
+        planned_cash REAL NOT NULL DEFAULT 0,
+        discount_deadline DATE,
+        discount_amount REAL NOT NULL DEFAULT 0,
+        discount_actionable INTEGER NOT NULL DEFAULT 0,
+        late_fee_effective_date DATE,
+        late_fee_amount REAL NOT NULL DEFAULT 0,
+        UNIQUE(snapshot_id,supplier_invoice_id)
+      )` },
+      { sql: 'CREATE INDEX IF NOT EXISTS idx_supplier_cash_forecast_snapshots_branch ON supplier_cash_forecast_snapshots(branch_id,as_of)' },
+      { sql: 'CREATE INDEX IF NOT EXISTS idx_supplier_cash_forecast_snapshot_lines ON supplier_cash_forecast_snapshot_lines(snapshot_id,supplier_id,due_date)' },
     ], 'write');
     await ensureColumn('supplier_invoices','freight_amount','REAL NOT NULL DEFAULT 0');
     await ensureColumn('supplier_invoices','duty_amount','REAL NOT NULL DEFAULT 0');
@@ -141,6 +169,126 @@ router.get('/invoices', requirePermission('reports_financial'), async (req,res)=
   }catch(e){res.status(500).json({error:e.message});}
 });
 
+async function buildForecastSnapshot(branchId,horizon,executor=db){
+  const invoiceArgs=[];let invoiceBranch='';
+  if(branchId){invoiceBranch=' AND si.branch_id=?';invoiceArgs.push(branchId);}
+  const {rows:invoices}=await executor.execute({sql:`SELECT si.*,s.name supplier_name,
+    COALESCE(a.paid,0) paid_amount,MAX(0,si.total-COALESCE(a.paid,0)) balance_due
+    FROM supplier_invoices si JOIN suppliers s ON s.id=si.supplier_id
+    LEFT JOIN (
+      SELECT supplier_invoice_id,SUM(amount) paid FROM (
+        SELECT supplier_invoice_id,amount FROM supplier_payment_allocations
+        UNION ALL SELECT supplier_invoice_id,amount FROM supplier_recoverable_ap_allocations
+      ) x GROUP BY supplier_invoice_id
+    ) a ON a.supplier_invoice_id=si.id
+    WHERE si.status!='void' AND MAX(0,si.total-COALESCE(a.paid,0))>0.001${invoiceBranch}
+    ORDER BY si.supplier_id,CASE WHEN si.due_date IS NULL THEN 1 ELSE 0 END,si.due_date,si.invoice_date,si.id`,args:invoiceArgs});
+  const recoverableArgs=[];let recoverableBranch='';
+  if(branchId){recoverableBranch=' AND (c.branch_id=? OR c.branch_id IS NULL)';recoverableArgs.push(branchId);}
+  const {rows:recoverables}=await executor.execute({sql:`SELECT c.supplier_id,
+    COALESCE(SUM(MAX(0,c.confirmed_amount-c.recovered_amount-COALESCE(r.reserved,0))),0) amount
+    FROM supplier_recoverable_claims c
+    JOIN supplier_recoverable_accounting_basis b ON b.claim_id=c.id
+    LEFT JOIN (
+      SELECT claim_id,SUM(MAX(0,amount-settled_amount)) reserved
+      FROM supplier_credit_note_applications GROUP BY claim_id
+    ) r ON r.claim_id=c.id
+    WHERE c.status IN ('confirmed','partially_recovered')${recoverableBranch}
+    GROUP BY c.supplier_id`,args:recoverableArgs});
+  const recoverableMap=new Map(recoverables.map(x=>[Number(x.supplier_id),money(x.amount)]));
+  const offsetLeft=new Map(recoverables.map(x=>[Number(x.supplier_id),money(x.amount)]));
+  const today=Date.parse(new Date().toISOString().slice(0,10)+'T00:00:00Z');
+  const daysUntil=date=>{if(!date)return null;const t=Date.parse(String(date)+'T00:00:00Z');return Number.isFinite(t)?Math.ceil((t-today)/86400000):null;};
+  const lines=[];let plannedCashTotal=0,plannedOffsetTotal=0,actionableDiscountTotal=0;
+  for(const inv of invoices){
+    const supplierId=Number(inv.supplier_id),balance=money(inv.balance_due),available=money(offsetLeft.get(supplierId)||0);
+    const offset=money(Math.min(balance,available));offsetLeft.set(supplierId,money(available-offset));
+    const cash=money(balance-offset);
+    const discount=money(inv.discount_amount||0),discountIn=daysUntil(inv.discount_deadline),paid=money(inv.paid_amount||0);
+    const actionable=discount>0&&discountIn!==null&&discountIn>=0&&paid<=0.009;
+    plannedCashTotal=money(plannedCashTotal+cash);plannedOffsetTotal=money(plannedOffsetTotal+offset);
+    if(actionable)actionableDiscountTotal=money(actionableDiscountTotal+Math.min(discount,cash));
+    lines.push({supplier_id:supplierId,supplier_invoice_id:inv.id,due_date:inv.due_date||null,balance_due:balance,
+      planned_recoverable_offset:offset,planned_cash:cash,discount_deadline:inv.discount_deadline||null,
+      discount_amount:discount,discount_actionable:actionable?1:0,late_fee_effective_date:inv.late_fee_effective_date||null,
+      late_fee_amount:money(inv.late_fee_amount||0)});
+  }
+  return {lines,summary:{planned_cash_total:plannedCashTotal,planned_recoverable_offsets:plannedOffsetTotal,actionable_discount_total:actionableDiscountTotal,invoice_count:lines.length}};
+}
+router.post('/cash-forecast/snapshots', requirePermission('reports_financial'), async (req,res)=>{
+  const branchId=req.body?.branch_id?Number(req.body.branch_id):null;
+  const horizon=Math.min(Math.max(Number(req.body?.horizon_days)||30,1),90);
+  const tx=await db.transaction('write');let committed=false;
+  try{
+    const built=await buildForecastSnapshot(branchId,horizon,tx);
+    const horizonEnd=new Date(Date.now()+horizon*86400000).toISOString().slice(0,10);
+    const r=await tx.execute({sql:`INSERT INTO supplier_cash_forecast_snapshots(branch_id,horizon_days,horizon_end,summary_json,created_by_employee_id)
+      VALUES(?,?,?,?,?)`,args:[branchId,horizon,horizonEnd,JSON.stringify(built.summary),actor(req)]});
+    const id=Number(r.lastInsertRowid);
+    for(const x of built.lines)await tx.execute({sql:`INSERT INTO supplier_cash_forecast_snapshot_lines(
+      snapshot_id,supplier_id,supplier_invoice_id,due_date,balance_due,planned_recoverable_offset,planned_cash,
+      discount_deadline,discount_amount,discount_actionable,late_fee_effective_date,late_fee_amount
+    ) VALUES(?,?,?,?,?,?,?,?,?,?,?,?)`,args:[id,x.supplier_id,x.supplier_invoice_id,x.due_date,x.balance_due,x.planned_recoverable_offset,x.planned_cash,
+      x.discount_deadline,x.discount_amount,x.discount_actionable,x.late_fee_effective_date,x.late_fee_amount]});
+    await tx.commit();committed=true;
+    res.status(201).json({id,branch_id:branchId,horizon_days:horizon,horizon_end:horizonEnd,summary:built.summary,line_count:built.lines.length});
+  }catch(e){if(!committed)try{await tx.rollback();}catch{}res.status(400).json({error:e.message});}
+});
+router.get('/cash-forecast/snapshots', requirePermission('reports_financial'), async (req,res)=>{
+  try{
+    const branchId=req.query.branch_id?Number(req.query.branch_id):null,args=[];let where='1=1';
+    if(branchId){where='(branch_id=? OR branch_id IS NULL)';args.push(branchId);}
+    const {rows}=await db.execute({sql:`SELECT * FROM supplier_cash_forecast_snapshots WHERE ${where} ORDER BY id DESC LIMIT 50`,args});
+    res.json(rows.map(x=>{let summary={};try{summary=JSON.parse(x.summary_json||'{}');}catch{}return {...x,summary};}));
+  }catch(e){res.status(500).json({error:e.message});}
+});
+router.get('/cash-performance/:snapshotId', requirePermission('reports_financial'), async (req,res)=>{
+  try{
+    const {rows:[snap]}=await db.execute({sql:'SELECT * FROM supplier_cash_forecast_snapshots WHERE id=?',args:[req.params.snapshotId]});
+    if(!snap)return res.status(404).json({error:'Cash forecast snapshot not found'});
+    const {rows:lines}=await db.execute({sql:`SELECT l.*,si.invoice_number,s.name supplier_name
+      FROM supplier_cash_forecast_snapshot_lines l
+      JOIN supplier_invoices si ON si.id=l.supplier_invoice_id
+      JOIN suppliers s ON s.id=l.supplier_id
+      WHERE l.snapshot_id=? ORDER BY l.supplier_id,l.id`,args:[snap.id]});
+    let plannedCash=0,actualCash=0,plannedOffsets=0,actualOffsets=0,earlyCash=0,potentialMissedDiscount=0,overdueCarry=0;
+    const detail=[];
+    const nowDate=new Date().toISOString().slice(0,10);
+    for(const x of lines){
+      const {rows:[cash]}=await db.execute({sql:`SELECT COALESCE(SUM(a.amount),0) amount,
+        MIN(p.payment_date) first_payment_date,MAX(p.payment_date) last_payment_date
+        FROM supplier_payment_allocations a JOIN supplier_payments p ON p.id=a.payment_id
+        WHERE a.supplier_invoice_id=? AND datetime(p.created_at)>=datetime(?) AND date(p.payment_date)<=date(?)`,
+        args:[x.supplier_invoice_id,snap.created_at,snap.horizon_end]});
+      const {rows:[offs]}=await db.execute({sql:`SELECT COALESCE(SUM(a.amount),0) amount
+        FROM supplier_recoverable_ap_allocations a JOIN supplier_recoverable_settlements rs ON rs.id=a.settlement_id
+        WHERE a.supplier_invoice_id=? AND datetime(rs.created_at)>=datetime(?) AND date(rs.settlement_date)<=date(?)`,
+        args:[x.supplier_invoice_id,snap.created_at,snap.horizon_end]});
+      const ac=money(cash?.amount||0),ao=money(offs?.amount||0),pc=money(x.planned_cash||0),po=money(x.planned_recoverable_offset||0);
+      plannedCash=money(plannedCash+pc);actualCash=money(actualCash+ac);plannedOffsets=money(plannedOffsets+po);actualOffsets=money(actualOffsets+ao);
+      if(cash?.first_payment_date&&x.due_date&&String(cash.first_payment_date)<String(x.due_date)&&!Number(x.discount_actionable||0))earlyCash=money(earlyCash+Math.min(ac,pc));
+      const discountExpired=Number(x.discount_actionable||0)&&x.discount_deadline&&String(nowDate)>String(x.discount_deadline);
+      if(discountExpired&&ac+ao+0.01<Number(x.balance_due||0))potentialMissedDiscount=money(potentialMissedDiscount+Math.min(Number(x.discount_amount||0),Number(x.planned_cash||0)));
+      const {rows:[current]}=await db.execute({sql:`SELECT MAX(0,si.total-COALESCE(a.paid,0)) balance FROM supplier_invoices si
+        LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM (
+          SELECT supplier_invoice_id,amount FROM supplier_payment_allocations
+          UNION ALL SELECT supplier_invoice_id,amount FROM supplier_recoverable_ap_allocations
+        ) q GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id WHERE si.id=?`,args:[x.supplier_invoice_id]});
+      const currentBalance=money(current?.balance||0);
+      if(x.due_date&&String(nowDate)>String(x.due_date)&&currentBalance>0.009)overdueCarry=money(overdueCarry+currentBalance);
+      detail.push({...x,actual_cash:ac,actual_offsets:ao,current_balance:currentBalance,first_payment_date:cash?.first_payment_date||null,
+        cash_variance:money(ac-pc),offset_variance:money(ao-po)});
+    }
+    let summary={};try{summary=JSON.parse(snap.summary_json||'{}');}catch{}
+    res.json({snapshot:{...snap,summary},summary:{
+      planned_cash:plannedCash,actual_cash_within_horizon:actualCash,cash_variance:money(actualCash-plannedCash),
+      planned_offsets:plannedOffsets,actual_offsets_within_horizon:actualOffsets,offset_variance:money(actualOffsets-plannedOffsets),
+      cash_paid_before_due_without_documented_discount:earlyCash,potential_discount_opportunity_expired:potentialMissedDiscount,
+      current_overdue_carryover:overdueCarry
+    },lines:detail,
+    basis:'Diagnostic performance review only. Early-payment and expired-discount indicators are operational signals, not accounting adjustments or proof of supplier entitlement.'});
+  }catch(e){res.status(500).json({error:e.message});}
+});
 router.get('/cash-forecast', requirePermission('reports_financial'), async (req,res)=>{
   try{
     const branchId=req.query.branch_id?Number(req.query.branch_id):null;
