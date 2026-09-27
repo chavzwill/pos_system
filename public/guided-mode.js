@@ -99,6 +99,24 @@
       { find:['rate','plan','metrics'], text:'Review the admin-configured rate and compensation plan that applies to the pay period.' },
       { find:['finalize','approve payroll','payroll'], text:'Check QC, rework and attendance records before finalizing. If required information is missing, the system should show that clearly instead of guessing.' }
     ]},
+    { id:'supplier-recovery', title:'Recover money owed by a supplier', keywords:['supplier recoverable','supplier credit note','supplier return','shorted goods','supplier owes us','recover money from supplier','supplier statement'], steps:[
+      { find:['purchasing','supplier recoverables'], text:'Open Purchasing and go to Supplier Recoverables. Start from the exact shortage, return, credit-note or supplier obligation evidence.' },
+      { find:['supplier recoverables','recovery attention'], text:'Review the recoverable amount, supplier evidence, age and next action. Identified exposure is not the same as confirmed money owed.' },
+      { find:['credit notes','supplier returns','statements'], text:'Use Credit Notes, Supplier Returns or Statements to attach the authoritative supplier evidence and reconcile the amount.' },
+      { find:['recovery attention','resolve','settle'], text:'Close or settle only through the controlled recoverable/AP workflow after the financial evidence agrees. Guide Me never creates the settlement for you.' }
+    ]},
+    { id:'supplier-payment-control', title:'Plan and pay suppliers safely', keywords:['supplier payment','supplier bills','accounts payable','cash forecast','payment priorities','pay supplier','supplier credits','ap forecast'], steps:[
+      { find:['supplier bills & payments','supplier bills','payments'], text:'Open Supplier Bills & Payments. Formal AP begins from posted supplier invoices, not estimates or purchase requests.' },
+      { find:['payment priorities','cash forecast'], text:'Review Payment priorities and Cash forecast before sending cash. Check due dates, documented discounts, late-fee exposure and eligible recoverable offsets.' },
+      { find:['record payment'], text:'When payment is justified, use Record payment. The payment guard will recheck unused supplier credits, duplicate risk and the current net-payment plan.' },
+      { find:['supplier credit','offset','minimum cash'], text:'Apply eligible supplier recoverable offsets first where appropriate. If usable credit remains and cash is still sent, the independent finance override remains authoritative.' }
+    ]},
+    { id:'operating-spend', title:'Review recurring operating costs and commitments', keywords:['operating commitments','recurring expenses','rent lease','utilities','software subscriptions','maintenance contract','recurring costs','renewal costs'], steps:[
+      { find:['supplier bills & payments'], text:'Open Supplier Bills & Payments, then Operating commitments.' },
+      { find:['operating commitments'], text:'Review the expected recurring amount, cadence, allocation target, next due date and renewal evidence for the commitment.' },
+      { find:['match invoice','reconcile'], text:'Match the actual supplier invoice to the correct service period, then Reconcile expected versus invoiced cost. Matching is evidence only and does not change AP.' },
+      { find:['performance'], text:'Use Performance to review repeated overruns, bill drift, annualized run rate and renewals that deserve renegotiation attention before they roll over.' }
+    ]},
     { id:'erp', title:'Stock Planning & Replenishment', keywords:['stock planning','replenishment','reordering','smart transfer','recommendation','slow moving','stockout','supplier performance','what to order'], steps:[
       { find:['stock planning','stock health','reordering'], text:'Open Stock Planning & Replenishment.' },
       { find:['low stock','move between branches','what to order','supplier choice'], text:'Review why the system is suggesting the action: branch stock, demand, supplier performance or stock history.' },

@@ -10,6 +10,7 @@
     "check:client-syntax": "node scripts/check-client-syntax.js",
     "check:contextual-actions": "node scripts/check-contextual-actions-contract.js",
     "check:guided-mode": "node scripts/check-guided-mode-contract.js",
+    "check:spendos-guide-me": "node scripts/check-spendos-guide-me-contract.js",
     "check:predictive-lookup": "node scripts/check-predictive-lookup-contract.js",
     "check:predictive-lookup-runtime": "node scripts/check-predictive-lookup-runtime.js && node scripts/check-predictive-lookup-http-runtime.js",
     "check:catalog-integrity": "node scripts/check-catalog-integrity-contract.js",
