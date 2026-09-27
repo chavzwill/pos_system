@@ -1,10 +1,13 @@
 'use strict';
 const express=require('express');
+const crypto=require('crypto');
 const router=express.Router();
 const {db}=require('../database');
-const {can}=require('../lib/permissions');
+const {can,requirePermission}=require('../lib/permissions');
 const {findEmployeeByPin}=require('../lib/pinAuth');
 const {ensureLandedCostReconciliationSchema,reconcileSupplierInvoiceLandedCosts,capitalizableAmount}=require('../lib/landed-cost-reconciliation');
+const {ensureSupplierRecoverablesSchema}=require('../lib/supplier-recoverables');
+const creditNotes=require('./supplier-credit-notes');
 const normalize=v=>String(v||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
 const money=v=>Number(Number(v||0).toFixed(2));
 let readyPromise=null;
@@ -33,8 +36,36 @@ async function ensureSchema(){if(readyPromise)return readyPromise;readyPromise=(
     evidence_json TEXT NOT NULL DEFAULT '{}',
     created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
   )`},
-  {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_payment_similarity ON supplier_payment_similarity_override_events(supplier_id,payment_date,amount,created_at)'}
-],'write');await ensureLandedCostReconciliationSchema();})().catch(e=>{readyPromise=null;throw e;});return readyPromise;}
+  {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_payment_similarity ON supplier_payment_similarity_override_events(supplier_id,payment_date,amount,created_at)'},
+  {sql:`CREATE TABLE IF NOT EXISTS supplier_payment_credit_override_events(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    payment_id INTEGER NOT NULL UNIQUE REFERENCES supplier_payments(id),
+    supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+    payment_amount REAL NOT NULL,
+    open_ap REAL NOT NULL DEFAULT 0,
+    offset_ready_recoverables REAL NOT NULL DEFAULT 0,
+    unmatched_credit_notes REAL NOT NULL DEFAULT 0,
+    matched_unsettled_credit REAL NOT NULL DEFAULT 0,
+    identified_unconfirmed_claims REAL NOT NULL DEFAULT 0,
+    authorizer_employee_id INTEGER NOT NULL REFERENCES employees(id),
+    reason TEXT NOT NULL,
+    evidence_json TEXT NOT NULL DEFAULT '{}',
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`},
+  {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_payment_credit_override ON supplier_payment_credit_override_events(supplier_id,created_at)'},
+  {sql:`CREATE TABLE IF NOT EXISTS supplier_net_payment_executions(
+    id INTEGER PRIMARY KEY AUTOINCREMENT,
+    operation_key TEXT NOT NULL UNIQUE,
+    supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+    branch_id INTEGER REFERENCES branches(id),
+    expected_plan_hash TEXT NOT NULL,
+    applied_amount REAL NOT NULL DEFAULT 0,
+    result_json TEXT NOT NULL DEFAULT '{}',
+    actor_employee_id INTEGER REFERENCES employees(id),
+    created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+  )`},
+  {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_net_payment_exec_supplier ON supplier_net_payment_executions(supplier_id,created_at)'}
+],'write');await ensureLandedCostReconciliationSchema();await ensureSupplierRecoverablesSchema();if(creditNotes.ensureSchema)await creditNotes.ensureSchema();})().catch(e=>{readyPromise=null;throw e;});return readyPromise;}
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Supplier-payment loss-prevention initialization failed',detail:e.message});}});
 router.use(require('./supplier-payment-operation-guard'));
 async function settingNumber(key,fallback){const {rows:[r]}=await db.execute({sql:'SELECT value FROM settings WHERE key=?',args:[key]});const n=Number(r?.value);return Number.isFinite(n)?n:fallback;}
@@ -49,6 +80,256 @@ async function authorize(req,message){
   if(!authorizer)throw Object.assign(new Error('Invalid supervisor PIN or insufficient supplier-payment approval authority.'),{status:403});
   if(req.employee&&String(req.employee.id)===String(authorizer.id))throw Object.assign(new Error('Independent supervisor authorization is required for a suspicious supplier payment.'),{status:403});
   return {authorizer,reason};
+}
+async function supplierCreditPosition(supplierId){
+  const {rows:[ap]}=await db.execute({sql:`SELECT COALESCE(SUM(MAX(0,si.total-COALESCE(a.paid,0))),0) amount
+    FROM supplier_invoices si
+    LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM (
+      SELECT supplier_invoice_id,amount FROM supplier_payment_allocations
+      UNION ALL SELECT supplier_invoice_id,amount FROM supplier_recoverable_ap_allocations
+    ) q GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id
+    WHERE si.supplier_id=? AND si.status!='void'`,args:[supplierId]});
+  const {rows:[ready]}=await db.execute({sql:`SELECT COALESCE(SUM(MAX(0,c.confirmed_amount-c.recovered_amount-COALESCE(r.reserved,0))),0) amount
+    FROM supplier_recoverable_claims c
+    JOIN supplier_recoverable_accounting_basis b ON b.claim_id=c.id
+    LEFT JOIN (
+      SELECT claim_id,SUM(MAX(0,amount-settled_amount)) reserved
+      FROM supplier_credit_note_applications GROUP BY claim_id
+    ) r ON r.claim_id=c.id
+    WHERE c.supplier_id=? AND c.status IN ('confirmed','partially_recovered')`,args:[supplierId]});
+  const {rows:[unmatched]}=await db.execute({sql:`SELECT COALESCE(SUM(MAX(0,n.amount-n.applied_amount)),0) amount
+    FROM supplier_credit_notes n WHERE n.supplier_id=?`,args:[supplierId]});
+  const {rows:[matched]}=await db.execute({sql:`SELECT COALESCE(SUM(MAX(0,a.amount-a.settled_amount)),0) amount
+    FROM supplier_credit_note_applications a
+    JOIN supplier_credit_notes n ON n.id=a.credit_note_id
+    WHERE n.supplier_id=?`,args:[supplierId]});
+  const {rows:[identified]}=await db.execute({sql:`SELECT COALESCE(SUM(identified_amount),0) amount
+    FROM supplier_recoverable_claims WHERE supplier_id=? AND status='identified'`,args:[supplierId]});
+  const position={
+    open_ap:money(ap?.amount),
+    offset_ready_recoverables:money(ready?.amount),
+    unmatched_credit_notes:money(unmatched?.amount),
+    matched_unsettled_credit:money(matched?.amount),
+    identified_unconfirmed_claims:money(identified?.amount)
+  };
+  position.requires_override=position.offset_ready_recoverables>0.009||position.unmatched_credit_notes>0.009;
+  return position;
+}
+async function authorizeCreditPosition(req,position){
+  if(!position.requires_override)return null;
+  const reason=String(req.body?.supplier_credit_override_reason||'').trim();
+  const pin=String(req.body?.supplier_credit_override_pin||'').trim();
+  const message=`This supplier has ${position.offset_ready_recoverables.toFixed(2)} of offset-ready recoverables and ${position.unmatched_credit_notes.toFixed(2)} of unmatched formal credit notes. Apply available supplier credit before sending additional cash, or obtain independent finance approval.`;
+  if(!pin)throw Object.assign(new Error(message),{status:409,code:'SUPPLIER_CREDIT_POSITION_REVIEW',position});
+  if(reason.length<10)throw Object.assign(new Error('A meaningful reason is required to pay a supplier while usable supplier credit remains.'),{status:400});
+  const {rows:employees}=await db.execute({sql:`SELECT e.id,e.first_name,e.last_name,e.pin,sg.permissions FROM employees e LEFT JOIN security_groups sg ON sg.id=e.security_group_id WHERE e.active=1`,args:[]});
+  const authorizer=await findEmployeeByPin(employees,pin,e=>{let p={};try{p=JSON.parse(e.permissions||'{}');}catch{}return can(p,'reports_financial')||can(p,'security_manage');});
+  if(!authorizer)throw Object.assign(new Error('Invalid supervisor PIN or insufficient finance authority for supplier-credit override.'),{status:403});
+  if(req.employee&&String(req.employee.id)===String(authorizer.id))throw Object.assign(new Error('Independent supervisor authorization is required when paying through usable supplier credit.'),{status:403});
+  return {authorizer,reason,message};
+}
+async function supplierNetPaymentPlan(supplierId,branchId=null,executor=db){
+  const invoiceArgs=[supplierId],claimArgs=[supplierId],creditArgs=[supplierId];
+  let invoiceBranch='',claimBranch='',creditBranch='';
+  if(branchId){
+    invoiceBranch=' AND si.branch_id=?';invoiceArgs.push(branchId);
+    claimBranch=' AND (c.branch_id=? OR c.branch_id IS NULL)';claimArgs.push(branchId);
+    creditBranch=' AND (n.branch_id=? OR n.branch_id IS NULL)';creditArgs.push(branchId);
+  }
+  const {rows:invoices}=await executor.execute({sql:`SELECT si.id,si.invoice_number,si.invoice_date,si.due_date,si.branch_id,
+      MAX(0,si.total-COALESCE(a.paid,0)) balance_due
+    FROM supplier_invoices si
+    LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM (
+      SELECT supplier_invoice_id,amount FROM supplier_payment_allocations
+      UNION ALL SELECT supplier_invoice_id,amount FROM supplier_recoverable_ap_allocations
+    ) q GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id
+    WHERE si.supplier_id=? AND si.status!='void' AND MAX(0,si.total-COALESCE(a.paid,0))>0.001${invoiceBranch}
+    ORDER BY CASE WHEN si.due_date IS NULL THEN 1 ELSE 0 END,si.due_date,si.invoice_date,si.id`,args:invoiceArgs});
+  const {rows:claims}=await executor.execute({sql:`SELECT c.id,c.claim_number,c.claim_type,c.branch_id,
+      MAX(0,c.confirmed_amount-c.recovered_amount-COALESCE(r.reserved,0)) outstanding_amount,
+      COALESCE(r.reserved,0) matched_credit_reserved
+    FROM supplier_recoverable_claims c
+    JOIN supplier_recoverable_accounting_basis b ON b.claim_id=c.id
+    LEFT JOIN (
+      SELECT claim_id,SUM(MAX(0,amount-settled_amount)) reserved
+      FROM supplier_credit_note_applications GROUP BY claim_id
+    ) r ON r.claim_id=c.id
+    WHERE c.supplier_id=? AND c.status IN ('confirmed','partially_recovered')
+      AND MAX(0,c.confirmed_amount-c.recovered_amount-COALESCE(r.reserved,0))>0.001${claimBranch}
+    ORDER BY COALESCE(c.due_date,c.confirmed_at,c.obligation_date),c.id`,args:claimArgs});
+  const {rows:credits}=await executor.execute({sql:`SELECT n.id,n.credit_note_number,n.credit_date,n.branch_id,
+      MAX(0,n.amount-n.applied_amount) remaining_amount
+    FROM supplier_credit_notes n
+    WHERE n.supplier_id=? AND MAX(0,n.amount-n.applied_amount)>0.001${creditBranch}
+    ORDER BY n.credit_date,n.id`,args:creditArgs});
+  const allocations=[];
+  let claimIndex=0,claimLeft=claims.length?money(claims[0].outstanding_amount):0;
+  for(const inv of invoices){
+    let invoiceLeft=money(inv.balance_due);
+    while(invoiceLeft>0.009&&claimIndex<claims.length){
+      const claim=claims[claimIndex];
+      const applied=money(Math.min(invoiceLeft,claimLeft));
+      if(applied>0)allocations.push({
+        claim_id:claim.id,claim_number:claim.claim_number,claim_type:claim.claim_type,
+        supplier_invoice_id:inv.id,invoice_number:inv.invoice_number,amount:applied
+      });
+      invoiceLeft=money(invoiceLeft-applied);
+      claimLeft=money(claimLeft-applied);
+      if(claimLeft<=0.009){
+        claimIndex++;
+        claimLeft=claimIndex<claims.length?money(claims[claimIndex].outstanding_amount):0;
+      }
+    }
+  }
+  const openAp=money(invoices.reduce((s,x)=>s+Number(x.balance_due||0),0));
+  const offsetPool=money(claims.reduce((s,x)=>s+Number(x.outstanding_amount||0),0));
+  const proposedOffset=money(allocations.reduce((s,x)=>s+Number(x.amount||0),0));
+  const unmatchedCredits=money(credits.reduce((s,x)=>s+Number(x.remaining_amount||0),0));
+  return {
+    supplier_id:supplierId,branch_id:branchId||null,
+    open_ap:openAp,offset_ready_recoverables:offsetPool,proposed_ap_offset:proposedOffset,
+    minimum_cash_after_current_offsets:money(Math.max(0,openAp-proposedOffset)),
+    unused_offset_ready_recoverables:money(Math.max(0,offsetPool-proposedOffset)),
+    unmatched_formal_credit_notes:unmatchedCredits,
+    invoices,offset_ready_claims:claims,unmatched_credit_notes:credits,suggested_offsets:allocations,
+    note:'Read-only payment plan. It does not post recoverable settlements, apply credit notes, change AP, or create supplier payments.'
+  };
+}
+function netPlanHash(plan){
+  const economic={
+    supplier_id:Number(plan.supplier_id),branch_id:plan.branch_id?Number(plan.branch_id):null,
+    open_ap:money(plan.open_ap),offset_ready_recoverables:money(plan.offset_ready_recoverables),
+    proposed_ap_offset:money(plan.proposed_ap_offset),minimum_cash_after_current_offsets:money(plan.minimum_cash_after_current_offsets),
+    unmatched_formal_credit_notes:money(plan.unmatched_formal_credit_notes),
+    suggested_offsets:(plan.suggested_offsets||[]).map(x=>({
+      claim_id:Number(x.claim_id),supplier_invoice_id:Number(x.supplier_invoice_id),amount:money(x.amount)
+    }))
+  };
+  return crypto.createHash('sha256').update(JSON.stringify(economic)).digest('hex');
+}
+router.get('/payments/net-plan',requirePermission('reports_financial'),async(req,res)=>{
+  try{
+    const supplierId=Number(req.query.supplier_id),branchId=req.query.branch_id?Number(req.query.branch_id):null;
+    if(!supplierId)return res.status(400).json({error:'supplier_id is required'});
+    const plan=await supplierNetPaymentPlan(supplierId,branchId);
+    res.json({...plan,plan_hash:netPlanHash(plan)});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+router.post('/payments/net-plan/apply',requirePermission('reports_financial'),async(req,res)=>{
+  const operationKey=String(req.get('Idempotency-Key')||req.body?.operation_key||'').trim();
+  const supplierId=Number(req.body?.supplier_id),branchId=req.body?.branch_id?Number(req.body.branch_id):null;
+  const expectedHash=String(req.body?.plan_hash||'').trim();
+  if(operationKey.length<16)return res.status(400).json({error:'A stable Idempotency-Key of at least 16 characters is required'});
+  if(!supplierId||!expectedHash)return res.status(400).json({error:'supplier_id and plan_hash are required'});
+  const tx=await db.transaction('write');let committed=false;
+  try{
+    const {rows:[prior]}=await tx.execute({sql:'SELECT * FROM supplier_net_payment_executions WHERE operation_key=?',args:[operationKey]});
+    if(prior){
+      const same=Number(prior.supplier_id)===supplierId&&Number(prior.branch_id||0)===Number(branchId||0)&&String(prior.expected_plan_hash)===expectedHash;
+      if(!same)throw Object.assign(new Error('Idempotency key was already used for a different supplier net-payment plan'),{status:409});
+      await tx.rollback();committed=true;
+      let result={};try{result=JSON.parse(prior.result_json||'{}');}catch{}
+      return res.json({...result,replayed:true});
+    }
+
+    const plan=await supplierNetPaymentPlan(supplierId,branchId,tx);
+    const currentHash=netPlanHash(plan);
+    if(currentHash!==expectedHash)throw Object.assign(new Error('Supplier net-payment plan changed before execution. Refresh the plan and review again.'),{
+      status:409,code:'SUPPLIER_NET_PLAN_STALE',current_plan:{...plan,plan_hash:currentHash}
+    });
+    if(!(plan.suggested_offsets||[]).length||Number(plan.proposed_ap_offset||0)<=0)throw Object.assign(new Error('No eligible recoverable offsets remain to apply'),{status:409});
+
+    const actorId=req.employee?.id||req.user?.employee_id||null;
+    const settlementDate=new Date().toISOString();
+    const settlements=[];
+    for(const x of plan.suggested_offsets){
+      const amount=money(x.amount);
+      if(amount<=0)continue;
+      const {rows:[claim]}=await tx.execute({sql:`SELECT c.*,COALESCE(r.reserved,0) matched_credit_reserved
+        FROM supplier_recoverable_claims c
+        LEFT JOIN (
+          SELECT claim_id,SUM(MAX(0,amount-settled_amount)) reserved
+          FROM supplier_credit_note_applications GROUP BY claim_id
+        ) r ON r.claim_id=c.id
+        WHERE c.id=?`,args:[x.claim_id]});
+      if(!claim||Number(claim.supplier_id)!==supplierId)throw new Error('Recoverable claim changed during net-payment execution');
+      const directAvailable=money(Math.max(0,Number(claim.confirmed_amount||0)-Number(claim.recovered_amount||0)-Number(claim.matched_credit_reserved||0)));
+      if(amount>directAvailable+0.01)throw new Error('Recoverable direct-offset capacity changed during net-payment execution');
+      const {rows:[basis]}=await tx.execute({sql:'SELECT id FROM supplier_recoverable_accounting_basis WHERE claim_id=?',args:[claim.id]});
+      if(!basis)throw new Error('Recoverable accounting basis is no longer available');
+      const {rows:[inv]}=await tx.execute({sql:"SELECT * FROM supplier_invoices WHERE id=? AND status!='void'",args:[x.supplier_invoice_id]});
+      if(!inv||Number(inv.supplier_id)!==supplierId)throw new Error('Supplier invoice changed during net-payment execution');
+      if(branchId&&Number(inv.branch_id||0)!==branchId)throw new Error('Supplier invoice moved outside the selected branch scope');
+      const {rows:[applied]}=await tx.execute({sql:`SELECT COALESCE(SUM(amount),0) amount FROM (
+        SELECT amount FROM supplier_payment_allocations WHERE supplier_invoice_id=?
+        UNION ALL
+        SELECT amount FROM supplier_recoverable_ap_allocations WHERE supplier_invoice_id=?
+      )`,args:[inv.id,inv.id]});
+      const invoiceBalance=money(Number(inv.total||0)-Number(applied?.amount||0));
+      if(amount>invoiceBalance+0.01)throw new Error('Supplier invoice balance changed during net-payment execution');
+
+      const reference='NET-OFFSET-'+operationKey.slice(0,24);
+      const settlement=await tx.execute({sql:`INSERT INTO supplier_recoverable_settlements(
+        claim_id,settlement_type,amount,reference,settlement_date,evidence_json,recorded_by_employee_id
+      ) VALUES(?,?,?,?,?,?,?)`,args:[
+        claim.id,'ap_offset',amount,reference,settlementDate,
+        JSON.stringify({source:'supplier_net_payment_plan',operationKey,planHash:expectedHash,supplierInvoiceId:inv.id}),
+        actorId
+      ]});
+      const settlementId=Number(settlement.lastInsertRowid);
+      await tx.execute({sql:'INSERT INTO supplier_recoverable_ap_allocations(settlement_id,claim_id,supplier_invoice_id,amount) VALUES(?,?,?,?)',
+        args:[settlementId,claim.id,inv.id,amount]});
+      const newRecovered=money(Number(claim.recovered_amount||0)+amount);
+      const claimStatus=newRecovered+0.01>=Number(claim.confirmed_amount||0)?'recovered':'partially_recovered';
+      await tx.execute({sql:`UPDATE supplier_recoverable_claims SET recovered_amount=?,status=?,updated_at=CURRENT_TIMESTAMP,
+        recovered_at=CASE WHEN ?='recovered' THEN CURRENT_TIMESTAMP ELSE NULL END WHERE id=?`,
+        args:[newRecovered,claimStatus,claimStatus,claim.id]});
+      settlements.push({settlement_id:settlementId,claim_id:claim.id,claim_number:claim.claim_number,supplier_invoice_id:inv.id,invoice_number:inv.invoice_number,amount});
+    }
+
+    const appliedAmount=money(settlements.reduce((s,x)=>s+Number(x.amount||0),0));
+    const result={
+      supplier_id:supplierId,branch_id:branchId,plan_hash:expectedHash,operation_key:operationKey,
+      applied_amount:appliedAmount,settlements,
+      minimum_cash_after_execution:money(Math.max(0,Number(plan.open_ap||0)-appliedAmount)),
+      accounting_status:'pending_source_sync'
+    };
+    await tx.execute({sql:`INSERT INTO supplier_net_payment_executions(
+      operation_key,supplier_id,branch_id,expected_plan_hash,applied_amount,result_json,actor_employee_id
+    ) VALUES(?,?,?,?,?,?,?)`,args:[operationKey,supplierId,branchId,expectedHash,appliedAmount,JSON.stringify(result),actorId]});
+    await tx.commit();committed=true;
+    res.status(201).json(result);
+  }catch(e){
+    if(!committed)try{await tx.rollback();}catch{}
+    res.status(e.status||400).json({error:e.message,code:e.code||undefined,current_plan:e.current_plan||undefined});
+  }
+});
+
+router.get('/payments/credit-position',requirePermission('reports_financial'),async(req,res)=>{
+  try{
+    const supplierId=Number(req.query.supplier_id);
+    if(!supplierId)return res.status(400).json({error:'supplier_id is required'});
+    res.json(await supplierCreditPosition(supplierId));
+  }catch(e){res.status(500).json({error:e.message});}
+});
+function wrapCreditOverrideEvidence(res,{supplierId,paymentAmount,position,creditAuth}){
+  if(!creditAuth)return;
+  const priorJson=res.json.bind(res);let creditHandled=false;
+  res.json=function(payload){
+    if(creditHandled)return priorJson(payload);creditHandled=true;
+    if(res.statusCode>=200&&res.statusCode<300&&payload?.id){
+      return db.execute({sql:`INSERT INTO supplier_payment_credit_override_events(
+        payment_id,supplier_id,payment_amount,open_ap,offset_ready_recoverables,unmatched_credit_notes,
+        matched_unsettled_credit,identified_unconfirmed_claims,authorizer_employee_id,reason,evidence_json
+      ) VALUES(?,?,?,?,?,?,?,?,?,?,?)`,args:[
+        payload.id,supplierId,paymentAmount,position.open_ap,position.offset_ready_recoverables,
+        position.unmatched_credit_notes,position.matched_unsettled_credit,position.identified_unconfirmed_claims,
+        creditAuth.authorizer.id,creditAuth.reason,JSON.stringify({position,decision:'pay_cash_despite_supplier_credit'})
+      ]}).then(()=>priorJson({...payload,supplier_credit_override_recorded:true,supplier_credit_position:position}))
+        .catch(err=>{if(!res.headersSent){res.status(500);return priorJson({error:'Supplier payment posted but supplier-credit override evidence failed to persist; reconciliation required',payment_id:payload.id,detail:err.message});}});
+    }
+    return priorJson(payload);
+  };
 }
 async function ensurePaymentLandedCosts(req,supplierId){
   const allocations=Array.isArray(req.body?.allocations)?req.body.allocations.filter(x=>Number(x.invoice_id)>0&&Number(x.amount)>0):[];
@@ -70,6 +351,10 @@ router.post('/payments',async(req,res,next)=>{
     const supplierId=Number(req.body?.supplier_id),normalized=normalize(req.body?.reference),amount=money(req.body?.amount),paymentDate=String(req.body?.payment_date||'').trim();
     if(!supplierId||!(amount>0)||!paymentDate)return next();
     await ensurePaymentLandedCosts(req,supplierId);
+    const creditPosition=await supplierCreditPosition(supplierId);
+    const creditAuth=await authorizeCreditPosition(req,creditPosition);
+    delete req.body.supplier_credit_override_pin;delete req.body.supplier_credit_override_reason;
+    wrapCreditOverrideEvidence(res,{supplierId,paymentAmount:amount,position:creditPosition,creditAuth});
     const [windowDays,pctTolerance,absoluteTolerance]=await Promise.all([
       settingNumber('loss_control_supplier_payment_similarity_days',2),
       settingNumber('loss_control_supplier_payment_similarity_amount_pct',0.25),

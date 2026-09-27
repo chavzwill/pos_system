@@ -1,0 +1,10 @@
+'use strict';
+const assert=require('node:assert/strict');
+const {automaticJournalNumber}=require('../lib/accounting-posting');
+const a=automaticJournalNumber('supplier_recoverable_recognition',1);
+const b=automaticJournalNumber('supplier_recoverable_settlement',1);
+const c=automaticJournalNumber('supplier_recoverable_recognition',1);
+assert.notEqual(a,b,'Different automatic journal source types must not collide for the same source id');
+assert.equal(a,c,'Automatic journal identity must be deterministic for the same source');
+assert.match(a,/^AUTO-[A-Z0-9]+-[A-F0-9]{8}-1$/);
+console.log('Accounting automatic journal identity OK (3 checks).');
