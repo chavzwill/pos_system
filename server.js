@@ -198,6 +198,7 @@ app.use('/api/supplier-statement-exceptions',require('./routes/supplier-statemen
 app.use('/api/supplier-recovery-cases',require('./routes/supplier-recovery-cases'));
 app.use('/api/supplier-recovery-performance',require('./routes/supplier-recovery-performance'));
 app.use('/api/spendos-management',require('./routes/spendos-management'));
+app.use('/api/operating-commitments',require('./routes/operating-commitments'));
 app.use('/api/security-groups', require('./routes/security-groups'));
 app.use('/api/quotations', require('./routes/quotation-workflow-hardening'));
 app.use('/api/quotations', require('./routes/quotations'));

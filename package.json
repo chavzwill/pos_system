@@ -90,6 +90,7 @@
     "check:supplier-cash-forecast": "node scripts/check-supplier-cash-forecast-contract.js",
     "check:supplier-cash-performance": "node scripts/check-supplier-cash-performance-contract.js",
     "check:supplier-payment-priority": "node scripts/check-supplier-payment-priority-contract.js",
+    "check:operating-commitments": "node scripts/check-operating-commitments-contract.js",
     "check:supplier-recovery-cases": "node scripts/check-supplier-recovery-cases-contract.js",
     "check:supplier-recovery-performance": "node scripts/check-supplier-recovery-performance-contract.js",
     "check:rental-asset-receiving": "node scripts/check-rental-asset-receiving-contract.js",
