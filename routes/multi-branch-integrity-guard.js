@@ -20,6 +20,7 @@ router.use(async(req,res,next)=>{
     if(req.apiKey||!req.employee)return next();
     const p=req.path;
     if(req.method==='GET'||req.method==='HEAD'){
+      // Branch-scoped reads are an authorization boundary, not a presentation filter.
       if(req.query?.branch_id!=null&&!assertBranch(req,res,req.query.branch_id))return;
       let readId=numericId(p,/^\/transactions\/(\d+)$/);
       if(readId){const branchId=await sourceBranch('transactions',readId);if(branchId!=null&&!assertBranch(req,res,branchId))return;}

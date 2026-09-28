@@ -51,7 +51,7 @@ if (manifest.externalCommerceRuntimeRequired !== false) fail('external commerce 
 for (const asset of ['/pos-native-runtime.js','/pos-api-client.js','/native-pos-shell.js','/native-pos-shell.css','/native-sales-modernization.js','/native-sales-modernization.css','/native-repairs-modernization.js','/native-repairs-modernization.css','/native-rentals-modernization.js','/native-rentals-modernization.css','/native-dispatch-modernization.js','/native-dispatch-modernization.css','/native-inventory-modernization.js','/native-inventory-modernization.css','/native-purchasing-modernization.js','/native-purchasing-modernization.css','/native-finance-modernization.js','/native-finance-modernization.css','/native-crm-modernization.js','/native-crm-modernization.css','/native-admin-modernization.js','/native-admin-modernization.css']) {
   if (!shell.includes(asset)) fail(`${asset} is missing from app shell`);
 }
-if (!bootstrap.includes("fetch('/pos-runtime.json'")) fail('frontend does not verify the POS runtime manifest');
+if (!bootstrap.includes("nativeFetch('/pos-runtime.json'") && !bootstrap.includes("fetch('/pos-runtime.json'")) fail('frontend does not verify the POS runtime manifest');
 if (!apiClient.includes("if (value.startsWith('/api/')) return value")) fail('POS API client must remain rooted at /api');
 if (!apiClient.includes('POS native API client only accepts same-origin paths')) fail('POS API client must reject cross-origin runtime calls');
 if (!apiClient.includes("init.headers['Idempotency-Key']")) fail('native mutation client must attach durable idempotency keys');

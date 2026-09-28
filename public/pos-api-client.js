@@ -146,6 +146,7 @@
       try {
         response = await nativeFetch(firstInput, init);
       } catch (firstError) {
+        // Retry only transport failures, reusing the exact same idempotency key and request payload.
         response = await nativeFetch(retryInput, init);
       }
     } catch (error) {

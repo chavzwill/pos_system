@@ -83,7 +83,7 @@ expectContains(idempotency, 'Idempotency-Replayed', 'idempotent response replay 
 expectContains(idempotency, 'operation_idempotency_in_progress', 'ambiguous-outcome duplicate suppression');
 
 const idempotencyTest = read('tests/operation-idempotency.spec.js');
-expectContains(idempotencyTest, 'same authenticated mutation and key replays the stored result instead of executing twice', 'runtime duplicate submission certification');
+expectContains(idempotencyTest, 'same authenticated mutation and key replays and exposes its authoritative reconciliation receipt', 'runtime duplicate submission certification');
 expectContains(idempotencyTest, "expect(second.replayed).toBe('true')", 'runtime replay certification');
 expectContains(idempotencyTest, 'Different payload', 'idempotency-key payload mismatch certification');
 
@@ -111,7 +111,7 @@ expectContains(bootstrap, 'Retry transport ambiguity once with the exact same id
 const nativeClient = read('public/pos-api-client.js');
 expectContains(nativeClient, "init.headers['Idempotency-Key']", 'native mutation idempotency key');
 expectContains(nativeClient, 'Retry only transport failures', 'transport retry discipline');
-expectContains(nativeClient, 'response = await fetch(url, init)', 'same-key transport retry');
+expectContains(nativeClient, 'response = await nativeFetch(retryInput, init)', 'same-key transport retry');
 
 const integrity = read('tests/business-integrity.spec.js');
 expectContains(integrity, 'registerPurchasingFinancialRuntimeCertification', 'purchasing accounting certification');
