@@ -1,0 +1,17 @@
+'use strict';
+const fs=require('fs'),path=require('path');const root=path.join(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
+let failed=0;const check=(n,o)=>o?console.log('PASS Operator Deposit Waiver:',n):(failed++,console.error('FAIL Operator Deposit Waiver:',n));
+const rent=read('routes/rentals.js'),ui=read('public/index.html'),acct=read('lib/accounting-rentals.js'),pkg=read('package.json');
+check('pending estimate waives deposit only when operator required',rent.includes('agreement.operator_required ? 0 : estFee'));
+check('checkout calculation waives deposit only when operator required',rent.includes('agreement.operator_required ? 0 : item.rentalFee'));
+check('checkout deposit total derives from item deposit amounts',rent.includes('depositTotal += item.depositAmount'));
+check('zero deposit omits refundable deposit transaction line',rent.includes('if (depositTotal > 0)'));
+check('agreement persists actual zero or positive deposit total',rent.includes('deposit_total = ?'));
+check('credit limit uses actual waived total',rent.includes('account_balance + total'));
+check('accounting reconciles against stored deposit total',acct.includes('const deposit = money(ra.deposit_total)')&&acct.includes('rentalFee + services + deposit + tax'));
+check('new rental preview mirrors operator waiver',ui.includes('const depositTotal = operatorRequired ? 0 : feeSubtotal'));
+check('preview explains waiver in staff language',ui.includes('waived — company operator provided'));
+check('payment modal exposes waiver status',ui.includes("a.operator_required ? ' <span style=\"color:var(--text-muted)\">(waived — company operator provided)</span>'"));
+check('operator toggle recalculates estimate',ui.includes("_toggleRentalCreateService(which)")&&ui.includes('this._recalcRentalCheckoutEstimate();'));
+check('syntax wall includes operator waiver contract',pkg.includes('check:rental-operator-deposit'));
+if(failed){console.error('Operator Deposit Waiver contract failed: '+failed);process.exit(1)}console.log('Operator Deposit Waiver contract passed.');

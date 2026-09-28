@@ -1,0 +1,55 @@
+name: Gate 1 Account Payment Certification
+
+on:
+  workflow_dispatch:
+  pull_request:
+    paths:
+      - 'lib/account-payment-invariants.js'
+      - 'routes/account-payment-settlement.js'
+      - 'routes/customer-account-integrity.js'
+      - 'tests/gate1-account-payment-invariants.spec.js'
+      - '.github/workflows/gate1-account-payment-certification.yml'
+  push:
+    branches:
+      - 'gate1/account-payment-invariants'
+    paths:
+      - 'lib/account-payment-invariants.js'
+      - 'routes/account-payment-settlement.js'
+      - 'routes/customer-account-integrity.js'
+      - 'tests/gate1-account-payment-invariants.spec.js'
+      - '.github/workflows/gate1-account-payment-certification.yml'
+
+permissions:
+  contents: read
+
+jobs:
+  account-payment-gate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      POS_TEST_USER: admin
+      POS_TEST_PASSWORD: '123456'
+      TURSO_DATABASE_URL: ''
+      TURSO_AUTH_TOKEN: ''
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: node --check lib/account-payment-invariants.js && node --check routes/account-payment-settlement.js && node --check routes/customer-account-integrity.js
+      - run: npx playwright install --with-deps chromium
+      - run: rm -f pos.db pos.db-shm pos.db-wal && node scripts/ci-runtime-bootstrap.js
+      - run: npx playwright test tests/gate1-account-payment-invariants.spec.js --workers=1
+      - name: Upload focused diagnostics on failure
+        if: failure()
+        uses: actions/upload-artifact@v4
+        with:
+          name: account-payment-diagnostics-${{ github.run_id }}
+          path: |
+            test-results/
+            playwright-report/
+          if-no-files-found: ignore
+          retention-days: 7

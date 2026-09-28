@@ -1,0 +1,18 @@
+'use strict';
+const fs=require('fs'),path=require('path');
+const root=path.join(__dirname,'..'),read=f=>fs.readFileSync(path.join(root,f),'utf8');
+let failed=0;const check=(n,o)=>o?console.log('PASS Category Correction:',n):(failed++,console.error('FAIL Category Correction:',n));
+const lib=read('lib/category-correction.js'),route=read('routes/category-corrections.js'),server=read('server.js'),pkg=read('package.json');
+check('append-only correction events exist',lib.includes('catalog_category_correction_events')&&lib.includes('no_update')&&lib.includes('no_delete'));
+check('detail correction requires reason',lib.includes('CATEGORY_CORRECTION_REASON_REQUIRED'));
+check('detail correction protects stale edits',lib.includes('CATEGORY_CORRECTION_STALE')&&lib.includes('expectedName'));
+check('detail correction blocks duplicate category names',lib.includes('CATEGORY_NAME_EXISTS')&&lib.includes('duplicate-category consolidation'));
+check('bulk reclassification has read-only preview',lib.includes('previewReclassification')&&lib.includes('read_only:true'));
+check('bulk reclassification verifies source membership',lib.includes('CATEGORY_RECLASSIFICATION_STALE'));
+check('bulk reclassification requires reason and actor',lib.includes('CATEGORY_RECLASSIFICATION_REASON_REQUIRED')&&lib.includes('CATEGORY_RECLASSIFICATION_ACTOR_REQUIRED'));
+check('bulk reclassification updates only selected products',lib.includes('UPDATE products SET category_id=? WHERE category_id=? AND id IN'));
+check('corrections create security audit evidence',lib.includes('catalog_category_corrected')&&lib.includes('catalog_products_reclassified'));
+check('routes expose correction and reclassification',route.includes("router.patch('/:id'")&&route.includes("'/reclassifications'")&&route.includes("'/reclassification-preview'"));
+check('server mounts category correction authority',server.includes("/api/category-corrections"));
+check('syntax wall includes category correction',pkg.includes('check:category-correction'));
+if(failed){console.error('Category Correction contract failed: '+failed);process.exit(1)}console.log('Category Correction contract passed.');

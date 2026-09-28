@@ -5,6 +5,7 @@ const checks=[
  ['product base UOM profile exists',lib.includes('product_uom_profiles')],
  ['product conversion table exists',lib.includes('product_uom_conversions')],
  ['transactional conversion snapshot exists',lib.includes('uom_usage_snapshots')],
+ ['snapshot schema retains entered and base economic evidence',lib.includes('entered_unit_price REAL')&&lib.includes('base_unit_price REAL')],
  ['standard length conversions include metric and imperial',lib.includes('mm:0.001')&&lib.includes('ft:0.3048')&&lib.includes('in:0.0254')],
  ['standard mass conversions include kg lb oz',lib.includes('kg:1')&&lib.includes('lb:0.45359237')&&lib.includes('oz:0.028349523125')],
  ['standard volume conversions include liters and US gallons',lib.includes('l:1')&&lib.includes('gal_us:3.785411784')],
@@ -20,9 +21,13 @@ const checks=[
  ['retail converts to authoritative base quantity',retail.includes('line.quantity=baseQuantity')],
  ['retail conversion history snapshots after transaction',retail.includes("guard('transaction')")&&retail.includes('saveEvidence(req,payload,sourceType)')],
  ['purchase UOM guard resolves purchase-only conversion',po.includes("resolveProductUom(db,productId,item.uom_code||item.unit||null,'purchase')")],
+ ['purchase UOM guard rejects invalid negative or non-numeric cost',po.includes('Purchase unit cost must be a non-negative number')],
  ['purchase economics are normalized by factor',po.includes('enteredUnitCost/factor')],
+ ['purchase order preserves entered and normalized unit cost on normalized line',po.includes('item.entered_unit_cost=enteredUnitCost')&&po.includes('item.base_unit_cost=baseUnitCost')],
  ['purchase order converts quantity to base inventory units',po.includes('item.quantity_ordered=baseQuantity')],
  ['purchase order retains UOM snapshot evidence',po.includes("sourceType:'purchase_order'")],
+ ['purchase order snapshot persists entered and base unit economics',po.includes('enteredUnitPrice:e.enteredUnitCost')&&po.includes('baseUnitPrice:e.baseUnitCost')],
+ ['purchase response exposes UOM economic evidence',po.includes('entered_unit_cost:e.enteredUnitCost')&&po.includes('base_unit_cost:e.baseUnitCost')],
  ['purchase UOM guard runs before PO document creation',poctx.indexOf("router.use(require('./purchase-uom-guard'))")<poctx.indexOf("router.post('/',requirePermission('purchasing_create')")]
 ];
 let failed=0;for(const [n,ok] of checks){console.log(`${ok?'PASS':'FAIL'} UOM conversion: ${n}`);if(!ok)failed++;}if(failed){console.error(`UOM conversion contract FAILED (${failed}/${checks.length} failed).`);process.exit(1);}console.log(`UOM conversion contract OK (${checks.length} checks).`);

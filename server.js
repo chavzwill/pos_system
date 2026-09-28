@@ -13,6 +13,7 @@ const { router: repairNotificationWorkerRouter, processQueue: processRepairNotif
 const { apiKeyAuth } = require('./lib/apiKeyAuth');
 const { sessionAuth } = require('./lib/sessionAuth');
 const { logActivity } = require('./routes/crm');
+const { flushSmartCommerceSyncOutbox } = require('./lib/smartcommerceSyncPublisher');
 const {
   securityHeaders,
   sameOriginMutationGuard,
@@ -29,7 +30,7 @@ const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
 const fastShellPath = path.join(publicDir, 'app-shell.html');
-const CLIENT_ASSET_VERSION = '20260824-0800';
+const CLIENT_ASSET_VERSION = '20260922-ui-v2-all';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -55,13 +56,18 @@ function getLegacyAppScript() {
 function getEnhancedIndex() {
   if (enhancedIndexCache) return enhancedIndexCache;
   const source = fs.readFileSync(indexPath, 'utf8');
-  const legacy = extractLegacyApp(source);
+  const retiredThemePattern = /<link\b[^>]*href=["'][^"']*\/(?:workspace-quality-pass|premium-shell-v2|premium-shell-v3|late-2020s-workspaces|late-2020s-intelligence-finance|late-2020s-operations|late-2020s-pos-commerce|late-2020s-admin-marketing|late-2020s-config-crm|meeting-demo-shell|meeting-readiness|unified-ui-system)\.css(?:\?[^"']*)?["'][^>]*>\s*/gi;
+  const presentationSource = source.replace(retiredThemePattern, '');
+  const legacy = extractLegacyApp(presentationSource);
   legacyAppScriptCache = legacy.script;
   const headAssets = [
     '<script src="' + versioned('/client-diagnostics.js') + '" defer></script>',
     '<link rel="stylesheet" href="' + versioned('/total-tools-pos.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/pos-experience.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/employee-workspace-home.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/predictive-lookup.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/employee-assist-ui.css') + '">',
+    '<link id="tt-authoritative-ui" rel="stylesheet" href="' + versioned('/unified-ui-system.css') + '">',
   ];
   const bodyAssets = [
     '<script src="' + versioned('/pos-guide-map.js') + '" defer></script>',
@@ -70,9 +76,11 @@ function getEnhancedIndex() {
     '<script src="' + versioned('/navigation-shell.js') + '" defer></script>',
     '<script src="' + versioned('/role-workspace.js') + '" defer></script>',
     '<script src="' + versioned('/employee-workspace-home.js') + '" defer></script>',
+    '<script src="' + versioned('/predictive-lookup.js') + '" defer></script>',
+'<script src="' + versioned('/employee-assist-ui.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
   ];
-  let html = source.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '" defer></script>' + source.slice(legacy.end);
+  let html = presentationSource.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '" defer></script>' + presentationSource.slice(legacy.end);
   for (const tag of headAssets) html = html.replace('</head>', `  ${tag}\n</head>`);
   for (const tag of bodyAssets) html = html.replace('</body>', `  ${tag}\n</body>`);
   enhancedIndexCache = html;
@@ -124,10 +132,24 @@ app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.
 
 app.use('/api', apiKeyAuth);
 app.use('/api', sessionAuth);
+app.use('/api', (req, res, next) => {
+  const method = String(req.method || 'GET').toUpperCase();
+  if (!['GET', 'HEAD', 'OPTIONS'].includes(method)) {
+    res.on('finish', () => {
+      if (res.statusCode >= 200 && res.statusCode < 300) flushSmartCommerceSyncOutbox().catch(() => {});
+    });
+  }
+  next();
+});
 app.use('/api', sameOriginMutationGuard);
 app.use('/api', require('./routes/multi-branch-integrity-guard'));
+app.use('/api/department-approvals', require('./routes/department-approval-admin'));
 app.use('/api/workspace-profile', require('./routes/workspace-profile'));
 app.use('/api/employee-workspace-intelligence', require('./routes/employee-workspace-intelligence'));
+app.use('/api/employee-assist', require('./routes/employee-assist'));
+app.use('/api/predictive-lookup', require('./routes/predictive-lookup'));
+app.use('/api/catalog-integrity', require('./routes/catalog-integrity'));
+app.use('/api/category-corrections', require('./routes/category-corrections'));
 app.use('/api/technician-management-intelligence', require('./routes/technician-management-intelligence'));
 app.use('/api/inventory-stock-status', require('./routes/inventory-stock-status'));
 app.use('/api/inventory-traceability', require('./routes/inventory-traceability'));
@@ -137,6 +159,7 @@ app.use('/api/inventory-writeoffs', require('./routes/inventory-writeoffs'));
 app.use('/api/products', require('./routes/inventory-adjustment-hardening'));
 app.use('/api/products', require('./routes/products'));
 app.use('/api/categories', require('./routes/categories'));
+app.use('/api/brands', require('./routes/brands'));
 app.use('/api/commerce-sync', require('./routes/commerce-sync'));
 app.use('/api/smartcommerce-orders', require('./routes/smartcommerce-orders'));
 app.use('/api/customer-repair-portal', require('./routes/customer-repair-portal'));
@@ -170,10 +193,22 @@ app.use('/api/settings', require('./routes/settings'));
 app.use('/api/branches', require('./routes/branches'));
 app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/purchase-orders', require('./routes/purchase-order-document-context'));
+app.use('/api/purchase-orders', require('./routes/purchase-receive-operation-guard'));
 app.use('/api/purchase-orders', require('./routes/purchase-receipt-traceability'));
 app.use('/api/purchase-orders', require('./routes/purchase-order-hardening'));
 app.use('/api/purchase-orders', require('./routes/purchase-orders'));
 app.use('/api/purchase-requests',require('./routes/purchase-requests'));
+app.use('/api/cost-allocations',require('./routes/cost-allocations'));
+app.use('/api/supplier-recoverables',require('./routes/supplier-recoverables'));
+app.use('/api/supplier-returns',require('./routes/supplier-returns'));
+app.use('/api/supplier-credit-notes',require('./routes/supplier-credit-notes'));
+app.use('/api/supplier-recovery-attention',require('./routes/supplier-recovery-attention'));
+app.use('/api/supplier-statements',require('./routes/supplier-statements'));
+app.use('/api/supplier-statement-exceptions',require('./routes/supplier-statement-exceptions'));
+app.use('/api/supplier-recovery-cases',require('./routes/supplier-recovery-cases'));
+app.use('/api/supplier-recovery-performance',require('./routes/supplier-recovery-performance'));
+app.use('/api/spendos-management',require('./routes/spendos-management'));
+app.use('/api/operating-commitments',require('./routes/operating-commitments'));
 app.use('/api/security-groups', require('./routes/security-groups'));
 app.use('/api/quotations', require('./routes/quotation-workflow-hardening'));
 app.use('/api/quotations', require('./routes/quotations'));
@@ -203,6 +238,7 @@ app.use('/api/api-keys', require('./routes/api-keys'));
 app.use('/api/rentals', require('./routes/rental-checkout-cash-drawer-guard'));
 app.use('/api/rentals', require('./routes/rental-refund-settlement'));
 app.use('/api/rentals', require('./routes/rental-loss-prevention'));
+app.use('/api/rentals', require('./routes/rental-compliance-exceptions'));
 app.use('/api/rentals', require('./routes/rentals'));
 app.use('/api/layaway', require('./routes/layaway'));
 app.use('/api/work-orders', require('./routes/work-order-financial-runtime-guard'));
@@ -225,8 +261,9 @@ app.use('/api', (err,req,res,next)=>{
 });
 app.get('*', (req,res)=> req.path.startsWith('/legacy') ? sendEnhancedIndex(req,res) : sendFastShell(req,res));
 
-if (!process.env.VERCEL) {
+if (!process.env.VERCEL && process.env.POS_EMBEDDED !== '1') {
   app.listen(PORT, () => { console.log(`\n  POS System running at http://localhost:${PORT}\n`); });
+  setInterval(() => { flushSmartCommerceSyncOutbox().catch(() => {}); }, 30000);
   setInterval(async()=>{try{await ensureReady();const{rows:[iRow]}=await db.execute({sql:"SELECT value FROM settings WHERE key='woo_sync_interval'",args:[]});const mins=parseInt(iRow?.value||'0');if(!mins)return;const{rows:[lRow]}=await db.execute({sql:"SELECT value FROM settings WHERE key='woo_last_auto_sync'",args:[]});const last=lRow?.value?new Date(lRow.value):new Date(0);if((Date.now()-last.getTime())/60000>=mins)wooSyncAll().catch(()=>{});}catch(e){}},60000);
   setInterval(async()=>{try{await ensureReady();const{rows:overdue}=await db.execute({sql:"SELECT * FROM rental_agreements WHERE status='active' AND due_date < date('now') AND overdue_notified_at IS NULL",args:[]});for(const agreement of overdue){try{await db.execute({sql:'UPDATE rental_agreements SET overdue_notified_at = CURRENT_TIMESTAMP WHERE id = ?',args:[agreement.id]});await logActivity({customerId:agreement.customer_id,employeeId:agreement.employee_id,type:'rental',subject:`Rental ${agreement.agreement_number} is overdue (due ${agreement.due_date})`,dueDate:agreement.due_date,completed:false});}catch(e){} } }catch(e){}},30*60000);
   setInterval(()=>{ processRepairNotificationQueue(20).catch(e=>console.error('Repair notification worker failed:',e&&e.message||e)); },60000);

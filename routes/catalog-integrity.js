@@ -1,0 +1,77 @@
+'use strict';
+const express=require('express');
+const router=express.Router();
+const {requirePermission}=require('../lib/permissions');
+const {catalogHealth,inspectProductCleanup,setProductLifecycle,reviewDuplicateCandidate,planDuplicateConsolidation,inspectDuplicateConsolidation,consolidateDuplicateProducts,inspectCategoryConsolidation,consolidateDuplicateCategories}=require('../lib/catalog-integrity');
+
+router.use(requirePermission('inventory'));
+function safe(res,error){
+  const status=Number(error?.status)||500;
+  const code=error?.code||'CATALOG_INTEGRITY_UNAVAILABLE';
+  if(status>=500)console.error('catalog_integrity_error',{code,message:error?.message||'unknown'});
+  return res.status(status).json({error:status>=500?'Catalog health is temporarily unavailable.':error.message,code});
+}
+router.get('/health',async(req,res)=>{
+  try{return res.json(await catalogHealth({limit:req.query.limit}));}catch(e){return safe(res,e);}
+});
+router.get('/duplicate-consolidation-plan',async(req,res)=>{try{return res.json(await planDuplicateConsolidation(req.query.candidate_key));}catch(e){return safe(res,e);}});
+router.get('/category-consolidation-preview',async(req,res)=>{try{return res.json(await inspectCategoryConsolidation(req.query.candidate_key));}catch(e){return safe(res,e);}});
+router.post('/category-consolidations',async(req,res)=>{
+  try{return res.json(await consolidateDuplicateCategories({candidateKey:req.body?.candidate_key,survivorCategoryId:req.body?.survivor_category_id,reason:req.body?.reason,confirmation:req.body?.confirmation,actorEmployeeId:req.employee?.id||null,requestId:req.requestId||null,method:req.method||null,path:req.originalUrl||req.path||null}));}catch(e){return safe(res,e);}
+});
+router.get('/duplicate-review/:candidateKey/consolidation-preview',async(req,res)=>{
+  try{return res.json(await inspectDuplicateConsolidation(req.params.candidateKey));}catch(e){return safe(res,e);}
+});
+router.post('/duplicate-consolidations',async(req,res)=>{
+  try{
+    const result=await consolidateDuplicateProducts({
+      candidateKey:req.body?.candidate_key,
+      survivorProductId:req.body?.survivor_product_id,
+      reason:req.body?.reason,
+      confirmation:req.body?.confirmation,
+      expectedReviewVersion:req.body?.expected_review_version,
+      actorEmployeeId:req.employee?.id||null,
+      requestId:req.requestId||null,
+      method:req.method||null,
+      path:req.originalUrl||req.path||null
+    });
+    return res.json(result);
+  }catch(e){return safe(res,e);}
+});
+router.patch('/duplicate-review',async(req,res)=>{
+  try{
+    const result=await reviewDuplicateCandidate({
+      candidateKey:req.body?.candidate_key,
+      decision:req.body?.decision,
+      reason:req.body?.reason,
+      expectedVersion:req.body?.expected_version??0,
+      actorEmployeeId:req.employee?.id||null,
+      requestId:req.requestId||null,
+      method:req.method||null,
+      path:req.originalUrl||req.path||null
+    });
+    return res.json({review:result.review,changed:result.changed});
+  }catch(e){return safe(res,e);}
+});
+router.patch('/products/:id/lifecycle',async(req,res)=>{
+  try{
+    const result=await setProductLifecycle(req.params.id,{
+      status:req.body?.status,
+      reason:req.body?.reason,
+      actorEmployeeId:req.employee?.id||null,
+      requestId:req.requestId||null,
+      method:req.method||null,
+      path:req.originalUrl||req.path||null
+    });
+    return res.json({product:result.product,changed:result.changed});
+  }catch(e){return safe(res,e);}
+});
+router.get('/products/:id/cleanup',async(req,res)=>{
+  try{
+    const data=await inspectProductCleanup(req.params.id);
+    return res.json({product:data.product,can_archive:data.can_archive,stock:data.stock,
+      historical_references_present:data.historical.reference_count>0,
+      historical_reference_count:data.historical.reference_count});
+  }catch(e){return safe(res,e);}
+});
+module.exports=router;

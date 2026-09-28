@@ -1,0 +1,611 @@
+:root{
+  --tt-green:#0B7A3E;--tt-green-deep:#075C31;--tt-green-soft:#EAF6EF;
+  --tt-yellow:#F2D11F;--tt-yellow-soft:#FFF8D6;
+  --tt-bg:#F6F7F4;--tt-surface:#FFFFFF;--tt-surface-soft:#EEF3EF;--tt-surface-muted:#F8FAF8;
+  --tt-border:#DCE5DF;--tt-border-strong:#C8D5CD;
+  --tt-text:#111714;--tt-text-2:#66716B;--tt-text-3:#8A948E;
+  --tt-success:#11864A;--tt-success-soft:#EAF7EF;
+  --tt-warning:#C98B16;--tt-warning-soft:#FFF3DD;
+  --tt-danger:#C44238;--tt-danger-soft:#FCECEA;
+  --tt-info:#3B82F6;--tt-info-soft:#EAF2FF;
+  --tt-shadow-panel:0 12px 34px rgba(17,23,20,.055);
+  --tt-shadow-float:0 24px 64px rgba(17,23,20,.14);
+  --tt-radius-sm:12px;--tt-radius-md:18px;--tt-radius-lg:24px;--tt-radius-xl:28px;
+  --tt-control-h:48px;--tt-control-h-sm:44px;
+  --tt-space-1:4px;--tt-space-2:8px;--tt-space-3:12px;--tt-space-4:16px;--tt-space-5:20px;--tt-space-6:24px;--tt-space-8:32px;--tt-space-10:40px;
+}
+html,body{background:var(--tt-bg);color:var(--tt-text);font-family:Inter,Geist,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif}
+body{font-size:14px;line-height:1.45}
+button,input,select,textarea{font:inherit}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,[tabindex]:focus-visible{outline:3px solid rgba(11,122,62,.20)!important;outline-offset:2px!important}
+::selection{background:rgba(242,209,31,.4);color:var(--tt-text)}
+
+/* Legacy fallback primitives are normalized to the same design universe. */
+:is(.card,.panel,.modal-content,.content-card,.stat-card,.report-card,.settings-card,.hub-tile){
+  background:var(--tt-surface)!important;border:1px solid var(--tt-border)!important;border-radius:var(--tt-radius-md)!important;box-shadow:none!important;color:var(--tt-text)!important
+}
+:is(.modal-content,.dialog,.modal){border-radius:var(--tt-radius-lg)!important;box-shadow:var(--tt-shadow-float)!important}
+:is(.btn,.primary-btn,.btn-primary,.btn-secondary,.btn-outline,.btn-danger,.primary,.secondary){
+  min-height:var(--tt-control-h-sm)!important;border-radius:var(--tt-radius-sm)!important;padding:0 14px!important;font-size:13px!important;font-weight:750!important
+}
+:is(.btn-primary,.primary-btn,.primary){background:var(--tt-green)!important;border-color:var(--tt-green)!important;color:#fff!important}
+:is(.btn-secondary,.btn-outline,.secondary){background:var(--tt-surface)!important;border:1px solid var(--tt-border-strong)!important;color:var(--tt-text)!important}
+:is(.btn-danger){background:var(--tt-danger)!important;border-color:var(--tt-danger)!important;color:#fff!important}
+:is(.badge,.status-badge,.badge-pill){min-height:24px!important;border-radius:999px!important;padding:4px 9px!important;font-size:11px!important;font-weight:750!important}
+:is(.table-wrap){border:1px solid var(--tt-border)!important;border-radius:var(--tt-radius-md)!important;background:var(--tt-surface)!important;overflow:auto}
+table{border-collapse:separate;border-spacing:0}
+th{font-size:12px!important;font-weight:750!important;letter-spacing:0!important;text-transform:none!important;color:var(--tt-text-2)!important;background:var(--tt-surface-muted)!important}
+td{font-size:13px!important;color:var(--tt-text)!important}
+th,td{padding:13px 14px!important;border-bottom:1px solid var(--tt-border)!important}
+
+/*
+  Governed sector roots:
+  sales, held orders, cashier, cash drawer, quotes, layaway, promotions,
+  rentals, inventory, transfers, purchasing, suppliers, warehouse,
+  repairs/service, dispatch/logistics, scheduling, customers/CRM,
+  finance/accounting/AR, reports, admin/settings/RBAC/integrations,
+  ecommerce, commissions, denominations, technician operations,
+  learning/assist/Guide Me and catalog workflows.
+*/
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+){
+  --tt-local-accent:var(--tt-green);
+  font-family:Inter,Geist,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
+  font-size:14px!important;line-height:1.45!important;color:var(--tt-text)!important
+}
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+) :is(div,section,article,aside,nav,header,footer,p,span,small,label,strong,b,em,button,input,select,textarea,th,td,a){
+  font-size:inherit!important
+}
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+) :is(small,[class*="eyebrow"],[class*="meta"],[class*="hint"],[class*="muted"],[class*="label"],[class*="badge"],[class*="status"],[class*="pill"]){
+  font-size:12px!important;line-height:1.35!important
+}
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+) :is(h1,h2,h3,h4){
+  color:var(--tt-text)!important;letter-spacing:-.025em!important;line-height:1.15!important;text-transform:none!important
+}
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+) h1{font-size:30px!important}
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+) h2{font-size:24px!important}
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+) h3{font-size:18px!important}
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+) :is(p,[class*="description"],[class*="subtitle"]){font-size:13px!important;line-height:1.55!important;color:var(--tt-text-2)!important}
+
+
+/* Remove the old yellow-strip / dense-header treatment from sector chrome. */
+:is(
+  .tt-held,.tt-cc,.tt-quotes,.tt-lw,.tt-promo,.tt-rent,.tt-inv,.tt-tr,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-admin,.tt-settings,.tt-rbac,.iaw,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,.tt-repair-auth__panel,.tt-repair-comms__panel,
+  .tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,.tt-si-panel,.tt-rebalance,.tt-ea-modal,.tt-learn,.tt-guide,.tt-po-document-context,.tt-qi__panel
+) :is([class$="__head"],[class$="-head"]){
+  background:var(--tt-surface)!important;border-bottom:1px solid var(--tt-border)!important;border-bottom-color:var(--tt-border)!important
+}
+
+/* Controls are large enough for staff use and consistent across every module. */
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+) button{
+  min-height:var(--tt-control-h-sm)!important;border-radius:var(--tt-radius-sm)!important;font-size:13px!important;font-weight:750!important
+}
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+) :is(input:not([type="checkbox"]):not([type="radio"]),select){
+  min-height:var(--tt-control-h)!important;border:1px solid var(--tt-border-strong)!important;border-radius:var(--tt-radius-sm)!important;background:#fff!important;color:var(--tt-text)!important;padding:0 14px!important;font-size:13px!important
+}
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+) textarea{
+  min-height:96px!important;border:1px solid var(--tt-border-strong)!important;border-radius:var(--tt-radius-sm)!important;background:#fff!important;color:var(--tt-text)!important;padding:12px 14px!important;font-size:13px!important
+}
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+) :is(input,select,textarea):focus{border-color:var(--tt-green)!important;box-shadow:0 0 0 3px rgba(11,122,62,.12)!important;outline:none!important}
+
+/* Primary and secondary action hierarchy. */
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+) :is(button.primary,.primary button,[class*="__primary"],[class*="-primary"],.tt-qi__btn:not(.secondary)){
+  background:var(--tt-green)!important;border-color:var(--tt-green)!important;color:#fff!important
+}
+:is(
+  .tt-sales,.tt-held,.tt-cc,.tt-cashier,.cdw-panel,.tt-quotes,.tt-lw,.tt-promo,
+  .tt-rent,.tt-inv,.tt-tr,.tt-transfers,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-logistics,.tt-li-panel,.tt-scheduling-intelligence,.tt-si-panel,.tt-rebalance,
+  .tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-reports,
+  .tt-admin,.tt-settings,.tt-rbac,.iaw,.catalog-admin-panel,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,
+  .tt-ea-modal,.tt-learn,.tt-employee-workspace-home,.tt-guide,
+  .tt-po-document-context,.tt-po-dialog,.tt-qi__panel,.rc-wizard-review,.tt-cat__panel
+) :is(button.secondary,[class*="__secondary"],[class*="-secondary"]){
+  background:var(--tt-surface)!important;border:1px solid var(--tt-border-strong)!important;color:var(--tt-text)!important
+}
+
+/* Surfaces: fewer layers, calmer geometry, consistent depth. */
+:is(
+  .tt-held__panel,.tt-cc__panel,.tt-quotes__panel,.tt-rent__panel,.tt-inv__panel,.tt-tr__panel,.tt-purch__panel,
+  .tt-wo__panel,.tt-aiacct,.tt-ledger,.arw,.tt-finctl__panel,.tt-op-reports,.tt-admin__panel,.tt-settings__panel,.tt-rbac__panel,
+  .iaw,.catalog-admin-panel,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+  .tt-si-panel,.tt-coach,.tt-tech-pay,.tt-tmi,.tt-ea-modal,.tt-learn,.tt-guide,.tt-po-dialog,.tt-qi__panel,.tt-cat__panel
+){
+  background:var(--tt-bg)!important;border:1px solid var(--tt-border)!important;border-radius:var(--tt-radius-xl)!important;box-shadow:var(--tt-shadow-float)!important
+}
+:is(
+  [class*="__card"],[class*="-card"],[class*="__metric"],[class*="-metric"],[class*="__kpi"],[class*="-kpi"],
+  [class*="__tile"],[class*="-tile"]
+){
+  border-radius:var(--tt-radius-md)
+}
+:is(
+  .tt-held,.tt-cc,.tt-quotes,.tt-lw,.tt-promo,.tt-rent,.tt-inv,.tt-tr,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-admin,.tt-settings,.tt-rbac,.iaw,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,.tt-repair-auth__panel,.tt-repair-comms__panel,
+  .tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,.tt-si-panel,.tt-rebalance,.tt-ea-modal,.tt-learn,.tt-guide,.tt-po-document-context,.tt-qi__panel
+) :is([class*="__card"],[class*="-card"],[class*="__metric"],[class*="-metric"],[class*="__kpi"],[class*="-kpi"],[class*="__tile"],[class*="-tile"]){
+  background:var(--tt-surface)!important;border:1px solid var(--tt-border)!important;border-radius:var(--tt-radius-md)!important;box-shadow:none!important
+}
+:is(
+  .tt-held,.tt-cc,.tt-quotes,.tt-lw,.tt-promo,.tt-rent,.tt-inv,.tt-tr,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-admin,.tt-settings,.tt-rbac,.iaw,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,.tt-repair-auth__panel,.tt-repair-comms__panel,
+  .tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,.tt-si-panel,.tt-rebalance,.tt-ea-modal,.tt-learn,.tt-guide,.tt-po-document-context,.tt-qi__panel
+) :is([class*="toolbar"],[class*="filters"],[class*="tabs"]){
+  gap:10px!important;padding:12px 14px!important;background:var(--tt-surface-muted)!important;border-color:var(--tt-border)!important
+}
+:is(
+  .tt-held,.tt-cc,.tt-quotes,.tt-lw,.tt-promo,.tt-rent,.tt-inv,.tt-tr,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-admin,.tt-settings,.tt-rbac,.iaw,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,.tt-repair-auth__panel,.tt-repair-comms__panel,
+  .tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,.tt-si-panel,.tt-rebalance,.tt-ea-modal,.tt-learn,.tt-guide,.tt-po-document-context,.tt-qi__panel
+) :is([class*="__metrics"],[class*="-metrics"],[class*="__kpis"],[class*="-kpis"]){
+  gap:12px!important
+}
+:is(
+  .tt-held,.tt-cc,.tt-quotes,.tt-lw,.tt-promo,.tt-rent,.tt-inv,.tt-tr,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-finctl,.tt-op-reports,.tt-admin,.tt-settings,.tt-rbac,.iaw,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-coach,.tt-repair-auth__panel,.tt-repair-comms__panel,
+  .tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,.tt-si-panel,.tt-rebalance,.tt-ea-modal,.tt-learn,.tt-guide,.tt-po-document-context,.tt-qi__panel
+) :is([class*="__metric"],[class*="-metric"],[class*="__kpi"],[class*="-kpi"],[class*="stat-card"]) strong{
+  font-size:24px!important;line-height:1!important;letter-spacing:-.035em!important;color:var(--tt-text)!important
+}
+
+/* Rows and tables remain scannable instead of becoming a wall of cards. */
+:is(
+  .tt-held,.tt-cc,.tt-quotes,.tt-rent,.tt-inv,.tt-tr,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-op-reports,.tt-admin,.tt-settings,.tt-rbac,.iaw,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,
+  .tt-repair-ops__panel,.tt-rpi-panel,.tt-si-panel
+) :is([class*="__row"],[class*="-row"]){
+  border-color:var(--tt-border)!important
+}
+:is(
+  .tt-held,.tt-cc,.tt-quotes,.tt-rent,.tt-inv,.tt-tr,.tt-purch,.suppliers-shell,.tt-supplier-ledger,.wow-shell,
+  .tt-wo,.tt-crm,.tt-cp,.tt-aiacct,.tt-ledger,.arw,.tt-op-reports,.tt-admin,.tt-settings,.tt-rbac,.iaw,
+  .ecom-shell,.cm-shell,.denom-shell,.tt-tmi,.tt-tech-pay,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,
+  .tt-repair-ops__panel,.tt-rpi-panel,.tt-si-panel
+) table{
+  width:100%!important;background:var(--tt-surface)!important;border:1px solid var(--tt-border)!important;border-radius:var(--tt-radius-md)!important;overflow:hidden
+}
+
+/* Status language is semantic and restrained. */
+:is([class*="status"],[class*="badge"],[class*="pill"]){
+  border-radius:999px!important
+}
+:is(.is-success,.is-ok,.ok,[class*="success"],[class*="approved"],[class*="complete"],[class*="delivered"]){color:var(--tt-success)!important}
+:is(.is-warn,.warn,[class*="warning"],[class*="pending"],[class*="attention"]){color:#8A5A0A!important}
+:is(.is-error,.error,.danger,[class*="failed"],[class*="rejected"],[class*="overdue"]){color:var(--tt-danger)!important}
+
+/* Exact palette convergence for legacy selectors that previously carried literal brand colors. */
+:is(
+  .tt-rent,.tt-wo,.tt-finctl,.tt-crm,.tt-promo,.tt-supplier-ledger,.tt-op-reports,.tt-purch,
+  .tt-settlement,.tt-tech-pay,.tt-tmi,.tt-coach,.tt-aiacct,.tt-ledger,.tt-inv,.tt-tr,.tt-quotes
+) :is([class*="eyebrow"],[class*="kicker"]){color:var(--tt-green)!important}
+
+:is(
+  .tt-rent__toolbar button,.tt-rent__actions button,.tt-rent__missing-card button,.tt-rent__modal button,
+  .tt-wo__new,.tt-wo__actions button.primary,.tt-wo__form button,.tt-wo__qc-actions button.primary,
+  .tt-finctl__filters button,
+  .tt-promo__toolbar>button,.tt-promo-detail__head button,.tt-promo-section-head button,.tt-promo-form footer button:last-child,.tt-promo__filters button.is-active,
+  .tt-supplier-ledger__toolbar button,.tt-supplier-ledger-modal__actions button:last-child,
+  .tt-op-reports__controls button,
+  .tt-purch button,
+  .tt-settlement__filters button,.tt-settlement .dialogactions button:last-child,
+  .tt-tech-pay button.tt-action.is-primary
+){
+  background:var(--tt-green)!important;border-color:var(--tt-green)!important;color:#fff!important
+}
+:is(
+  .tt-rent__toolbar button,.tt-rent__actions button,.tt-rent__missing-card button,.tt-rent__modal button,
+  .tt-wo__new,.tt-wo__actions button.primary,.tt-wo__form button,.tt-wo__qc-actions button.primary,
+  .tt-finctl__filters button,.tt-promo__toolbar>button,.tt-promo__filters button.is-active,
+  .tt-supplier-ledger__toolbar button,.tt-op-reports__controls button,.tt-purch button,.tt-settlement__filters button
+):hover{background:var(--tt-green-deep)!important;border-color:var(--tt-green-deep)!important}
+
+:is(.tt-wo-row.is-active,.tt-crm-row.is-active,.tt-purch__row.is-selected,.tt-tech-score__row.is-selected){
+  background:var(--tt-green-soft)!important;border-color:var(--tt-green)!important
+}
+:is(.tt-wo-row:hover,.tt-crm-row:hover,.tt-promo-row:hover,.tt-op-reports__card:hover){
+  border-color:#9CC9AE!important;background:#F5FAF7!important
+}
+:is(.tt-wo__quality-state.is-ready>span,.tt-wo__checks .is-pass>span,.tt-wo__quality-latest strong.is-pass){
+  background:var(--tt-success-soft)!important;color:var(--tt-success)!important
+}
+:is(.tt-wo__qc-checklist input){accent-color:var(--tt-green)!important}
+.tt-purch__spinner{border-top-color:var(--tt-green)!important}
+.tt-tech-score__coverage-bar span{background:var(--tt-green)!important}
+.tt-purch__head:before{background:var(--tt-green)!important}
+.tt-op-reports-launcher{
+  min-height:44px!important;padding:0 14px!important;border:1px solid var(--tt-border-strong)!important;
+  border-radius:var(--tt-radius-sm)!important;background:var(--tt-surface)!important;color:var(--tt-green-deep)!important;
+  font-size:13px!important;font-weight:750!important
+}
+.tt-op-reports-launcher:hover{border-color:#9CC9AE!important;background:var(--tt-green-soft)!important}
+.tt-settlement{
+  font-family:Inter,Geist,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important;
+  font-size:14px!important;line-height:1.45!important;color:var(--tt-text)!important
+}
+.tt-settlement :is(div,section,article,aside,nav,header,footer,p,span,small,label,strong,b,em,button,input,select,textarea,th,td,a){font-size:inherit!important}
+.tt-settlement :is(small,[class*="eyebrow"],[class*="meta"],[class*="hint"],[class*="muted"],[class*="label"],[class*="badge"],[class*="status"],[class*="pill"]){font-size:12px!important;line-height:1.35!important}
+.tt-settlement :is(h1,h2,h3,h4){color:var(--tt-text)!important;letter-spacing:-.025em!important;line-height:1.15!important;text-transform:none!important}
+.tt-settlement h2{font-size:24px!important}.tt-settlement h3{font-size:18px!important}
+.tt-settlement p{font-size:13px!important;line-height:1.55!important;color:var(--tt-text-2)!important}
+.tt-settlement button{min-height:44px!important;border-radius:var(--tt-radius-sm)!important;font-size:13px!important;font-weight:750!important}
+.tt-settlement :is(input:not([type="checkbox"]):not([type="radio"]),select){
+  min-height:48px!important;border:1px solid var(--tt-border-strong)!important;border-radius:var(--tt-radius-sm)!important;
+  background:#fff!important;color:var(--tt-text)!important;padding:0 14px!important;font-size:13px!important
+}
+.tt-settlement__panel{
+  background:var(--tt-bg)!important;border:1px solid var(--tt-border)!important;border-radius:var(--tt-radius-xl)!important;box-shadow:var(--tt-shadow-float)!important
+}
+.tt-settlement__panel>header{background:var(--tt-surface)!important;border-bottom:1px solid var(--tt-border)!important}
+.tt-settlement__filters{gap:10px!important;padding:12px 14px!important;background:var(--tt-surface-muted)!important;border-color:var(--tt-border)!important}
+.tt-settlement-kpi{
+  background:var(--tt-surface)!important;border:1px solid var(--tt-border)!important;border-radius:var(--tt-radius-md)!important;box-shadow:none!important
+}
+.tt-settlement-kpi strong{font-size:24px!important;color:var(--tt-text)!important}
+.tt-settlement .tiny{min-height:24px!important;border-radius:999px!important;padding:4px 9px!important;font-size:11px!important}
+
+/* Preserve the deliberate Sales/POS hierarchy from the V2 reference surface. */
+.tt-sales__eyebrow{font-size:11px!important}
+.tt-sales__head h2{font-size:30px!important;line-height:1.05!important;letter-spacing:-.04em!important}
+.tt-sales__head p{font-size:13px!important}
+.tt-sales__tabs button,.tt-sales__toolbar button{font-size:13px!important}
+.tt-sales .tt-sales__product{min-height:140px!important}.tt-sales__product strong{font-size:15px!important;line-height:1.35!important}
+.tt-sales__product span{font-size:12px!important}
+.tt-sales__product footer b{font-size:16px!important}
+.tt-sales__product footer em{font-size:12px!important}
+.tt-sales__customer small{font-size:12px!important}
+.tt-sales__customer-selected{font-size:13px!important}
+.tt-sales__line strong{font-size:13px!important}
+.tt-sales__line span{font-size:12px!important}
+.tt-sales__totals>div{font-size:13px!important}
+.tt-sales__totals div.total{font-size:22px!important}
+.tt-sales__tx strong,.tt-sales__tx b{font-size:13px!important}
+.tt-sales__tx span{font-size:12px!important}
+.tt-sales__tx em{font-size:11px!important}
+.tt-sales__tx-modal header small{font-size:12px!important}
+.tt-sales__tx-modal header h3{font-size:22px!important}
+.tt-sales__tx-modal header p{font-size:13px!important}
+.tt-sales__receipt-line,.tt-sales__receipt-totals div,.tt-sales__payment-evidence div{font-size:13px!important}
+.tt-sales__receipt-totals .total{font-size:21px!important}
+
+/* Predictive lookup and floating helpers follow the same surface system. */
+.tt-predictive-list{background:var(--tt-surface)!important;border:1px solid var(--tt-border)!important;border-radius:var(--tt-radius-md)!important;box-shadow:var(--tt-shadow-float)!important;overflow:hidden!important}
+.tt-predictive-option{min-height:48px!important;padding:11px 14px!important;font-size:13px!important;border-color:var(--tt-border)!important}
+.tt-predictive-option:hover,.tt-predictive-option[aria-selected="true"]{background:var(--tt-green-soft)!important}
+.tt-predictive-empty{padding:16px!important;font-size:13px!important;color:var(--tt-text-2)!important}
+
+/* Employee assist / learning / Guide Me remain supportive, not visually dominant. */
+.tt-learning-launcher,.tt-rebalance-launcher,.tt-tech-pay-launcher,.tt-guide-launcher{min-width:44px!important;min-height:44px!important;border-radius:14px!important}
+.tt-guide-highlight,.tt-guide-exact-highlight,.tt-guide-fallback-highlight{outline:3px solid rgba(242,209,31,.8)!important;outline-offset:4px!important}
+.tt-guide{max-width:440px!important}
+.tt-guide__body{font-size:13px!important;line-height:1.55!important}
+
+/* Responsive convergence */
+@media(max-width:1280px){
+  :is(.tt-rent__body,.tt-inv__body,.tt-purch__body,.tt-quotes__body,.tt-held__body,.tt-cc__body,.tt-wo__body){gap:12px!important}
+  :is([class*="__panel"],[class*="-panel"],[class*="__dialog"],[class*="-dialog"]){max-width:calc(100vw - 32px)!important}
+}
+@media(max-width:1024px){
+  :is(
+    .tt-held__panel,.tt-cc__panel,.tt-quotes__panel,.tt-rent__panel,.tt-inv__panel,.tt-tr__panel,.tt-purch__panel,
+    .tt-wo__panel,.tt-aiacct,.tt-ledger,.arw,.tt-finctl__panel,.tt-op-reports,.tt-admin__panel,.tt-settings__panel,.tt-rbac__panel,
+    .iaw,.catalog-admin-panel,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+    .tt-si-panel,.tt-coach,.tt-tech-pay,.tt-tmi,.tt-ea-modal,.tt-learn,.tt-guide,.tt-po-dialog,.tt-qi__panel,.tt-cat__panel
+  ){border-radius:20px!important;max-width:calc(100vw - 24px)!important}
+  :is([class*="__metrics"],[class*="-metrics"],[class*="__kpis"],[class*="-kpis"]){grid-template-columns:repeat(2,minmax(0,1fr))!important}
+  :is([class*="toolbar"],[class*="filters"],[class*="tabs"]){gap:8px!important}
+}
+@media(max-width:768px){
+  :is([class*="__panel"],[class*="-panel"],[class*="__dialog"],[class*="-dialog"]){max-width:none!important}
+  :is(
+    .tt-sales__panel,.tt-held__panel,.tt-cc__panel,.tt-quotes__panel,.tt-rent__panel,.tt-inv__panel,.tt-tr__panel,.tt-purch__panel,
+    .tt-wo__panel,.tt-aiacct,.tt-ledger,.arw,.tt-finctl__panel,.tt-op-reports,.tt-admin__panel,.tt-settings__panel,.tt-rbac__panel,
+    .iaw,.catalog-admin-panel,.tt-repair-auth__panel,.tt-repair-comms__panel,.tt-rn__panel,.tt-repair-ops__panel,.tt-rpi-panel,
+    .tt-si-panel,.tt-coach,.tt-tech-pay,.tt-tmi,.tt-ea-modal,.tt-learn,.tt-guide,.tt-po-dialog,.tt-qi__panel,.tt-cat__panel
+  ){inset:0!important;width:100%!important;max-width:none!important;max-height:100dvh!important;border-radius:0!important}
+  :is([class*="toolbar"],[class*="filters"],[class*="tabs"]){overflow-x:auto!important;scrollbar-width:thin;overscroll-behavior-x:contain;scroll-snap-type:x proximity}
+  :is([class*="toolbar"],[class*="filters"],[class*="tabs"])>button{flex:0 0 auto;min-height:48px!important;white-space:nowrap!important;scroll-snap-align:start}
+  :is([class*="__metrics"],[class*="-metrics"],[class*="__kpis"],[class*="-kpis"]){grid-template-columns:1fr 1fr!important}
+  :is(.modal-footer,[class*="__actions"],[class*="-actions"]){gap:8px!important;flex-wrap:wrap!important}
+  :is(.modal-footer,[class*="__actions"],[class*="-actions"]) button{min-height:48px!important;white-space:normal!important;line-height:1.25!important}
+  :is(input:not([type="checkbox"]):not([type="radio"]),select,textarea){font-size:16px!important}
+  :is(h1,h2,h3,p,strong,span,label,button){overflow-wrap:anywhere}
+}
+@media(max-width:560px){
+  .arw-overlay.open .arw .arw-toolbar input,.arw-overlay.open .arw .arw-toolbar select,.arw-overlay.open .arw .arw-detail input,.arw-overlay.open .arw .arw-detail select,.arw-overlay.open .arw .arw-detail textarea{font-size:16px!important}
+  .catalog-admin-overlay .catalog-admin-shell .catalog-admin-panel .catalog-admin-toolbar input,.catalog-admin-overlay .catalog-admin-shell .catalog-admin-panel .catalog-admin-toolbar select{font-size:16px!important}
+  .cm-overlay .cm-shell .cm-toolbar input,.cm-overlay .cm-shell .cm-toolbar select{font-size:16px!important}
+  .arw-overlay .arw-metrics,.cm-overlay .cm-metrics,.iaw-layer .iaw-metrics{grid-template-columns:1fr 1fr!important}
+}
+@media(max-width:480px){
+  :is([class*="__metrics"],[class*="-metrics"],[class*="__kpis"],[class*="-kpis"]){grid-template-columns:1fr!important}
+  .arw-overlay .arw-metrics,.cm-overlay .cm-metrics,.iaw-layer .iaw-metrics{grid-template-columns:1fr 1fr!important}
+  :is(.modal-footer,[class*="__actions"],[class*="-actions"]){display:grid!important;grid-template-columns:1fr!important;width:100%!important}
+  :is(.modal-footer,[class*="__actions"],[class*="-actions"]) button{width:100%!important;min-width:0!important}
+  :is([class*="__head"],[class*="-head"],[class*="__header"],[class*="-header"]){gap:10px!important}
+}
+@media(max-width:390px){
+  :is([class*="toolbar"],[class*="filters"],[class*="tabs"]){padding-left:10px!important;padding-right:10px!important}
+  :is(.tt-guide,.tt-ea-modal,.tt-learn){width:100vw!important;max-width:100vw!important}
+}
+/* Shell authority exception: the application frame has its own warm visual law. */
+html,body{background:#FBF5E9!important}
+.shell-app{background:#FBF5E9!important}
+.shell-sidebar{background:#FBF5E9!important;color:#111714!important}
+.shell-brand strong,.shell-sidebar footer strong{color:#111714!important}
+.shell-brand span,.shell-sidebar footer span,.shell-guide span{color:#66716B!important}
+.shell-nav button{background:transparent!important;color:#303934!important}
+.shell-nav button:hover{background:rgba(11,122,62,.07)!important;color:#075C31!important}
+.shell-nav button.is-active{background:#0B7A3E!important;color:#fff!important;box-shadow:none!important}
+.shell-nav button.is-active:before{background:#F2D11F!important}
+.shell-guide{background:transparent!important;border-color:rgba(17,23,20,.08)!important}
+.shell-guide button{background:#0B7A3E!important;color:#fff!important;border-color:#0B7A3E!important}
+.shell-guide button+button{background:#fff!important;color:#111714!important;border-color:#DCE5DF!important}
+.shell-sidebar footer{border-top-color:rgba(17,23,20,.08)!important}
+.shell-sidebar footer button{background:transparent!important;color:#C44238!important;border:0!important;min-height:36px!important}
+.shell-main{background:#fff!important}
+.shell-topbar{min-height:82px!important;height:auto!important;padding:14px 28px!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:18px!important;background:rgba(255,255,255,.96)!important;border-bottom:1px solid #ECEDE9!important}
+.shell-command-button{display:flex!important;flex:1 1 auto!important;width:auto!important;max-width:760px!important;height:52px!important;min-height:52px!important;max-height:52px!important;align-items:center!important;justify-content:flex-start!important;gap:12px!important;padding:0 15px!important;border:1px solid #CED5D0!important;border-radius:16px!important;background:#fff!important;color:#66716B!important;overflow:hidden!important;white-space:nowrap!important}
+.shell-command-button:hover{background:#fff!important;border-color:#9FC2AD!important}
+.shell-command-button .shell-search-icon{flex:0 0 auto!important;font-size:24px!important;line-height:1!important;color:#111714!important}
+.shell-command-button .shell-search-label{flex:1 1 auto!important;min-width:0!important;overflow:hidden!important;text-overflow:ellipsis!important;white-space:nowrap!important;font-size:13px!important;color:#6A746E!important;text-align:left!important}
+.shell-command-button kbd{flex:0 0 auto!important;font-size:11px!important}
+.shell-topbar__profile{display:flex!important;align-items:center!important;gap:10px!important}
+.shell-topbar-avatar,.shell-profile-mark{background:#0B7A3E!important;color:#fff!important}
+.shell-content{background:#fff!important}
+.shell-page-head__branch,.shell-resume{background:#FFF9EE!important;border-color:#E8E0D4!important}
+.shell-choice,.shell-attention-list,.shell-kpis article,.shell-more__grid>button{background:#fff!important}
+.shell-choice__mark{background:#EAF6EF!important;color:#075C31!important}
+.shell-choice:nth-child(4n+2) .shell-choice__mark,.shell-attention-count{background:#FFF6C9!important;color:#6D5B00!important}
+.shell-choice__action,.shell-more__grid em,.shell-resume__item em{color:#075C31!important}
+.shell-resume__item{background:#fff!important;color:#111714!important;border-color:#E6DED3!important}
+.shell-resume__item small{color:#66716B!important}
+.shell-login{background:#FBF5E9!important}
+.shell-login__brand{background:#FBF5E9!important;color:#111714!important}
+.shell-login__brand h1{color:#111714!important}
+.shell-login__brand p,.shell-login__brand small{color:#66716B!important}
+.shell-login__panel{background:#fff!important}
+.shell-login__card{background:transparent!important;border:0!important;box-shadow:none!important}
+.shell-login__card button{background:#0B7A3E!important;color:#fff!important}
+.shell-topbar>.shell-command-search,.shell-topbar>.shell-quick-actions,.shell-topbar>.tt-learning-launcher{display:none!important}
+@media(max-width:1080px){.shell-app{background:#fff!important}.shell-sidebar{background:#FBF5E9!important}.shell-main{background:#fff!important}.shell-topbar{min-height:76px!important;padding:12px 20px!important}.shell-command-button{max-width:none!important}.shell-topbar__profile>div{display:none!important}.shell-topbar-avatar{width:40px!important;height:40px!important}.shell-mobile-menu{width:auto!important;min-width:64px!important;height:44px!important;min-height:44px!important;padding:0 12px!important;justify-content:center!important;flex:0 0 auto!important}}
+@media(max-width:640px){.shell-topbar{min-height:68px!important;padding:10px 12px!important;display:flex!important;align-items:center!important;gap:8px!important;flex-wrap:nowrap!important}.shell-command-button{width:100%!important;min-width:0!important;height:48px!important;min-height:48px!important;max-height:48px!important;padding:0 12px!important}.shell-command-button .shell-search-label{font-size:0!important}.shell-command-button .shell-search-label:after{content:"Search";font-size:13px!important}.shell-topbar__profile>div{display:none!important}.shell-topbar-avatar{width:38px!important;height:38px!important}}
+@media(max-width:430px){.shell-topbar{grid-template-columns:auto minmax(0,1fr)!important}.shell-topbar__profile{display:none!important}.shell-command-button .shell-search-icon{font-size:21px!important}}
+
+/* Guide Me final authority — one fluent coach surface, never a legacy mini-modal. */
+#tt-guide-launcher,#tt-guide-access,#tt-guide-quick{display:none!important}
+#tt-guided-mode{position:fixed!important;inset:0!important;z-index:8990!important;pointer-events:none!important;font-family:Inter,Geist,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif!important}
+#tt-guided-mode .tt-guide-backdrop{position:fixed!important;inset:0!important;background:transparent!important;backdrop-filter:none!important;opacity:0!important;pointer-events:none!important}
+#tt-guided-mode .tt-guide{position:fixed!important;z-index:8999!important;left:auto!important;right:22px!important;top:auto!important;bottom:22px!important;width:min(440px,calc(100vw - 44px))!important;max-height:min(620px,calc(100dvh - 44px))!important;overflow:hidden!important;display:flex!important;flex-direction:column!important;background:#fff!important;border:1px solid #DCE5DF!important;border-top:4px solid #0B7A3E!important;border-radius:22px!important;box-shadow:0 24px 64px rgba(17,23,20,.18)!important;pointer-events:auto!important;color:#111714!important;transform:translateY(12px) scale(.985)!important;opacity:0!important;transition:transform .18s ease,opacity .18s ease,bottom .18s ease,top .18s ease!important}
+#tt-guided-mode.is-open .tt-guide{transform:none!important;opacity:1!important}
+#tt-guided-mode .tt-guide.tt-guide--top{top:22px!important;bottom:auto!important}
+#tt-guided-mode .tt-guide.tt-guide--bottom{top:auto!important;bottom:22px!important}
+#tt-guided-mode .tt-guide__head{display:flex!important;align-items:flex-start!important;justify-content:space-between!important;gap:14px!important;padding:18px 18px 15px!important;background:#FFFDF8!important;border-bottom:1px solid #E5E8E5!important}
+#tt-guided-mode .tt-guide__head>div{min-width:0!important}
+#tt-guided-mode .tt-guide__eyebrow{display:block!important;margin:0 0 4px!important;font-size:11px!important;line-height:1.2!important;font-weight:850!important;letter-spacing:.09em!important;text-transform:uppercase!important;color:#0B7A3E!important}
+#tt-guided-mode .tt-guide__head h2{margin:0!important;font-size:24px!important;line-height:1.08!important;letter-spacing:-.035em!important;color:#111714!important}
+#tt-guided-mode .tt-guide__head p{margin:6px 0 0!important;max-width:38ch!important;font-size:13px!important;line-height:1.45!important;color:#66716B!important}
+#tt-guided-mode .tt-guide__close{flex:0 0 auto!important;width:42px!important;height:42px!important;min-width:42px!important;min-height:42px!important;display:grid!important;place-items:center!important;padding:0!important;border:1px solid #DCE5DF!important;border-radius:12px!important;background:#fff!important;color:#111714!important;font-size:20px!important;line-height:1!important}
+#tt-guided-mode .tt-guide__close:hover{background:#F6F7F4!important}
+#tt-guided-mode .tt-guide__body{min-height:0!important;overflow:auto!important;padding:16px 18px 18px!important;background:#fff!important}
+#tt-guided-mode .tt-guide__availability{margin:0 0 12px!important;padding:12px 13px!important;border:1px solid #DDE8E1!important;border-radius:13px!important;background:#F5FAF7!important}
+#tt-guided-mode .tt-guide__availability strong{display:block!important;font-size:12px!important;color:#075C31!important}
+#tt-guided-mode .tt-guide__availability span{display:block!important;margin-top:3px!important;font-size:12px!important;line-height:1.45!important;color:#66716B!important}
+#tt-guided-mode .tt-guide__resume{width:100%!important;min-height:44px!important;margin:0 0 10px!important;padding:10px 12px!important;border:1px solid #DCE5DF!important;border-radius:12px!important;background:#fff!important;color:#075C31!important;text-align:left!important;font-size:12px!important;font-weight:800!important}
+#tt-guided-mode .tt-guide__search{display:grid!important;grid-template-columns:minmax(0,1fr) auto!important;gap:8px!important}
+#tt-guided-mode .tt-guide__search input{min-width:0!important;height:50px!important;min-height:50px!important;padding:0 14px!important;border:1px solid #C8D5CD!important;border-radius:13px!important;background:#fff!important;color:#111714!important;font-size:15px!important}
+#tt-guided-mode .tt-guide__search input:focus{outline:0!important;border-color:#0B7A3E!important;box-shadow:0 0 0 3px rgba(11,122,62,.12)!important}
+#tt-guided-mode .tt-guide__search button,#tt-guided-mode .is-primary{min-height:50px!important;padding:0 15px!important;border:1px solid #0B7A3E!important;border-radius:13px!important;background:#0B7A3E!important;color:#fff!important;font-size:12px!important;font-weight:850!important}
+#tt-guided-mode .tt-guide__suggestions{display:grid!important;grid-template-columns:1fr 1fr!important;gap:7px!important;margin-top:12px!important}
+#tt-guided-mode .tt-guide__chip{min-height:46px!important;padding:9px 11px!important;border:1px solid #DCE5DF!important;border-radius:12px!important;background:#fff!important;color:#303934!important;text-align:left!important;font-size:12px!important;line-height:1.3!important}
+#tt-guided-mode .tt-guide__chip:hover{background:#F5FAF7!important;border-color:#B8D2C2!important;color:#075C31!important}
+#tt-guided-mode .tt-guide__step{margin:0!important;padding:14px 15px!important;border:1px solid #DCE5DF!important;border-left:4px solid #0B7A3E!important;border-radius:14px!important;background:#F8FBF9!important}
+#tt-guided-mode .tt-guide__step-count{display:block!important;font-size:11px!important;line-height:1.2!important;font-weight:850!important;letter-spacing:.06em!important;text-transform:uppercase!important;color:#0B7A3E!important}
+#tt-guided-mode .tt-guide__progress{height:5px!important;margin:8px 0 10px!important;background:#E5ECE7!important;border-radius:999px!important;overflow:hidden!important}
+#tt-guided-mode .tt-guide__progress span{display:block!important;height:100%!important;background:#0B7A3E!important;border-radius:999px!important;transition:width .2s ease!important}
+#tt-guided-mode .tt-guide__step h3{margin:7px 0 5px!important;font-size:16px!important;line-height:1.25!important;letter-spacing:-.015em!important;color:#111714!important}
+#tt-guided-mode .tt-guide__step>p{margin:5px 0!important;font-size:13px!important;line-height:1.5!important;color:#56625D!important}
+#tt-guided-mode .tt-guide__hint{display:block!important;margin-top:9px!important;padding-top:9px!important;border-top:1px solid #E2E8E4!important;color:#66716B!important}
+#tt-guided-mode .tt-guide__coach-note{margin-top:10px!important;padding:10px 11px!important;border:1px solid #E7DFC1!important;border-radius:12px!important;background:#FFFBEA!important;color:#64561C!important;font-size:12px!important;line-height:1.45!important;font-weight:650!important}
+#tt-guided-mode .tt-guide__exact-action{display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px!important;margin-top:10px!important;padding:11px 12px!important;border:1px solid #E7DFC1!important;border-radius:12px!important;background:#FFFDF4!important}
+#tt-guided-mode .tt-guide__exact-action small{font-size:11px!important;color:#7A6518!important}
+#tt-guided-mode .tt-guide__exact-action strong{font-size:12px!important;line-height:1.35!important;color:#4B4321!important}
+#tt-guided-mode .tt-guide__exact-action button{min-height:40px!important;padding:0 11px!important;border:1px solid #D7BA39!important;border-radius:10px!important;background:#F2D11F!important;color:#2B260F!important;font-size:11px!important;font-weight:850!important}
+#tt-guided-mode .tt-guide__qa-recovery{margin-top:10px!important;padding:11px!important;border:1px solid #DCE5DF!important;border-radius:12px!important;background:#F8FBF9!important}
+#tt-guided-mode .tt-guide__qa-recovery strong{font-size:12px!important;color:#173D2A!important}
+#tt-guided-mode .tt-guide__qa-recovery span{font-size:12px!important;line-height:1.45!important;color:#66716B!important}
+#tt-guided-mode .tt-guide__qa-recovery button{min-height:40px!important;border-radius:10px!important;font-size:11px!important}
+#tt-guided-mode .tt-guide__actions{position:static!important;display:flex!important;align-items:center!important;justify-content:space-between!important;gap:10px!important;margin-top:12px!important;padding:0!important;background:transparent!important}
+#tt-guided-mode .tt-guide__actions>div{display:flex!important;gap:7px!important}
+#tt-guided-mode .tt-guide__actions button{min-height:42px!important;padding:0 12px!important;border:1px solid #D3DDD6!important;border-radius:11px!important;background:#fff!important;color:#303934!important;font-size:12px!important;font-weight:800!important}
+#tt-guided-mode .tt-guide__actions button:hover:not(:disabled){background:#F6F7F4!important}
+#tt-guided-mode .tt-guide__actions button.is-primary{background:#0B7A3E!important;color:#fff!important;border-color:#0B7A3E!important}
+#tt-guided-mode button[aria-disabled="true"],#tt-guided-mode button:disabled{opacity:.45!important;cursor:not-allowed!important}
+.tt-guide-highlight,.tt-guide-exact-highlight,[data-guide-hardened-target="true"],.tt-guide-fallback-highlight,[data-guide-fallback-target="true"]{position:relative!important;z-index:9001!important;pointer-events:auto!important;outline:3px solid #F2D11F!important;outline-offset:4px!important;box-shadow:0 0 0 2px #0B7A3E,0 0 0 8px rgba(242,209,31,.24),0 14px 32px rgba(17,23,20,.14)!important}
+.tt-guide-exact-highlight,[data-guide-hardened-target="true"],.tt-guide-fallback-highlight,[data-guide-fallback-target="true"]{animation:tt-guide-final-pulse 1.2s ease-in-out infinite!important}
+@keyframes tt-guide-final-pulse{0%,100%{outline-offset:4px}50%{outline-offset:7px}}
+.tt-guide-toast{position:fixed!important;left:auto!important;right:22px!important;bottom:22px!important;z-index:10000!important;width:min(420px,calc(100vw - 44px))!important;padding:12px 14px!important;border-radius:13px!important;background:#173E32!important;color:#fff!important;font-size:12px!important;line-height:1.45!important;box-shadow:0 18px 46px rgba(17,23,20,.2)!important}
+@media(max-width:900px){
+ #tt-guided-mode .tt-guide{left:10px!important;right:10px!important;top:auto!important;bottom:calc(env(safe-area-inset-bottom) + 10px)!important;width:auto!important;max-height:min(58dvh,520px)!important;border-radius:20px!important;transform:translateY(14px) scale(.99)!important}
+ #tt-guided-mode.is-open .tt-guide{transform:none!important}
+ #tt-guided-mode .tt-guide.tt-guide--top,#tt-guided-mode .tt-guide.tt-guide--bottom{top:auto!important;bottom:calc(env(safe-area-inset-bottom) + 10px)!important}
+ #tt-guided-mode .tt-guide__head{padding:15px 15px 12px!important}
+ #tt-guided-mode .tt-guide__head h2{font-size:21px!important}
+ #tt-guided-mode .tt-guide__head p{font-size:13px!important}
+ #tt-guided-mode .tt-guide__body{padding:13px 15px 15px!important}
+ #tt-guided-mode .tt-guide__search input{font-size:16px!important}
+ #tt-guided-mode .tt-guide__suggestions{grid-template-columns:1fr!important}
+ #tt-guided-mode .tt-guide__chip{font-size:13px!important}
+ #tt-guided-mode .tt-guide__step h3{font-size:15px!important}
+ #tt-guided-mode .tt-guide__step>p,#tt-guided-mode .tt-guide__coach-note,#tt-guided-mode .tt-guide__availability span,#tt-guided-mode .tt-guide__qa-recovery span{font-size:13px!important}
+ #tt-guided-mode .tt-guide__actions{position:sticky!important;bottom:-15px!important;margin:12px -15px -15px!important;padding:10px 15px calc(10px + env(safe-area-inset-bottom))!important;background:rgba(255,255,255,.97)!important;border-top:1px solid #E5E8E5!important;backdrop-filter:blur(14px)!important}
+ .tt-guide-toast{left:10px!important;right:10px!important;bottom:calc(env(safe-area-inset-bottom) + 10px)!important;width:auto!important}
+}
+@media(max-width:430px){
+ #tt-guided-mode .tt-guide{max-height:62dvh!important}
+ #tt-guided-mode .tt-guide__search{grid-template-columns:1fr!important}
+ #tt-guided-mode .tt-guide__search button{width:100%!important}
+ #tt-guided-mode .tt-guide__actions{align-items:stretch!important;flex-direction:column!important}
+ #tt-guided-mode .tt-guide__actions>div{display:grid!important;grid-template-columns:1fr 1fr!important}
+ #tt-guided-mode .tt-guide__actions>button{width:100%!important}
+}
+@media(prefers-reduced-motion:reduce){
+ #tt-guided-mode .tt-guide{transition:none!important;transform:none!important}
+ .tt-guide-exact-highlight,[data-guide-hardened-target="true"],.tt-guide-fallback-highlight,[data-guide-fallback-target="true"]{animation:none!important}
+}
+
+/* Keep identity decorations within the canonical shell layout. */
+.shell-brand{min-width:0;gap:10px!important;background:#FBF5E9!important}
+.shell-brand::before,.shell-brand::after{content:none!important;display:none!important}
+.shell-brand>div:not(.shell-mark){min-width:0}
+.shell-brand strong{display:block;font-size:17px!important;color:#111714!important}
+.shell-brand span{font-size:11px!important;letter-spacing:0!important;white-space:normal}
+.shell-command-button{min-width:0}
+.shell-command-button .shell-search-icon::after{content:none!important}
+.shell-guide-top{flex:0 0 auto;display:inline-flex;align-items:center;gap:6px;min-height:44px;padding:0 10px;border:1px solid #DCE5DF;border-radius:12px;background:#fff;color:#075C31;font:inherit;font-size:13px;font-weight:700;white-space:nowrap}
+@media(max-width:640px){
+ .shell-topbar{gap:8px!important}
+ .shell-command-button .shell-search-icon{font-size:21px!important}
+ .shell-command-button .shell-search-label{font-size:0!important}
+ .shell-command-button .shell-search-label::after{content:'Search'!important;font-size:13px!important}
+}
+@media(prefers-reduced-motion:reduce){
+  *,*:before,*:after{scroll-behavior:auto!important;animation:none!important;transition:none!important}
+}

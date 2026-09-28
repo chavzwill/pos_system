@@ -2,7 +2,7 @@ const express = require('express');
 const router = express.Router();
 const bcrypt = require('bcryptjs');
 const { db } = require('../database');
-const { createSession, destroySession, destroyEmployeeSessions, setSessionCookie, clearSessionCookie, readCookie } = require('../lib/sessionAuth');
+const { createSession, destroySession, destroyEmployeeSessions, setSessionCookie, clearSessionCookie, readCookie, markSessionReauthenticated, recentSessionReauth, REAUTH_TTL_MS } = require('../lib/sessionAuth');
 const { requireAuth, requirePermission, can } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
 const { loginRateLimit, privilegedPinRateLimit, resetRequestRateLimit } = require('../lib/securityHardening');
@@ -177,6 +177,93 @@ router.put('/:id/change-password', requireAuth, async (req, res) => {
   }
 });
 
+router.put('/:id/change-pin', requireAuth, async (req, res) => {
+  if (req.apiKey) return res.status(403).json({ error: 'API keys cannot change employee credentials' });
+  const targetId = Number(req.params.id);
+  const { pin, current_pin } = req.body || {};
+  if (Number(req.employee?.id) !== targetId) return res.status(403).json({ error: 'Use the privileged reset-pin operation for another employee' });
+  if (!validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
+  try {
+    const { rows: [target] } = await db.execute({ sql: 'SELECT id,pin,active FROM employees WHERE id=?', args: [targetId] });
+    if (!target) return res.status(404).json({ error: 'Employee not found' });
+    if (Number(target.active) === 0) return res.status(400).json({ error: 'Cannot change PIN for an inactive employee' });
+    if (!(await verifyPin(target.pin, current_pin))) return res.status(403).json({ error: 'Current PIN is required and must be valid', code: 'CURRENT_PIN_REQUIRED' });
+    if (await verifyPin(target.pin, pin)) return res.status(400).json({ error: 'New PIN must be different from the current PIN' });
+    await ensureSecurityAuditTable();
+    const pinHash = await hashPin(pin);
+    const tx = await db.transaction('write');
+    try {
+      await tx.execute({ sql: 'UPDATE employees SET pin=? WHERE id=? AND active=1', args: [pinHash, targetId] });
+      await destroyEmployeeSessions(targetId, tx);
+      await recordSecurityAudit({
+        actorEmployeeId: targetId,
+        action: 'pin_changed_self',
+        targetType: 'employee',
+        targetId,
+        oldValue: { credential: 'pin' },
+        newValue: { credential: 'pin', sessions_revoked: true },
+        reason: 'Authenticated self-service PIN change',
+        requestId: req.requestId || null,
+        method: req.method,
+        path: req.originalUrl,
+        control: 'credential_lifecycle',
+        executor: tx,
+      });
+      await tx.commit();
+    } catch (error) {
+      await tx.rollback().catch(() => {});
+      throw error;
+    }
+    clearSessionCookie(res);
+    res.json({ success: true, reauthentication_required: true, sessions_revoked: true });
+  } catch (e) {
+    res.status(400).json({ error: 'Unable to change PIN' });
+  }
+});
+
+router.post('/:id/reset-pin', requirePermission('security_manage'), async (req, res) => {
+  if (req.apiKey) return res.status(403).json({ error: 'API keys cannot reset employee credentials' });
+  const targetId = Number(req.params.id);
+  if (Number(req.employee?.id) === targetId) return res.status(400).json({ error: 'Use change-pin for your own account' });
+  const { pin, reason } = req.body || {};
+  if (!validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
+  if (String(reason || '').trim().length < 8) return res.status(400).json({ error: 'A PIN reset reason is required' });
+  try {
+    const { rows: [target] } = await db.execute({ sql: 'SELECT id,pin,active FROM employees WHERE id=?', args: [targetId] });
+    if (!target) return res.status(404).json({ error: 'Employee not found' });
+    if (Number(target.active) === 0) return res.status(400).json({ error: 'Cannot reset an inactive employee' });
+    if (await verifyPin(target.pin, pin)) return res.status(400).json({ error: 'New PIN must be different from the current PIN' });
+    await ensureSecurityAuditTable();
+    const pinHash = await hashPin(pin);
+    const tx = await db.transaction('write');
+    try {
+      await tx.execute({ sql: 'UPDATE employees SET pin=? WHERE id=? AND active=1', args: [pinHash, targetId] });
+      await destroyEmployeeSessions(targetId, tx);
+      await recordSecurityAudit({
+        actorEmployeeId: req.employee.id,
+        action: 'pin_reset_by_admin',
+        targetType: 'employee',
+        targetId,
+        oldValue: { credential: 'pin' },
+        newValue: { credential: 'pin', sessions_revoked: true },
+        reason: String(reason).trim(),
+        requestId: req.requestId || null,
+        method: req.method,
+        path: req.originalUrl,
+        control: 'credential_lifecycle',
+        executor: tx,
+      });
+      await tx.commit();
+    } catch (error) {
+      await tx.rollback().catch(() => {});
+      throw error;
+    }
+    res.json({ success: true, sessions_revoked: true });
+  } catch (e) {
+    res.status(400).json({ error: 'Unable to reset PIN' });
+  }
+});
+
 router.post('/:id/reset-password', requirePermission('security_manage'), async (req, res) => {
   if (req.apiKey) return res.status(403).json({ error: 'API keys cannot reset employee credentials' });
   const targetId = Number(req.params.id);
@@ -228,6 +315,7 @@ router.put('/:id', requirePermission('employees'), async (req, res) => {
     if (!existing) return res.status(404).json({ error: 'Employee not found' });
 
     if (password) return res.status(400).json({ error: 'Use the dedicated reset-password credential operation instead of employee profile edit' });
+    if (pin !== undefined && pin !== null && String(pin) !== '') return res.status(400).json({ error: 'Use change-pin for your own PIN or reset-pin for another employee instead of employee profile edit' });
 
     const assignment = await assertAssignableSecurityGroup(req, security_group_id);
     if (!assignment.ok) return res.status(assignment.status).json({ error: assignment.error });
@@ -281,6 +369,62 @@ router.put('/:id', requirePermission('employees'), async (req, res) => {
     res.json(emp);
   } catch (e) {
     res.status(400).json({ error: 'Unable to update employee' });
+  }
+});
+
+router.post('/reauth-self', requireAuth, privilegedPinRateLimit, async (req, res) => {
+  try {
+    const employeeId = Number(req.employee?.id);
+    const sessionId = Number(req.sessionRecord?.id);
+    if (!employeeId || !sessionId) return res.status(401).json({ error: 'Signed-in employee session required' });
+    const purpose = String(req.body?.purpose || 'sensitive_action').trim();
+    if (!['sensitive_action','security_admin','financial_review','approval_review'].includes(purpose)) {
+      return res.status(400).json({ error: 'Unsupported reauthentication purpose' });
+    }
+    const pin = String(req.body?.pin || '');
+    const password = String(req.body?.password || '');
+    if ((!pin && !password) || (pin && password)) return res.status(400).json({ error: 'Enter either your PIN or password' });
+    const { rows: [row] } = await db.execute({ sql: 'SELECT id,pin,password,active FROM employees WHERE id=?', args: [employeeId] });
+    if (!row || !Number(row.active)) return res.status(401).json({ error: 'Employee account is unavailable' });
+    let verified = false, method = null;
+    if (pin) {
+      if (!validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
+      verified = await verifyPin(row.pin, pin);
+      method = 'pin';
+      if (verified) await upgradeLegacyPin(row.id, row.pin, pin);
+    } else {
+      verified = await verifyPassword(row.password, password);
+      method = 'password';
+    }
+    if (!verified) return res.status(403).json({ error: 'Verification failed' });
+    const verifiedAt = await markSessionReauthenticated(sessionId, employeeId, method, purpose);
+    resetRequestRateLimit(req);
+    await ensureSecurityAuditTable();
+    await recordSecurityAudit({
+      actorEmployeeId: employeeId,
+      action: 'session_reauthenticated',
+      targetType: 'session',
+      targetId: sessionId,
+      oldValue: null,
+      newValue: { purpose, method },
+      reason: 'Signed-in employee verified identity for a sensitive action',
+      requestId: req.requestId || null,
+      method: req.method,
+      path: req.originalUrl,
+      control: 'session_reauthentication',
+    });
+    res.json({ verified: true, verified_at: verifiedAt, expires_in_seconds: Math.floor(REAUTH_TTL_MS / 1000), purpose });
+  } catch (e) {
+    res.status(500).json({ error: 'Reauthentication failed' });
+  }
+});
+
+router.get('/reauth-status', requireAuth, async (req, res) => {
+  try {
+    const row = await recentSessionReauth(Number(req.sessionRecord?.id), Number(req.employee?.id));
+    res.json({ verified: !!row, verified_at: row?.verified_at || null, method: row?.method || null, purpose: row?.purpose || null, expires_in_seconds: row ? Math.max(0, Math.floor((REAUTH_TTL_MS - (Date.now() - new Date(row.verified_at).getTime())) / 1000)) : 0 });
+  } catch (e) {
+    res.status(500).json({ error: 'Unable to read reauthentication status' });
   }
 });
 

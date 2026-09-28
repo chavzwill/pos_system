@@ -24,7 +24,7 @@ async function api(cookie, path, options = {}) {
 }
 
 test.describe('Password reset and recovery runtime boundary', () => {
-  test('administrator reset is audited, revokes sessions, forces change, and normal self-change requires current password', async () => {
+  test('administrator reset requires fresh reauthentication, is audited, revokes sessions, forces change, and normal self-change requires current password', async () => {
     const admin = await login(ADMIN_USER, ADMIN_PASSWORD);
     expect(admin.status).toBe(200);
 
@@ -57,19 +57,33 @@ test.describe('Password reset and recovery runtime boundary', () => {
     expect(profilePasswordMutation.status).toBe(400);
     expect(profilePasswordMutation.body?.error).toMatch(/reset-password/i);
 
+    const resetWithoutReauth = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ temporary_password: temporary, reason: 'Automated credential lifecycle certification' }),
+    });
+    expect(resetWithoutReauth.status).toBe(403);
+    expect(resetWithoutReauth.body?.code).toBe('REAUTHENTICATION_REQUIRED');
+
+    const resetWithWrongReauth = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
+      method: 'POST',
+      body: JSON.stringify({ temporary_password: temporary, reason: 'Automated credential lifecycle certification', reauth_password: `${ADMIN_PASSWORD}-wrong` }),
+    });
+    expect(resetWithWrongReauth.status).toBe(403);
+    expect(resetWithWrongReauth.body?.code).toBe('REAUTHENTICATION_REQUIRED');
+
     const missingReason = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
-      method: 'POST', body: JSON.stringify({ temporary_password: temporary }),
+      method: 'POST', body: JSON.stringify({ temporary_password: temporary, reauth_password: ADMIN_PASSWORD }),
     });
     expect(missingReason.status).toBe(400);
 
     const weakReset = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
-      method: 'POST', body: JSON.stringify({ temporary_password: '123456', reason: 'Integrity test reset' }),
+      method: 'POST', body: JSON.stringify({ temporary_password: '123456', reason: 'Integrity test reset', reauth_password: ADMIN_PASSWORD }),
     });
     expect(weakReset.status).toBe(400);
 
     const reset = await api(admin.cookie, `/api/employees/${employeeId}/reset-password`, {
       method: 'POST',
-      body: JSON.stringify({ temporary_password: temporary, reason: 'Automated credential lifecycle certification' }),
+      body: JSON.stringify({ temporary_password: temporary, reason: 'Automated credential lifecycle certification', reauth_password: ADMIN_PASSWORD }),
     });
     expect(reset.status).toBe(200);
     expect(reset.body).toMatchObject({ success: true, must_change_password: true, sessions_revoked: true });
@@ -122,5 +136,6 @@ test.describe('Password reset and recovery runtime boundary', () => {
     expect(serializedAudit).not.toContain(temporary);
     expect(serializedAudit).not.toContain(changed);
     expect(serializedAudit).not.toContain(changedAgain);
+    expect(serializedAudit).not.toContain(ADMIN_PASSWORD);
   });
 });

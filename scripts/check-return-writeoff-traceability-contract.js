@@ -20,12 +20,12 @@ const checks=[
  ['writeoff workflow is actually mounted',server.includes("/api/inventory-writeoffs', require('./routes/inventory-writeoffs')")],
  ['tracked serial writeoff requires exact identity count',woff.includes('Serial-controlled write-off requires exactly ${qty} serial numbers')],
  ['tracked lot writeoff requires exact allocation',woff.includes('Lot-controlled write-off requires exact lot allocation')],
- ['writeoff serial is locked before approval',woff.includes("SET status='writeoff_pending'")],
- ['writeoff approval rechecks lot live quantity',woff.includes('no longer has enough available quantity for write-off')],
- ['successful serial writeoff retires exact identity',woff.includes("SET status='written_off'")],
- ['successful lot writeoff decrements exact lot',woff.includes('SET available_quantity=available_quantity-?')],
- ['writeoff identity event is linked to writeoff source',woff.includes("'inventory_writeoff'")&&woff.includes("'written_off'")],
- ['writeoff identity failure is fail-visible',woff.includes('write-off requires reconciliation')],
+ ['writeoff approval preparation does not mutate serial state',!woff.includes("SET status='writeoff_pending'")&&woff.includes('req.writeoffIdentityApproval=')],
+ ['writeoff approval rechecks lot live quantity transactionally',woffCore.includes('available_quantity>=?')&&woffCore.includes("writeoffError('WRITEOFF_IDENTITY_CHANGED')")],
+ ['successful serial writeoff retires exact identity in core transaction',woffCore.includes("SET status='written_off'")],
+ ['successful lot writeoff decrements exact lot in core transaction',woffCore.includes('SET available_quantity=available_quantity-?')],
+ ['writeoff identity event is linked to writeoff source in core transaction',woffCore.includes("'inventory_writeoff'")&&woffCore.includes("'written_off'")],
+ ['writeoff identity failure is staff-safe and rollback-driven',woffCore.includes("writeoffError('WRITEOFF_IDENTITY_CHANGED')")&&woffCore.includes('rollbackWriteoffQuietly')],
  ['writeoff core still preserves valuation and GL evidence',woffCore.includes('valueStockAdjustment')&&woffCore.includes('postSourceJournal')]
 ];
 let failed=0;for(const [n,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Return/writeoff traceability: ${n}`);if(!ok)failed++;}if(failed){console.error(`Return/writeoff traceability contract FAILED (${failed}/${checks.length} failed).`);process.exit(1);}console.log(`Return/writeoff traceability contract OK (${checks.length} checks).`);

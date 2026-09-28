@@ -14,6 +14,8 @@ const map={
  'Create or manage a rental':{1:['rentals','rental'],2:['new rental','create rental','rental agreement'],3:['issue','activate','checkout rental'],4:['return rental','check in','return']},
  'Dispatch, route or complete a delivery':{1:['dispatch','logistics'],2:['dispatch queue','jobs','unassigned'],3:['schedule','assignee','vehicle'],4:['in transit','completed','complete']},
  'Adjust inventory':{1:['inventory','products'],2:['adjust','stock adjustment','inventory adjustment'],3:['reason','adjustment reason','apply adjustment']},
+ 'Manage product brands':{1:['products & categories','inventory','catalog'],2:['brands','manage brands','brand maintenance'],3:['new brand','edit brand','brand name'],4:['logo image','brand logo','save brand']},
+ 'Review duplicate catalog products':{1:['catalog management','products & categories','catalog'],2:['catalog health','work queue'],3:['confirm same item','not a duplicate','needs more info'],4:['review consolidation','plan consolidation','consolidation impact review'],5:['consolidate records','surviving product']},
  'Run a stock or cycle count':{1:['warehouse','inventory','cycle count'],2:['new count','start count','cycle count'],3:['commit','finalize','complete count']},
  'Create or approve a purchase request':{1:['purchase requests','purchasing'],2:['new purchase request','create request'],3:['approve','reject'],4:['convert to po','create po']},
  'Create, edit, copy, cancel or receive a PO':{1:['purchase orders','purchasing'],2:['new purchase order','create po'],3:['edit','revise','copy','duplicate','cancel','approve po','mark sent'],4:['receive','receive items','goods received']},
@@ -21,7 +23,10 @@ const map={
  'Create or manage a quotation':{1:['quotations','quotes'],2:['new quotation','create quote'],3:['send','approve','accept']},
  'Run, export or print a report':{1:['reports','reporting'],2:['date','branch','filter'],3:['run report','apply','refresh'],4:['export','csv','excel','print','pdf']},
  'Review technician compensation':{1:['technician','repairs','work orders'],2:['compensation','pay period','performance'],3:['rate','plan','metrics'],4:['finalize','approve payroll','payroll']},
- 'Use ERP / inventory intelligence':{1:['erp','intelligence','analytics'],2:['recommend','transfer','replenish','supplier'],3:['create transfer','purchase request','apply']}
+ 'Recover money owed by a supplier':{1:['purchasing','supplier recoverables'],2:['supplier recoverables','recovery attention'],3:['credit notes','supplier returns','statements'],4:['recovery attention','resolve','settle']},
+ 'Plan and pay suppliers safely':{1:['supplier bills & payments','supplier bills','payments'],2:['payment priorities','cash forecast'],3:['record payment'],4:['supplier credit','offset','minimum cash']},
+ 'Review recurring operating costs and commitments':{1:['supplier bills & payments'],2:['operating commitments'],3:['match invoice','reconcile'],4:['performance']},
+ 'Stock Planning & Replenishment':{1:['stock planning','stock health','reordering'],2:['low stock','move between branches','what to order','supplier choice'],3:['create transfer','purchase request']}
 };
 function candidates(){return [...document.querySelectorAll('button,a,[role="button"],[role="tab"],input,select,textarea,label')].filter(el=>visible(el)&&!el.closest('#tt-guided-mode'));}
 function labelFor(el){return norm(el.getAttribute('aria-label')||el.getAttribute('placeholder')||el.name||el.id||el.textContent||'');}

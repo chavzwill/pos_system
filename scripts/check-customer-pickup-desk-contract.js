@@ -1,0 +1,28 @@
+'use strict';
+const fs=require('fs'),path=require('path'),vm=require('vm');
+const repo=path.join(__dirname,'..');
+const route=fs.readFileSync(path.join(repo,'routes','employee-customer-pickup-desk.js'),'utf8');
+const mount=fs.readFileSync(path.join(repo,'routes','employee-end-shift-assistant.js'),'utf8');
+const ui=fs.readFileSync(path.join(repo,'public','customer-pickup-desk-ui.js'),'utf8');
+const deferred=fs.readFileSync(path.join(repo,'public','shell-deferred.js'),'utf8');
+new vm.Script(route,{filename:'employee-customer-pickup-desk.js'});
+new vm.Script(ui,{filename:'customer-pickup-desk-ui.js'});
+const checks=[];
+checks.push(['Pickup Desk route exists',route.includes("router.get('/customer-pickups")]);
+checks.push(['Pickup Desk is read only',!route.includes("router.post('/customer-pickups")&&!route.includes("router.patch('/customer-pickups")]);
+checks.push(['Pickup Desk is mounted',mount.includes("require('./employee-customer-pickup-desk')")]);
+checks.push(['Ready repairs use authoritative status',route.includes("wo.status='awaiting_pickup'")&&route.includes('wo.notified_at ready_since')]);
+checks.push(['Ready rentals use authoritative status',route.includes("ra.status='awaiting_issue'")&&route.includes('checkout_transaction_id')]);
+checks.push(['Customer contact is included',route.includes('customer_name')&&route.includes('c.phone')]);
+checks.push(['Branch scope is enforced',route.includes('default_branch_id')&&route.includes('branch_id')]);
+checks.push(['Waiting duration is derived',route.includes('age_minutes')&&route.includes('ageMinutes')]);
+checks.push(['Exact record context is returned',route.includes('record_id')&&route.includes('record_type')&&route.includes('action')]);
+checks.push(['Desk has no status mutation',!route.includes('UPDATE work_orders')&&!route.includes('UPDATE rental_agreements')]);
+checks.push(['UI exposes Customer Pickup Desk',ui.includes('Customer Pickup Desk')&&ui.includes('data-customer-pickups')]);
+checks.push(['UI routes through context opener',ui.includes('TotalToolsEmployeeAssist')&&ui.includes('openContext')]);
+checks.push(['UI explains the next human action',ui.includes('next_action')&&ui.includes('normal workflow')]);
+checks.push(['Deferred shell loads Pickup Desk',deferred.includes("'/customer-pickup-desk-ui.js'" )]);
+let failed=0;
+for(const [name,ok] of checks){if(ok)console.log(`PASS Pickup Desk: ${name}`);else{console.error(`FAIL Pickup Desk: ${name}`);failed++;}}
+if(failed)process.exit(1);
+console.log(`Customer Pickup Desk contract OK (${checks.length} checks).`);

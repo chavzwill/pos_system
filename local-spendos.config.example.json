@@ -1,0 +1,7 @@
+{
+  "posDatabase": "C:/path/to/existing/pos.db",
+  "spendDatabase": "C:/path/to/existing/spendos.db",
+  "spendSource": "C:/path/to/spend-os",
+  "posPort": 4191,
+  "spendPort": 4192
+}

@@ -5,7 +5,7 @@ const r2=v=>Number(Number(v||0).toFixed(2));
 const SIG='data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNk+A8AAQUBAScY42YAAAAASUVORK5CYII=';
 async function login(username=process.env.POS_TEST_USER||'admin',password=process.env.POS_TEST_PASSWORD||'123456'){
   const r=await fetch(`${BASE}/api/employees/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
-  expect(r.status).toBe(200);return {cookie:(r.headers.get('set-cookie')||'').split(';')[0],body:await r.json()};
+  expect(r.status).toBe(200);const cookie=(r.headers.get('set-cookie')||'').split(';')[0],body=await r.json();if(username===(process.env.POS_TEST_USER||'admin')){const verify=await fetch(`${BASE}/api/employees/reauth-self`,{method:'POST',headers:{'Content-Type':'application/json',Cookie:cookie},body:JSON.stringify({purpose:'security_admin',password})});expect(verify.status,await verify.text()).toBe(200);}return {cookie,body};
 }
 async function api(cookie,path,options={}){const headers={Cookie:cookie,Accept:'application/json',...(options.headers||{})};if(options.body&&!headers['Content-Type'])headers['Content-Type']='application/json';const r=await fetch(`${BASE}${path}`,{...options,headers});return {status:r.status,body:await r.json().catch(()=>null)};}
 function line(detail,code){return detail.body?.lines?.find(x=>String(x.account_code)===String(code));}
@@ -19,8 +19,10 @@ export function registerRentalFinancialRuntimeCertification(){
     const username=`rrt_${suffix.slice(-12)}`,password=`Rt!${suffix}Aa1`,pin=String(Date.now()).slice(-6);
     let product=null,customer=null,drawer=null,group=null,employee=null,session=null,agreement=null;
     try{
-      let x=await api(admin.cookie,'/api/products',{method:'POST',body:JSON.stringify({sku:`RTR-${suffix}`,name:`Runtime Rental ${suffix}`,price:0,cost:250,tax_rate:0,stock_qty:1,min_stock:0,active:1,branch_id:branch.id,is_rental:1,rental_classification:'tool',rental_rate:50,rental_weekly_rate:0,rental_monthly_rate:0,rental_hourly_rate:0,replacement_value:250,taxable:1})});
+      let x=await api(admin.cookie,'/api/products',{method:'POST',body:JSON.stringify({sku:`RTR-${suffix}`,name:`Runtime Rental ${suffix}`,price:0,cost:250,tax_rate:0,stock_qty:0,min_stock:0,active:1,branch_id:branch.id,is_rental:1,rental_classification:'tool',rental_rate:50,rental_weekly_rate:0,rental_monthly_rate:0,rental_hourly_rate:0,replacement_value:250,taxable:1})});
       expect(x.status).toBe(201);product=x.body;
+      x=await api(admin.cookie,`/api/products/${product.id}/stock`,{method:'PATCH',body:JSON.stringify({adjustment:1,branch_id:branch.id,reason:'Rental runtime opening count'})});
+      expect(x.status,JSON.stringify(x.body)).toBe(200);expect(Number(x.body.stock_qty)).toBe(1);expect(Number(x.body.movement_id)).toBeGreaterThan(0);
 
       x=await api(admin.cookie,'/api/customers',{method:'POST',body:JSON.stringify({first_name:'Runtime',last_name:`Rental ${suffix}`,phone:'8765550101',address:'1 Runtime Rental Road',city:'Kingston',state:'Kingston',customer_type:'cash',is_rental_customer:true,rental_id_type:'drivers_license',rental_id_number:`RT-${suffix}`,rental_address_proof_type:'utility_bill',rental_address_proof_details:'Runtime certification',rental_reference_name:'Runtime Reference',rental_reference_phone:'8765550102',rental_reference_relationship:'Reference'})});
       expect(x.status).toBe(201);customer=x.body;

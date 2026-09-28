@@ -828,4 +828,64 @@ router.post('/send-work-order-ready/:id', requirePermission('work_orders'), asyn
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
+function escHtml(v){return String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));}
+
+async function loadRentalAgreementSummary(id){
+  const {rows:[a]}=await db.execute({sql:`SELECT ra.*,c.first_name||' '||c.last_name AS customer_name,c.email AS customer_email,c.phone AS customer_phone,
+    b.name AS branch_name,e.first_name||' '||e.last_name AS employee_name,
+    co.transaction_number AS checkout_transaction_number,co.payment_method AS checkout_payment_method,
+    st.transaction_number AS settlement_transaction_number,st.payment_method AS settlement_payment_method,
+    ise.first_name||' '||ise.last_name AS issue_security_employee_name,
+    rse.first_name||' '||rse.last_name AS return_security_employee_name,
+    rde.first_name||' '||rde.last_name AS return_driver_employee_name,
+    (ra.damage_fee_total+ra.duration_adjustment_total-ra.deposit_total+ra.tax_adjustment_total) AS balance_due
+    FROM rental_agreements ra
+    LEFT JOIN customers c ON c.id=ra.customer_id
+    LEFT JOIN branches b ON b.id=ra.branch_id
+    LEFT JOIN employees e ON e.id=ra.employee_id
+    LEFT JOIN transactions co ON co.id=ra.checkout_transaction_id
+    LEFT JOIN transactions st ON st.id=ra.settlement_transaction_id
+    LEFT JOIN employees ise ON ise.id=ra.issue_security_employee_id
+    LEFT JOIN employees rse ON rse.id=ra.return_security_employee_id
+    LEFT JOIN employees rde ON rde.id=ra.return_driver_employee_id
+    WHERE ra.id=?`,args:[id]});
+  if(!a)return null;
+  const {rows:items}=await db.execute({sql:'SELECT * FROM rental_agreement_items WHERE agreement_id=? ORDER BY id',args:[id]});
+  const {rows:pauses}=await db.execute({sql:`SELECT rp.*,pb.first_name||' '||pb.last_name AS paused_by_name,rb.first_name||' '||rb.last_name AS resumed_by_name
+    FROM rental_agreement_pauses rp LEFT JOIN employees pb ON pb.id=rp.paused_by LEFT JOIN employees rb ON rb.id=rp.resumed_by
+    WHERE rp.agreement_id=? ORDER BY rp.id`,args:[id]});
+  a.items=items;a.pauses=pauses;return a;
+}
+
+function buildRentalAgreementSummaryHtml(a,s){
+  const store=escHtml(s.store_name||'My Store'),agreement=escHtml(a.agreement_number),status=escHtml(String(a.status||'').replace(/_/g,' '));
+  const rows=(a.items||[]).map(i=>`<tr><td>${escHtml(i.product_name)}<small>${escHtml(i.sku||'')}</small></td><td>${Number(i.quantity||0)}</td><td>${fmt(i.rental_fee)}</td><td>${fmt(i.final_rental_fee)}</td><td>${fmt(i.deposit_amount)}</td><td>${escHtml(i.condition_out||'—')} → ${escHtml(i.condition_in||'—')}</td></tr>`).join('');
+  const pauses=(a.pauses||[]).map(p=>`<li><strong>${escHtml(p.reason||'Pause')}</strong> · ${escHtml(p.started_at||'')} → ${escHtml(p.ended_at||'Ongoing')}${p.due_date_after?` · due ${escHtml(p.due_date_after)}`:''}</li>`).join('');
+  const signatureRow=(label,who,at,present)=>present?`<div class="sig"><strong>${label}</strong><span>${escHtml(who||'Recorded')} · ${escHtml(at||'')}</span><em>Signature captured electronically</em></div>`:'';
+  return `<!doctype html><html><head><meta charset="utf-8"><title>Rental Agreement Summary - ${agreement}</title><style>
+    body{font-family:Arial,sans-serif;color:#111;margin:0;background:#f5f5f5}.page{max-width:900px;margin:20px auto;background:#fff;padding:34px}h1{font-size:24px;margin:0}h2{font-size:15px;margin:24px 0 8px;border-bottom:1px solid #ddd;padding-bottom:6px}.head{display:flex;justify-content:space-between;gap:20px}.muted,small{color:#666;font-size:11px}.facts{display:grid;grid-template-columns:repeat(3,1fr);gap:10px;margin-top:18px}.fact{border:1px solid #e5e5e5;padding:9px}.fact b{display:block;font-size:12px;margin-top:3px}table{width:100%;border-collapse:collapse;font-size:12px}th,td{padding:8px;border-bottom:1px solid #eee;text-align:left}th{background:#f7f7f7}.money{display:grid;grid-template-columns:repeat(3,1fr);gap:8px}.money div{border:1px solid #e5e5e5;padding:9px}.sig{display:inline-grid;gap:3px;width:30%;min-width:210px;border-top:1px solid #333;padding-top:6px;margin:24px 2% 0 0}.sig span,.sig em{font-size:10px;color:#666}.footer{margin-top:30px;color:#777;font-size:10px;text-align:center}@media print{body{background:#fff}.page{margin:0;padding:0;max-width:none}@page{size:letter;margin:.55in}}@media(max-width:700px){.page{margin:0;padding:18px}.facts,.money{grid-template-columns:1fr}.head{display:block}}
+  </style></head><body><main class="page"><div class="head"><div><h1>${store}</h1><div class="muted">${escHtml(a.branch_name||'')}</div></div><div><h1>RENTAL AGREEMENT SUMMARY</h1><div class="muted">${agreement} · ${status}</div></div></div>
+  <div class="facts"><div class="fact">Customer<b>${escHtml(a.customer_name||'—')}</b><small>${escHtml(a.customer_phone||'')}</small></div><div class="fact">Created by<b>${escHtml(a.employee_name||'—')}</b><small>${escHtml(a.created_at||'')}</small></div><div class="fact">Rental period<b>${escHtml(a.checkout_datetime||'Not issued')} → ${escHtml(a.returned_at||a.due_date||'—')}</b><small>Due ${escHtml(a.due_date||'—')}</small></div></div>
+  <h2>Items, rates & condition</h2><table><thead><tr><th>Item</th><th>Qty</th><th>Original fee</th><th>Final fee</th><th>Deposit</th><th>Condition out → in</th></tr></thead><tbody>${rows||'<tr><td colspan="6">No rental lines recorded.</td></tr>'}</tbody></table>
+  <h2>Financial summary</h2><div class="money"><div>Deposit collected<b>${fmt(a.deposit_total)}</b></div><div>Deposit refunded<b>${fmt(a.deposit_refunded)}</b></div><div>Damage fee<b>${fmt(a.damage_fee_total)}</b></div><div>Duration adjustment<b>${fmt(a.duration_adjustment_total)}</b></div><div>Tax adjustment<b>${fmt(a.tax_adjustment_total)}</b></div><div>Remaining balance<b>${fmt(a.balance_due)}</b></div></div>
+  <h2>Payment evidence</h2><div class="facts"><div class="fact">Checkout transaction<b>${escHtml(a.checkout_transaction_number||'—')}</b><small>${escHtml((a.checkout_payment_method||'').replace(/_/g,' '))}</small></div><div class="fact">Settlement transaction<b>${escHtml(a.settlement_transaction_number||'—')}</b><small>${escHtml((a.settlement_payment_method||'').replace(/_/g,' '))}</small></div><div class="fact">Customer PO<b>${escHtml(a.customer_po_number||'—')}</b></div></div>
+  ${pauses?`<h2>Pause / downtime history</h2><ul>${pauses}</ul>`:''}
+  <h2>Custody & acknowledgement</h2>
+  ${signatureRow('Issue security',a.issue_security_employee_name,a.issue_security_confirmed_at,a.issue_security_signature)}
+  ${signatureRow('Customer acceptance',a.customer_name,a.issue_security_confirmed_at,a.issue_customer_signature)}
+  ${signatureRow('Return security',a.return_security_employee_name,a.return_security_confirmed_at,a.return_security_signature)}
+  ${a.return_driver_employee_name?`<div class="fact" style="margin-top:16px">Return custody<b>${escHtml(a.return_driver_employee_name)}</b><small>${escHtml(a.return_driver_confirmed_at||'')}</small></div>`:''}
+  <div class="footer">This summary is generated from the POS rental, payment and custody records. It does not replace the original transaction evidence.</div></main></body></html>`;
+}
+
+router.get('/rental-agreement-summary/:id/preview',requirePermission('rentals'),async(req,res)=>{
+  try{const a=await loadRentalAgreementSummary(req.params.id);if(!a)return res.status(404).send('Rental agreement not found');const s=await getSettings();res.type('html').send(buildRentalAgreementSummaryHtml(a,s));}
+  catch(e){res.status(500).send('Unable to build rental agreement summary right now.');}
+});
+router.post('/send-rental-agreement-summary/:id',requirePermission('rentals'),async(req,res)=>{
+  const to=String(req.body?.to||'').trim();if(!to)return res.status(400).json({error:'Recipient email is required'});
+  try{const a=await loadRentalAgreementSummary(req.params.id);if(!a)return res.status(404).json({error:'Rental agreement not found'});const s=await getSettings();const transporter=createTransporter(s);const fromName=s.email_from_name||s.store_name||'POS System',fromAddr=s.email_smtp_user||s.store_email||'';await transporter.sendMail({from:`"${fromName}" <${fromAddr}>`,to,subject:`Rental Agreement Summary - ${a.agreement_number}`,html:buildRentalAgreementSummaryHtml(a,s)});res.json({success:true,message:`Rental agreement summary sent to ${to}`});}
+  catch(e){res.status(500).json({error:'Unable to send the rental agreement summary right now.'});}
+});
+
 module.exports = router;

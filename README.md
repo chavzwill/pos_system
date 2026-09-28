@@ -1,5 +1,9 @@
 # RetailPOS
 
+## SpendOS integration
+
+For POS-to-SpendOS setup, event contracts, authority boundaries, backfill, operations, and go-live certification, see [`docs/SPENDOS_POS_INTEGRATION_GUIDE.md`](docs/SPENDOS_POS_INTEGRATION_GUIDE.md).
+
 ## Docker deployment
 
 `docker-compose.yml` runs the app against local SQLite by default, persisted via a bind-mounted `./data` volume (`TURSO_DATABASE_URL: file:/app/data/pos.db`). Product images and PO attachments persist separately under `./uploads`. To use Turso instead, remove that env line and set `TURSO_DATABASE_URL` to a real `libsql://` URL plus `TURSO_AUTH_TOKEN`.

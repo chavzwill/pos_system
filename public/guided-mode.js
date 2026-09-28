@@ -36,15 +36,28 @@
       { find:['return rental','check in','return'], text:'At return, record condition, damage/fees where applicable, and complete the rental lifecycle.' }
     ]},
     { id:'dispatch', title:'Dispatch, route or complete a delivery', keywords:['dispatch','route','routing','delivery','driver','logistics','vehicle','in transit','pickup'], steps:[
-      { find:['dispatch & logistics intelligence','dispatch','logistics'], text:'Open Dispatch & Logistics Intelligence.' },
+      { find:['dispatch & deliveries','dispatch','logistics'], text:'Open Dispatch & Deliveries.' },
       { find:['unassigned','dispatch queue','jobs'], text:'Review the dispatch queue, priority, promised time, assignment state and operational risk before choosing work.' },
-      { find:['schedule','assignee','vehicle'], text:'Assign the authorized employee and vehicle, then schedule the movement using verified capacity and timing.' },
+      { find:['schedule','assignee','vehicle'], text:'Assign the authorized employee and vehicle, then schedule the movement using the available vehicle capacity and schedule.' },
       { find:['ready','in transit','delayed','completed'], text:'Move the dispatch through its real lifecycle. Record delays rather than hiding them, and mark completed only after the movement is actually finished.' }
     ]},
     { id:'inventory-adjust', title:'Adjust inventory', keywords:['adjust inventory','stock adjustment','damage stock','write off','inventory correction'], steps:[
       { find:['inventory','products'], text:'Open Inventory.' },
       { find:['adjust','stock adjustment','inventory adjustment'], text:'Choose the controlled stock-adjustment action for the exact item and branch.' },
       { find:['reason','adjustment reason'], text:'Enter the verified quantity change and a real reason. Do not disguise sales, transfers or cycle-count variance as manual adjustments.' }
+    ]},
+    { id:'brands', title:'Manage product brands', keywords:['brand','brands','brand logo','product brand','manage brands'], steps:[
+      { find:['products & categories','inventory','catalog'], text:'Open Products & Categories.' },
+      { find:['brands','manage brands','brand maintenance'], text:'Open Brands to review the current brand list.' },
+      { find:['new brand','edit brand','brand name'], text:'Add or edit the brand using its correct name and description. Avoid creating spelling variants of an existing brand.' },
+      { find:['logo image','brand logo','save brand'], text:'Add the approved brand logo when available, then save. Product assignment remains a separate deliberate catalog edit.' }
+    ]},
+    { id:'catalog-duplicates', title:'Review duplicate catalog products', keywords:['duplicate products','duplicate sku','catalog duplicates','merge products','consolidate products'], steps:[
+      { find:['catalog management','products & categories','catalog'], text:'Open Catalog Management.' },
+      { find:['catalog health','work queue'], text:'Open Catalog Health and review the work queue. Duplicate candidates are evidence for review, not an automatic merge.' },
+      { find:['confirm same item','not a duplicate','needs more info'], text:'Compare the exact records. Record whether they are the same item, not duplicates, or need more information, and enter the real reason.' },
+      { find:['review consolidation','plan consolidation','consolidation impact review'], text:'If the records are confirmed duplicates, review stock, units, history and the proposed surviving product before any consolidation.' },
+      { find:['consolidate records','surviving product'], text:'Choose the surviving product only after the review is complete. Consolidation preserves historical records, retires duplicates and leaves consolidated records read-only.' }
     ]},
     { id:'count', title:'Run a stock or cycle count', keywords:['cycle count','stock count','physical count','inventory count'], steps:[
       { find:['warehouse','inventory','cycle count'], text:'Open Warehouse / Inventory Counts.' },
@@ -54,7 +67,7 @@
     { id:'pr', title:'Create or approve a purchase request', keywords:['purchase request','pr','request purchase','replenish'], steps:[
       { find:['purchase requests','purchasing'], text:'Open Purchase Requests.' },
       { find:['new purchase request','create request'], text:'Create the request with the correct branch, products, quantities and business reason.' },
-      { find:['approve','reject'], text:'Authorized approvers should review demand and sourcing evidence before approving or rejecting.' },
+      { find:['approve','reject'], text:'Authorized approvers should review demand, supplier options and supporting details before approving or rejecting.' },
       { find:['convert to po','create po'], text:'When approved, convert through the controlled PO flow rather than creating unrelated duplicate purchasing records.' }
     ]},
     { id:'po', title:'Create, edit, copy, cancel or receive a PO', keywords:['purchase order','po','receive po','copy po','cancel po','edit po'], steps:[
@@ -84,16 +97,34 @@
       { find:['technician','repairs','work orders'], text:'Open the technician/service management area.' },
       { find:['compensation','pay period','performance'], text:'Open Technician Compensation / Performance.' },
       { find:['rate','plan','metrics'], text:'Review the admin-configured rate and compensation plan that applies to the pay period.' },
-      { find:['finalize','approve payroll','payroll'], text:'Verify evidence before finalizing. Missing QC, rework, attendance or other evidence should remain unavailable rather than being invented.' }
+      { find:['finalize','approve payroll','payroll'], text:'Check QC, rework and attendance records before finalizing. If required information is missing, the system should show that clearly instead of guessing.' }
     ]},
-    { id:'erp', title:'Use ERP / inventory intelligence', keywords:['erp','intelligence','smart transfer','recommendation','slow moving','stockout','supplier performance'], steps:[
-      { find:['erp','intelligence','analytics'], text:'Open ERP Intelligence / Analytics.' },
-      { find:['recommend','transfer','replenish','supplier'], text:'Review the recommendation and the evidence behind it: branch stock, demand, supplier performance or movement history.' },
-      { find:['create transfer','purchase request','apply'], text:'When action is justified, use the normal controlled transfer/purchasing workflow. Intelligence should recommend; it should not silently mutate inventory.' }
+    { id:'supplier-recovery', title:'Recover money owed by a supplier', keywords:['supplier recoverable','supplier credit note','supplier return','shorted goods','supplier owes us','recover money from supplier','supplier statement'], steps:[
+      { find:['purchasing','supplier recoverables'], text:'Open Purchasing and go to Supplier Recoverables. Start from the exact shortage, return, credit-note or supplier obligation evidence.' },
+      { find:['supplier recoverables','recovery attention'], text:'Review the recoverable amount, supplier evidence, age and next action. Identified exposure is not the same as confirmed money owed.' },
+      { find:['credit notes','supplier returns','statements'], text:'Use Credit Notes, Supplier Returns or Statements to attach the authoritative supplier evidence and reconcile the amount.' },
+      { find:['recovery attention','resolve','settle'], text:'Close or settle only through the controlled recoverable/AP workflow after the financial evidence agrees. Guide Me never creates the settlement for you.' }
+    ]},
+    { id:'supplier-payment-control', title:'Plan and pay suppliers safely', keywords:['supplier payment','supplier bills','accounts payable','cash forecast','payment priorities','pay supplier','supplier credits','ap forecast'], steps:[
+      { find:['supplier bills & payments','supplier bills','payments'], text:'Open Supplier Bills & Payments. Formal AP begins from posted supplier invoices, not estimates or purchase requests.' },
+      { find:['payment priorities','cash forecast'], text:'Review Payment priorities and Cash forecast before sending cash. Check due dates, documented discounts, late-fee exposure and eligible recoverable offsets.' },
+      { find:['record payment'], text:'When payment is justified, use Record payment. The payment guard will recheck unused supplier credits, duplicate risk and the current net-payment plan.' },
+      { find:['supplier credit','offset','minimum cash'], text:'Apply eligible supplier recoverable offsets first where appropriate. If usable credit remains and cash is still sent, the independent finance override remains authoritative.' }
+    ]},
+    { id:'operating-spend', title:'Review recurring operating costs and commitments', keywords:['operating commitments','recurring expenses','rent lease','utilities','software subscriptions','maintenance contract','recurring costs','renewal costs'], steps:[
+      { find:['supplier bills & payments'], text:'Open Supplier Bills & Payments, then Operating commitments.' },
+      { find:['operating commitments'], text:'Review the expected recurring amount, cadence, allocation target, next due date and renewal evidence for the commitment.' },
+      { find:['match invoice','reconcile'], text:'Match the actual supplier invoice to the correct service period, then Reconcile expected versus invoiced cost. Matching is evidence only and does not change AP.' },
+      { find:['performance'], text:'Use Performance to review repeated overruns, bill drift, annualized run rate and renewals that deserve renegotiation attention before they roll over.' }
+    ]},
+    { id:'erp', title:'Stock Planning & Replenishment', keywords:['stock planning','replenishment','reordering','smart transfer','recommendation','slow moving','stockout','supplier performance','what to order'], steps:[
+      { find:['stock planning','stock health','reordering'], text:'Open Stock Planning & Replenishment.' },
+      { find:['low stock','move between branches','what to order','supplier choice'], text:'Review why the system is suggesting the action: branch stock, demand, supplier performance or stock history.' },
+      { find:['create transfer','purchase request'], text:'If the action makes sense, use the normal transfer or purchasing process. Suggestions must never change stock automatically.' }
     ]}
   ];
 
-  const state = { open:false, task:null, step:0, target:null, observer:null };
+  const state = { open:false, task:null, step:0, target:null, observer:null, returnFocus:null };
   const norm = s => String(s || '').toLowerCase().replace(/\s+/g,' ').trim();
   const visible = el => !!el && el instanceof Element && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
 
@@ -135,23 +166,23 @@
   function render() {
     const root=shell(); if(!root)return;
     const task=state.task; const step=task?.steps[state.step]; const found=step ? highlight(step) : false;
-    root.innerHTML=`<div class="tt-guide-backdrop" data-guide-close></div><section class="tt-guide" role="dialog" aria-modal="true" aria-labelledby="tt-guide-title">
-      <div class="tt-guide__head"><div><span class="tt-guide__eyebrow">Total Tools POS</span><h2 id="tt-guide-title">Guided Mode</h2><p>${task ? escapeHtml(task.title) : 'Tell me what you want to do and I’ll guide you through the POS.'}</p></div><button class="tt-guide__close" type="button" aria-label="Close Guided Mode" data-guide-close>×</button></div>
-      <div class="tt-guide__body">${task ? `<div class="tt-guide__step"><span class="tt-guide__step-count">Step ${state.step+1} of ${task.steps.length}</span><h3>${found?'Follow the highlighted control':'Control not currently available'}</h3><p>${escapeHtml(step.text)}</p>${found?'<p class="tt-guide__hint">The correct area is highlighted on the screen. Complete the action there, then choose Next.</p>':'<p class="tt-guide__hint">This control may be hidden because of your permissions, the current record state, or a missing prerequisite. Guided Mode will not tell you to click a control that is not actually available.</p>'}</div><div class="tt-guide__actions"><button type="button" data-guide-home>Choose another task</button><div><button type="button" data-guide-prev ${state.step===0?'disabled':''}>Back</button><button type="button" class="is-primary" data-guide-next>${state.step===task.steps.length-1?'Finish':'Next'}</button></div></div>` : `<form class="tt-guide__search" data-guide-search><input id="tt-guide-input" autocomplete="off" placeholder="e.g. dispatch a delivery, receive a PO, close my drawer" aria-label="What do you want to do?"/><button type="submit">Guide me</button></form><div class="tt-guide__suggestions">${TASKS.map(t=>`<button type="button" class="tt-guide__chip" data-task="${t.id}">${escapeHtml(t.title)}</button>`).join('')}</div>`}</div>
+    root.innerHTML=`<div class="tt-guide-backdrop" aria-hidden="true"></div><section class="tt-guide" role="dialog" aria-modal="false" aria-labelledby="tt-guide-title" aria-describedby="tt-guide-description">
+      <div class="tt-guide__head"><div><span class="tt-guide__eyebrow">Total Tools</span><h2 id="tt-guide-title">Guide Me</h2><p id="tt-guide-description">${task ? escapeHtml(task.title) : 'Tell me what you need to do. I’ll take you to the right place and stay with you while you work.'}</p></div><button class="tt-guide__close" type="button" aria-label="Close Guide Me" data-guide-close>&times;</button></div>
+      <div class="tt-guide__body">${task ? `<div class="tt-guide__step"><span class="tt-guide__step-count">Step ${state.step+1} of ${task.steps.length}</span><h3>${found?'Follow the highlighted control':'Control not currently available'}</h3><p>${escapeHtml(step.text)}</p>${found?'<p class="tt-guide__hint">The correct area is highlighted on the screen. Complete the action there, then choose Next.</p>':'<p class="tt-guide__hint">This control may be hidden because of your permissions, the current record state, or a missing prerequisite. Guide Me will not tell you to click a control that is not actually available.</p>'}</div><div class="tt-guide__actions"><button type="button" data-guide-home>Choose another task</button><div><button type="button" data-guide-prev ${state.step===0?'disabled':''}>Back</button><button type="button" class="is-primary" data-guide-next>${state.step===task.steps.length-1?'Finish':'Next'}</button></div></div>` : `<form class="tt-guide__search" data-guide-search><input id="tt-guide-input" autocomplete="off" placeholder="e.g. dispatch a delivery, receive a PO, close my drawer" aria-label="What do you want to do?"/><button type="submit">Guide me</button></form><div class="tt-guide__suggestions">${TASKS.map(t=>`<button type="button" class="tt-guide__chip" data-task="${t.id}">${escapeHtml(t.title)}</button>`).join('')}</div>`}</div>
     </section>`;
     bind();
     queueMicrotask(()=>root.querySelector(task?'[data-guide-next]':'#tt-guide-input')?.focus());
   }
   function escapeHtml(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
   function choose(task){state.task=task;state.step=0;render();}
-  function close(){clearHighlight();state.open=false;state.task=null;state.step=0;shell()?.remove();state.observer?.disconnect();state.observer=null;document.getElementById('tt-guide-launcher')?.focus();}
-  function open(){if(state.open)return;state.open=true;const root=document.createElement('div');root.id='tt-guided-mode';document.body.appendChild(root);render();state.observer=new MutationObserver(()=>{if(state.task){const step=state.task.steps[state.step]; if(step && !visible(state.target)) highlight(step);}});state.observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});}
+  function close(){clearHighlight();state.open=false;state.task=null;state.step=0;shell()?.remove();state.observer?.disconnect();state.observer=null;const target=state.returnFocus&&state.returnFocus.isConnected?state.returnFocus:document.getElementById('shell-guide');state.returnFocus=null;target?.focus?.({preventScroll:true});}
+  function open(){if(state.open){shell()?.querySelector('#tt-guide-input,[data-guide-next]')?.focus?.({preventScroll:true});return;}state.returnFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;state.open=true;const root=document.createElement('div');root.id='tt-guided-mode';document.body.appendChild(root);render();requestAnimationFrame(()=>root.classList.add('is-open'));state.observer=new MutationObserver(()=>{if(state.task){const step=state.task.steps[state.step]; if(step && !visible(state.target)) highlight(step);}});state.observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});}
   function bind(){const root=shell(); if(!root)return; root.querySelectorAll('[data-guide-close]').forEach(x=>x.addEventListener('click',close)); root.querySelector('[data-guide-search]')?.addEventListener('submit',e=>{e.preventDefault();const q=root.querySelector('#tt-guide-input')?.value||'';const task=bestTask(q);if(task)choose(task);else{const toast=document.createElement('div');toast.className='tt-guide-toast';toast.textContent='I could not match that task yet. Try words like sale, repair, dispatch, rental, purchase order, transfer, inventory, report, drawer or technician pay.';document.body.appendChild(toast);setTimeout(()=>toast.remove(),4500);}}); root.querySelectorAll('[data-task]').forEach(btn=>btn.addEventListener('click',()=>choose(TASKS.find(t=>t.id===btn.dataset.task)))); root.querySelector('[data-guide-home]')?.addEventListener('click',()=>{clearHighlight();state.task=null;state.step=0;render();}); root.querySelector('[data-guide-prev]')?.addEventListener('click',()=>{if(state.step>0){state.step--;render();}}); root.querySelector('[data-guide-next]')?.addEventListener('click',()=>{if(!state.task)return;if(state.step>=state.task.steps.length-1)close();else{state.step++;render();}});}
+  window.TotalToolsGuideMe={open,openTask:(id)=>{const task=TASKS.find(t=>t.id===id);if(!task)return false;if(!state.open)open();choose(task);return true;},tasks:()=>TASKS.map(t=>({id:t.id,title:t.title}))};
   function install(){
-    if(document.getElementById('tt-guide-launcher'))return;
-    const skip=document.createElement('a');skip.className='tt-pos-skip';skip.href='#main-content';skip.textContent='Skip to POS content';document.body.prepend(skip);
+    if(!document.querySelector('.tt-pos-skip')){const skip=document.createElement('a');skip.className='tt-pos-skip';skip.href='#main-content';skip.textContent='Skip to POS content';document.body.prepend(skip);}
     const main=document.querySelector('main,.main-content,#content,.content') || document.body.querySelector(':scope > div'); if(main && !main.id)main.id='main-content';
-    const btn=document.createElement('button');btn.id='tt-guide-launcher';btn.className='tt-guide-launcher';btn.type='button';btn.setAttribute('aria-haspopup','dialog');btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3a7 7 0 0 0-4.2 12.6c.8.6 1.2 1.2 1.3 1.9h5.8c.1-.7.5-1.3 1.3-1.9A7 7 0 0 0 12 3Z" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 21h5M9.5 18.5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Guided Mode</span>';btn.addEventListener('click',open);document.body.appendChild(btn);
+    document.getElementById('tt-guide-launcher')?.remove();
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.open)close();});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();

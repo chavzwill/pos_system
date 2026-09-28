@@ -2,6 +2,7 @@ const { defineConfig, devices } = require('@playwright/test');
 const { execSync } = require('child_process');
 const { existsSync } = require('fs');
 const path = require('path');
+require('./tests/support/sale-operation-fetch');
 
 // Some minimal Linux hosts need the repository's libasound compatibility stub.
 // Build it only when the helper exists; ordinary developer machines should use

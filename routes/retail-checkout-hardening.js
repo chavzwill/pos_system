@@ -6,6 +6,9 @@ const { requirePermission, can } = require('../lib/permissions');
 const { getAvailableQty } = require('../lib/inventory-stock-status');
 const { getReservedQty } = require('../lib/inventory-reservations');
 
+// Idempotency must claim the client operation before any stock reservation or
+// monetary mutation so duplicate/replayed checkout attempts cannot fan out.
+router.use(require('./retail-sale-idempotency'));
 // Commercial loss prevention must run after virtual-bundle/UOM normalization
 // (the parent traceability router already did that) but before general stock
 // reservation, so a blocked below-floor sale does not unnecessarily hold stock.

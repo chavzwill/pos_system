@@ -7,6 +7,10 @@ const path = require('path');
 const fs = require('fs');
 const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
 const { requireAuth, requirePermission, can } = require('../lib/permissions');
+const { archiveProduct, assertProductNotConsolidated, resolveCanonicalProduct } = require('../lib/catalog-integrity');
+const { validateMemoryUpload, imageMulterFilter } = require('../lib/uploadSecurity');
+const { recordSecurityAudit } = require('../lib/securityAudit');
+const { sanitizeSkuForFilename, planBulkImages } = require('../lib/product-media');
 
 // CSV cells for money/quantity fields often carry currency symbols, thousands
 // separators, or stray whitespace (e.g. "$15.00", "1,000") — bare parseFloat/
@@ -18,6 +22,17 @@ const parseNum = v => {
   if (v == null || v === '') return NaN;
   const cleaned = String(v).replace(/[^0-9.\-]/g, '');
   return cleaned === '' || cleaned === '-' ? NaN : parseFloat(cleaned);
+};
+const sendProductMutationError=(res,e,fallback='Unable to update this product right now.')=>{
+  const status=Number(e?.status)||500;
+  if(status>=500)console.error('product_mutation_error',{code:e?.code||'unknown',message:e?.message||'unknown'});
+  return res.status(status).json({
+    error:status>=500?fallback:e.message,
+    code:e?.code||'PRODUCT_MUTATION_FAILED',
+    canonical_product_id:e?.details?.canonical_product_id||null,
+    canonical_sku:e?.details?.canonical_sku||null,
+    canonical_name:e?.details?.canonical_name||null
+  });
 };
 
 // POST/PUT/DELETE on /products are shared by three frontend forms (Inventory,
@@ -46,11 +61,53 @@ function requireProductPermission(isRental, isService) {
   };
 }
 
+async function requireImagePermission(req,res,next){
+  if(req.apiKey)return res.status(403).json({error:'API keys cannot manage product images',code:'PRODUCT_MEDIA_INTERNAL_ONLY'});
+  if(!req.employee)return res.status(401).json({error:'Authentication required'});
+  try{
+    const {rows:[product]}=await db.execute({sql:'SELECT id,is_rental,is_service FROM products WHERE id=?',args:[req.params.id]});
+    if(!product)return res.status(404).json({error:'Product not found'});
+    const key=requiredProductPermission(!!product.is_rental,!!product.is_service);
+    if(!can(req.employee.permissions,key))return res.status(403).json({error:`Missing permission: ${key}`});
+    next();
+  }catch(e){res.status(500).json({error:'Unable to verify product image permission right now.'});}
+}
+
 const upload = multer({
   storage: multer.memoryStorage(),
-  limits: { fileSize: 5 * 1024 * 1024 },
-  fileFilter: (req, file, cb) => cb(null, /^image\//.test(file.mimetype)),
+  limits: { fileSize: 5 * 1024 * 1024, files: 100 },
+  fileFilter: imageMulterFilter,
 });
+
+async function storeProductImage(product,file,validation){
+  const skuSlug=sanitizeSkuForFilename(product.sku);
+  const result=await cloudUpload(file.buffer,{folder:'pos-system/products',public_id:skuSlug,overwrite:true,resource_type:'image'});
+  let imagePath;
+  if(result){
+    imagePath=result.secure_url;
+  }else{
+    const dir=path.join(__dirname,'../uploads/products');
+    fs.mkdirSync(dir,{recursive:true});
+    const ext=validation.extension||path.extname(file.originalname).toLowerCase();
+    const filename=`${skuSlug}${ext}`;
+    fs.writeFileSync(path.join(dir,filename),file.buffer);
+    imagePath=`/uploads/products/${filename}`;
+  }
+  if(product.image_path&&product.image_path!==imagePath){
+    if(product.image_path.startsWith('https://')){
+      // Cloudinary overwrite is keyed by the canonical SKU public_id. Do not
+      // destroy the prior URL after a successful overwrite because versioned
+      // URLs can differ while still pointing at the same underlying asset.
+      if(!result)await cloudDestroy(product.image_path).catch(()=>{});
+    }else{
+      const old=path.join(__dirname,'..',product.image_path);
+      const next=imagePath.startsWith('/uploads/')?path.join(__dirname,'..',imagePath):null;
+      if(fs.existsSync(old)&&(!next||path.resolve(old)!==path.resolve(next)))fs.unlinkSync(old);
+    }
+  }
+  await db.execute({sql:'UPDATE products SET image_path=? WHERE id=?',args:[imagePath,product.id]});
+  return imagePath;
+}
 
 // requireAuth only — the product catalog is used everywhere (POS, inventory,
 // services, rentals, PO/transfer forms, ecommerce API key), not just the
@@ -78,10 +135,10 @@ router.get('/', requireAuth, async (req, res) => {
         p.tax_rate, p.active, p.image_path, p.is_service, p.unit,
         p.online_available, p.web_allotment, p.stock_qty as global_stock_qty,
         ${stockExpr} as stock_qty,
-        c.name as category_name,
+        c.name as category_name, br.name as brand_name,
         (SELECT COUNT(*) FROM product_variations WHERE product_id = p.id AND active = 1) as has_variations
         FROM products p
-        LEFT JOIN categories c ON p.category_id = c.id${joinClause}
+        LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN brands br ON p.brand_id = br.id${joinClause}
         WHERE p.active = 1 AND p.online_available = 1`;
       if (search) { onlineSql += ` AND (p.name LIKE ? OR p.sku LIKE ?)`; onlineParams.push(`%${search}%`, `%${search}%`); }
       if (category) { onlineSql += ` AND p.category_id = ?`; onlineParams.push(category); }
@@ -103,7 +160,7 @@ router.get('/', requireAuth, async (req, res) => {
       // branch-scoped query (POS cart, quote line default, etc.) reads
       // `price` as-is and gets the tiered value automatically. list_price is
       // the untouched base price, kept for anywhere that wants it.
-      sql = `SELECT p.id, p.sku, p.barcode, p.name, p.description, p.category_id, p.price as list_price,
+      sql = `SELECT p.id, p.sku, p.barcode, p.name, p.description, p.category_id, p.brand_id, p.price as list_price,
         MAX(0, ROUND(p.price * (1 + COALESCE(b.price_tier_percent,0)/100.0), 2)) as price,
         p.cost, p.tax_rate, p.active, p.created_at, p.supplier_id, p.image_path, p.is_service, p.unit,
         p.is_rental, p.rental_rate_type, p.rental_rate, p.rental_deposit, p.rental_late_fee_rate, p.replacement_value,
@@ -111,11 +168,12 @@ router.get('/', requireAuth, async (req, res) => {
         COALESCE(bi.stock_qty, 0) as stock_qty,
         COALESCE(bi.min_stock, p.min_stock) as min_stock,
         p.stock_qty as global_stock_qty,
-        c.name as category_name,
+        c.name as category_name, br.name as brand_name,
         (SELECT COUNT(*) FROM product_variations WHERE product_id = p.id AND active = 1) as has_variations,
         ${rentalOutstandingExpr(true)}
         FROM products p
         LEFT JOIN categories c ON p.category_id = c.id
+        LEFT JOIN brands br ON p.brand_id = br.id
         LEFT JOIN branch_inventory bi ON p.id = bi.product_id AND bi.branch_id = ?
         LEFT JOIN branches b ON b.id = ?
         WHERE 1=1`;
@@ -123,10 +181,13 @@ router.get('/', requireAuth, async (req, res) => {
       params.push(branch_id); // for the branch_inventory JOIN's bi.branch_id = ?
       params.push(branch_id); // for the branches JOIN's b.id = ? (price tier)
     } else {
-      sql = `SELECT p.*, c.name as category_name, (SELECT COUNT(*) FROM product_variations WHERE product_id = p.id AND active = 1) as has_variations, ${rentalOutstandingExpr(false)},
+      sql = `SELECT p.*, c.name as category_name, br.name as brand_name, (SELECT COUNT(*) FROM product_variations WHERE product_id = p.id AND active = 1) as has_variations, ${rentalOutstandingExpr(false)},
         (SELECT bi.branch_id FROM branch_inventory bi WHERE bi.product_id = p.id LIMIT 1) as assigned_branch_id,
-        (SELECT b.name FROM branch_inventory bi JOIN branches b ON bi.branch_id = b.id WHERE bi.product_id = p.id LIMIT 1) as assigned_branch_name
-        FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE 1=1`;
+        (SELECT b.name FROM branch_inventory bi JOIN branches b ON bi.branch_id = b.id WHERE bi.product_id = p.id LIMIT 1) as assigned_branch_name,
+        (SELECT cpc.survivor_product_id FROM catalog_product_consolidations cpc WHERE cpc.duplicate_product_id=p.id LIMIT 1) as consolidated_into_product_id,
+        (SELECT sp.sku FROM catalog_product_consolidations cpc JOIN products sp ON sp.id=cpc.survivor_product_id WHERE cpc.duplicate_product_id=p.id LIMIT 1) as consolidated_into_sku,
+        (SELECT sp.name FROM catalog_product_consolidations cpc JOIN products sp ON sp.id=cpc.survivor_product_id WHERE cpc.duplicate_product_id=p.id LIMIT 1) as consolidated_into_name
+        FROM products p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN brands br ON p.brand_id=br.id WHERE 1=1`;
     }
 
     if (search) {
@@ -292,6 +353,7 @@ router.post('/import', requirePermission('inventory'), async (req, res) => {
       try {
         const { rows: [existing] } = await db.execute({ sql: 'SELECT id FROM products WHERE sku = ?', args: [sku] });
         if (existing) {
+          await assertProductNotConsolidated(existing.id);
           await db.execute({ sql: 'UPDATE products SET barcode=?,name=?,description=?,category_id=?,price=?,cost=?,tax_rate=?,stock_qty=?,min_stock=?,active=?,supplier_id=? WHERE sku=?', args: [...vals, sku] });
           updated++;
         } else {
@@ -389,6 +451,7 @@ router.post('/import/rentals', requirePermission('rentals_manage_items'), async 
         let productId;
         if (existing) {
           productId = existing.id;
+          await assertProductNotConsolidated(productId);
           await db.execute({ sql: `UPDATE products SET name=?,description=?,model_number=?,size=?,category_id=?,tax_rate=?,taxable=?,stock_qty=?,min_stock=?,
             rental_classification=?,rental_rate=?,rental_weekly_rate=?,rental_monthly_rate=?,rental_hourly_rate=?,
             replacement_value=?,is_accessory=?,active=?,is_rental=1 WHERE id=?`, args: [...vals, productId] });
@@ -473,19 +536,22 @@ router.get('/:id', requireAuth, async (req, res) => {
         stockExpr = `CASE WHEN p.web_allotment IS NOT NULL THEN MIN(COALESCE(p.stock_qty, 0), p.web_allotment) ELSE COALESCE(p.stock_qty, 0) END`;
       }
       const { rows: [product] } = await db.execute({
-        sql: `SELECT p.id, p.sku, p.name, p.description, p.category_id, p.price, p.cost, p.tax_rate,
+        sql: `SELECT p.id, p.sku, p.name, p.description, p.category_id, p.brand_id, p.price, p.cost, p.tax_rate,
           p.active, p.image_path, p.is_service, p.unit,
           p.online_available, p.web_allotment, p.stock_qty as global_stock_qty,
-          ${stockExpr} as stock_qty, c.name as category_name
-          FROM products p LEFT JOIN categories c ON p.category_id = c.id${joinClause} WHERE p.id = ?`,
+          ${stockExpr} as stock_qty, c.name as category_name, br.name as brand_name
+          FROM products p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN brands br ON p.brand_id = br.id${joinClause} WHERE p.id = ?`,
         args: onlineParams
       });
       if (!product) return res.status(404).json({ error: 'Product not found' });
       return res.json(product);
     }
-    const { rows: [product] } = await db.execute({ sql: `SELECT p.*, c.name as category_name,
-      (SELECT branch_id FROM branch_inventory WHERE product_id = p.id LIMIT 1) as assigned_branch_id
-      FROM products p LEFT JOIN categories c ON p.category_id = c.id WHERE p.id = ?`, args: [req.params.id] });
+    const { rows: [product] } = await db.execute({ sql: `SELECT p.*, c.name as category_name, br.name as brand_name,
+      (SELECT branch_id FROM branch_inventory WHERE product_id = p.id LIMIT 1) as assigned_branch_id,
+      (SELECT cpc.survivor_product_id FROM catalog_product_consolidations cpc WHERE cpc.duplicate_product_id=p.id LIMIT 1) as consolidated_into_product_id,
+      (SELECT sp.sku FROM catalog_product_consolidations cpc JOIN products sp ON sp.id=cpc.survivor_product_id WHERE cpc.duplicate_product_id=p.id LIMIT 1) as consolidated_into_sku,
+      (SELECT sp.name FROM catalog_product_consolidations cpc JOIN products sp ON sp.id=cpc.survivor_product_id WHERE cpc.duplicate_product_id=p.id LIMIT 1) as consolidated_into_name
+      FROM products p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN brands br ON p.brand_id = br.id WHERE p.id = ?`, args: [req.params.id] });
     if (!product) return res.status(404).json({ error: 'Product not found' });
     // Additive fields only — used by the product form's Bin Locations panel to show
     // the branch-scoped stock figure that bin quantities must split accurately against.
@@ -504,7 +570,7 @@ router.get('/:id', requireAuth, async (req, res) => {
 // permission required is chosen per-request based on the product's own type
 // (see requireProductPermission above), not any-of-the-three statically.
 router.post('/', (req, res, next) => requireProductPermission(!!req.body.is_rental, !!req.body.is_service)(req, res, next), async (req, res) => {
-  const { sku, barcode, name, description, category_id, price, cost, tax_rate, stock_qty, min_stock, active, branch_id, supplier_id, is_service, unit, online_available, web_allotment, is_rental, rental_rate_type, rental_rate, rental_deposit, rental_late_fee_rate, replacement_value, rental_classification, rental_weekly_rate, rental_monthly_rate, rental_hourly_rate, is_accessory, is_layaway_eligible, model_number, size, taxable } = req.body;
+  const { sku, barcode, name, description, category_id, brand_id, price, cost, tax_rate, stock_qty, min_stock, active, branch_id, supplier_id, is_service, unit, online_available, web_allotment, is_rental, rental_rate_type, rental_rate, rental_deposit, rental_late_fee_rate, replacement_value, rental_classification, rental_weekly_rate, rental_monthly_rate, rental_hourly_rate, is_accessory, is_layaway_eligible, model_number, size, taxable } = req.body;
   if (!sku || !name) return res.status(400).json({ error: 'SKU and name are required' });
   try {
     const svc = is_service ? 1 : 0;
@@ -512,7 +578,7 @@ router.post('/', (req, res, next) => requireProductPermission(!!req.body.is_rent
     const acc = is_accessory ? 1 : 0;
     const lay = is_layaway_eligible ? 1 : 0;
     const tax = taxable === undefined ? 1 : (taxable ? 1 : 0);
-    const result = await db.execute({ sql: `INSERT INTO products (sku,barcode,name,description,category_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,is_service,unit,online_available,web_allotment,is_rental,rental_rate_type,rental_rate,rental_deposit,rental_late_fee_rate,replacement_value,rental_classification,rental_weekly_rate,rental_monthly_rate,rental_hourly_rate,is_accessory,is_layaway_eligible,model_number,size,taxable) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [sku, barcode||null, name, description||null, category_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : (stock_qty||0), svc ? 0 : (min_stock||5), active??1, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax] });
+    const result = await db.execute({ sql: `INSERT INTO products (sku,barcode,name,description,category_id,brand_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,is_service,unit,online_available,web_allotment,is_rental,rental_rate_type,rental_rate,rental_deposit,rental_late_fee_rate,replacement_value,rental_classification,rental_weekly_rate,rental_monthly_rate,rental_hourly_rate,is_accessory,is_layaway_eligible,model_number,size,taxable) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [sku, barcode||null, name, description||null, category_id||null, brand_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : (stock_qty||0), svc ? 0 : (min_stock||5), active??1, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax] });
     const productId = Number(result.lastInsertRowid);
     if (!svc && branch_id && (parseInt(stock_qty) || 0) > 0) {
       await db.execute({ sql: 'INSERT OR IGNORE INTO branch_inventory (product_id, branch_id, stock_qty, min_stock) VALUES (?, ?, ?, ?)', args: [productId, branch_id, parseInt(stock_qty) || 0, parseInt(min_stock) || 5] });
@@ -532,20 +598,27 @@ router.put('/:id', async (req, res, next) => {
   // is_rental from the request body.
   if (req.apiKey) return next();
   if (!req.employee) return res.status(401).json({ error: 'Authentication required' });
-  const { rows: [existing] } = await db.execute({ sql: 'SELECT is_rental, is_service FROM products WHERE id = ?', args: [req.params.id] });
+  const { rows: [existing] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [req.params.id] });
   if (!existing) return res.status(404).json({ error: 'Product not found' });
+  try{await assertProductNotConsolidated(existing.id);}catch(e){return res.status(Number(e?.status)||409).json({error:e.message,code:e.code,canonical_product_id:e.details?.canonical_product_id||null,canonical_sku:e.details?.canonical_sku||null});}
   const key = requiredProductPermission(!!existing.is_rental || !!req.body.is_rental, !!existing.is_service || !!req.body.is_service);
   if (!can(req.employee.permissions, key)) return res.status(403).json({ error: `Missing permission: ${key}` });
+  req.catalogExistingProduct = existing;
   next();
 }, async (req, res) => {
-  const { sku, barcode, name, description, category_id, price, cost, tax_rate, stock_qty, min_stock, active, branch_id, supplier_id, is_service, unit, online_available, web_allotment, is_rental, rental_rate_type, rental_rate, rental_deposit, rental_late_fee_rate, replacement_value, rental_classification, rental_weekly_rate, rental_monthly_rate, rental_hourly_rate, is_accessory, is_layaway_eligible, model_number, size, taxable } = req.body;
+  const { sku, barcode, name, description, category_id, brand_id, price, cost, tax_rate, stock_qty, min_stock, active, branch_id, supplier_id, is_service, unit, online_available, web_allotment, is_rental, rental_rate_type, rental_rate, rental_deposit, rental_late_fee_rate, replacement_value, rental_classification, rental_weekly_rate, rental_monthly_rate, rental_hourly_rate, is_accessory, is_layaway_eligible, model_number, size, taxable } = req.body;
   try {
-    const svc = is_service ? 1 : 0;
-    const rnt = is_rental ? 1 : 0;
-    const acc = is_accessory ? 1 : 0;
-    const lay = is_layaway_eligible ? 1 : 0;
-    const tax = taxable === undefined ? 1 : (taxable ? 1 : 0);
-    await db.execute({ sql: `UPDATE products SET sku=?,barcode=?,name=?,description=?,category_id=?,price=?,cost=?,tax_rate=?,stock_qty=?,min_stock=?,active=?,supplier_id=?,is_service=?,unit=?,online_available=?,web_allotment=?,is_rental=?,rental_rate_type=?,rental_rate=?,rental_deposit=?,rental_late_fee_rate=?,replacement_value=?,rental_classification=?,rental_weekly_rate=?,rental_monthly_rate=?,rental_hourly_rate=?,is_accessory=?,is_layaway_eligible=?,model_number=?,size=?,taxable=? WHERE id=?`, args: [sku, barcode||null, name, description||null, category_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : (stock_qty||0), svc ? 0 : (min_stock||5), active??1, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax, req.params.id] });
+    const current = req.catalogExistingProduct || {};
+    const svc = is_service === undefined ? Number(current.is_service || 0) : (is_service ? 1 : 0);
+    const rnt = is_rental === undefined ? Number(current.is_rental || 0) : (is_rental ? 1 : 0);
+    const acc = is_accessory === undefined ? Number(current.is_accessory || 0) : (is_accessory ? 1 : 0);
+    const lay = is_layaway_eligible === undefined ? Number(current.is_layaway_eligible || 0) : (is_layaway_eligible ? 1 : 0);
+    const tax = taxable === undefined ? Number(current.taxable ?? 1) : (taxable ? 1 : 0);
+    const targetActive = active === undefined ? Number(current.active ?? 1) : (Number(active) ? 1 : 0);
+    if(Number(current.active)!==0&&targetActive===0){const error=new Error('Use the Retire product action so stock and history can be checked safely.');error.code='CATALOG_RETIREMENT_ROUTE_REQUIRED';error.status=409;throw error;}
+    const safeStock = stock_qty === undefined ? Number(current.stock_qty || 0) : Number(stock_qty || 0);
+    const safeMinStock = min_stock === undefined ? Number(current.min_stock || 0) : Number(min_stock || 0);
+    await db.execute({ sql: `UPDATE products SET sku=?,barcode=?,name=?,description=?,category_id=?,brand_id=?,price=?,cost=?,tax_rate=?,stock_qty=?,min_stock=?,active=?,supplier_id=?,is_service=?,unit=?,online_available=?,web_allotment=?,is_rental=?,rental_rate_type=?,rental_rate=?,rental_deposit=?,rental_late_fee_rate=?,replacement_value=?,rental_classification=?,rental_weekly_rate=?,rental_monthly_rate=?,rental_hourly_rate=?,is_accessory=?,is_layaway_eligible=?,model_number=?,size=?,taxable=? WHERE id=?`, args: [sku, barcode||null, name, description||null, category_id||null, brand_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : safeStock, svc ? 0 : safeMinStock, targetActive, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax, req.params.id] });
     // Rental items live at a single branch — reassigning the dropdown moves
     // the stock there; clearing it drops back to unassigned/global-only
     // (matches the "Unassigned (global stock only)" option in the form).
@@ -555,14 +628,15 @@ router.put('/:id', async (req, res, next) => {
         await db.execute({
           sql: `INSERT INTO branch_inventory (product_id, branch_id, stock_qty, min_stock) VALUES (?, ?, ?, ?)
                 ON CONFLICT(product_id, branch_id) DO UPDATE SET stock_qty = ?, min_stock = ?, updated_at = CURRENT_TIMESTAMP`,
-          args: [req.params.id, branch_id, stock_qty||0, min_stock||5, stock_qty||0, min_stock||5],
+          args: [req.params.id, branch_id, safeStock, safeMinStock, safeStock, safeMinStock],
         });
       }
     }
     const { rows: [prod] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [req.params.id] });
     res.json(prod);
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    const status=Number(e?.status)||400;
+    res.status(status).json({ error: e?.message||'Unable to update product', code:e?.code||'PRODUCT_UPDATE_FAILED' });
   }
 });
 
@@ -570,6 +644,7 @@ router.put('/:id', async (req, res, next) => {
 router.patch('/:id/stock', requirePermission('inventory'), async (req, res) => {
   try {
     const { adjustment, reason, branch_id } = req.body;
+    await assertProductNotConsolidated(req.params.id);
     const { rows: [product] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [req.params.id] });
     if (!product) return res.status(404).json({ error: 'Product not found' });
     const adj = parseInt(adjustment) || 0;
@@ -592,78 +667,112 @@ router.patch('/:id/stock', requirePermission('inventory'), async (req, res) => {
     await db.execute({ sql: 'UPDATE products SET stock_qty = ? WHERE id = ?', args: [newQty, req.params.id] });
     await db.execute({ sql: 'INSERT INTO stock_movements (product_id, branch_id, quantity_change, type, reason) VALUES (?, ?, ?, ?, ?)', args: [req.params.id, null, adj, 'adjustment', reason || null] });
     res.json({ stock_qty: newQty });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { const status=Number(e?.status)||500;res.status(status).json({error:status>=500?'Unable to adjust stock right now.':e.message,code:e?.code||'PRODUCT_STOCK_UPDATE_FAILED',canonical_product_id:e?.details?.canonical_product_id||null,canonical_sku:e?.details?.canonical_sku||null}); }
 });
 
 // PATCH promote a non-inventory (quote-sourced) product into normal inventory
 router.patch('/:id/promote-to-inventory', requirePermission('inventory'), async (req, res) => {
   try {
+    await assertProductNotConsolidated(req.params.id);
     const { rows: [product] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [req.params.id] });
     if (!product) return res.status(404).json({ error: 'Product not found' });
     await db.execute({ sql: 'UPDATE products SET is_non_inventory = 0 WHERE id = ?', args: [req.params.id] });
     const { rows: [updated] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [req.params.id] });
     res.json(updated);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { const status=Number(e?.status)||500;res.status(status).json({error:status>=500?'Unable to promote this product right now.':e.message,code:e?.code||'PRODUCT_PROMOTE_FAILED',canonical_product_id:e?.details?.canonical_product_id||null,canonical_sku:e?.details?.canonical_sku||null}); }
 });
 
 // DELETE product
 router.delete('/:id', async (req, res, next) => {
   if (req.apiKey) return next();
   if (!req.employee) return res.status(401).json({ error: 'Authentication required' });
-  const { rows: [existing] } = await db.execute({ sql: 'SELECT is_rental, is_service FROM products WHERE id = ?', args: [req.params.id] });
+  const { rows: [existing] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [req.params.id] });
   if (!existing) return res.status(404).json({ error: 'Product not found' });
+  try{await assertProductNotConsolidated(existing.id);}catch(e){return res.status(Number(e?.status)||409).json({error:e.message,code:e.code,canonical_product_id:e.details?.canonical_product_id||null,canonical_sku:e.details?.canonical_sku||null});}
   const key = requiredProductPermission(!!existing.is_rental, !!existing.is_service);
   if (!can(req.employee.permissions, key)) return res.status(403).json({ error: `Missing permission: ${key}` });
   next();
 }, async (req, res) => {
   try {
-    await db.execute({ sql: 'UPDATE products SET active = 0 WHERE id = ?', args: [req.params.id] });
-    res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+    const result = await archiveProduct(req.params.id,{actorEmployeeId:req.employee?.id||null,requestId:req.requestId||null,method:req.method||null,path:req.originalUrl||req.path||null});
+    res.json({ success: true, product: result.product, historical_references_preserved: result.historical_references_preserved });
+  } catch(e) {
+    const status = Number(e?.status) || 500;
+    if (status >= 500) console.error('catalog_product_archive_error', { code: e?.code || 'unknown', message: e?.message || 'unknown' });
+    res.status(status).json({
+      error: status >= 500 ? 'Unable to retire this product right now.' : e.message,
+      code: e?.code || 'CATALOG_PRODUCT_ARCHIVE_UNAVAILABLE'
+    });
+  }
+});
+
+// POST bulk product images named after SKU (for example DRILL-18V.jpg).
+// Nothing with an existing image is replaced unless replace_existing=true.
+router.post('/images/bulk', requirePermission('inventory_media_bulk'), upload.array('images',100), async (req,res)=>{
+  if(req.apiKey)return res.status(403).json({error:'API keys cannot bulk-manage product images',code:'PRODUCT_MEDIA_INTERNAL_ONLY'});
+  const files=Array.isArray(req.files)?req.files:[];
+  if(!files.length)return res.status(400).json({error:'Choose at least one supported product image',code:'PRODUCT_MEDIA_IMAGES_REQUIRED'});
+  const replaceExisting=req.body?.replace_existing==='1'||req.body?.replace_existing==='true'||req.body?.replace_existing===true;
+  try{
+    const {rows:products}=await db.execute({sql:`SELECT p.id,p.sku,p.name,p.image_path,p.active,
+      (SELECT cpc.survivor_product_id FROM catalog_product_consolidations cpc WHERE cpc.duplicate_product_id=p.id LIMIT 1) AS consolidated_into_product_id
+      FROM products p`,args:[]});
+    const plan=planBulkImages(products,files,{replaceExisting});
+    const result={uploaded:0,skipped_existing:0,unmatched:[],invalid:[],ambiguous:[],consolidated:[],details:[]};
+    for(let i=0;i<files.length;i++){
+      const file=files[i],entry=plan[i],product=entry.product;
+      if(entry.status==='unmatched'){result.unmatched.push(file.originalname);continue;}
+      if(entry.status==='ambiguous'){result.ambiguous.push({file:file.originalname,skus:(entry.products||[]).map(p=>p.sku)});continue;}
+      if(entry.status==='consolidated'){result.consolidated.push({file:file.originalname,sku:product.sku,canonical_product_id:product.consolidated_into_product_id});continue;}
+      const validation=validateMemoryUpload(file,{kind:'image'});
+      if(!validation.ok){result.invalid.push({file:file.originalname,error:validation.error});continue;}
+      if(entry.status==='existing_image_preserved'){result.skipped_existing++;result.details.push({file:file.originalname,sku:product.sku,status:'existing_image_preserved'});continue;}
+      const oldPath=product.image_path||null;
+      const imagePath=await storeProductImage(product,file,validation);
+      product.image_path=imagePath;
+      result.uploaded++;
+      result.details.push({file:file.originalname,sku:product.sku,status:oldPath?'replaced':'added',image_path:imagePath});
+      await recordSecurityAudit({
+        actorEmployeeId:req.employee?.id||null,action:'product_image_bulk_updated',targetType:'product',targetId:Number(product.id),
+        oldValue:{image_path:oldPath},newValue:{image_path:imagePath,sku:product.sku,source_file:file.originalname},
+        reason:oldPath?'Bulk product image replacement':'Bulk product image assignment',
+        requestId:req.requestId||null,method:req.method,path:req.originalUrl||req.path,control:'product_media_bulk'
+      }).catch(()=>{});
+    }
+    res.json(result);
+  }catch(e){
+    console.error('product_media_bulk_error',{message:e?.message||'unknown'});
+    res.status(500).json({error:'Unable to process the product image batch right now.',code:'PRODUCT_MEDIA_BULK_FAILED'});
+  }
 });
 
 // POST upload product image
-router.post('/:id/image', requirePermission('inventory'), upload.single('image'), async (req, res) => {
-  if (!req.file) return res.status(400).json({ error: 'No image uploaded' });
+router.post('/:id/image', requireImagePermission, upload.single('image'), async (req, res) => {
+  if (!req.file) return res.status(400).json({ error: 'No supported image uploaded', code:'PRODUCT_MEDIA_IMAGE_REQUIRED' });
+  const validation=validateMemoryUpload(req.file,{kind:'image'});
+  if(!validation.ok)return res.status(400).json({error:validation.error,code:'PRODUCT_MEDIA_IMAGE_INVALID'});
   try {
-    const { rows: [existing] } = await db.execute({ sql: 'SELECT image_path FROM products WHERE id = ?', args: [req.params.id] });
-    if (existing?.image_path) {
-      if (existing.image_path.startsWith('https://')) {
-        await cloudDestroy(existing.image_path);
-      } else {
-        const old = path.join(__dirname, '..', existing.image_path);
-        if (fs.existsSync(old)) fs.unlinkSync(old);
-      }
-    }
-
-    const result = await cloudUpload(req.file.buffer, {
-      folder: 'pos-system/products',
-      public_id: `product-${req.params.id}`,
-      overwrite: true,
-      resource_type: 'image',
-    });
-
-    let imagePath;
-    if (result) {
-      imagePath = result.secure_url;
-    } else {
-      // Cloudinary not configured — save locally
-      const dir = path.join(__dirname, '../uploads/products');
-      fs.mkdirSync(dir, { recursive: true });
-      const ext = path.extname(req.file.originalname).toLowerCase();
-      const filename = `product-${req.params.id}-${Date.now()}${ext}`;
-      fs.writeFileSync(path.join(dir, filename), req.file.buffer);
-      imagePath = `/uploads/products/${filename}`;
-    }
-
-    await db.execute({ sql: 'UPDATE products SET image_path = ? WHERE id = ?', args: [imagePath, req.params.id] });
+    await assertProductNotConsolidated(req.params.id);
+    const { rows: [existing] } = await db.execute({ sql: 'SELECT sku, image_path FROM products WHERE id = ?', args: [req.params.id] });
+    const imagePath=await storeProductImage({...existing,id:Number(req.params.id)},req.file,validation);
+    await recordSecurityAudit({
+      actorEmployeeId:req.employee?.id||null,
+      action:'product_image_updated',
+      targetType:'product',
+      targetId:Number(req.params.id),
+      oldValue:{image_path:existing.image_path||null},
+      newValue:{image_path:imagePath,sku:existing.sku},
+      reason:'Product image uploaded or replaced',
+      requestId:req.requestId||null,method:req.method,path:req.originalUrl||req.path,control:'product_media'
+    }).catch(()=>{});
     res.json({ image_path: imagePath });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { return sendProductMutationError(res,e,'Unable to update this product image right now.'); }
 });
 
 // DELETE product image
-router.delete('/:id/image', requirePermission('inventory'), async (req, res) => {
+router.delete('/:id/image', requireImagePermission, async (req, res) => {
   try {
+    await assertProductNotConsolidated(req.params.id);
     const { rows: [product] } = await db.execute({ sql: 'SELECT image_path FROM products WHERE id = ?', args: [req.params.id] });
     if (product?.image_path) {
       if (product.image_path.startsWith('https://')) {
@@ -673,9 +782,10 @@ router.delete('/:id/image', requirePermission('inventory'), async (req, res) => 
         if (fs.existsSync(filePath)) fs.unlinkSync(filePath);
       }
       await db.execute({ sql: 'UPDATE products SET image_path = NULL WHERE id = ?', args: [req.params.id] });
+      await recordSecurityAudit({actorEmployeeId:req.employee?.id||null,action:'product_image_removed',targetType:'product',targetId:Number(req.params.id),oldValue:{image_path:product.image_path},newValue:{image_path:null},reason:'Product image removed',requestId:req.requestId||null,method:req.method,path:req.originalUrl||req.path,control:'product_media'}).catch(()=>{});
     }
     res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { return sendProductMutationError(res,e,'Unable to update this product image right now.'); }
 });
 
 // GET variation types for a product
@@ -693,6 +803,7 @@ router.put('/:id/variation-types', requirePermission('inventory'), async (req, r
   const { types } = req.body;
   if (!Array.isArray(types)) return res.status(400).json({ error: 'types must be an array' });
   try {
+    await assertProductNotConsolidated(req.params.id);
     await db.execute({ sql: 'DELETE FROM product_variation_types WHERE product_id = ?', args: [req.params.id] });
     for (let i = 0; i < types.length; i++) {
       const { name, values } = types[i];
@@ -702,7 +813,7 @@ router.put('/:id/variation-types', requirePermission('inventory'), async (req, r
     }
     const { rows } = await db.execute({ sql: 'SELECT * FROM product_variation_types WHERE product_id = ? ORDER BY sort_order', args: [req.params.id] });
     res.json(rows);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { return sendProductMutationError(res,e,'Unable to update variation settings right now.'); }
 });
 
 // GET variations for a product
@@ -718,33 +829,37 @@ router.post('/:id/variations', requirePermission('inventory'), async (req, res) 
   const { name, sku, barcode, attributes, price, price_modifier, cost, stock_qty, min_stock, active } = req.body;
   if (!name || !sku) return res.status(400).json({ error: 'Name and SKU are required' });
   try {
+    await assertProductNotConsolidated(req.params.id);
     const result = await db.execute({ sql: 'INSERT INTO product_variations (product_id,name,sku,barcode,attributes,price,price_modifier,cost,stock_qty,min_stock,active) VALUES (?,?,?,?,?,?,?,?,?,?,?)', args: [req.params.id, name, sku, barcode||null, JSON.stringify(attributes||{}), price!=null?price:null, price_modifier||0, cost!=null?cost:null, stock_qty||0, min_stock||5, active??1] });
     const { rows: [v] } = await db.execute({ sql: 'SELECT * FROM product_variations WHERE id = ?', args: [Number(result.lastInsertRowid)] });
     res.status(201).json(v);
-  } catch(e) { res.status(400).json({ error: e.message }); }
+  } catch(e) { return sendProductMutationError(res,e,'Unable to create this variation right now.'); }
 });
 
 // PUT update a variation
 router.put('/:id/variations/:vid', requirePermission('inventory'), async (req, res) => {
   const { name, sku, barcode, attributes, price, price_modifier, cost, stock_qty, min_stock, active } = req.body;
   try {
+    await assertProductNotConsolidated(req.params.id);
     await db.execute({ sql: 'UPDATE product_variations SET name=?,sku=?,barcode=?,attributes=?,price=?,price_modifier=?,cost=?,stock_qty=?,min_stock=?,active=? WHERE id=? AND product_id=?', args: [name, sku, barcode||null, JSON.stringify(attributes||{}), price!=null?price:null, price_modifier||0, cost!=null?cost:null, stock_qty||0, min_stock||5, active??1, req.params.vid, req.params.id] });
     const { rows: [v] } = await db.execute({ sql: 'SELECT * FROM product_variations WHERE id = ?', args: [req.params.vid] });
     res.json(v);
-  } catch(e) { res.status(400).json({ error: e.message }); }
+  } catch(e) { return sendProductMutationError(res,e,'Unable to update this variation right now.'); }
 });
 
 // DELETE a variation
 router.delete('/:id/variations/:vid', requirePermission('inventory'), async (req, res) => {
   try {
+    await assertProductNotConsolidated(req.params.id);
     await db.execute({ sql: 'DELETE FROM product_variations WHERE id = ? AND product_id = ?', args: [req.params.vid, req.params.id] });
     res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { return sendProductMutationError(res,e,'Unable to delete this variation right now.'); }
 });
 
 // PATCH adjust stock for a variation
 router.patch('/:id/variations/:vid/stock', requirePermission('inventory'), async (req, res) => {
   try {
+    await assertProductNotConsolidated(req.params.id);
     const { adjustment } = req.body;
     const adj = parseInt(adjustment) || 0;
     const { rows: [v] } = await db.execute({ sql: 'SELECT * FROM product_variations WHERE id = ? AND product_id = ?', args: [req.params.vid, req.params.id] });
@@ -752,7 +867,7 @@ router.patch('/:id/variations/:vid/stock', requirePermission('inventory'), async
     const newQty = Math.max(0, v.stock_qty + adj);
     await db.execute({ sql: 'UPDATE product_variations SET stock_qty = ? WHERE id = ?', args: [newQty, req.params.vid] });
     res.json({ stock_qty: newQty });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { return sendProductMutationError(res,e,'Unable to adjust variation stock right now.'); }
 });
 
 // ─── Rental accessory assignments ──────────────────────────────────────────
@@ -773,6 +888,7 @@ router.get('/:id/accessories', requireAuth, async (req, res) => {
 
 router.post('/:id/accessories', requirePermission('rentals_manage_items'), async (req, res) => {
   try {
+    await assertProductNotConsolidated(req.params.id);
     const { accessory_product_id, is_mandatory } = req.body;
     if (!accessory_product_id) return res.status(400).json({ error: 'accessory_product_id is required' });
     if (Number(accessory_product_id) === Number(req.params.id)) return res.status(400).json({ error: 'An item cannot be its own accessory' });
@@ -782,14 +898,15 @@ router.post('/:id/accessories', requirePermission('rentals_manage_items'), async
       ON CONFLICT(product_id, accessory_product_id) DO UPDATE SET is_mandatory = excluded.is_mandatory`,
       args: [req.params.id, accessory_product_id, is_mandatory ? 1 : 0] });
     res.status(201).json({ success: true });
-  } catch(e) { res.status(400).json({ error: e.message }); }
+  } catch(e) { return sendProductMutationError(res,e,'Unable to update rental accessories right now.'); }
 });
 
 router.delete('/:id/accessories/:accessoryId', requirePermission('rentals_manage_items'), async (req, res) => {
   try {
+    await assertProductNotConsolidated(req.params.id);
     await db.execute({ sql: 'DELETE FROM product_accessories WHERE product_id = ? AND id = ?', args: [req.params.id, req.params.accessoryId] });
     res.json({ success: true });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { return sendProductMutationError(res,e,'Unable to update rental accessories right now.'); }
 });
 
 module.exports = router;

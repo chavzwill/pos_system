@@ -1,13 +1,15 @@
 'use strict';
+const crypto=require('crypto');
 const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {can}=require('../lib/permissions');
 const {ensureSupplierLedgerBase}=require('../lib/supplier-ledger-base-schema');
+const {normalizeSupplierInvoiceNumber}=require('../lib/supplier-invoice-identity');
 
 let readyPromise=null;
 const money=v=>Number(Number(v||0).toFixed(2));
-const normalizeInvoiceNumber=v=>String(v||'').trim().toUpperCase().replace(/[^A-Z0-9]/g,'');
+const normalizeInvoiceNumber=normalizeSupplierInvoiceNumber;
 function actor(req){return req.employee?.id||null;}
 function mayOverride(req){return !!req.apiKey||!!req.employee&&(can(req.employee.permissions,'purchasing_approve')||can(req.employee.permissions,'reports_financial'));}
 async function ensureSchema(){
@@ -15,6 +17,15 @@ async function ensureSchema(){
   readyPromise=(async()=>{
     await ensureSupplierLedgerBase();
     await db.batch([
+      {sql:`CREATE TABLE IF NOT EXISTS supplier_invoice_identity_claims(
+        supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
+        normalized_invoice_number TEXT NOT NULL,
+        supplier_invoice_id INTEGER REFERENCES supplier_invoices(id),
+        claim_token TEXT NOT NULL,
+        claimed_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+        linked_at DATETIME,
+        PRIMARY KEY(supplier_id,normalized_invoice_number)
+      )`},
       {sql:`CREATE TABLE IF NOT EXISTS supplier_invoice_match_controls(
         supplier_invoice_id INTEGER PRIMARY KEY REFERENCES supplier_invoices(id),
         supplier_id INTEGER NOT NULL REFERENCES suppliers(id),
@@ -41,9 +52,15 @@ async function ensureSchema(){
         details TEXT,
         created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
       )`},
+      {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_invoice_identity_invoice ON supplier_invoice_identity_claims(supplier_invoice_id)'},
       {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_invoice_match_po ON supplier_invoice_match_controls(purchase_order_id,match_status)'},
       {sql:'CREATE INDEX IF NOT EXISTS idx_supplier_invoice_match_status ON supplier_invoice_match_controls(match_status,created_at)'}
     ],'write');
+    const {rows:existing}=await db.execute({sql:`SELECT id,supplier_id,purchase_order_id,invoice_number,subtotal,status FROM supplier_invoices WHERE status!='void' ORDER BY id`,args:[]});
+    for(const inv of existing){
+      const normalized=normalizeInvoiceNumber(inv.invoice_number)||`INVOICE${inv.id}`;
+      await db.execute({sql:`INSERT OR IGNORE INTO supplier_invoice_identity_claims(supplier_id,normalized_invoice_number,supplier_invoice_id,claim_token,linked_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP)`,args:[inv.supplier_id,normalized,inv.id,`legacy:${inv.id}`]});
+    }
     const {rows:legacy}=await db.execute({sql:`SELECT si.id,si.supplier_id,si.purchase_order_id,si.invoice_number,si.subtotal FROM supplier_invoices si LEFT JOIN supplier_invoice_match_controls c ON c.supplier_invoice_id=si.id WHERE c.supplier_invoice_id IS NULL AND si.status!='void' ORDER BY si.id`,args:[]});
     for(const inv of legacy){
       const normalized=normalizeInvoiceNumber(inv.invoice_number)||`INVOICE${inv.id}`;
@@ -59,6 +76,27 @@ router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.s
 async function duplicateFor(supplierId,normalized){
   const {rows}=await db.execute({sql:`SELECT id,invoice_number,total,status FROM supplier_invoices WHERE supplier_id=? AND status!='void'`,args:[supplierId]});
   return rows.find(r=>normalizeInvoiceNumber(r.invoice_number)===normalized)||null;
+}
+async function claimIdentity(supplierId,normalized){
+  const token=crypto.randomUUID();
+  try{
+    await db.execute({sql:`INSERT INTO supplier_invoice_identity_claims(supplier_id,normalized_invoice_number,claim_token) VALUES(?,?,?)`,args:[supplierId,normalized,token]});
+    return token;
+  }catch(e){
+    const {rows:[claim]}=await db.execute({sql:`SELECT supplier_invoice_id,claimed_at FROM supplier_invoice_identity_claims WHERE supplier_id=? AND normalized_invoice_number=?`,args:[supplierId,normalized]});
+    const err=new Error(claim?.supplier_invoice_id?`Potential duplicate supplier invoice: this normalized invoice identity is already linked to supplier invoice ${claim.supplier_invoice_id}.`:'Supplier invoice identity is already being posted or requires reconciliation before it can be reused.');
+    err.status=409;throw err;
+  }
+}
+async function releaseIdentityClaim(supplierId,normalized,token){
+  await db.execute({sql:`DELETE FROM supplier_invoice_identity_claims WHERE supplier_id=? AND normalized_invoice_number=? AND claim_token=? AND supplier_invoice_id IS NULL`,args:[supplierId,normalized,token]});
+}
+async function linkIdentityClaim(supplierId,normalized,token,invoiceId){
+  const result=await db.execute({sql:`UPDATE supplier_invoice_identity_claims SET supplier_invoice_id=?,linked_at=CURRENT_TIMESTAMP WHERE supplier_id=? AND normalized_invoice_number=? AND claim_token=? AND supplier_invoice_id IS NULL`,args:[invoiceId,supplierId,normalized,token]});
+  if(Number(result.rowsAffected||0)!==1){
+    const err=new Error('Supplier invoice posted but durable invoice identity could not be linked; reconciliation is required before further posting.');
+    err.status=500;throw err;
+  }
 }
 async function receiptValue(poId){
   const {rows:[exists]}=await db.execute({sql:"SELECT name FROM sqlite_master WHERE type='table' AND name='purchase_receipt_items'",args:[]});
@@ -112,9 +150,19 @@ async function persistMatch(invoiceId,ev){
 router.post('/invoices',async(req,res,next)=>{
   let ev;try{ev=await evaluateInvoice(req);}catch(e){return res.status(e.status||500).json({error:e.message});}
   if(!ev)return next();
+  let claimToken;try{claimToken=await claimIdentity(ev.supplierId,ev.normalized);}catch(e){return res.status(e.status||409).json({error:e.message});}
   delete req.body.match_override_reason;
   const originalJson=res.json.bind(res);let handled=false;
-  res.json=function(payload){if(handled)return originalJson(payload);handled=true;if(res.statusCode>=200&&res.statusCode<300&&payload?.id)return persistMatch(payload.id,ev).then(()=>originalJson({...payload,invoice_match_status:ev.matchStatus,invoice_match_variance:ev.variance})).catch(err=>{if(!res.headersSent){res.status(500);return originalJson({error:'Supplier invoice posted but match evidence failed to persist; reconciliation required',supplier_invoice_id:payload.id,detail:err.message});}});return originalJson(payload);};
+  res.json=function(payload){
+    if(handled)return originalJson(payload);handled=true;
+    if(res.statusCode>=200&&res.statusCode<300&&payload?.id){
+      return linkIdentityClaim(ev.supplierId,ev.normalized,claimToken,payload.id)
+        .then(()=>persistMatch(payload.id,ev))
+        .then(()=>originalJson({...payload,invoice_match_status:ev.matchStatus,invoice_match_variance:ev.variance,invoice_identity:'durable'}))
+        .catch(err=>{if(!res.headersSent){res.status(500);return originalJson({error:'Supplier invoice posted but identity/match evidence failed to finalize; reconciliation required',supplier_invoice_id:payload.id,detail:err.message});}});
+    }
+    return releaseIdentityClaim(ev.supplierId,ev.normalized,claimToken).catch(()=>{}).then(()=>originalJson(payload));
+  };
   next();
 });
 

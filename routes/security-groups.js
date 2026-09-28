@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
 const { PERMISSION_TREE, can, requireAuth, requirePermission } = require('../lib/permissions');
+const { recentSessionReauth } = require('../lib/sessionAuth');
 const { ensureSecurityAuditTable, recordSecurityAudit } = require('../lib/securityAudit');
 
 const KNOWN_PERMISSION_KEYS = [...new Set(PERMISSION_TREE.flatMap(mod => [mod.key, ...mod.subs.map(sub => sub.key)]))];
@@ -142,6 +143,18 @@ router.get('/:id', requirePermission('security'), async (req, res) => {
     group.members = members;
     res.json(group);
   } catch(e) { res.status(500).json({ error: e.message }); }
+});
+
+async function requireRecentSecurityReauth(req,res,next){
+  if(req.apiKey)return res.status(403).json({error:'Employee session reauthentication is required for security changes',code:'REAUTHENTICATION_REQUIRED'});
+  const recent=await recentSessionReauth(Number(req.sessionRecord?.id),Number(req.employee?.id));
+  if(!recent||recent.purpose!=='security_admin')return res.status(403).json({error:'Verify your identity before changing security access',code:'REAUTHENTICATION_REQUIRED'});
+  next();
+}
+
+router.use((req,res,next)=>{
+  if(['GET','HEAD','OPTIONS'].includes(req.method))return next();
+  return requireRecentSecurityReauth(req,res,next).catch(()=>res.status(500).json({error:'Unable to verify recent identity confirmation'}));
 });
 
 router.post('/', requirePermission('security_manage'), async (req, res) => {

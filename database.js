@@ -1,4 +1,5 @@
 const { createClient } = require('@libsql/client');
+const { ensureSmartCommerceSyncSchema } = require('./lib/smartcommerceSyncSchema');
 
 if (process.env.VERCEL && !process.env.TURSO_DATABASE_URL) {
   throw new Error('TURSO_DATABASE_URL is not set. Add it in Vercel project → Settings → Environment Variables.');
@@ -56,6 +57,14 @@ async function _init() {
       description TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS brands (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      name TEXT NOT NULL,
+      description TEXT,
+      logo_path TEXT,
+      active INTEGER NOT NULL DEFAULT 1,
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS products (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       sku TEXT UNIQUE NOT NULL,
@@ -63,14 +72,78 @@ async function _init() {
       name TEXT NOT NULL,
       description TEXT,
       category_id INTEGER REFERENCES categories(id),
+      brand_id INTEGER REFERENCES brands(id),
       price REAL NOT NULL DEFAULT 0,
       cost REAL NOT NULL DEFAULT 0,
       tax_rate REAL NOT NULL DEFAULT 8.5,
       stock_qty INTEGER NOT NULL DEFAULT 0,
       min_stock INTEGER NOT NULL DEFAULT 5,
       active INTEGER NOT NULL DEFAULT 1,
+      catalog_status TEXT NOT NULL DEFAULT 'active',
+      catalog_status_reason TEXT,
+      catalog_status_changed_at DATETIME,
+      catalog_status_changed_by INTEGER REFERENCES employees(id),
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS catalog_product_lifecycle_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      product_id INTEGER NOT NULL REFERENCES products(id),
+      from_status TEXT NOT NULL,
+      to_status TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      changed_by INTEGER REFERENCES employees(id),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP
+    )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_product_lifecycle_events_no_update BEFORE UPDATE ON catalog_product_lifecycle_events BEGIN SELECT RAISE(ABORT,'catalog lifecycle events are append-only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_product_lifecycle_events_no_delete BEFORE DELETE ON catalog_product_lifecycle_events BEGIN SELECT RAISE(ABORT,'catalog lifecycle events are append-only'); END` },
+    { sql: `CREATE TABLE IF NOT EXISTS catalog_duplicate_reviews (
+      candidate_key TEXT PRIMARY KEY,
+      decision TEXT NOT NULL CHECK(decision IN ('confirmed_duplicate','not_duplicate','needs_more_info')),
+      reason TEXT NOT NULL,
+      reviewed_by INTEGER REFERENCES employees(id),
+      version INTEGER NOT NULL DEFAULT 1,
+      updated_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )` },
+    { sql: `CREATE TABLE IF NOT EXISTS catalog_duplicate_review_events (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      candidate_key TEXT NOT NULL,
+      from_decision TEXT,
+      to_decision TEXT NOT NULL CHECK(to_decision IN ('confirmed_duplicate','not_duplicate','needs_more_info')),
+      reason TEXT NOT NULL,
+      reviewed_by INTEGER REFERENCES employees(id),
+      version INTEGER NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_duplicate_review_events_no_update BEFORE UPDATE ON catalog_duplicate_review_events BEGIN SELECT RAISE(ABORT,'catalog duplicate review events are append-only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_duplicate_review_events_no_delete BEFORE DELETE ON catalog_duplicate_review_events BEGIN SELECT RAISE(ABORT,'catalog duplicate review events are append-only'); END` },
+    { sql: `CREATE TABLE IF NOT EXISTS catalog_product_consolidations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      candidate_key TEXT NOT NULL,
+      survivor_product_id INTEGER NOT NULL REFERENCES products(id),
+      duplicate_product_id INTEGER NOT NULL UNIQUE REFERENCES products(id),
+      review_version INTEGER NOT NULL,
+      reason TEXT NOT NULL,
+      consolidated_by INTEGER NOT NULL REFERENCES employees(id),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK(survivor_product_id <> duplicate_product_id)
+    )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_product_consolidations_no_update BEFORE UPDATE ON catalog_product_consolidations BEGIN SELECT RAISE(ABORT,'catalog product consolidations are append-only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_product_consolidations_no_delete BEFORE DELETE ON catalog_product_consolidations BEGIN SELECT RAISE(ABORT,'catalog product consolidations are append-only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_product_tombstone_guard BEFORE UPDATE ON products WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.id) BEGIN SELECT RAISE(ABORT,'consolidated product tombstones are immutable'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_product_delete_guard BEFORE DELETE ON products WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.id) BEGIN SELECT RAISE(ABORT,'consolidated product tombstones are immutable'); END` },
+    { sql: `CREATE TABLE IF NOT EXISTS catalog_category_consolidations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      candidate_key TEXT NOT NULL,
+      survivor_category_id INTEGER NOT NULL REFERENCES categories(id),
+      duplicate_category_id INTEGER NOT NULL UNIQUE,
+      duplicate_name TEXT NOT NULL,
+      reason TEXT NOT NULL,
+      consolidated_by INTEGER NOT NULL REFERENCES employees(id),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      CHECK(survivor_category_id <> duplicate_category_id)
+    )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_category_consolidations_no_update BEFORE UPDATE ON catalog_category_consolidations BEGIN SELECT RAISE(ABORT,'catalog category consolidations are append-only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_category_consolidations_no_delete BEFORE DELETE ON catalog_category_consolidations BEGIN SELECT RAISE(ABORT,'catalog category consolidations are append-only'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS customers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       customer_number TEXT UNIQUE,
@@ -101,11 +174,26 @@ async function _init() {
       active INTEGER DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS lookup_aliases (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      entity_type TEXT NOT NULL,
+      entity_id INTEGER NOT NULL,
+      alias TEXT NOT NULL,
+      alias_normalized TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending' CHECK(status IN ('pending','approved','rejected')),
+      evidence_source TEXT,
+      created_by INTEGER REFERENCES employees(id),
+      reviewed_by INTEGER REFERENCES employees(id),
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      reviewed_at DATETIME,
+      UNIQUE(entity_type, entity_id, alias_normalized)
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS transactions (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       transaction_number TEXT UNIQUE NOT NULL,
       customer_id INTEGER REFERENCES customers(id),
       employee_id INTEGER REFERENCES employees(id),
+      sales_agent_id INTEGER REFERENCES employees(id),
       subtotal REAL NOT NULL DEFAULT 0,
       tax_amount REAL NOT NULL DEFAULT 0,
       discount_amount REAL NOT NULL DEFAULT 0,
@@ -249,6 +337,9 @@ async function _init() {
       description TEXT NOT NULL,
       item_label TEXT,
       assessment_fee REAL NOT NULL DEFAULT 0,
+      assessment_fee_product_id INTEGER REFERENCES products(id),
+      assessment_fee_name TEXT,
+      assessment_fee_tax_rate REAL NOT NULL DEFAULT 0,
       assessment_transaction_id INTEGER REFERENCES transactions(id),
       estimate_labor REAL NOT NULL DEFAULT 0,
       estimate_consumables REAL NOT NULL DEFAULT 0,
@@ -301,6 +392,8 @@ async function _init() {
       updated_at DATETIME DEFAULT CURRENT_TIMESTAMP,
       UNIQUE(product_id, branch_id)
     )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_branch_stock_guard_insert BEFORE INSERT ON branch_inventory WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=NEW.product_id) AND ABS(COALESCE(NEW.stock_qty,0))>0.000000001 BEGIN SELECT RAISE(ABORT,'consolidated product cannot receive branch stock'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_branch_stock_guard_update BEFORE UPDATE OF stock_qty ON branch_inventory WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=NEW.product_id) AND ABS(COALESCE(NEW.stock_qty,0))>0.000000001 BEGIN SELECT RAISE(ABORT,'consolidated product cannot receive branch stock'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS stock_movements (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       product_id INTEGER NOT NULL REFERENCES products(id),
@@ -311,6 +404,7 @@ async function _init() {
       reason TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_stock_movement_guard BEFORE INSERT ON stock_movements WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=NEW.product_id) AND ABS(COALESCE(NEW.quantity_change,0))>0.000000001 BEGIN SELECT RAISE(ABORT,'consolidated product cannot receive stock movement'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS branch_transfers (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       transfer_number TEXT UNIQUE NOT NULL,
@@ -453,6 +547,22 @@ async function _init() {
       outcome TEXT,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS shift_handovers (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      branch_id INTEGER REFERENCES branches(id),
+      workspace TEXT NOT NULL,
+      priority TEXT NOT NULL DEFAULT 'normal' CHECK(priority IN ('normal','important','urgent')),
+      title TEXT NOT NULL,
+      note TEXT NOT NULL,
+      record_type TEXT,
+      record_id INTEGER,
+      created_by INTEGER NOT NULL REFERENCES employees(id),
+      acknowledged_by INTEGER REFERENCES employees(id),
+      acknowledged_at DATETIME,
+      status TEXT NOT NULL DEFAULT 'open' CHECK(status IN ('open','acknowledged','resolved')),
+      created_at DATETIME DEFAULT CURRENT_TIMESTAMP,
+      resolved_at DATETIME
+    )` },
     { sql: `CREATE TABLE IF NOT EXISTS commission_plans (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       name TEXT NOT NULL,
@@ -592,6 +702,27 @@ async function _init() {
       damage_fee REAL DEFAULT 0,
       returned_at DATETIME
     )` },
+    { sql: `CREATE TABLE IF NOT EXISTS rental_compliance_exceptions (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      customer_id INTEGER NOT NULL REFERENCES customers(id),
+      approved_by INTEGER NOT NULL REFERENCES employees(id),
+      reason TEXT NOT NULL,
+      missing_requirements_json TEXT NOT NULL,
+      expires_at DATETIME NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )` },
+    { sql: `CREATE INDEX IF NOT EXISTS rental_compliance_exception_customer_idx ON rental_compliance_exceptions(customer_id, expires_at)` },
+    { sql: `CREATE TABLE IF NOT EXISTS rental_compliance_exception_revocations (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      exception_id INTEGER NOT NULL UNIQUE REFERENCES rental_compliance_exceptions(id),
+      revoked_by INTEGER NOT NULL REFERENCES employees(id),
+      reason TEXT NOT NULL,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+    )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS rental_compliance_exception_no_update BEFORE UPDATE ON rental_compliance_exceptions BEGIN SELECT RAISE(ABORT,'rental compliance exception evidence is append only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS rental_compliance_exception_no_delete BEFORE DELETE ON rental_compliance_exceptions BEGIN SELECT RAISE(ABORT,'rental compliance exception evidence is append only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS rental_compliance_revocation_no_update BEFORE UPDATE ON rental_compliance_exception_revocations BEGIN SELECT RAISE(ABORT,'rental compliance revocation evidence is append only'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS rental_compliance_revocation_no_delete BEFORE DELETE ON rental_compliance_exception_revocations BEGIN SELECT RAISE(ABORT,'rental compliance revocation evidence is append only'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS rental_agreement_pauses (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       agreement_id INTEGER NOT NULL REFERENCES rental_agreements(id),
@@ -791,6 +922,7 @@ async function _init() {
       notes TEXT,
       required_date DATE,
       converted_to_po_id INTEGER REFERENCES purchase_orders(id),
+      spendos_version INTEGER NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
     { sql: `CREATE TABLE IF NOT EXISTS purchase_request_items (
@@ -803,6 +935,22 @@ async function _init() {
       unit_cost REAL DEFAULT 0,
       notes TEXT,
       total REAL DEFAULT 0
+    )` },
+    { sql: `CREATE TABLE IF NOT EXISTS spendos_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      event_type TEXT NOT NULL,
+      aggregate_type TEXT NOT NULL,
+      aggregate_id TEXT NOT NULL,
+      source_version INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_error TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      sent_at DATETIME,
+      UNIQUE(aggregate_type,aggregate_id,event_type,source_version)
     )` },
     { sql: `CREATE TABLE IF NOT EXISTS currency_denominations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -853,6 +1001,9 @@ async function _init() {
       attr_values TEXT NOT NULL DEFAULT '[]',
       sort_order INTEGER DEFAULT 0
     )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_variation_type_guard_insert BEFORE INSERT ON product_variation_types WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=NEW.product_id) BEGIN SELECT RAISE(ABORT,'consolidated product variation settings are immutable'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_variation_type_guard_update BEFORE UPDATE ON product_variation_types WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.product_id) BEGIN SELECT RAISE(ABORT,'consolidated product variation settings are immutable'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_variation_type_guard_delete BEFORE DELETE ON product_variation_types WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.product_id) BEGIN SELECT RAISE(ABORT,'consolidated product variation settings are immutable'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS product_variations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       product_id INTEGER NOT NULL REFERENCES products(id) ON DELETE CASCADE,
@@ -868,6 +1019,9 @@ async function _init() {
       active INTEGER NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_variation_guard_insert BEFORE INSERT ON product_variations WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=NEW.product_id) BEGIN SELECT RAISE(ABORT,'consolidated product variations are immutable'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_variation_guard_update BEFORE UPDATE ON product_variations WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.product_id) BEGIN SELECT RAISE(ABORT,'consolidated product variations are immutable'); END` },
+    { sql: `CREATE TRIGGER IF NOT EXISTS catalog_consolidated_variation_guard_delete BEFORE DELETE ON product_variations WHEN EXISTS(SELECT 1 FROM catalog_product_consolidations c WHERE c.duplicate_product_id=OLD.product_id) BEGIN SELECT RAISE(ABORT,'consolidated product variations are immutable'); END` },
     { sql: `CREATE TABLE IF NOT EXISTS woo_sync_map (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       entity_type TEXT NOT NULL,
@@ -920,10 +1074,16 @@ async function _init() {
     'ALTER TABLE customers ADD COLUMN credit_terms_days INTEGER DEFAULT 30',
     'ALTER TABLE customers ADD COLUMN account_blocked INTEGER DEFAULT 0',
     'ALTER TABLE transactions ADD COLUMN branch_id INTEGER REFERENCES branches(id)',
+    'ALTER TABLE transactions ADD COLUMN sales_agent_id INTEGER REFERENCES employees(id)',
     'ALTER TABLE transactions ADD COLUMN is_credit INTEGER DEFAULT 0',
     'ALTER TABLE employees ADD COLUMN password TEXT',
     'ALTER TABLE employees ADD COLUMN must_change_password INTEGER DEFAULT 0',
     'ALTER TABLE products ADD COLUMN supplier_id INTEGER REFERENCES suppliers(id)',
+    'ALTER TABLE products ADD COLUMN brand_id INTEGER REFERENCES brands(id)',
+    "ALTER TABLE products ADD COLUMN catalog_status TEXT NOT NULL DEFAULT 'active'",
+    'ALTER TABLE products ADD COLUMN catalog_status_reason TEXT',
+    'ALTER TABLE products ADD COLUMN catalog_status_changed_at DATETIME',
+    'ALTER TABLE products ADD COLUMN catalog_status_changed_by INTEGER REFERENCES employees(id)',
     'ALTER TABLE branches ADD COLUMN currency TEXT',
     'ALTER TABLE branches ADD COLUMN is_warehouse INTEGER DEFAULT 0',
     'ALTER TABLE transactions ADD COLUMN drawer_session_id INTEGER REFERENCES drawer_sessions(id)',
@@ -945,6 +1105,7 @@ async function _init() {
     'ALTER TABLE purchase_requests ADD COLUMN is_online_purchase INTEGER DEFAULT 0',
     'ALTER TABLE purchase_requests ADD COLUMN tax_rate REAL DEFAULT 0',
     'ALTER TABLE purchase_requests ADD COLUMN tax_amount REAL DEFAULT 0',
+    'ALTER TABLE purchase_requests ADD COLUMN spendos_version INTEGER NOT NULL DEFAULT 1',
     'ALTER TABLE purchase_request_items ADD COLUMN product_url TEXT',
     'ALTER TABLE products ADD COLUMN is_service INTEGER DEFAULT 0',
     'ALTER TABLE products ADD COLUMN unit TEXT',
@@ -1156,6 +1317,9 @@ async function _init() {
     // The balance collected when the customer picks up the item — labor +
     // consumables + parts, less the deposit already paid. Mirrors
     // assessment_transaction_id / deposit_transaction_id above.
+    'ALTER TABLE work_orders ADD COLUMN assessment_fee_product_id INTEGER REFERENCES products(id)',
+    'ALTER TABLE work_orders ADD COLUMN assessment_fee_name TEXT',
+    'ALTER TABLE work_orders ADD COLUMN assessment_fee_tax_rate REAL NOT NULL DEFAULT 0',
     'ALTER TABLE work_orders ADD COLUMN final_transaction_id INTEGER REFERENCES transactions(id)',
     // A "Q" line — a part the WO needs that isn't in the catalog yet — mirrors
     // quotation_items.is_temp_item exactly: no product_id, flows through the
@@ -1172,6 +1336,27 @@ async function _init() {
   ];
   for (const sql of migrations) {
     try { await db.execute({ sql, args: [] }); } catch(e) {}
+  }
+
+  // Canonical catalog continuity: older consolidations may predate promotion
+  // scope migration. Reconcile those current campaign assignments at startup
+  // without touching historical transaction evidence.
+  {
+    const tx = await db.transaction('write');
+    try {
+      await tx.execute({ sql: `INSERT OR IGNORE INTO promotion_items(promotion_id,item_type,item_id)
+        SELECT pi.promotion_id,'product',c.survivor_product_id
+        FROM promotion_items pi
+        JOIN catalog_product_consolidations c ON c.duplicate_product_id=pi.item_id
+        WHERE pi.item_type='product'`, args: [] });
+      await tx.execute({ sql: `DELETE FROM promotion_items
+        WHERE item_type='product'
+          AND item_id IN (SELECT duplicate_product_id FROM catalog_product_consolidations)`, args: [] });
+      await tx.commit();
+    } catch(e) {
+      try { await tx.rollback(); } catch(_) {}
+      throw e;
+    }
   }
 
   // quotation_item_sources.purchase_request_item_id originally declared a
@@ -1457,16 +1642,18 @@ async function _init() {
       WHERE p.stock_qty > 0 AND NOT EXISTS (SELECT 1 FROM branch_inventory WHERE product_id = p.id)`, args: [] });
   } catch(e) {}
 
+  const seedDemo = process.env.POS_SKIP_DEMO_SEED !== '1';
+
   // Seed branches
   const { rows: [branchCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM branches', args: [] });
-  if (Number(branchCount.c) === 0) {
+  if (seedDemo && Number(branchCount.c) === 0) {
     await db.execute({ sql: 'INSERT INTO branches (branch_code, name, address, city, state, zip, phone, manager) VALUES (?,?,?,?,?,?,?,?)', args: ['BR-001','Main Store','100 Commerce Way','Springfield','IL','62701','(217) 555-0100','Admin User'] });
     await db.execute({ sql: 'INSERT INTO branches (branch_code, name, address, city, state, zip, phone, manager) VALUES (?,?,?,?,?,?,?,?)', args: ['BR-002','North Branch','250 Oak Ave','Springfield','IL','62702','(217) 555-0200','Jane Doe'] });
   }
 
   // Seed suppliers
   const { rows: [supplierCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM suppliers', args: [] });
-  if (Number(supplierCount.c) === 0) {
+  if (seedDemo && Number(supplierCount.c) === 0) {
     await db.execute({ sql: 'INSERT INTO suppliers (supplier_number,name,contact_name,email,phone,address,city,state,zip,payment_terms) VALUES (?,?,?,?,?,?,?,?,?,?)', args: ['SUP-0001','TechSupply Co','Mark Johnson','orders@techsupply.com','555-9001','1 Tech Park','Chicago','IL','60601','Net 30'] });
     await db.execute({ sql: 'INSERT INTO suppliers (supplier_number,name,contact_name,email,phone,address,city,state,zip,payment_terms) VALUES (?,?,?,?,?,?,?,?,?,?)', args: ['SUP-0002','Fashion World','Lisa Chen','buying@fashionworld.com','555-9002','22 Style Ave','New York','NY','10001','Net 15'] });
     await db.execute({ sql: 'INSERT INTO suppliers (supplier_number,name,contact_name,email,phone,address,city,state,zip,payment_terms) VALUES (?,?,?,?,?,?,?,?,?,?)', args: ['SUP-0003','FoodCo Distributors','Tom Green','sales@foodco.com','555-9003','5 Harvest Rd','Joliet','IL','60431','Net 30'] });
@@ -1506,7 +1693,7 @@ async function _init() {
 
   // Seed categories and products
   const { rows: [catCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM categories', args: [] });
-  if (Number(catCount.c) === 0) {
+  if (seedDemo && Number(catCount.c) === 0) {
     await db.execute({ sql: 'INSERT INTO categories (name, description) VALUES (?, ?)', args: ['Electronics', 'Electronic devices and accessories'] });
     await db.execute({ sql: 'INSERT INTO categories (name, description) VALUES (?, ?)', args: ['Clothing', 'Apparel and accessories'] });
     await db.execute({ sql: 'INSERT INTO categories (name, description) VALUES (?, ?)', args: ['Food & Beverage', 'Food and drink items'] });
@@ -1627,7 +1814,7 @@ async function _init() {
 
   // Seed commission plans and demo records
   const { rows: [commPlanCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM commission_plans', args: [] });
-  if (Number(commPlanCount.c) === 0) {
+  if (seedDemo && Number(commPlanCount.c) === 0) {
     try {
       const cpSql = 'INSERT INTO commission_plans (name,type,rate,tiers,apply_to,min_sale_amount,notes) VALUES (?,?,?,?,?,?,?)';
       const p1r = await db.execute({ sql: cpSql, args: ['Standard 5% Commission','percentage',5,null,'all',0,'5% on all sales — standard plan for sales staff'] });
@@ -1671,7 +1858,7 @@ async function _init() {
 
   // Seed CRM demo data
   const { rows: [crmCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM crm_leads', args: [] });
-  if (Number(crmCount.c) === 0) {
+  if (seedDemo && Number(crmCount.c) === 0) {
     try {
       const { rows: [empRow] } = await db.execute({ sql: 'SELECT id FROM employees WHERE username = ?', args: ['admin'] });
       const { rows: [emp2Row] } = await db.execute({ sql: 'SELECT id FROM employees WHERE username = ?', args: ['jdoe'] });
@@ -1714,7 +1901,7 @@ async function _init() {
 
   // Seed default USD denominations
   const { rows: [denomCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM currency_denominations', args: [] });
-  if (Number(denomCount.c) === 0) {
+  if (seedDemo && Number(denomCount.c) === 0) {
     const dSql = 'INSERT INTO currency_denominations (currency, value, label, sort_order) VALUES (?,?,?,?)';
     const usd = [
       ['USD', 100, '$100', 1], ['USD', 50, '$50', 2], ['USD', 20, '$20', 3],
@@ -1762,6 +1949,8 @@ async function _init() {
   // the purchase_order_items/purchase_request_items rebuild blocks above —
   // those DROP and recreate those two tables, which would silently wipe out
   // any index created on them earlier in this function.
+  await ensureSmartCommerceSyncSchema(db);
+
   const indexes = [
     'CREATE INDEX IF NOT EXISTS idx_transactions_customer_id ON transactions(customer_id)',
     'CREATE INDEX IF NOT EXISTS idx_transactions_branch_id ON transactions(branch_id)',
@@ -1783,6 +1972,8 @@ async function _init() {
     'CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id)',
     'CREATE INDEX IF NOT EXISTS idx_purchase_order_items_po_id ON purchase_order_items(po_id)',
     'CREATE INDEX IF NOT EXISTS idx_purchase_request_items_pr_id ON purchase_request_items(pr_id)',
+    'CREATE INDEX IF NOT EXISTS idx_spendos_outbox_delivery ON spendos_outbox(status,available_at,id)',
+    'CREATE INDEX IF NOT EXISTS idx_spendos_outbox_aggregate ON spendos_outbox(aggregate_type,aggregate_id,source_version)',
     'CREATE INDEX IF NOT EXISTS idx_account_payments_customer_id ON account_payments(customer_id)',
     'CREATE INDEX IF NOT EXISTS idx_commission_records_employee_id ON commission_records(employee_id)',
     'CREATE INDEX IF NOT EXISTS idx_commission_records_source ON commission_records(source_type, source_id)',
@@ -1791,6 +1982,8 @@ async function _init() {
     'CREATE INDEX IF NOT EXISTS idx_return_items_return_id ON return_items(return_id)',
     'CREATE INDEX IF NOT EXISTS idx_employee_branches_employee_id ON employee_branches(employee_id)',
     'CREATE INDEX IF NOT EXISTS idx_employee_branches_branch_id ON employee_branches(branch_id)',
+    'CREATE INDEX IF NOT EXISTS idx_lookup_aliases_match ON lookup_aliases(entity_type,status,alias_normalized)',
+    'CREATE UNIQUE INDEX IF NOT EXISTS idx_brands_name_normalized ON brands(lower(trim(name)))',
     'CREATE INDEX IF NOT EXISTS idx_product_variations_product_id ON product_variations(product_id)',
     'CREATE INDEX IF NOT EXISTS idx_stock_movements_product_id ON stock_movements(product_id)',
     'CREATE INDEX IF NOT EXISTS idx_crm_activities_lead_id ON crm_activities(lead_id)',

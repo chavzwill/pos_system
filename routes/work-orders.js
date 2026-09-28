@@ -4,6 +4,7 @@ const { db } = require('../database');
 const { requirePermission, requireAnyPermission } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
 const { processWorkOrderItems, processWorkOrderPartSourcing } = require('../lib/workOrders');
+const { assessmentServiceSnapshot, assessmentAmounts } = require('../lib/work-order-assessment');
 
 // Statuses a WO can freely log a comment against via PATCH /:id/status without
 // going through a dedicated money-moving endpoint (assessment-paid,
@@ -285,19 +286,19 @@ router.post('/:id/confirm-parts', requirePermission('wo_assign_parts'), async (r
 
 router.post('/', requirePermission('wo_intake'), async (req, res) => {
   try {
-    const { customer_id, employee_id, branch_id, description, item_label } = req.body;
+    const { customer_id, employee_id, branch_id, description, item_label, assessment_fee_product_id } = req.body;
     if (!customer_id) return res.status(400).json({ error: 'A customer is required' });
     if (!description || !description.trim()) return res.status(400).json({ error: 'A description is required' });
-
-    const { rows: [feeSetting] } = await db.execute({ sql: "SELECT value FROM settings WHERE key = 'wo_assessment_fee'", args: [] });
-    const assessmentFee = parseFloat(feeSetting?.value) || 0;
+    let fee;
+    try{fee=await assessmentServiceSnapshot(assessment_fee_product_id);}catch(e){return res.status(Number(e.status)||400).json({error:e.message,code:e.code||'WORK_ORDER_ASSESSMENT_SERVICE_UNAVAILABLE'});}
+    const feeProductId=fee.product_id,assessmentFee=fee.subtotal,assessmentTaxRate=fee.tax_rate;
 
     const wo_number = await nextNumber(db, 'work_orders', 'wo_number', 'WO-', 6);
     const tx = await db.transaction('write');
     let committed = false;
     try {
-      const result = await tx.execute({ sql: `INSERT INTO work_orders (wo_number, customer_id, employee_id, branch_id, description, item_label, assessment_fee, pickup_due_date)
-        VALUES (?,?,?,?,?,?,?, date('now','+30 days'))`, args: [wo_number, customer_id, employee_id || null, branch_id || null, description.trim(), item_label || null, assessmentFee] });
+      const result = await tx.execute({ sql: `INSERT INTO work_orders (wo_number, customer_id, employee_id, branch_id, description, item_label, assessment_fee, assessment_fee_product_id, assessment_fee_name, assessment_fee_tax_rate, pickup_due_date)
+        VALUES (?,?,?,?,?,?,?,?,?,?, date('now','+30 days'))`, args: [wo_number, customer_id, employee_id || null, branch_id || null, description.trim(), item_label || null, assessmentFee, feeProductId, fee.name, assessmentTaxRate] });
       const woId = Number(result.lastInsertRowid);
       await logStatus(tx, woId, 'intake', 'Work order opened', employee_id);
       await tx.commit();
@@ -357,7 +358,7 @@ router.patch('/:id/assessment-paid', requireAnyPermission('wo_assess', 'pos'), a
     if (wo.status !== 'intake') return res.status(400).json({ error: `This work order is ${wo.status}, not awaiting the assessment fee` });
 
     const method = payment_method || 'cash';
-    const total = wo.assessment_fee;
+    const {subtotal,tax,total}=assessmentAmounts(wo);
     const tendered = parseFloat(amount_tendered || total);
     const changeAmt = Math.max(0, parseFloat((tendered - total).toFixed(2)));
     const transaction_number = await nextNumber(db, 'transactions', 'transaction_number', 'TXN-', 6);
@@ -365,9 +366,9 @@ router.patch('/:id/assessment-paid', requireAnyPermission('wo_assess', 'pos'), a
     const tx = await db.transaction('write');
     let committed = false;
     try {
-      const txResult = await tx.execute({ sql: `INSERT INTO transactions (transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,total,payment_method,amount_tendered,change_amount,notes,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [transaction_number, wo.customer_id, employee_id || null, branch_id || wo.branch_id || null, drawer_session_id || null, total, 0, total, method, tendered, changeAmt, `Work order assessment fee ${wo.wo_number}`, 'pos'] });
+      const txResult = await tx.execute({ sql: `INSERT INTO transactions (transaction_number,customer_id,employee_id,branch_id,drawer_session_id,subtotal,tax_amount,total,payment_method,amount_tendered,change_amount,notes,source) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [transaction_number, wo.customer_id, employee_id || null, branch_id || wo.branch_id || null, drawer_session_id || null, subtotal, tax, total, method, tendered, changeAmt, `Work order assessment fee ${wo.wo_number}`, 'pos'] });
       const txId = Number(txResult.lastInsertRowid);
-      await tx.execute({ sql: `INSERT INTO transaction_items (transaction_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES (?,?,?,?,?,?,?)`, args: [txId, 'Assessment Fee', 'WO-ASSESS', 1, total, 0, total] });
+      await tx.execute({ sql: `INSERT INTO transaction_items (transaction_id,product_id,product_name,sku,quantity,unit_price,tax_amount,total) VALUES (?,?,?,?,?,?,?,?)`, args: [txId, wo.assessment_fee_product_id||null, wo.assessment_fee_name||'Assessment Fee', 'WO-ASSESS', 1, subtotal, tax, total] });
       await tx.execute({ sql: `UPDATE work_orders SET assessment_transaction_id = ?, status = 'assessed' WHERE id = ?`, args: [txId, req.params.id] });
       await logStatus(tx, req.params.id, 'assessed', `Assessment fee paid (${method})`, employee_id);
       await tx.commit();

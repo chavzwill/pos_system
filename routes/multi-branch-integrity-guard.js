@@ -19,9 +19,20 @@ async function sourceBranch(table,id){
   const {rows:[row]}=await db.execute({sql:`SELECT branch_id FROM ${table} WHERE id=?`,args:[id]});
   return row?row.branch_id:null;
 }
+async function binBranch(binId){
+  const {rows:[row]}=await db.execute({sql:'SELECT COALESCE(sb.branch_id,z.branch_id) branch_id FROM storage_bins sb LEFT JOIN warehouse_zones z ON z.id=sb.zone_id WHERE sb.id=?',args:[binId]});
+  return row?row.branch_id:null;
+}
+async function assignmentRecord(id){
+  const {rows:[row]}=await db.execute({sql:'SELECT a.*,COALESCE(a.branch_id,sb.branch_id,z.branch_id) resolved_branch_id FROM product_bin_assignments a LEFT JOIN storage_bins sb ON sb.id=a.bin_id LEFT JOIN warehouse_zones z ON z.id=sb.zone_id WHERE a.id=?',args:[id]});
+  return row||null;
+}
 function numericId(path,re){const m=path.match(re);return m?Number(m[1]):null;}
 
 router.use('/logistics-intelligence',require('./logistics-runtime-integrity-guard'));
+router.use('/warehouse/put-away',require('./warehouse-put-away'));
+router.use('/purchase-requests',require('./purchase-request-approval-guard'));
+router.use('/',require('./customer-credit-governance'));
 
 router.use(async(req,res,next)=>{
   try{
@@ -49,6 +60,38 @@ router.use(async(req,res,next)=>{
       return next();
     }
     if(req.method==='OPTIONS')return next();
+
+    if(p==='/warehouse/assignments'&&req.method==='POST'){
+      if(!can(req.employee.permissions,'warehouse'))return res.status(403).json({error:'Missing permission: warehouse'});
+      if(Number(req.body?.quantity||0)!==0)return res.status(409).json({error:'Bin quantity must be changed through Put Away'});
+      const resolvedBranch=await binBranch(Number(req.body?.bin_id));
+      if(resolvedBranch==null)return res.status(400).json({error:'Selected bin does not have a valid branch'});
+      if(!assertBranch(req,res,resolvedBranch))return;
+      req.body ||= {};
+      req.body.quantity=0;
+      req.body.branch_id=resolvedBranch;
+      return next();
+    }
+    const assignmentId=numericId(p,/^\/warehouse\/assignments\/(\d+)$/);
+    if(assignmentId&&req.method==='PUT'){
+      if(!can(req.employee.permissions,'warehouse'))return res.status(403).json({error:'Missing permission: warehouse'});
+      if(Object.prototype.hasOwnProperty.call(req.body||{},'quantity'))return res.status(409).json({error:'Use Put Away to change bin quantity'});
+      const assignment=await assignmentRecord(assignmentId);
+      if(!assignment)return res.status(404).json({error:'Bin assignment not found'});
+      if(!assertBranch(req,res,assignment.resolved_branch_id))return;
+      const primary=req.body?.is_primary?1:0;
+      await db.execute({sql:'UPDATE product_bin_assignments SET is_primary=?,branch_id=COALESCE(branch_id,?),updated_at=CURRENT_TIMESTAMP WHERE id=?',args:[primary,assignment.resolved_branch_id,assignmentId]});
+      const updated=await assignmentRecord(assignmentId);
+      return res.json(updated);
+    }
+    if(assignmentId&&req.method==='DELETE'){
+      if(!can(req.employee.permissions,'warehouse'))return res.status(403).json({error:'Missing permission: warehouse'});
+      const assignment=await assignmentRecord(assignmentId);
+      if(!assignment)return res.status(404).json({error:'Bin assignment not found'});
+      if(!assertBranch(req,res,assignment.resolved_branch_id))return;
+      if(Number(assignment.quantity||0)>1e-9)return res.status(409).json({error:'Cannot delete a bin assignment that still contains stock'});
+      return next();
+    }
 
     // POS transaction creation is a branch-custody event. Enforce the branch
     // boundary before traceability, reservation, margin, drawer, or product

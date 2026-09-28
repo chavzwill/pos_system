@@ -29,7 +29,7 @@ A capability is not considered complete merely because backend code exists or a 
 - Build a unified design system for application shell, navigation, typography, spacing, surfaces, cards, tables, forms, controls, empty states, errors, loading, responsive behavior, and accessibility.
 - Make desktop, tablet, and mobile intentionally designed rather than scaled copies.
 - Add complete navigation behavior: back, forward, home/dashboard, breadcrumbs, contextual section navigation, clear exits from detail/edit flows.
-- Keep Guided Mode inside product chrome/navigation so it never obstructs operational content.
+- Keep Guide Me inside product chrome/navigation so it never obstructs operational content.
 
 ## Phase 2 — Repair operating system
 
@@ -370,7 +370,7 @@ Already present or substantially started on `feature/total-tools-pos-upgrades`:
 - ERP intelligence backend
 - commerce sync infrastructure
 - purchase-order hardening
-- Guided Mode
+- Guide Me
 - integrated upgrade navigation
 - back/forward/home navigation shell
 - mobile shell stabilization

@@ -1,0 +1,11 @@
+'use strict';
+const fs=require('fs'),path=require('path');
+const ui=fs.readFileSync(path.join(__dirname,'..','public','operational-reports.js'),'utf8');
+let failed=0;const check=(n,p)=>{console.log(`${p?'PASS':'FAIL'} Supplier Report UI: ${n}`);if(!p)failed++;};
+for(const label of ['On-time delivery','Fill rate','Goods accepted','Customer return rate','Effective fulfillment','Supplier rating']) check(`plain label ${label}`,ui.includes(label));
+check('shows evidence status',ui.includes('evidence_status'));
+check('shows rating method',ui.includes('rating_method'));
+check('shows sales attribution',ui.includes('sales_attribution'));
+check('explains insufficient rating evidence',ui.includes('Not enough data'));
+check('does not expose caught report error messages',!ui.includes('state.data={error:e.message}'));
+if(failed){console.error(`Supplier report UI contract failed: ${failed}`);process.exit(1);}console.log('Supplier report UI contract passed.');

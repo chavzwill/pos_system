@@ -1,0 +1,12 @@
+'use strict';
+const express=require('express');
+const router=express.Router();
+const {requirePermission}=require('../lib/permissions');
+const core=require('../lib/warehouse-put-away-core');
+router.use(requirePermission('warehouse'));
+router.use(async(req,res,next)=>{try{await core.ensureSchema();next()}catch(e){res.status(500).json({error:'Put-away initialization failed',detail:e.message})}});
+const branchId=req=>Number(req.employee?.default_branch_id||0);
+router.get('/queue',async(req,res)=>{try{const branch=branchId(req);if(!branch)return res.status(409).json({error:'Your employee profile needs a default branch before put-away work can be shown'});res.json(await core.queue(branch))}catch(e){res.status(500).json({error:e.message})}});
+router.post('/allocate',async(req,res)=>{try{const branch=branchId(req),productId=Number(req.body?.product_id),binId=Number(req.body?.bin_id),qty=Number(req.body?.quantity),operationKey=String(req.body?.operation_key||'').trim();if(!branch)return res.status(409).json({error:'Your employee profile needs a default branch before put-away can be recorded'});if(!productId||!binId||!Number.isFinite(qty)||qty<=0)return res.status(400).json({error:'Product, target bin and a positive quantity are required'});if(!operationKey)return res.status(400).json({error:'operation_key is required for safe put-away retries'});const saved=await core.allocate({branch,productId,binId,qty,operationKey,employeeId:req.employee.id});res.status(saved.idempotent?200:201).json(saved)}catch(e){res.status(e.status||400).json({error:e.message})}});
+router.get('/history',async(req,res)=>{try{res.json(await core.history(branchId(req)))}catch(e){res.status(500).json({error:e.message})}});
+module.exports=router;

@@ -54,8 +54,19 @@ router.get('/:id', async (req, res) => {
 
 router.post('/', async (req, res) => {
   try {
-    const { supplier_id, branch_id, employee_id, items, notes, expected_date } = req.body;
+    const { supplier_id, branch_id, employee_id, items, notes, expected_date, source_quote_import_id } = req.body;
     if (!items || items.length === 0) return res.status(400).json({ error: 'No items in PO' });
+
+    let sourceQuote = null;
+    if (source_quote_import_id) {
+      const { rows: [quote] } = await db.execute({ sql: 'SELECT * FROM purchase_quote_imports WHERE id = ?', args: [Number(source_quote_import_id)] });
+      if (!quote) return res.status(404).json({ error: 'Source supplier quote import not found' });
+      if (quote.converted_po_id) return res.status(409).json({ error: 'This supplier quote is already linked to a purchase order' });
+      if (quote.supplier_id && Number(quote.supplier_id) !== Number(supplier_id)) return res.status(409).json({ error: 'Purchase order supplier must match the staged supplier quote' });
+      const { rows: quoteLines } = await db.execute({ sql: 'SELECT product_id,match_status FROM purchase_quote_import_lines WHERE import_id=? ORDER BY line_no,id', args: [quote.id] });
+      if (!quoteLines.length || quoteLines.some(line => !line.product_id || line.match_status !== 'matched')) return res.status(409).json({ error: 'Every supplier quote line must have a confirmed inventory match before PO creation' });
+      sourceQuote = quote;
+    }
 
     const po_number = await nextNumber(db, 'purchase_orders', 'po_number', 'PO-', 6);
 
@@ -78,6 +89,10 @@ router.post('/', async (req, res) => {
       const poId = Number(result.lastInsertRowid);
       for (const item of processedItems) {
         await tx.execute({ sql: 'INSERT INTO purchase_order_items (po_id,product_id,product_name,sku,quantity_ordered,unit_cost,total) VALUES (?,?,?,?,?,?,?)', args: [poId, item.product_id, item.product_name, item.sku, item.quantity_ordered, item.unit_cost, item.total] });
+      }
+      if (sourceQuote) {
+        const claim = await tx.execute({ sql: `UPDATE purchase_quote_imports SET converted_po_id=?,status='converted',updated_at=CURRENT_TIMESTAMP WHERE id=? AND converted_po_id IS NULL`, args: [poId, sourceQuote.id] });
+        if (Number(claim.rowsAffected || 0) !== 1) throw new Error('Supplier quote was already converted by another request; duplicate PO creation blocked');
       }
       await tx.commit();
       committed = true;

@@ -159,10 +159,10 @@ router.get('/agreements/:id', requirePermission('rentals'), async (req, res) => 
           rental_hourly_rate: item.hourly_rate,
         }, item.quantity, estCheckoutDateTime, estDueDateTime);
         item.estimated_rental_fee = estFee;
-        item.estimated_deposit_amount = estFee;
+        item.estimated_deposit_amount = agreement.operator_required ? 0 : estFee;
         estRentalSubtotal += estFee;
         estTax += parseFloat((estFee * (item.tax_rate || 0) / 100).toFixed(2));
-        estDepositTotal += estFee;
+        estDepositTotal += item.estimated_deposit_amount;
       }
       const deliveryCost = agreement.delivery_required ? parseFloat(agreement.delivery_cost || 0) : 0;
       const pickupCost = agreement.pickup_required ? parseFloat(agreement.pickup_cost || 0) : 0;
@@ -220,8 +220,8 @@ router.post('/agreements', requirePermission('rentals_checkout'), async (req, re
     // Only gates the creation of NEW agreements — existing ones are untouched.
     try {
       const { rows: [customer] } = await db.execute({ sql: 'SELECT * FROM customers WHERE id = ?', args: [customer_id] });
-      assertRentalCustomerEligible(customer);
-    } catch(e) { return res.status(400).json({ error: e.message }); }
+      await assertRentalCustomerEligible(db, customer);
+    } catch(e) { return res.status(Number(e?.status)||400).json({ error: e.message, code: e?.code||'RENTAL_CUSTOMER_COMPLIANCE_REQUIRED', ...(e?.details||{}) }); }
 
     let lines;
     try {
@@ -310,7 +310,9 @@ router.patch('/agreements/:id/checkout', requireAnyPermission('rentals_checkout'
         rental_monthly_rate: item.monthly_rate,
         rental_hourly_rate: item.hourly_rate,
       }, item.quantity, checkoutDateTime, dueDateTime);
-      item.depositAmount = item.rentalFee; // deposit == fee (double-charge model)
+      // When Total Tools supplies the operator, the customer never takes operating custody,
+      // so there is no refundable operating-risk deposit to collect.
+      item.depositAmount = agreement.operator_required ? 0 : item.rentalFee;
       item.lineTax = parseFloat((item.rentalFee * (item.tax_rate || 0) / 100).toFixed(2));
       rentalSubtotal += item.rentalFee;
       taxAmount += item.lineTax;

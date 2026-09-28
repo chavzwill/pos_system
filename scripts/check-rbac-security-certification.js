@@ -20,6 +20,7 @@ function segment(src,startNeedle,endNeedle){
   return src.slice(start,end<0?undefined:end);
 }
 const noEndpointBlock=segment(apiAuth,'if (!needed) {','if (!scopes.includes');
+const employeeDenials=segment(apiAuth,'function employeeEndpointDenial(path) {','function clientIp');
 const checks=[
  ['server RBAC tree defines granular financial and destructive permissions',permissions.includes('reports_financial')&&permissions.includes('inventory_writeoff_create')&&permissions.includes('inventory_writeoff_approve')&&permissions.includes('employees_salaries')],
  ['rental management compatibility alias does not create a new authority',permissions.includes("rentals_manage: 'rentals_manage_items'")],
@@ -39,7 +40,10 @@ const checks=[
  ['API keys cannot operate internal Dispatch workflows',permissions.includes('API keys cannot operate internal Dispatch workflows')],
  ['authorized Dispatch requests short-circuit legacy transfer permission checks',permissions.includes("if(dispatch==='allow')return next()")],
  ['department handoffs still continue into their original business permission checks',permissions.includes("if(required==='source_handoff')return 'continue'")],
- ['API keys fail closed outside explicit integration endpoints',noEndpointBlock.includes('await auditApiKeyDenied(req')&&noEndpointBlock.includes("control: 'api_key_endpoint_policy'")&&noEndpointBlock.includes("return res.status(403).json({ error: 'API keys are not permitted on this employee endpoint' })")],
+ ['API keys fail closed outside explicit integration endpoints',noEndpointBlock.includes('await auditApiKeyDenied(req')&&noEndpointBlock.includes("control: 'api_key_endpoint_policy'")&&noEndpointBlock.includes('employeeEndpointDenial(path)')],
+ ['unmapped employee APIs retain generic fail-closed denial',employeeDenials.includes("return { error: 'API keys are not permitted on this employee endpoint' }")],
+ ['approval employee APIs return stable safe denial code',employeeDenials.includes("code: 'APPROVAL_API_KEY_FORBIDDEN'")],
+ ['department approval administration returns stable safe denial code',employeeDenials.includes("code: 'DEPARTMENT_API_KEY_FORBIDDEN'")],
  ['legacy API wildcard cannot unlock unmapped employee APIs',noEndpointBlock.length>0&&apiAuth.indexOf('if (!needed) {')<apiAuth.indexOf("if (!scopes.includes('*')")],
  ['API key scopes include repair portal scopes explicitly',apiKeys.includes("'repairs:read'")&&apiKeys.includes("'repairs:write'")],
  ['new API keys do not default to wildcard',apiKeys.includes("scopes = ['products:read']")&&!apiKeys.includes("scopes = ['*']")],
@@ -62,4 +66,4 @@ const checks=[
 ];
 let failed=0;for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} RBAC/security certification: ${name}`);if(!ok)failed++;}
 if(failed){console.error(`RBAC/security certification FAILED (${failed}/${checks.length} failed).`);process.exit(1);}
-console.log(`RBAC/security certification OK (${checks.length} checks). Dispatch view/plan/execute/admin authority is explicit, supersedes legacy transfer gates, and unknown logistics mutations fail closed.`);
+console.log(`RBAC/security certification OK (${checks.length} checks). Dispatch authority and API-key endpoint boundaries remain explicit and fail closed.`);
