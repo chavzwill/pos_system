@@ -30,7 +30,7 @@ const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
 const fastShellPath = path.join(publicDir, 'app-shell.html');
-const CLIENT_ASSET_VERSION = '20260824-0800';
+const CLIENT_ASSET_VERSION = '20260922-ui-v2-all';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -56,7 +56,9 @@ function getLegacyAppScript() {
 function getEnhancedIndex() {
   if (enhancedIndexCache) return enhancedIndexCache;
   const source = fs.readFileSync(indexPath, 'utf8');
-  const legacy = extractLegacyApp(source);
+  const retiredThemePattern = /<link\b[^>]*href=["'][^"']*\/(?:workspace-quality-pass|premium-shell-v2|premium-shell-v3|late-2020s-workspaces|late-2020s-intelligence-finance|late-2020s-operations|late-2020s-pos-commerce|late-2020s-admin-marketing|late-2020s-config-crm|meeting-demo-shell|meeting-readiness|unified-ui-system)\.css(?:\?[^"']*)?["'][^>]*>\s*/gi;
+  const presentationSource = source.replace(retiredThemePattern, '');
+  const legacy = extractLegacyApp(presentationSource);
   legacyAppScriptCache = legacy.script;
   const headAssets = [
     '<script src="' + versioned('/client-diagnostics.js') + '" defer></script>',
@@ -64,7 +66,8 @@ function getEnhancedIndex() {
     '<link rel="stylesheet" href="' + versioned('/pos-experience.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/employee-workspace-home.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/predictive-lookup.css') + '">',
-'<link rel="stylesheet" href="' + versioned('/employee-assist-ui.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/employee-assist-ui.css') + '">',
+    '<link id="tt-authoritative-ui" rel="stylesheet" href="' + versioned('/unified-ui-system.css') + '">',
   ];
   const bodyAssets = [
     '<script src="' + versioned('/pos-guide-map.js') + '" defer></script>',
@@ -77,7 +80,7 @@ function getEnhancedIndex() {
 '<script src="' + versioned('/employee-assist-ui.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
   ];
-  let html = source.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '" defer></script>' + source.slice(legacy.end);
+  let html = presentationSource.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '" defer></script>' + presentationSource.slice(legacy.end);
   for (const tag of headAssets) html = html.replace('</head>', `  ${tag}\n</head>`);
   for (const tag of bodyAssets) html = html.replace('</body>', `  ${tag}\n</body>`);
   enhancedIndexCache = html;
@@ -195,6 +198,17 @@ app.use('/api/purchase-orders', require('./routes/purchase-receipt-traceability'
 app.use('/api/purchase-orders', require('./routes/purchase-order-hardening'));
 app.use('/api/purchase-orders', require('./routes/purchase-orders'));
 app.use('/api/purchase-requests',require('./routes/purchase-requests'));
+app.use('/api/cost-allocations',require('./routes/cost-allocations'));
+app.use('/api/supplier-recoverables',require('./routes/supplier-recoverables'));
+app.use('/api/supplier-returns',require('./routes/supplier-returns'));
+app.use('/api/supplier-credit-notes',require('./routes/supplier-credit-notes'));
+app.use('/api/supplier-recovery-attention',require('./routes/supplier-recovery-attention'));
+app.use('/api/supplier-statements',require('./routes/supplier-statements'));
+app.use('/api/supplier-statement-exceptions',require('./routes/supplier-statement-exceptions'));
+app.use('/api/supplier-recovery-cases',require('./routes/supplier-recovery-cases'));
+app.use('/api/supplier-recovery-performance',require('./routes/supplier-recovery-performance'));
+app.use('/api/spendos-management',require('./routes/spendos-management'));
+app.use('/api/operating-commitments',require('./routes/operating-commitments'));
 app.use('/api/security-groups', require('./routes/security-groups'));
 app.use('/api/quotations', require('./routes/quotation-workflow-hardening'));
 app.use('/api/quotations', require('./routes/quotations'));
@@ -247,7 +261,7 @@ app.use('/api', (err,req,res,next)=>{
 });
 app.get('*', (req,res)=> req.path.startsWith('/legacy') ? sendEnhancedIndex(req,res) : sendFastShell(req,res));
 
-if (!process.env.VERCEL) {
+if (!process.env.VERCEL && process.env.POS_EMBEDDED !== '1') {
   app.listen(PORT, () => { console.log(`\n  POS System running at http://localhost:${PORT}\n`); });
   setInterval(() => { flushSmartCommerceSyncOutbox().catch(() => {}); }, 30000);
   setInterval(async()=>{try{await ensureReady();const{rows:[iRow]}=await db.execute({sql:"SELECT value FROM settings WHERE key='woo_sync_interval'",args:[]});const mins=parseInt(iRow?.value||'0');if(!mins)return;const{rows:[lRow]}=await db.execute({sql:"SELECT value FROM settings WHERE key='woo_last_auto_sync'",args:[]});const last=lRow?.value?new Date(lRow.value):new Date(0);if((Date.now()-last.getTime())/60000>=mins)wooSyncAll().catch(()=>{});}catch(e){}},60000);

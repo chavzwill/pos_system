@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const VERSION='20260825-1500';
+const VERSION='20260923-1040';
 const assets={
 'sales-workspace':['/sales-workspace.css','/sales-workspace.js','TotalToolsSalesWorkspace'],
 'quotations-workspace':['/quotations-workspace.css','/quotations-workspace.js','TotalToolsQuotationsWorkspace'],
@@ -15,8 +15,10 @@ const assets={
 'transfers-workspace':['/transfers-workspace.css','/transfers-workspace.js','TotalToolsTransfersWorkspace'],
 'work-orders-workspace':['/work-orders-workspace.css','/work-orders-workspace.js','TotalToolsWorkOrdersWorkspace'],
 'inventory-workspace':['/inventory-workspace.css','/inventory-workspace.js','TotalToolsInventoryWorkspace'],
+'warehouse-operations':['/warehouse-operations-workspace.css','/warehouse-operations-workspace.js','TotalToolsWarehouseOperations'],
 'catalog-admin-workspace':['/catalog-admin-workspace.css','/catalog-admin-workspace.js','TotalToolsCatalogAdmin'],
 'purchasing-workspace':['/purchasing-workspace.css','/purchasing-workspace.js','TotalToolsPurchasingWorkspace'],
+'suppliers-workspace':['/suppliers-workspace.css','/suppliers-workspace.js','TotalToolsSuppliersWorkspace'],
 'rentals-workspace':['/rentals-workspace.css','/rentals-workspace.js','TotalToolsRentalsWorkspace'],
 'repair-operations':['/repair-operations.css','/repair-operations.js','TotalToolsRepairOperations'],
 'repair-communications':['/repair-communications.css','/repair-communications.js','TotalToolsRepairCommunications'],
@@ -36,10 +38,10 @@ const loading=new Map();
 function ensureCss(href){if([...document.styleSheets].some(x=>x.href&&x.href.includes(href)))return;const l=document.createElement('link');l.rel='stylesheet';l.href=`${href}?v=${VERSION}`;document.head.appendChild(l);}
 function removeScripts(src){document.querySelectorAll('script[src]').forEach(s=>{try{if(new URL(s.src,location.href).pathname===src)s.remove();}catch(_){}});}
 function loadScript(src,global,force=false){if(window[global]?.open)return Promise.resolve(window[global]);const key=src+'|'+global;if(!force&&loading.has(key))return loading.get(key);const p=new Promise((resolve,reject)=>{if(force)removeScripts(src);const id='shell-hardened-'+src.replace(/\W/g,'-');document.getElementById(id)?.remove();const s=document.createElement('script');s.id=id;s.async=true;s.src=`${src}?v=${VERSION}${force?'&retry='+Date.now():''}`;s.onload=()=>requestAnimationFrame(()=>window[global]?.open?resolve(window[global]):reject(new Error(`Module script loaded but ${global} was not registered.`)));s.onerror=()=>reject(new Error(`Unable to load ${src}`));document.body.appendChild(s);});loading.set(key,p);p.finally(()=>loading.delete(key));return p;}
-async function openFeature(key,title='Workspace',options={}){if(key==='legacy'){location.href='/legacy?from=shell&open='+encodeURIComponent(title);return true;}const a=assets[key];if(!a)throw new Error(`Unknown workspace module: ${key}`);const [css,js,global]=a;ensureCss(css);let api;try{api=await loadScript(js,global,false);}catch(first){api=await loadScript(js,global,true);}if(!api?.open)throw new Error(`${title} did not initialize after a clean reload.`);if(key==='customer-crm-workspace'&&/pipeline/i.test(title))await api.open({...options,tab:'pipeline'});else await api.open(options||{});return true;}
+async function openFeature(key,title='Workspace',options={}){if(key==='legacy'){location.href='/legacy?from=shell&open='+encodeURIComponent(title);return true;}if(key==='purchasing-workspace'){if(/request/i.test(title||''))options={...options,tab:'pr'};else if(/order|receiv/i.test(title||''))options={...options,tab:'po'}}if(key==='admin-workspace'&&/branch/i.test(title||''))options={...options,tab:'branches'};const a=assets[key];if(!a)throw new Error(`Unknown workspace module: ${key}`);const [css,js,global]=a;ensureCss(css);let api;try{api=await loadScript(js,global,false);}catch(first){api=await loadScript(js,global,true);}if(!api?.open)throw new Error(`${title} did not initialize after a clean reload.`);if(key==='customer-crm-workspace'&&/pipeline/i.test(title))await api.open({...options,tab:'pipeline'});else await api.open(options||{});return true;}
 window.TotalToolsShellOpen=openFeature;
 window.TotalToolsWorkspaceLoader={open:openFeature,assets,version:VERSION};
 // This is the single capture-phase owner of shell workspace buttons. Guide Me
 // calls TotalToolsShellOpen directly and therefore cannot race this handler.
-document.addEventListener('click',e=>{const b=e.target.closest?.('#shell-root [data-open]');if(!b)return;e.preventDefault();e.stopImmediatePropagation();openFeature(b.dataset.open,b.dataset.title||'Workspace').catch(err=>alert(`${b.dataset.title||'Workspace'} could not open: ${err.message}`));},true);
+document.addEventListener('click',e=>{const b=e.target.closest?.('#shell-root [data-open]');if(!b)return;e.preventDefault();e.stopImmediatePropagation();openFeature(b.dataset.open,b.dataset.title||'Workspace').catch(err=>{const message=`${b.dataset.title||'Workspace'} could not open: ${err.message}`;if(window.TotalToolsShellUI?.toast)window.TotalToolsShellUI.toast(message,'error');else console.error(message);});},true);
 })();

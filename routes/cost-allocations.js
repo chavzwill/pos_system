@@ -1,0 +1,428 @@
+'use strict';
+const express=require('express');
+const router=express.Router();
+const {db}=require('../database');
+const {requirePermission}=require('../lib/permissions');
+const {nextNumber}=require('../lib/nextNumber');
+const {ensureInventoryMovementValuation,valueStockAdjustment}=require('../lib/inventory-movement-valuation');
+const {ensureCostAllocationSchema,normalizeAllocations,insertAllocations}=require('../lib/cost-allocations');
+const {enqueueSpendEvent}=require('../lib/spendos-outbox');
+
+let readyPromise=null;
+async function ensureSchema(){
+  if(readyPromise)return readyPromise;
+  readyPromise=(async()=>{
+    await ensureCostAllocationSchema();
+    await ensureInventoryMovementValuation();
+    await db.batch([
+      {sql:`CREATE TABLE IF NOT EXISTS internal_consumptions(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        consumption_number TEXT NOT NULL UNIQUE,
+        branch_id INTEGER NOT NULL REFERENCES branches(id),
+        employee_id INTEGER REFERENCES employees(id),
+        notes TEXT,
+        status TEXT NOT NULL DEFAULT 'posted',
+        total_tracked_value REAL NOT NULL DEFAULT 0,
+        valuation_status TEXT NOT NULL DEFAULT 'fully_valued',
+        created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP
+      )`},
+      {sql:`CREATE TABLE IF NOT EXISTS internal_consumption_items(
+        id INTEGER PRIMARY KEY AUTOINCREMENT,
+        consumption_id INTEGER NOT NULL REFERENCES internal_consumptions(id) ON DELETE CASCADE,
+        product_id INTEGER NOT NULL REFERENCES products(id),
+        quantity REAL NOT NULL,
+        tracked_value REAL NOT NULL DEFAULT 0,
+        valuation_status TEXT NOT NULL,
+        stock_movement_id INTEGER REFERENCES stock_movements(id)
+      )`}
+    ],'write');
+  })().catch(e=>{readyPromise=null;throw e;});
+  return readyPromise;
+}
+router.use(requirePermission('purchasing'));
+router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:e.message});}});
+
+router.get('/targets',async(req,res)=>{
+  try{
+    const type=String(req.query.type||'');
+    let rows=[];
+    if(type==='rental_asset'){
+      ({rows}=await db.execute({sql:`SELECT ra.id,ra.asset_number code,p.name||' · '||ra.asset_number name,ra.branch_id
+        FROM rental_assets ra JOIN products p ON p.id=ra.product_id
+        WHERE ra.status NOT IN ('disposed','sold','lost') ORDER BY ra.asset_number`,args:[]}));
+    }else if(type==='vehicle'){
+      ({rows}=await db.execute({sql:`SELECT id,vehicle_number code,description name,NULL branch_id
+        FROM dispatch_vehicles WHERE active=1 ORDER BY vehicle_number`,args:[]}));
+    }else if(type==='branch'){
+      ({rows}=await db.execute({sql:'SELECT id,branch_code code,name,id branch_id FROM branches WHERE active=1 ORDER BY name',args:[]}));
+    }else if(type==='work_order'){
+      ({rows}=await db.execute({sql:`SELECT id,wo_number code,'Work Order '||wo_number name,branch_id
+        FROM work_orders WHERE status NOT IN ('completed','cancelled') ORDER BY created_at DESC LIMIT 200`,args:[]}));
+    }else{
+      ({rows}=await db.execute({sql:'SELECT id,code,name,branch_id,department FROM cost_objects WHERE object_type=? AND active=1 ORDER BY name',args:[type]}));
+    }
+    res.json(rows);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.post('/objects',async(req,res)=>{
+  try{
+    const {object_type,code,name,branch_id,department,metadata}=req.body||{};
+    if(!['equipment','building','department','project','general_overhead'].includes(object_type))return res.status(400).json({error:'Unsupported custom cost object type'});
+    if(!name)return res.status(400).json({error:'Name is required'});
+    const r=await db.execute({sql:`INSERT INTO cost_objects(object_type,code,name,branch_id,department,metadata_json)
+      VALUES(?,?,?,?,?,?) RETURNING *`,args:[object_type,code||null,name,branch_id||null,department||null,JSON.stringify(metadata||{})]});
+    res.status(201).json(r.rows[0]);
+  }catch(e){res.status(400).json({error:e.message});}
+});
+
+router.post('/attention/refresh',async(req,res)=>{
+  try{
+    const {rows:targets}=await db.execute({sql:`SELECT
+      target_type,target_id,MAX(target_label) target_label,
+      ROUND(SUM(CASE WHEN source_type IN ('purchase_receipt','internal_consumption') THEN allocation_amount ELSE 0 END),2) actual_cost,
+      ROUND(SUM(CASE WHEN source_type IN ('purchase_receipt','internal_consumption') AND datetime(created_at)>=datetime('now','-30 days') THEN allocation_amount ELSE 0 END),2) trailing_30d_cost,
+      ROUND(SUM(CASE WHEN source_type IN ('purchase_receipt','internal_consumption') AND datetime(created_at)>=datetime('now','-60 days') AND datetime(created_at)<datetime('now','-30 days') THEN allocation_amount ELSE 0 END),2) prior_30d_cost,
+      COUNT(CASE WHEN source_type IN ('purchase_receipt','internal_consumption') AND valuation_status NOT IN ('actual','fully_valued') THEN 1 END) incomplete_actual_lines
+      FROM cost_allocations
+      GROUP BY target_type,target_id`,args:[]});
+    const detected=[];
+    const add=(row,reasonCode,priority,evidence)=>detected.push({
+      target_type:row.target_type,target_id:row.target_id==null?null:String(row.target_id),
+      target_label:row.target_label||null,reason_code:reasonCode,priority,evidence
+    });
+    for(const row of targets){
+      const trailing=Number(row.trailing_30d_cost||0),prior=Number(row.prior_30d_cost||0);
+      const costChangePct=prior>0?Number((((trailing-prior)/prior)*100).toFixed(2)):(trailing>0?null:0);
+      if(Number(row.incomplete_actual_lines||0)>0){
+        add(row,'valuation_evidence_gap','high',{actualCost:Number(row.actual_cost||0),incompleteActualLines:Number(row.incomplete_actual_lines||0),trailing30dCost:trailing});
+      }
+      if(row.target_type==='vehicle'&&row.target_id){
+        let jobs={recent_completed_jobs:0,prior_completed_jobs:0};
+        try{
+          ({rows:[jobs]}=await db.execute({sql:`SELECT
+            COUNT(CASE WHEN dj.status='completed' AND datetime(COALESCE(dj.completed_at,dj.created_at))>=datetime('now','-30 days') THEN 1 END) recent_completed_jobs,
+            COUNT(CASE WHEN dj.status='completed' AND datetime(COALESCE(dj.completed_at,dj.created_at))>=datetime('now','-60 days') AND datetime(COALESCE(dj.completed_at,dj.created_at))<datetime('now','-30 days') THEN 1 END) prior_completed_jobs
+            FROM dispatch_jobs dj JOIN dispatch_executions de ON de.dispatch_job_id=dj.id
+            WHERE de.vehicle_id=?`,args:[row.target_id]}));
+        }catch{}
+        const recent=Number(jobs?.recent_completed_jobs||0),old=Number(jobs?.prior_completed_jobs||0);
+        if(trailing>0&&recent===0){
+          add(row,'cost_without_recent_output','high',{trailing30dCost:trailing,recentCompletedDispatches:0,costChangePct});
+        }else if(recent>0&&old>0){
+          const current=trailing/recent,previous=prior/old,effChange=previous>0?((current-previous)/previous)*100:0;
+          if(effChange>=15){
+            add(row,'efficiency_worsening','high',{trailing30dCost:trailing,prior30dCost:prior,recentCompletedDispatches:recent,priorCompletedDispatches:old,recentCostPerDispatch:Number(current.toFixed(2)),priorCostPerDispatch:Number(previous.toFixed(2)),efficiencyChangePct:Number(effChange.toFixed(2)),costChangePct});
+          }
+        }
+      }else if(row.target_type==='branch'&&row.target_id){
+        let activity={recent_transactions:0,prior_transactions:0};
+        try{
+          ({rows:[activity]}=await db.execute({sql:`SELECT
+            COUNT(CASE WHEN status='completed' AND datetime(created_at)>=datetime('now','-30 days') THEN 1 END) recent_transactions,
+            COUNT(CASE WHEN status='completed' AND datetime(created_at)>=datetime('now','-60 days') AND datetime(created_at)<datetime('now','-30 days') THEN 1 END) prior_transactions
+            FROM transactions WHERE branch_id=?`,args:[row.target_id]}));
+        }catch{}
+        const recent=Number(activity?.recent_transactions||0),old=Number(activity?.prior_transactions||0);
+        if(trailing>0&&recent===0){
+          add(row,'cost_without_recent_output','high',{trailing30dCost:trailing,recentCompletedTransactions:0,costChangePct});
+        }else if(recent>0&&old>0){
+          const current=trailing/recent,previous=prior/old,effChange=previous>0?((current-previous)/previous)*100:0;
+          if(effChange>=15){
+            add(row,'efficiency_worsening','high',{trailing30dCost:trailing,prior30dCost:prior,recentCompletedTransactions:recent,priorCompletedTransactions:old,recentCostPerTransaction:Number(current.toFixed(2)),priorCostPerTransaction:Number(previous.toFixed(2)),efficiencyChangePct:Number(effChange.toFixed(2)),costChangePct});
+          }
+        }
+      }else if(costChangePct!=null&&costChangePct>=25){
+        add(row,'cost_rising_review','medium',{trailing30dCost:trailing,prior30dCost:prior,costChangePct,normalizedEfficiencyAvailable:false});
+      }
+    }
+    const seen=[];
+    for(const c of detected){
+      const key=`${c.target_type}|${c.target_id??''}|${c.reason_code}`;seen.push(key);
+      await db.execute({sql:`INSERT INTO cost_attention_cases(
+        target_type,target_id,target_label,reason_code,priority,status,evidence_json
+      ) VALUES(?,?,?,?,?,'identified',?)
+      ON CONFLICT(target_type,target_id,reason_code) DO UPDATE SET
+        target_label=excluded.target_label,priority=excluded.priority,evidence_json=excluded.evidence_json,
+        last_seen_at=CURRENT_TIMESTAMP,
+        status=CASE WHEN cost_attention_cases.status IN ('reviewing','dismissed') THEN cost_attention_cases.status ELSE 'identified' END,
+        resolved_at=CASE WHEN cost_attention_cases.status='resolved' THEN NULL ELSE cost_attention_cases.resolved_at END`,
+        args:[c.target_type,c.target_id,c.target_label,c.reason_code,c.priority,JSON.stringify(c.evidence)]});
+    }
+    const {rows:openCases}=await db.execute({sql:"SELECT id,target_type,target_id,reason_code,status FROM cost_attention_cases WHERE status='identified'",args:[]});
+    for(const c of openCases){
+      const key=`${c.target_type}|${c.target_id??''}|${c.reason_code}`;
+      if(!seen.includes(key))await db.execute({sql:"UPDATE cost_attention_cases SET status='condition_cleared',last_seen_at=CURRENT_TIMESTAMP WHERE id=?",args:[c.id]});
+    }
+    const {rows:cases}=await db.execute({sql:`SELECT c.*,e.first_name||' '||e.last_name assigned_to_name
+      FROM cost_attention_cases c LEFT JOIN employees e ON e.id=c.assigned_to_employee_id
+      ORDER BY CASE c.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,c.last_seen_at DESC,c.id DESC`,args:[]});
+    res.json({detected:detected.length,cases,methodology:{
+      creates_case_for:['valuation_evidence_gap','cost_without_recent_output','efficiency_worsening','cost_rising_review'],
+      does_not_escalate:'Higher spend with stable or improving normalized efficiency does not create an inefficiency case.'
+    }});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.get('/attention',async(req,res)=>{
+  try{
+    let sql=`SELECT c.*,e.first_name||' '||e.last_name assigned_to_name
+      FROM cost_attention_cases c LEFT JOIN employees e ON e.id=c.assigned_to_employee_id WHERE 1=1`;
+    const args=[];
+    if(req.query.status){sql+=' AND c.status=?';args.push(req.query.status);}
+    sql+=" ORDER BY CASE c.priority WHEN 'high' THEN 0 WHEN 'medium' THEN 1 ELSE 2 END,c.last_seen_at DESC,c.id DESC";
+    const {rows}=await db.execute({sql,args});res.json(rows);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.post('/attention/:id/state',async(req,res)=>{
+  try{
+    const status=String(req.body?.status||'').trim();
+    if(!['identified','reviewing','resolved','dismissed'].includes(status))return res.status(400).json({error:'Unsupported attention status'});
+    const note=String(req.body?.resolution_note||'').trim()||null;
+    if(['resolved','dismissed'].includes(status)&&!note)return res.status(400).json({error:'Resolution note is required'});
+    const assigned=req.body?.assigned_to_employee_id==null?(req.employee?.id||null):Number(req.body.assigned_to_employee_id);
+    await db.execute({sql:`UPDATE cost_attention_cases SET status=?,assigned_to_employee_id=?,
+      resolution_note=?,resolved_at=CASE WHEN ? IN ('resolved','dismissed') THEN CURRENT_TIMESTAMP ELSE NULL END,
+      last_seen_at=CURRENT_TIMESTAMP WHERE id=?`,args:[status,assigned,note,status,req.params.id]});
+    const {rows:[row]}=await db.execute({sql:'SELECT * FROM cost_attention_cases WHERE id=?',args:[req.params.id]});
+    if(!row)return res.status(404).json({error:'Attention case not found'});
+    res.json(row);
+  }catch(e){res.status(400).json({error:e.message});}
+});
+
+router.get('/economics',async(req,res)=>{
+  try{
+    const type=String(req.query.target_type||'').trim();
+    if(!type)return res.status(400).json({error:'target_type is required'});
+    const {rows}=await db.execute({sql:`SELECT
+      ca.target_type,ca.target_id,MAX(ca.target_label) target_label,
+      ROUND(SUM(CASE WHEN ca.source_type='purchase_request' THEN ca.allocation_amount ELSE 0 END),2) requested_cost,
+      ROUND(SUM(CASE WHEN ca.source_type='purchase_order' THEN ca.allocation_amount ELSE 0 END),2) committed_cost,
+      ROUND(SUM(CASE WHEN ca.source_type IN ('purchase_receipt','internal_consumption') THEN ca.allocation_amount ELSE 0 END),2) actual_cost,
+      ROUND(SUM(CASE WHEN ca.source_type IN ('purchase_receipt','internal_consumption') AND datetime(ca.created_at)>=datetime('now','-30 days') THEN ca.allocation_amount ELSE 0 END),2) trailing_30d_cost,
+      ROUND(SUM(CASE WHEN ca.source_type IN ('purchase_receipt','internal_consumption') AND datetime(ca.created_at)>=datetime('now','-60 days') AND datetime(ca.created_at)<datetime('now','-30 days') THEN ca.allocation_amount ELSE 0 END),2) prior_30d_cost,
+      COUNT(CASE WHEN ca.source_type IN ('purchase_receipt','internal_consumption') AND ca.valuation_status NOT IN ('actual','fully_valued') THEN 1 END) incomplete_actual_lines,
+      COUNT(CASE WHEN ca.target_type='general_overhead' THEN 1 END) overhead_lines,
+      MAX(ca.created_at) last_activity
+      FROM cost_allocations ca
+      WHERE ca.target_type=?
+      GROUP BY ca.target_type,ca.target_id
+      ORDER BY actual_cost DESC,requested_cost DESC`,args:[type]});
+    const out=[];
+    for(const row of rows){
+      let context={};
+      if(type==='vehicle'&&row.target_id){
+        let v=null,jobs={jobs:0,completed_jobs:0,exception_jobs:0,recent_completed_jobs:0,prior_completed_jobs:0};
+        try{
+          ({rows:[v]}=await db.execute({sql:'SELECT id,vehicle_number,registration_number,description,status,current_branch_id FROM dispatch_vehicles WHERE id=?',args:[row.target_id]}));
+          ({rows:[jobs]}=await db.execute({sql:`SELECT
+            COUNT(*) jobs,
+            COUNT(CASE WHEN dj.status='completed' THEN 1 END) completed_jobs,
+            COUNT(CASE WHEN dj.status IN ('failed','delayed') THEN 1 END) exception_jobs,
+            COUNT(CASE WHEN dj.status='completed' AND datetime(COALESCE(dj.completed_at,dj.created_at))>=datetime('now','-30 days') THEN 1 END) recent_completed_jobs,
+            COUNT(CASE WHEN dj.status='completed' AND datetime(COALESCE(dj.completed_at,dj.created_at))>=datetime('now','-60 days') AND datetime(COALESCE(dj.completed_at,dj.created_at))<datetime('now','-30 days') THEN 1 END) prior_completed_jobs
+            FROM dispatch_jobs dj
+            JOIN dispatch_executions de ON de.dispatch_job_id=dj.id
+            WHERE de.vehicle_id=?`,args:[row.target_id]}));
+        }catch{}
+        const recentJobs=Number(jobs?.recent_completed_jobs||0),priorJobs=Number(jobs?.prior_completed_jobs||0);
+        const recentCostPerJob=recentJobs>0?Number((Number(row.trailing_30d_cost||0)/recentJobs).toFixed(2)):null;
+        const priorCostPerJob=priorJobs>0?Number((Number(row.prior_30d_cost||0)/priorJobs).toFixed(2)):null;
+        const efficiencyChangePct=recentCostPerJob!=null&&priorCostPerJob>0?Number((((recentCostPerJob-priorCostPerJob)/priorCostPerJob)*100).toFixed(2)):null;
+        context={vehicle:v||null,dispatch:jobs||{},efficiency:{
+          metric:'allocated_cost_per_completed_dispatch',
+          recent_output:recentJobs,prior_output:priorJobs,
+          recent_cost_per_output:recentCostPerJob,prior_cost_per_output:priorCostPerJob,
+          change_pct:efficiencyChangePct,
+          state:recentJobs<=0?'no_recent_output':priorJobs<=0?'new_output_baseline':efficiencyChangePct>=15?'efficiency_worsening':efficiencyChangePct<=-15?'efficiency_improving':'efficiency_stable'
+        }};
+      }else if(type==='branch'&&row.target_id){
+        const {rows:[b]}=await db.execute({sql:'SELECT id,branch_code,name,active FROM branches WHERE id=?',args:[row.target_id]});
+        let activity={recent_transactions:0,prior_transactions:0,recent_sales_value:0,prior_sales_value:0};
+        try{
+          const {rows:[a]}=await db.execute({sql:`SELECT
+            COUNT(CASE WHEN status='completed' AND datetime(created_at)>=datetime('now','-30 days') THEN 1 END) recent_transactions,
+            COUNT(CASE WHEN status='completed' AND datetime(created_at)>=datetime('now','-60 days') AND datetime(created_at)<datetime('now','-30 days') THEN 1 END) prior_transactions,
+            COALESCE(SUM(CASE WHEN status='completed' AND datetime(created_at)>=datetime('now','-30 days') THEN total ELSE 0 END),0) recent_sales_value,
+            COALESCE(SUM(CASE WHEN status='completed' AND datetime(created_at)>=datetime('now','-60 days') AND datetime(created_at)<datetime('now','-30 days') THEN total ELSE 0 END),0) prior_sales_value
+            FROM transactions WHERE branch_id=?`,args:[row.target_id]});
+          activity=a||activity;
+        }catch{}
+        const recentTx=Number(activity.recent_transactions||0),priorTx=Number(activity.prior_transactions||0),
+          recentSales=Number(activity.recent_sales_value||0),priorSales=Number(activity.prior_sales_value||0);
+        const recentCostPerTx=recentTx>0?Number((Number(row.trailing_30d_cost||0)/recentTx).toFixed(2)):null;
+        const priorCostPerTx=priorTx>0?Number((Number(row.prior_30d_cost||0)/priorTx).toFixed(2)):null;
+        const recentCostToSales=recentSales>0?Number((100*Number(row.trailing_30d_cost||0)/recentSales).toFixed(2)):null;
+        const priorCostToSales=priorSales>0?Number((100*Number(row.prior_30d_cost||0)/priorSales).toFixed(2)):null;
+        const efficiencyChangePct=recentCostPerTx!=null&&priorCostPerTx>0?Number((((recentCostPerTx-priorCostPerTx)/priorCostPerTx)*100).toFixed(2)):
+          (recentCostToSales!=null&&priorCostToSales>0?Number((((recentCostToSales-priorCostToSales)/priorCostToSales)*100).toFixed(2)):null);
+        context={branch:b||null,activity,efficiency:{
+          metric:'allocated_cost_intensity',
+          recent_cost_per_transaction:recentCostPerTx,
+          prior_cost_per_transaction:priorCostPerTx,
+          recent_cost_to_recorded_sales_pct:recentCostToSales,
+          prior_cost_to_recorded_sales_pct:priorCostToSales,
+          change_pct:efficiencyChangePct,
+          state:recentTx<=0&&recentSales<=0?'no_recent_output':priorTx<=0&&priorSales<=0?'new_output_baseline':efficiencyChangePct>=15?'efficiency_worsening':efficiencyChangePct<=-15?'efficiency_improving':'efficiency_stable'
+        }};
+      }else if(['building','equipment','department','project','general_overhead'].includes(type)&&row.target_id){
+        const {rows:[o]}=await db.execute({sql:'SELECT * FROM cost_objects WHERE id=? AND object_type=?',args:[row.target_id,type]});
+        context={object:o||null};
+      }
+      const trailing=Number(row.trailing_30d_cost||0),prior=Number(row.prior_30d_cost||0);
+      const changePct=prior>0?Number((((trailing-prior)/prior)*100).toFixed(2)):(trailing>0?null:0);
+      const state=Number(row.incomplete_actual_lines||0)>0?'evidence_gap':(changePct!=null&&changePct>=25?'cost_rising':changePct!=null&&changePct<=-15?'cost_improving':'stable');
+      out.push({...row,requested_cost:Number(row.requested_cost||0),committed_cost:Number(row.committed_cost||0),actual_cost:Number(row.actual_cost||0),trailing_30d_cost:trailing,prior_30d_cost:prior,cost_change_pct:changePct,cost_state:state,context});
+    }
+    res.json({target_type:type,items:out,methodology:{
+      profitability_applicable:type==='rental_asset',
+      statement:type==='rental_asset'?'Use rental economics for revenue-linked profitability.':'This view measures cost efficiency and trend only; no revenue or profit is invented.',
+      trailing_window_days:30
+    }});
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.get('/summary',async(req,res)=>{
+  try{
+    const {target_type}=req.query;
+    let sql=`SELECT target_type,target_id,MAX(target_label) target_label,
+      ROUND(SUM(CASE WHEN source_type='purchase_request' THEN allocation_amount ELSE 0 END),2) requested_cost,
+      ROUND(SUM(CASE WHEN source_type='purchase_order' THEN allocation_amount ELSE 0 END),2) committed_cost,
+      ROUND(SUM(CASE WHEN source_type='purchase_receipt' THEN allocation_amount ELSE 0 END),2) received_actual_cost,
+      ROUND(SUM(CASE WHEN source_type='internal_consumption' THEN allocation_amount ELSE 0 END),2) consumed_actual_cost,
+      COUNT(CASE WHEN source_type IN ('purchase_receipt','internal_consumption') AND valuation_status NOT IN ('actual','fully_valued') THEN 1 END) incomplete_actual_lines,
+      COUNT(*) allocation_lines,
+      MAX(created_at) last_activity
+      FROM cost_allocations WHERE 1=1`;
+    const args=[];
+    if(target_type){sql+=' AND target_type=?';args.push(target_type);}
+    sql+=' GROUP BY target_type,target_id ORDER BY (received_actual_cost+consumed_actual_cost) DESC,requested_cost DESC LIMIT 500';
+    const {rows}=await db.execute({sql,args});
+    res.json(rows);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.get('/reconciliations',async(req,res)=>{
+  try{
+    const {status,limit=200}=req.query;
+    let sql=`SELECT r.*,si.invoice_number,si.invoice_date,po.po_number,s.name supplier_name
+      FROM cost_allocation_invoice_reconciliations r
+      JOIN supplier_invoices si ON si.id=r.supplier_invoice_id
+      JOIN purchase_orders po ON po.id=r.purchase_order_id
+      LEFT JOIN suppliers s ON s.id=si.supplier_id WHERE 1=1`;
+    const args=[];
+    if(status){sql+=' AND r.status=?';args.push(status);}
+    sql+=' ORDER BY r.updated_at DESC,r.id DESC LIMIT ?';args.push(Math.min(500,Number(limit)||200));
+    const {rows}=await db.execute({sql,args});
+    res.json(rows);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.get('/target/:type/:id/history',async(req,res)=>{
+  try{
+    const {rows}=await db.execute({sql:`SELECT * FROM cost_allocations
+      WHERE target_type=? AND target_id=? ORDER BY created_at DESC,id DESC LIMIT 500`,
+      args:[req.params.type,String(req.params.id)]});
+    res.json(rows);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.get('/consumptions',async(req,res)=>{
+  try{
+    const {branch_id,limit=100}=req.query;
+    let sql=`SELECT ic.*,b.name branch_name,e.first_name||' '||e.last_name employee_name
+      FROM internal_consumptions ic
+      JOIN branches b ON b.id=ic.branch_id
+      LEFT JOIN employees e ON e.id=ic.employee_id WHERE 1=1`;
+    const args=[];
+    if(branch_id){sql+=' AND ic.branch_id=?';args.push(branch_id);}
+    sql+=' ORDER BY ic.created_at DESC LIMIT ?';args.push(Math.min(500,Number(limit)||100));
+    const {rows}=await db.execute({sql,args});
+    res.json(rows);
+  }catch(e){res.status(500).json({error:e.message});}
+});
+
+router.post('/consumptions',async(req,res)=>{
+  const {branch_id,notes,items}=req.body||{};
+  const employee_id=req.employee?.id||req.body?.employee_id||null;
+  if(!branch_id)return res.status(400).json({error:'Branch is required'});
+  if(!Array.isArray(items)||!items.length)return res.status(400).json({error:'At least one consumption item is required'});
+  const tx=await db.transaction('write');let committed=false;
+  try{
+    const number=await nextNumber(tx,'internal_consumptions','consumption_number','CON-',6);
+    const {rows:[branch]}=await tx.execute({sql:'SELECT currency FROM branches WHERE id=?',args:[branch_id]});
+    const branchCurrency=branch?.currency||null;
+    const head=await tx.execute({sql:`INSERT INTO internal_consumptions(consumption_number,branch_id,employee_id,notes)
+      VALUES(?,?,?,?)`,args:[number,branch_id,employee_id||null,notes||null]});
+    const consumptionId=Number(head.lastInsertRowid);
+    let totalTracked=0;let overall='fully_valued';
+    const eventItems=[];
+    for(const raw of items){
+      const productId=Number(raw.product_id),qty=Number(raw.quantity);
+      if(!productId||!Number.isFinite(qty)||qty<=0)throw new Error('Each consumption item requires a valid product and quantity');
+      const {rows:[product]}=await tx.execute({sql:'SELECT id,name,sku FROM products WHERE id=?',args:[productId]});
+      if(!product)throw new Error('Product not found');
+      const {rows:[inv]}=await tx.execute({sql:'SELECT stock_qty FROM branch_inventory WHERE product_id=? AND branch_id=?',args:[productId,branch_id]});
+      const physicalBefore=Number(inv?.stock_qty||0);
+      if(physicalBefore<qty)throw new Error(`Insufficient branch stock for ${product.name}`);
+      const {rows:[bin]}=await tx.execute({sql:'SELECT id FROM product_bin_assignments WHERE product_id=? AND branch_id=? LIMIT 1',args:[productId,branch_id]});
+      if(bin&&!raw.bin_id)throw new Error(`${product.name} is bin-controlled; select the exact bin`);
+      if(raw.bin_id){
+        const br=await tx.execute({sql:'UPDATE product_bin_assignments SET quantity=quantity-?,updated_at=CURRENT_TIMESTAMP WHERE product_id=? AND branch_id=? AND bin_id=? AND quantity>=?',args:[qty,productId,branch_id,raw.bin_id,qty]});
+        if(Number(br.rowsAffected||0)!==1)throw new Error(`Bin stock changed for ${product.name}`);
+      }
+      const upd=await tx.execute({sql:'UPDATE branch_inventory SET stock_qty=stock_qty-?,updated_at=CURRENT_TIMESTAMP WHERE product_id=? AND branch_id=? AND stock_qty>=?',args:[qty,productId,branch_id,qty]});
+      if(Number(upd.rowsAffected||0)!==1)throw new Error(`Stock changed for ${product.name}`);
+      await tx.execute({sql:'UPDATE products SET stock_qty=(SELECT COALESCE(SUM(stock_qty),0) FROM branch_inventory WHERE product_id=?) WHERE id=?',args:[productId,productId]});
+      const mov=await tx.execute({sql:`INSERT INTO stock_movements(product_id,branch_id,quantity_change,type,reference,reason)
+        VALUES(?,?,?,?,?,?)`,args:[productId,branch_id,-qty,'internal_consumption',number,raw.purpose||'Internal consumption']});
+      const movementId=Number(mov.lastInsertRowid);
+      await valueStockAdjustment(tx,{stockMovementId:movementId,productId,branchKey:branch_id,quantityChange:-qty,reason:raw.purpose||'Internal consumption',physicalBefore});
+      const {rows:[val]}=await tx.execute({sql:'SELECT * FROM inventory_adjustment_valuations WHERE stock_movement_id=?',args:[movementId]});
+      const trackedValue=Number(val?.tracked_value||0);
+      const incomplete=Number(val?.legacy_quantity||0)+Number(val?.untracked_quantity||0)>0;
+      const valuationStatus=incomplete?(trackedValue>0?'partial':'unvalued'):'fully_valued';
+      if(valuationStatus!=='fully_valued')overall=overall==='unvalued'||valuationStatus==='unvalued'?'unvalued':'partial';
+      totalTracked+=trackedValue;
+      const line=await tx.execute({sql:`INSERT INTO internal_consumption_items(consumption_id,product_id,quantity,tracked_value,valuation_status,stock_movement_id)
+        VALUES(?,?,?,?,?,?)`,args:[consumptionId,productId,qty,trackedValue,valuationStatus,movementId]});
+      const lineId=Number(line.lastInsertRowid);
+      const allocations=Array.isArray(raw.allocations)?raw.allocations:[];
+      if(!allocations.length)throw new Error(`Allocate ${product.name} to a machine, vehicle, branch, department, building, project, work order, or overhead`);
+      const pctTotal=allocations.reduce((s,a)=>s+Number(a.allocation_percent||0),0);
+      if(Math.abs(pctTotal-100)>0.01)throw new Error(`Allocations for ${product.name} must total 100%`);
+      const normalized=allocations.map(a=>({
+        ...a,
+        allocation_amount:Number((trackedValue*Number(a.allocation_percent||0)/100).toFixed(2)),
+        allocation_quantity:Number((qty*Number(a.allocation_percent||0)/100).toFixed(4)),
+        valuation_status:valuationStatus
+      }));
+      await insertAllocations(tx,{sourceType:'internal_consumption',sourceId:consumptionId,sourceLineId:lineId,allocations:normalized,createdBy:employee_id});
+      eventItems.push({
+        productId:String(productId),sku:product.sku||null,productName:product.name,quantity:qty,trackedValue,
+        valuationStatus,allocations:normalized.map(a=>({
+          targetType:a.target_type,targetId:a.target_id,targetLabel:a.target_label,
+          amount:a.allocation_amount,quantity:a.allocation_quantity,percent:a.allocation_percent,
+          purpose:a.purpose,expenseCategory:a.expense_category,valuationStatus:a.valuation_status
+        }))
+      });
+    }
+    await tx.execute({sql:'UPDATE internal_consumptions SET total_tracked_value=?,valuation_status=? WHERE id=?',args:[Number(totalTracked.toFixed(2)),overall,consumptionId]});
+    await enqueueSpendEvent(tx,{
+      id:`total-tools:internal-consumption:${consumptionId}:1`,type:'consumable.issued',
+      occurredAt:new Date().toISOString(),tenantId:process.env.SPENDOS_TENANT_ID||'total-tools',
+      source:'total-tools-pos',sourceRecordId:String(consumptionId),sourceVersion:1,
+      actorId:employee_id?String(employee_id):null,locationId:String(branch_id),departmentId:null,
+      payload:{consumptionNumber:number,currency:branchCurrency,totalTrackedValue:Number(totalTracked.toFixed(2)),valuationStatus:overall,items:eventItems}
+    });
+    await tx.commit();committed=true;
+    const {rows:[row]}=await db.execute({sql:'SELECT * FROM internal_consumptions WHERE id=?',args:[consumptionId]});
+    res.status(201).json(row);
+  }catch(e){
+    if(!committed)try{await tx.rollback();}catch{}
+    res.status(400).json({error:e.message});
+  }
+});
+
+module.exports=router;

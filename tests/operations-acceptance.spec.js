@@ -37,7 +37,7 @@ test.describe('Total Tools Operations acceptance', () => {
     const failures = collectRuntimeFailures(page);
 
     const domains = page.locator('.shell-nav [data-domain]');
-    const cards = page.locator('.shell-card');
+    const cards = page.locator('.shell-choice');
     await expect(domains).not.toHaveCount(0);
     await expect(cards).not.toHaveCount(0);
 
@@ -46,7 +46,7 @@ test.describe('Total Tools Operations acceptance', () => {
       const button = domains.nth(i);
       await button.click();
       await expect(button).toHaveClass(/is-active/);
-      await expect(page.locator('#shell-grid')).toBeVisible();
+      await expect(page.locator('.shell-choice-grid')).toBeVisible();
       await expect(page.locator('#shell-title')).not.toBeEmpty();
     }
 
@@ -57,9 +57,9 @@ test.describe('Total Tools Operations acceptance', () => {
     await loginToOperationsShell(page);
     const failures = collectRuntimeFailures(page);
 
-    const healthButton = page.getByRole('button', { name: /system health/i });
-    await expect(healthButton).toBeVisible({ timeout: 8_000 });
-    await healthButton.click();
+    // Diagnostics remain callable without adding an everyday navigation item.
+    await page.waitForFunction(() => !!window.TotalToolsSystemHealth?.open);
+    await page.evaluate(() => window.TotalToolsSystemHealth.open());
 
     const dialog = page.getByRole('dialog', { name: /system health & operational readiness/i });
     await expect(dialog).toBeVisible();

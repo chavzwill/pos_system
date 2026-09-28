@@ -922,6 +922,7 @@ async function _init() {
       notes TEXT,
       required_date DATE,
       converted_to_po_id INTEGER REFERENCES purchase_orders(id),
+      spendos_version INTEGER NOT NULL DEFAULT 1,
       created_at DATETIME DEFAULT CURRENT_TIMESTAMP
     )` },
     { sql: `CREATE TABLE IF NOT EXISTS purchase_request_items (
@@ -934,6 +935,22 @@ async function _init() {
       unit_cost REAL DEFAULT 0,
       notes TEXT,
       total REAL DEFAULT 0
+    )` },
+    { sql: `CREATE TABLE IF NOT EXISTS spendos_outbox (
+      id INTEGER PRIMARY KEY AUTOINCREMENT,
+      event_id TEXT NOT NULL UNIQUE,
+      event_type TEXT NOT NULL,
+      aggregate_type TEXT NOT NULL,
+      aggregate_id TEXT NOT NULL,
+      source_version INTEGER NOT NULL,
+      payload TEXT NOT NULL,
+      status TEXT NOT NULL DEFAULT 'pending',
+      attempts INTEGER NOT NULL DEFAULT 0,
+      available_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      last_error TEXT,
+      created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,
+      sent_at DATETIME,
+      UNIQUE(aggregate_type,aggregate_id,event_type,source_version)
     )` },
     { sql: `CREATE TABLE IF NOT EXISTS currency_denominations (
       id INTEGER PRIMARY KEY AUTOINCREMENT,
@@ -1088,6 +1105,7 @@ async function _init() {
     'ALTER TABLE purchase_requests ADD COLUMN is_online_purchase INTEGER DEFAULT 0',
     'ALTER TABLE purchase_requests ADD COLUMN tax_rate REAL DEFAULT 0',
     'ALTER TABLE purchase_requests ADD COLUMN tax_amount REAL DEFAULT 0',
+    'ALTER TABLE purchase_requests ADD COLUMN spendos_version INTEGER NOT NULL DEFAULT 1',
     'ALTER TABLE purchase_request_items ADD COLUMN product_url TEXT',
     'ALTER TABLE products ADD COLUMN is_service INTEGER DEFAULT 0',
     'ALTER TABLE products ADD COLUMN unit TEXT',
@@ -1624,16 +1642,18 @@ async function _init() {
       WHERE p.stock_qty > 0 AND NOT EXISTS (SELECT 1 FROM branch_inventory WHERE product_id = p.id)`, args: [] });
   } catch(e) {}
 
+  const seedDemo = process.env.POS_SKIP_DEMO_SEED !== '1';
+
   // Seed branches
   const { rows: [branchCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM branches', args: [] });
-  if (Number(branchCount.c) === 0) {
+  if (seedDemo && Number(branchCount.c) === 0) {
     await db.execute({ sql: 'INSERT INTO branches (branch_code, name, address, city, state, zip, phone, manager) VALUES (?,?,?,?,?,?,?,?)', args: ['BR-001','Main Store','100 Commerce Way','Springfield','IL','62701','(217) 555-0100','Admin User'] });
     await db.execute({ sql: 'INSERT INTO branches (branch_code, name, address, city, state, zip, phone, manager) VALUES (?,?,?,?,?,?,?,?)', args: ['BR-002','North Branch','250 Oak Ave','Springfield','IL','62702','(217) 555-0200','Jane Doe'] });
   }
 
   // Seed suppliers
   const { rows: [supplierCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM suppliers', args: [] });
-  if (Number(supplierCount.c) === 0) {
+  if (seedDemo && Number(supplierCount.c) === 0) {
     await db.execute({ sql: 'INSERT INTO suppliers (supplier_number,name,contact_name,email,phone,address,city,state,zip,payment_terms) VALUES (?,?,?,?,?,?,?,?,?,?)', args: ['SUP-0001','TechSupply Co','Mark Johnson','orders@techsupply.com','555-9001','1 Tech Park','Chicago','IL','60601','Net 30'] });
     await db.execute({ sql: 'INSERT INTO suppliers (supplier_number,name,contact_name,email,phone,address,city,state,zip,payment_terms) VALUES (?,?,?,?,?,?,?,?,?,?)', args: ['SUP-0002','Fashion World','Lisa Chen','buying@fashionworld.com','555-9002','22 Style Ave','New York','NY','10001','Net 15'] });
     await db.execute({ sql: 'INSERT INTO suppliers (supplier_number,name,contact_name,email,phone,address,city,state,zip,payment_terms) VALUES (?,?,?,?,?,?,?,?,?,?)', args: ['SUP-0003','FoodCo Distributors','Tom Green','sales@foodco.com','555-9003','5 Harvest Rd','Joliet','IL','60431','Net 30'] });
@@ -1673,7 +1693,7 @@ async function _init() {
 
   // Seed categories and products
   const { rows: [catCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM categories', args: [] });
-  if (Number(catCount.c) === 0) {
+  if (seedDemo && Number(catCount.c) === 0) {
     await db.execute({ sql: 'INSERT INTO categories (name, description) VALUES (?, ?)', args: ['Electronics', 'Electronic devices and accessories'] });
     await db.execute({ sql: 'INSERT INTO categories (name, description) VALUES (?, ?)', args: ['Clothing', 'Apparel and accessories'] });
     await db.execute({ sql: 'INSERT INTO categories (name, description) VALUES (?, ?)', args: ['Food & Beverage', 'Food and drink items'] });
@@ -1794,7 +1814,7 @@ async function _init() {
 
   // Seed commission plans and demo records
   const { rows: [commPlanCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM commission_plans', args: [] });
-  if (Number(commPlanCount.c) === 0) {
+  if (seedDemo && Number(commPlanCount.c) === 0) {
     try {
       const cpSql = 'INSERT INTO commission_plans (name,type,rate,tiers,apply_to,min_sale_amount,notes) VALUES (?,?,?,?,?,?,?)';
       const p1r = await db.execute({ sql: cpSql, args: ['Standard 5% Commission','percentage',5,null,'all',0,'5% on all sales — standard plan for sales staff'] });
@@ -1838,7 +1858,7 @@ async function _init() {
 
   // Seed CRM demo data
   const { rows: [crmCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM crm_leads', args: [] });
-  if (Number(crmCount.c) === 0) {
+  if (seedDemo && Number(crmCount.c) === 0) {
     try {
       const { rows: [empRow] } = await db.execute({ sql: 'SELECT id FROM employees WHERE username = ?', args: ['admin'] });
       const { rows: [emp2Row] } = await db.execute({ sql: 'SELECT id FROM employees WHERE username = ?', args: ['jdoe'] });
@@ -1881,7 +1901,7 @@ async function _init() {
 
   // Seed default USD denominations
   const { rows: [denomCount] } = await db.execute({ sql: 'SELECT COUNT(*) as c FROM currency_denominations', args: [] });
-  if (Number(denomCount.c) === 0) {
+  if (seedDemo && Number(denomCount.c) === 0) {
     const dSql = 'INSERT INTO currency_denominations (currency, value, label, sort_order) VALUES (?,?,?,?)';
     const usd = [
       ['USD', 100, '$100', 1], ['USD', 50, '$50', 2], ['USD', 20, '$20', 3],
@@ -1952,6 +1972,8 @@ async function _init() {
     'CREATE INDEX IF NOT EXISTS idx_products_category_id ON products(category_id)',
     'CREATE INDEX IF NOT EXISTS idx_purchase_order_items_po_id ON purchase_order_items(po_id)',
     'CREATE INDEX IF NOT EXISTS idx_purchase_request_items_pr_id ON purchase_request_items(pr_id)',
+    'CREATE INDEX IF NOT EXISTS idx_spendos_outbox_delivery ON spendos_outbox(status,available_at,id)',
+    'CREATE INDEX IF NOT EXISTS idx_spendos_outbox_aggregate ON spendos_outbox(aggregate_type,aggregate_id,source_version)',
     'CREATE INDEX IF NOT EXISTS idx_account_payments_customer_id ON account_payments(customer_id)',
     'CREATE INDEX IF NOT EXISTS idx_commission_records_employee_id ON commission_records(employee_id)',
     'CREATE INDEX IF NOT EXISTS idx_commission_records_source ON commission_records(source_type, source_id)',
