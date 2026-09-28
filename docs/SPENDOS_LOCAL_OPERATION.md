@@ -1,7 +1,11 @@
 # Local POS → SpendOS operation
 
-This integration combines POS master `8082680d` with the certified connector
-`fd0b647c` in a separate checkout. Existing POS checkouts are not switched or reset.
+This integration branch combines the current POS modernization line with the certified SpendOS connector and local-operation tooling. It was built in a separate worktree so the active POS checkout and its uncommitted work were not switched or reset.
+
+Docker is not required for local POS-to-SpendOS operation. There are two supported local paths:
+- for an isolated disposable validation database, use the SpendOS repository's `npm run start:linked-pos -- --pos-dir "C:\path\to\pos_system"` launcher;
+- for supervised local operation against explicitly selected existing POS and SpendOS SQLite databases, use the runner below after taking its backup.
+
 This is local operation, not a production deployment.
 
 ## Configuration and startup
