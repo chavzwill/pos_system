@@ -67,6 +67,24 @@ Meaning:
 
 Do not expose `SPENDOS_API_KEY` to browsers or POS clients. Keep it server-side only.
 
+### Same-machine local development
+
+Docker is not required for local POS-to-SpendOS integration. Start both applications directly on Node 24+ and point the POS at:
+
+```env
+SPENDOS_INGEST_URL=http://127.0.0.1:4010/v1/events
+```
+
+The SpendOS repository provides the preferred launcher:
+
+```powershell
+npm run start:linked-pos -- --pos-dir "C:\path\to\this-pos-checkout"
+```
+
+It creates an ephemeral shared server key without printing it, uses a dedicated local POS database by default, secures the first-boot administrator and prints one-time local sign-in credentials, runs the real outbox worker once, and verifies authenticated SpendOS access. This is the recommended local setup when Docker Desktop is unavailable.
+
+For a persistent/manual setup, give both services the same `SPENDOS_TENANT_ID` and `SPENDOS_API_KEY`, keep the key server-side, then run `node scripts/deliver-spendos-outbox.js` after both services are online.
+
 ## 4. Required event envelope
 
 Every event sent to SpendOS should use this shape:
