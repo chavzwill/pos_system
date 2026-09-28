@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const route=read('routes/logistics-location-intelligence.js'),parent=read('routes/logistics-intelligence.js'),ui=read('public/logistics-location-intelligence.js'),deferred=read('public/shell-deferred.js');
+const route=read('routes/logistics-location-intelligence.js'),parent=read('routes/logistics-intelligence.js'),ui=read('public/logistics-location-intelligence.js'),deferred=read('public/shell-deferred.js'),loader=read('public/workspace-loader-hardening.js');
 new vm.Script(route,{filename:'logistics location intelligence'});new vm.Script(parent,{filename:'logistics parent'});new vm.Script(ui,{filename:'logistics location intelligence ui'});
 const checks=[
  ['location intelligence is mounted inside logistics',parent.includes("router.use(require('./logistics-location-intelligence'))")],
@@ -24,6 +24,6 @@ const checks=[
  ['operator UI can verify coordinates',ui.includes('Verify coordinates')&&ui.includes('/coordinates')],
  ['operator UI can create service zones',ui.includes('Add service zone')&&ui.includes('/service-zones')],
  ['operator UI inspects route geography evidence',ui.includes('Route geography')&&ui.includes('/geography')],
- ['location intelligence UI is deferred through shell',deferred.includes('/logistics-location-intelligence.js')]
+ ['location intelligence UI is deferred through shell or its logistics workspace',deferred.includes('/logistics-location-intelligence.js')||(loader.includes("'logistics-intelligence'")&&loader.includes('/logistics-location-intelligence.js'))]
 ];
 let failed=0;for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Logistics location intelligence: ${name}`);if(!ok)failed++;}if(failed){console.error(`Logistics location intelligence contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`Logistics location intelligence contract OK (${checks.length} checks).`);

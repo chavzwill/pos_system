@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const route=read('routes/rental-asset-disposal.js'),trace=read('routes/inventory-traceability.js'),ui=read('public/rental-fleet-disposal.js'),deferred=read('public/shell-deferred.js');
+const route=read('routes/rental-asset-disposal.js'),trace=read('routes/inventory-traceability.js'),ui=read('public/rental-fleet-disposal.js'),deferred=read('public/shell-deferred.js'),loader=read('public/workspace-loader-hardening.js');
 new vm.Script(route,{filename:'rental asset disposal'});new vm.Script(ui,{filename:'rental fleet disposal ui'});
 const checks=[
  ['controlled disposal route is mounted before lifetime economics',trace.includes("require('./rental-asset-disposal')")&&trace.indexOf('rental-asset-disposal')<trace.indexOf('rental-asset-lifetime-economics')],
@@ -25,6 +25,6 @@ const checks=[
  ['employee UI exposes permanent disposal only from owned retired states',ui.includes('Dispose permanently')&&ui.includes("'retired','internal_use','reserve','parts_donor','long_term_storage','awaiting_sale'")],
  ['employee UI requires independent authorizer pin and evidence',ui.includes('disposal_authorizer_pin')&&ui.includes('Evidence / write-off reference')],
  ['employee UI clearly redirects proceeds to Fleet Sale',ui.includes('If any money will be received')&&ui.includes('Fleet Sale')],
- ['employee UI is deferred-loaded',deferred.includes('/rental-fleet-disposal.js')]
+ ['employee UI is deferred-loaded by shell or rental workspace',deferred.includes('/rental-fleet-disposal.js')||(loader.includes("'rentals-workspace'")&&loader.includes('/rental-fleet-disposal.js'))]
 ];
 let failed=0;for(const [name,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Rental asset disposal: ${name}`);if(!ok)failed++;}if(failed){console.error(`Rental asset disposal contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`Rental asset disposal contract OK (${checks.length} checks).`);

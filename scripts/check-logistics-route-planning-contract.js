@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const route=read('routes/logistics-route-planning.js'),parent=read('routes/logistics-intelligence.js'),ui=read('public/logistics-route-planning.js'),deferred=read('public/shell-deferred.js');
+const route=read('routes/logistics-route-planning.js'),parent=read('routes/logistics-intelligence.js'),ui=read('public/logistics-route-planning.js'),deferred=read('public/shell-deferred.js'),loader=read('public/workspace-loader-hardening.js');
 new vm.Script(route,{filename:'logistics route planning'});new vm.Script(parent,{filename:'logistics parent'});new vm.Script(ui,{filename:'logistics route planning ui'});
 const checks=[
  ['route planning mounted inside logistics',parent.includes("router.use(require('./logistics-route-planning'))")],
@@ -28,6 +28,6 @@ const checks=[
  ['route planner UI can create routes',ui.includes('Create route')&&ui.includes("api('/routes'")],
  ['route planner UI adds jobs with load estimates',ui.includes('planned_weight_kg')&&ui.includes('planned_volume_m3')&&ui.includes('/stops')],
  ['route planner UI exposes release and manifest',ui.includes('Release route')&&ui.includes('View manifest')],
- ['route planner is deferred through shell',deferred.includes('/logistics-route-planning.js')]
+ ['route planner is deferred through shell or its logistics workspace',deferred.includes('/logistics-route-planning.js')||(loader.includes("'logistics-intelligence'")&&loader.includes('/logistics-route-planning.js'))]
 ];
 let failed=0;for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Logistics route planning: ${name}`);if(!ok)failed++;}if(failed){console.error(`Logistics route planning contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`Logistics route planning contract OK (${checks.length} checks).`);

@@ -1,8 +1,10 @@
 import { test, expect } from '@playwright/test';
+import { TEST_BASE_URL } from './test-base-url.js';
 
-const BASE = 'http://localhost:3001';
-const TEST_USER = process.env.POS_TEST_USER || 'admin';
-const TEST_PASSWORD = process.env.POS_TEST_PASSWORD || 'CI-Test-Auth!2026';
+const BASE = TEST_BASE_URL;
+const TEST_USER = process.env.POS_TEST_USER;
+const TEST_PASSWORD = process.env.POS_TEST_PASSWORD;
+if (!TEST_USER || !TEST_PASSWORD) throw new Error('POS_TEST_USER and POS_TEST_PASSWORD are required');
 
 async function loginCookie() {
   const r = await fetch(`${BASE}/api/employees/login`, {
@@ -42,7 +44,6 @@ test.describe('Service completion and payment integrity', () => {
 
   test('completed service records retain completion evidence', async () => {
     const cookie = await loginCookie();
-    // Touch the quality runtime first so its database-level completion guard is initialized.
     const init = await fetch(`${BASE}/api/repair-quality/work-orders/999999/readiness`, { headers: { Cookie: cookie } });
     expect([404, 403]).toContain(init.status);
 

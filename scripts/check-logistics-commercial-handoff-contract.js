@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const route=read('routes/logistics-commercial-handoff.js'),parent=read('routes/logistics-intelligence.js'),ui=read('public/logistics-commercial-handoff.js'),deferred=read('public/shell-deferred.js');
+const route=read('routes/logistics-commercial-handoff.js'),parent=read('routes/logistics-intelligence.js'),ui=read('public/logistics-commercial-handoff.js'),deferred=read('public/shell-deferred.js'),loader=read('public/workspace-loader-hardening.js');
 new vm.Script(route,{filename:'logistics commercial handoff'});new vm.Script(parent,{filename:'logistics intelligence'});new vm.Script(ui,{filename:'logistics commercial handoff ui'});
 const checks=[
  ['commercial handoff is mounted inside logistics',parent.includes("router.use(require('./logistics-commercial-handoff'))")],
@@ -30,7 +30,7 @@ const checks=[
  ['printed document is rendered from immutable snapshot line items',ui.includes('d.snapshot?.items')&&ui.includes('Frozen handoff copy captured for logistics execution')],
  ['printed document explains snapshot immutability',ui.includes('does not silently rewrite itself')&&ui.includes('originating PO, invoice, rental or repair record later changes')],
  ['document renderer HTML-escapes commercial source values',ui.includes('const esc=')&&ui.includes('esc(d.party_name)')&&ui.includes('esc(d.document_number)')],
- ['commercial handoff UI is deferred through the application shell',deferred.includes('/logistics-commercial-handoff.js')]
+ ['commercial handoff UI is deferred through the application shell or its logistics workspace',deferred.includes('/logistics-commercial-handoff.js')||(loader.includes("'logistics-intelligence'")&&loader.includes('/logistics-commercial-handoff.js'))]
 ];
 let failed=0;for(const [name,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Commercial logistics handoff: ${name}`);if(!ok)failed++;}
 if(failed){console.error(`Commercial logistics handoff contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}

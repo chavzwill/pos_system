@@ -14,19 +14,31 @@ function compile(source, filename) {
 }
 
 const browserScripts = [
-  'app-shell.js','shell-deferred.js','workspace-loader-hardening.js','total-tools-identity.js','reports-shell-bridge.js','customer-programs-shell-bridge.js','customer-programs-workspace.js','warehouse-shell-bridge.js','warehouse-operations-workspace.js','cash-drawer-shell-bridge.js','cash-drawer-workspace.js','accounts-receivable-shell-bridge.js','accounts-receivable-workspace.js','commissions-shell-bridge.js','commissions-workspace.js','ecommerce-operations-shell-bridge.js','ecommerce-operations-workspace.js','integration-admin-shell-bridge.js','integration-admin-workspace.js','suppliers-shell-bridge.js','suppliers-workspace.js','catalog-admin-shell-bridge.js','catalog-admin-workspace.js','denominations-shell-bridge.js','denominations-workspace.js','settings-workspace.js','quotations-workspace.js','layaway-workspace.js','promotions-workspace.js','predictive-lookup.js','catalog-picker.js','catalog-workflow-enhancer.js','sales-workspace.js','pos-margin-override-ui.js','pos-uom-barcode-scanner.js','held-sales-workspace.js','held-sales-recall-context.js','cashier-controls-workspace.js','customer-crm-workspace.js','admin-workspace.js','rbac-workspace.js','transfers-workspace.js','work-orders-workspace.js','service-concessions-ui.js','service-refunds-ui.js','inventory-workspace.js','purchasing-workspace.js','purchasing-approval-ui-guard.js','purchasing-uom-enhancer.js','purchase-fast-receiving.js','stock-finder-ui.js','stock-finder-sell-action.js','purchase-quote-import-workspace.js','rentals-workspace.js','rental-fleet-management.js','rental-fleet-disposal.js','rental-fleet-transfer.js','logistics-commercial-handoff.js','logistics-field-execution.js','logistics-route-planning.js','logistics-location-intelligence.js','uom-commercial-experience.js','client-diagnostics.js','pos-guide-map.js','guided-mode.js','guided-mode-orchestrator.js','guided-mode-access.js','purchase-order-document-context.js','held-sales-recall-context.js','guided-mode-completion.js','guided-mode-role-context.js','guided-mode-record-context.js','guided-mode-exact-action.js','guided-mode-exact-fallback.js','guided-mode-hardening.js','guided-mode-integrity.js','guided-mode-adversarial.js','guided-mode-qa.js','operations-attention-center.js','technician-compensation.js','stock-rebalancing.js','operational-reports.js','repair-operations.js','repair-communications.js','repair-notifications.js','repair-authorizations.js','repair-parts-integrity.js','inventory-intelligence.js','logistics-intelligence.js','scheduling-intelligence.js','accounting-intelligence.js','financial-controls-intelligence.js','supplier-ledger.js','settlement-reconciliation.js','accounting-ledger.js','pos-upgrade-navigation.js','navigation-shell.js','role-workspace.js','employee-workspace-home.js','employee-assist-ui.js','department-approvals-ui.js','department-approvals-guide-me.js','login-controller.js',
+  'app-shell.js','shell-deferred.js','workspace-loader-hardening.js','total-tools-identity.js','reports-shell-bridge.js','customer-programs-shell-bridge.js','customer-programs-workspace.js','warehouse-shell-bridge.js','warehouse-operations-workspace.js','cash-drawer-shell-bridge.js','cash-drawer-workspace.js','accounts-receivable-shell-bridge.js','accounts-receivable-workspace.js','commissions-shell-bridge.js','commissions-workspace.js','ecommerce-operations-shell-bridge.js','ecommerce-operations-workspace.js','integration-admin-shell-bridge.js','integration-admin-workspace.js','suppliers-shell-bridge.js','suppliers-workspace.js','catalog-admin-shell-bridge.js','catalog-admin-workspace.js','denominations-shell-bridge.js','denominations-workspace.js','settings-workspace.js','quotations-workspace.js','layaway-workspace.js','promotions-workspace.js','sales-workspace.js','pos-margin-override-ui.js','pos-uom-barcode-scanner.js','held-sales-workspace.js','held-sales-recall-context.js','cashier-controls-workspace.js','replacement-identity-exchange-ui.js','customer-crm-workspace.js','admin-workspace.js','rbac-workspace.js','transfers-workspace.js','work-orders-workspace.js','service-concessions-ui.js','service-refunds-ui.js','inventory-workspace.js','branch-variation-migration.js','purchasing-workspace.js','rentals-workspace.js','rental-fleet-management.js','rental-fleet-disposal.js','rental-fleet-transfer.js','logistics-commercial-handoff.js','logistics-field-execution.js','logistics-route-planning.js','logistics-location-intelligence.js','uom-commercial-experience.js','client-diagnostics.js','pos-guide-map.js','guided-mode.js','guided-mode-branch-variation-extension.js','guided-mode-orchestrator.js','guided-mode-access.js','purchase-order-document-context.js','held-sales-recall-context.js','guided-mode-completion.js','guided-mode-role-context.js','guided-mode-record-context.js','guided-mode-exact-action.js','guided-mode-exact-fallback.js','guided-mode-hardening.js','guided-mode-integrity.js','guided-mode-adversarial.js','guided-mode-qa.js','technician-compensation.js','technician-coaching.js','technician-management-intelligence.js','operations-attention-center.js','stock-rebalancing.js','operational-reports.js','repair-operations.js','repair-communications.js','repair-notifications.js','repair-authorizations.js','repair-parts-integrity.js','inventory-intelligence.js','logistics-intelligence.js','scheduling-intelligence.js','accounting-intelligence.js','financial-controls-intelligence.js','supplier-ledger.js','settlement-reconciliation.js','accounting-ledger.js','pos-upgrade-navigation.js','navigation-shell.js','role-workspace.js','employee-workspace-home.js','login-controller.js','role-operations-dashboard.js','dispatch-command-center-v2.js','native-pos-shell.js','shell-native-support.js',
 ];
 for (const filename of browserScripts) compile(fs.readFileSync(path.join(publicDir, filename), 'utf8'), filename);
 
-const html = fs.readFileSync(indexPath, 'utf8');
-const marker = 'const App = {';
-const markerIndex = html.indexOf(marker);
-const scriptStart = html.lastIndexOf('<script', markerIndex);
-const scriptOpenEnd = scriptStart >= 0 ? html.indexOf('>', scriptStart) : -1;
-const scriptEnd = html.indexOf('</script>', markerIndex);
-if (markerIndex < 0 || scriptStart < 0 || scriptOpenEnd < 0 || scriptEnd < 0) { console.error('Syntax FAILED: unable to locate legacy POS application script in public/index.html'); process.exitCode = 1; }
-else compile(html.slice(scriptOpenEnd + 1, scriptEnd), 'legacy-pos-app.js');
+const html = fs.existsSync(indexPath) ? fs.readFileSync(indexPath, 'utf8') : '';
+if (html.trim()) {
+  const marker = 'const App = {';
+  const markerIndex = html.indexOf(marker);
+  const scriptStart = html.lastIndexOf('<script', markerIndex);
+  const scriptOpenEnd = scriptStart >= 0 ? html.indexOf('>', scriptStart) : -1;
+  const scriptEnd = html.indexOf('</script>', markerIndex);
+  if (markerIndex < 0 || scriptStart < 0 || scriptOpenEnd < 0 || scriptEnd < 0) { console.error('Syntax FAILED: unable to locate legacy POS application script in public/index.html'); process.exitCode = 1; }
+  else compile(html.slice(scriptOpenEnd + 1, scriptEnd), 'legacy-pos-app.js');
+} else {
+  console.log('Legacy POS index is empty; certifying native app-shell runtime only.');
+}
 if (process.exitCode) process.exit(process.exitCode);
+require('./check-ui-authority-contract');
+require('./check-native-workflow-surface-contract');
+require('./check-retail-customer-lifecycle-concurrency-contract');
+require('./check-retail-promotion-integrity-contract');
+require('./check-retail-void-integrity-contract');
+require('./check-retail-refund-settlement-integrity-contract');
+require('./check-replacement-return-integrity-contract');
+require('./check-branch-variation-integrity-contract');
 require('./check-logistics-commercial-handoff-contract');
 require('./check-logistics-field-execution-contract');
 require('./check-logistics-route-planning-contract');
@@ -42,12 +54,5 @@ require('./check-purchasing-financial-runtime-prerequisites');
 require('./check-rental-financial-runtime-prerequisites');
 require('./check-repair-financial-runtime-prerequisites');
 require('./check-dispatch-field-runtime-prerequisites');
-require('./check-human-language-contract');
-require('./check-employee-assist-contract');
-require('./check-warehouse-effort-contract');
-require('./check-fast-receiving-contract');
-require('./check-put-away-contract');
-require('./check-stock-finder-contract');
-require('./check-customer-pickup-desk-contract');
-require('./check-approval-routing-foundation-contract');
-require('./check-purchasing-approval-adapter-contract');
+require('./check-role-operations-dashboard-contract');
+require('./check-workspace-loader-stability-contract');

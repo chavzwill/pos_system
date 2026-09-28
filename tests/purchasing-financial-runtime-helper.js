@@ -1,8 +1,11 @@
 import { expect, test } from '@playwright/test';
+import { TEST_BASE_URL as BASE, assertSafeMutationTarget } from './test-base-url.js';
 
-const BASE='http://localhost:3001';
+assertSafeMutationTarget();
+
 const r2=v=>Number(Number(v||0).toFixed(2));
-async function login(username=process.env.POS_TEST_USER||'admin',password=process.env.POS_TEST_PASSWORD||'123456'){
+async function login(username=process.env.POS_TEST_USER,password=process.env.POS_TEST_PASSWORD){
+  if(!username||!password)throw new Error('POS_TEST_USER and POS_TEST_PASSWORD are required');
   const r=await fetch(`${BASE}/api/employees/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
   expect(r.status).toBe(200);return {cookie:(r.headers.get('set-cookie')||'').split(';')[0],body:await r.json()};
 }

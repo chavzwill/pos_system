@@ -1,6 +1,6 @@
 import { test, expect } from '@playwright/test';
+import { TEST_BASE_URL as BASE } from './test-base-url.js';
 
-const BASE = 'http://localhost:3001';
 const USER = process.env.POS_TEST_USER || 'admin';
 const PASSWORD = process.env.POS_TEST_PASSWORD || '123456';
 

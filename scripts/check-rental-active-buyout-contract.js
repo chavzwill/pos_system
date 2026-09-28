@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const route=read('routes/rental-active-buyout.js'),bootstrap=read('routes/rental-active-buyout-account-bootstrap.js'),trace=read('routes/inventory-traceability.js'),ui=read('public/rental-fleet-management.js'),deferred=read('public/shell-deferred.js'),economics=read('routes/rental-asset-lifetime-economics.js'),permissions=read('lib/permissions.js');
+const route=read('routes/rental-active-buyout.js'),bootstrap=read('routes/rental-active-buyout-account-bootstrap.js'),trace=read('routes/inventory-traceability.js'),ui=read('public/rental-fleet-management.js'),deferred=read('public/shell-deferred.js'),loader=read('public/workspace-loader-hardening.js'),economics=read('routes/rental-asset-lifetime-economics.js'),permissions=read('lib/permissions.js');
 new vm.Script(route,{filename:'rental active buyout'});new vm.Script(bootstrap,{filename:'rental active buyout accounting bootstrap'});new vm.Script(ui,{filename:'rental fleet management'});
 const checks=[
  ['active buyout accounting bootstrap is mounted first',trace.includes("require('./rental-active-buyout-account-bootstrap')")&&trace.indexOf('rental-active-buyout-account-bootstrap')<trace.indexOf("require('./rental-active-buyout')")],
@@ -29,7 +29,7 @@ const checks=[
  ['fleet UI shows lifetime economic evidence',ui.includes('Lifetime contribution')&&ui.includes('Return on acquisition')&&ui.includes('Acquisition cost')],
  ['active buyout UI previews current combined settlement before posting',ui.includes('Calculate combined settlement')&&ui.includes('/active-buyout-quote')&&ui.includes('Deposit applied')&&ui.includes('Due now')],
  ['fleet UI is injected into native rental workspace',ui.includes('#tt-rentals-workspace .tt-rent__toolbar')&&ui.includes('Fleet management')],
- ['fleet UI is actually deferred-loaded by shell',deferred.includes('/rental-fleet-management.js')]
+ ['fleet UI is deferred-loaded by shell or rental workspace',deferred.includes('/rental-fleet-management.js')||(loader.includes("'rentals-workspace'")&&loader.includes('/rental-fleet-management.js'))]
 ];
 let failed=0;for(const [name,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Active rental buyout/fleet UI: ${name}`);if(!ok)failed++;}if(failed){console.error(`Active rental buyout/fleet UI contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`Active rental buyout/fleet UI contract OK (${checks.length} checks).`);
 require('./check-rental-asset-disposal-contract');

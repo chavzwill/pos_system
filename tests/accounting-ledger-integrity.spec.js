@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { TEST_BASE_URL as BASE, assertSafeMutationTarget } from './test-base-url.js';
 
-const BASE='http://localhost:3001';
-const USER=process.env.POS_TEST_USER||'admin';
-const PASSWORD=process.env.POS_TEST_PASSWORD||'123456';
+const USER=process.env.POS_TEST_USER;
+const PASSWORD=process.env.POS_TEST_PASSWORD;
 
 async function login(){
+  if(!USER||!PASSWORD) throw new Error('POS_TEST_USER and POS_TEST_PASSWORD are required for ledger certification');
   const r=await fetch(`${BASE}/api/employees/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:USER,password:PASSWORD})});
   expect(r.status).toBe(200);
   return {cookie:(r.headers.get('set-cookie')||'').split(';')[0],body:await r.json()};
@@ -19,6 +20,8 @@ const money=v=>Number(Number(v||0).toFixed(2));
 function row(tb,code){return tb.rows.find(x=>String(x.code)===String(code));}
 
 test.describe('Accounting ledger reconciliation integrity',()=>{
+  test.beforeAll(()=>assertSafeMutationTarget());
+
   test('trial balance contains posted in-period evidence only and reversals restore balances',async()=>{
     const auth=await login();
     const accounts=await api(auth.cookie,'/api/accounting-ledger/accounts');

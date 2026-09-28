@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const service=read('routes/loss-control-commercial-service-leaks.js'),trace=read('routes/inventory-traceability.js'),promo=read('routes/retail-promotion-protection.js'),credit=read('routes/retail-credit-loss-prevention.js'),uom=read('routes/retail-uom-guard.js'),sales=read('public/sales-workspace.js'),concessions=read('routes/service-concessions.js'),completion=read('routes/work-order-completion-hardening.js'),concessionUi=read('public/service-concessions-ui.js'),refunds=read('routes/service-refunds.js'),refundIntel=read('routes/service-refund-intelligence.js'),refundUi=read('public/service-refunds-ui.js'),deferred=read('public/shell-deferred.js');
+const service=read('routes/loss-control-commercial-service-leaks.js'),trace=read('routes/inventory-traceability.js'),promo=read('routes/retail-promotion-protection.js'),credit=read('routes/retail-credit-loss-prevention.js'),uom=read('routes/retail-uom-guard.js'),sales=read('public/sales-workspace.js'),concessions=read('routes/service-concessions.js'),completion=read('routes/work-order-completion-hardening.js'),concessionUi=read('public/service-concessions-ui.js'),refunds=read('routes/service-refunds.js'),refundIntel=read('routes/service-refund-intelligence.js'),refundUi=read('public/service-refunds-ui.js'),deferred=read('public/shell-deferred.js'),loader=read('public/workspace-loader-hardening.js');
 for(const [name,src] of [['commercial/service leakage',service],['promotion protection',promo],['credit protection',credit],['fast POS',sales],['service concessions',concessions],['service concession UI',concessionUi],['service refunds',refunds],['service refund intelligence',refundIntel],['service refund UI',refundUi]])new vm.Script(src,{filename:name});
 const checks=[
  ['commercial/service intelligence requires reports permission',service.includes("router.use(requirePermission('reports'))")],
@@ -52,7 +52,7 @@ const checks=[
  ['final payment rechecks work-order state inside write transaction',concessions.includes('Work order status changed; reload before collecting payment')],
  ['service concession UI exposes proposal review approval and rejection',concessionUi.includes('Propose concession')&&concessionUi.includes('Review & approve')&&concessionUi.includes('Reject service concession')],
  ['service concession UI explains independent authorization and net balance',concessionUi.includes('independent financial authorization')&&concessionUi.includes('balance_after_concessions')],
- ['service concession UI is loaded by the fast shell',deferred.includes('/service-concessions-ui.js')],
+ ['service concession UI loads with the shell or work-order workspace',deferred.includes('/service-concessions-ui.js')||(loader.includes("'work-orders-workspace'")&&loader.includes('/service-concessions-ui.js'))],
  ['service refund controls are mounted before work-order settlement',completion.includes("router.use(require('./service-refunds'))")],
  ['service refunds can only reference actual work-order payment transactions',refunds.includes('assessment_transaction_id')&&refunds.includes('deposit_transaction_id')&&refunds.includes('final_transaction_id')&&refunds.includes('Refund must be linked to an actual payment from this work order')],
  ['service refund proposals require amount reason and evidence',refunds.includes('positive refund amount')&&refunds.includes('supporting evidence/reference')],
@@ -72,6 +72,6 @@ const checks=[
  ['native service refund UI exposes original payment and remaining refundable balance',refundUi.includes('Original payment')&&refundUi.includes('refundable_amount')],
  ['native service refund UI discovers open drawers for cash settlement',refundUi.includes('/api/drawers/sessions?')&&refundUi.includes('drawer_session_id')],
  ['native service refund UI requires external settlement reference when appropriate',refundUi.includes('External refund / remittance reference')&&refundUi.includes('external_refund_reference')],
- ['service refund UI is loaded by fast shell',deferred.includes('/service-refunds-ui.js')]
+ ['service refund UI loads with the shell or work-order workspace',deferred.includes('/service-refunds-ui.js')||(loader.includes("'work-orders-workspace'")&&loader.includes('/service-refunds-ui.js'))]
 ];
 let failed=0;for(const [name,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Commercial/service loss control: ${name}`);if(!ok)failed++;}if(failed){console.error(`Commercial/service loss-control contract FAILED (${failed}/${checks.length} failed).`);process.exit(1)}console.log(`Commercial/service loss-control contract OK (${checks.length} checks).`);

@@ -143,15 +143,21 @@ async function finalize(key,returnId){
 }
 
 router.post('/:id/return',async(req,res,next)=>{
-  let key=null,finalized=false;
+  let key=null,finalized=false,responseCompleted=false;
   try{key=await reserveReturnIdentities(req);if(!key)return next();}catch(e){return res.status(e.status||409).json({error:e.message});}
   const originalJson=res.json.bind(res);
   res.json=function(payload){
     const success=res.statusCode>=200&&res.statusCode<300&&payload&&payload.id;
-    if(success)return finalize(key,payload.id).then(()=>{finalized=true;return originalJson(payload);}).catch(async e=>{await release(key,'finalization_failed').catch(()=>{});if(!res.headersSent){res.status(500);return originalJson({error:'Return posted but inventory identity finalization failed; return requires reconciliation',return_id:payload.id,detail:e.message});}});
-    release(key).catch(()=>{});return originalJson(payload);
+    if(success)return finalize(key,payload.id).then(()=>{finalized=true;responseCompleted=true;return originalJson(payload);}).catch(async e=>{await release(key,'finalization_failed').catch(()=>{});if(!res.headersSent){res.status(500);responseCompleted=true;return originalJson({error:'Return posted but inventory identity finalization failed; return requires reconciliation',return_id:payload.id,detail:e.message});}});
+    release(key).then(()=>{responseCompleted=true;}).catch(()=>{});return originalJson(payload);
   };
-  res.on('close',()=>{if(!finalized)release(key).catch(()=>{});});
+  // A client connection can disappear after the underlying return has started
+  // committing but before the response is observed. Do not release serial/lot
+  // identity reservations on `close`; doing so would let another request race an
+  // outcome whose business state is still unknown. Normal non-success responses
+  // release explicitly above. Ambiguous disconnects retain the reservation until
+  // finalization or the bounded 10-minute expiry/reconciliation path.
+  res.once('finish',()=>{responseCompleted=true;});
   next();
 });
 module.exports=router;

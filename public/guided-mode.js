@@ -1,189 +1,71 @@
-(() => {
-  'use strict';
-
-  const GUIDE_CLASS = 'tt-guide-highlight';
-  const TASKS = [
-    { id:'sale', title:'Complete a sale', keywords:['sale','checkout','cashier','ring up','sell','payment'], steps:[
-      { find:['point of sale','pos','sales'], text:'Open the Point of Sale workspace.' },
-      { find:['search products','scan','barcode','product search'], text:'Search for or scan the customer’s product.' },
-      { find:['customer','select customer'], text:'Select the customer when needed, or continue with the permitted walk-in flow.' },
-      { find:['checkout','pay','complete sale','payment'], text:'Review quantities, prices, tax and discounts, then open checkout. Confirm tender before completing the transaction.' }
-    ]},
-    { id:'hold', title:'Hold or recall a sale', keywords:['hold','recall','park sale','suspend sale'], steps:[
-      { find:['point of sale','pos'], text:'Open Point of Sale.' },
-      { find:['hold','suspend'], text:'Use Hold after confirming the cart is correct. A hold should not be treated as payment.' },
-      { find:['recall','held','open holds'], text:'To continue later, open the held-sales list and recall the correct transaction.' }
-    ]},
-    { id:'return', title:'Return or refund a transaction', keywords:['return','refund','reverse sale','money back'], steps:[
-      { find:['transactions','sales history','returns'], text:'Open transaction history or the Returns workspace.' },
-      { find:['search','transaction'], text:'Locate the original transaction. Never create a return against the wrong receipt.' },
-      { find:['return','refund'], text:'Choose Return/Refund, select the correct items and quantities, record the reason, and follow any supervisor authorization shown by the POS.' }
-    ]},
-    { id:'drawer', title:'Open or close a cash drawer', keywords:['drawer','cash drawer','till','open drawer','close drawer','reconcile'], steps:[
-      { find:['drawer','cash management'], text:'Open Cash Drawer / Cash Management.' },
-      { find:['open drawer','start drawer','opening balance'], text:'At shift start, open the drawer and record the verified opening cash.' },
-      { find:['close drawer','reconcile','count denominations'], text:'At shift end, count actual cash, reconcile the drawer and record any variance before closing.' }
-    ]},
-    { id:'repair', title:'Create or work a repair', keywords:['repair','work order','service','technician','machine repair'], steps:[
-      { find:['repairs','work orders','service'], text:'Open Repairs / Work Orders.' },
-      { find:['new work order','create work order','new repair'], text:'Create the work order and capture the customer, equipment, reported issue and intake condition.' },
-      { find:['assign technician','technician'], text:'Assign the appropriate technician and follow diagnosis, parts/labor authorization, repair, QC and collection states.' }
-    ]},
-    { id:'rental', title:'Create or manage a rental', keywords:['rental','rent','hire equipment','rental agreement'], steps:[
-      { find:['rentals','rental'], text:'Open Rentals.' },
-      { find:['new rental','create rental','rental agreement'], text:'Create the rental using the correct customer, branch, item and date range.' },
-      { find:['issue','activate','checkout rental'], text:'Verify availability, deposits/eligibility and condition before issuing the rental.' },
-      { find:['return rental','check in','return'], text:'At return, record condition, damage/fees where applicable, and complete the rental lifecycle.' }
-    ]},
-    { id:'dispatch', title:'Dispatch, route or complete a delivery', keywords:['dispatch','route','routing','delivery','driver','logistics','vehicle','in transit','pickup'], steps:[
-      { find:['dispatch & deliveries','dispatch','logistics'], text:'Open Dispatch & Deliveries.' },
-      { find:['unassigned','dispatch queue','jobs'], text:'Review the dispatch queue, priority, promised time, assignment state and operational risk before choosing work.' },
-      { find:['schedule','assignee','vehicle'], text:'Assign the authorized employee and vehicle, then schedule the movement using the available vehicle capacity and schedule.' },
-      { find:['ready','in transit','delayed','completed'], text:'Move the dispatch through its real lifecycle. Record delays rather than hiding them, and mark completed only after the movement is actually finished.' }
-    ]},
-    { id:'inventory-adjust', title:'Adjust inventory', keywords:['adjust inventory','stock adjustment','damage stock','write off','inventory correction'], steps:[
-      { find:['inventory','products'], text:'Open Inventory.' },
-      { find:['adjust','stock adjustment','inventory adjustment'], text:'Choose the controlled stock-adjustment action for the exact item and branch.' },
-      { find:['reason','adjustment reason'], text:'Enter the verified quantity change and a real reason. Do not disguise sales, transfers or cycle-count variance as manual adjustments.' }
-    ]},
-    { id:'brands', title:'Manage product brands', keywords:['brand','brands','brand logo','product brand','manage brands'], steps:[
-      { find:['products & categories','inventory','catalog'], text:'Open Products & Categories.' },
-      { find:['brands','manage brands','brand maintenance'], text:'Open Brands to review the current brand list.' },
-      { find:['new brand','edit brand','brand name'], text:'Add or edit the brand using its correct name and description. Avoid creating spelling variants of an existing brand.' },
-      { find:['logo image','brand logo','save brand'], text:'Add the approved brand logo when available, then save. Product assignment remains a separate deliberate catalog edit.' }
-    ]},
-    { id:'catalog-duplicates', title:'Review duplicate catalog products', keywords:['duplicate products','duplicate sku','catalog duplicates','merge products','consolidate products'], steps:[
-      { find:['catalog management','products & categories','catalog'], text:'Open Catalog Management.' },
-      { find:['catalog health','work queue'], text:'Open Catalog Health and review the work queue. Duplicate candidates are evidence for review, not an automatic merge.' },
-      { find:['confirm same item','not a duplicate','needs more info'], text:'Compare the exact records. Record whether they are the same item, not duplicates, or need more information, and enter the real reason.' },
-      { find:['review consolidation','plan consolidation','consolidation impact review'], text:'If the records are confirmed duplicates, review stock, units, history and the proposed surviving product before any consolidation.' },
-      { find:['consolidate records','surviving product'], text:'Choose the surviving product only after the review is complete. Consolidation preserves historical records, retires duplicates and leaves consolidated records read-only.' }
-    ]},
-    { id:'count', title:'Run a stock or cycle count', keywords:['cycle count','stock count','physical count','inventory count'], steps:[
-      { find:['warehouse','inventory','cycle count'], text:'Open Warehouse / Inventory Counts.' },
-      { find:['new count','start count','cycle count'], text:'Start a count for the correct branch/location and scope.' },
-      { find:['commit','finalize','complete count'], text:'Enter physical quantities, review variances and commit through the count workflow so the variance remains auditable.' }
-    ]},
-    { id:'pr', title:'Create or approve a purchase request', keywords:['purchase request','pr','request purchase','replenish'], steps:[
-      { find:['purchase requests','purchasing'], text:'Open Purchase Requests.' },
-      { find:['new purchase request','create request'], text:'Create the request with the correct branch, products, quantities and business reason.' },
-      { find:['approve','reject'], text:'Authorized approvers should review demand, supplier options and supporting details before approving or rejecting.' },
-      { find:['convert to po','create po'], text:'When approved, convert through the controlled PO flow rather than creating unrelated duplicate purchasing records.' }
-    ]},
-    { id:'po', title:'Create, edit, copy, cancel or receive a PO', keywords:['purchase order','po','receive po','copy po','cancel po','edit po'], steps:[
-      { find:['purchase orders','purchasing'], text:'Open Purchase Orders.' },
-      { find:['new purchase order','create po'], text:'Create or open the correct PO. Verify supplier, branch, terms and line quantities.' },
-      { find:['edit','revise','copy','duplicate','cancel'], text:'Use the explicit revise, copy/reuse or cancel action. A copied PO should become a new PO rather than overwrite the original audit trail.' },
-      { find:['receive','receive items','goods received'], text:'When receiving, record only quantities physically received. Never over-receive a line or mark missing goods as received.' }
-    ]},
-    { id:'transfer', title:'Create, dispatch or receive a branch transfer', keywords:['transfer','branch transfer','move stock','dispatch transfer','receive transfer'], steps:[
-      { find:['transfers','branch transfers'], text:'Open Branch Transfers.' },
-      { find:['new transfer','create transfer'], text:'Create the transfer using the correct source/destination branches and verified stock.' },
-      { find:['dispatch','pick up','in transit'], text:'Dispatch only after source quantities are confirmed. This should move the transfer into its in-transit lifecycle.' },
-      { find:['receive','receive transfer'], text:'Destination staff should receive only what physically arrived and record discrepancies instead of guessing.' }
-    ]},
-    { id:'quote', title:'Create or manage a quotation', keywords:['quote','quotation','estimate'], steps:[
-      { find:['quotations','quotes'], text:'Open Quotations.' },
-      { find:['new quotation','create quote'], text:'Create the quotation with the correct customer, branch, items and validity period.' },
-      { find:['send','approve','accept'], text:'Review before sending/acceptance. Once accepted, material revisions should use the controlled copy/reissue path so sourcing side effects are not duplicated.' }
-    ]},
-    { id:'reports', title:'Run, export or print a report', keywords:['report','reports','export','csv','excel','print','pdf'], steps:[
-      { find:['reports','reporting'], text:'Open Reports.' },
-      { find:['date','branch','filter'], text:'Set the reporting period, branch and other filters first.' },
-      { find:['run report','apply','refresh'], text:'Run or refresh the report and review the results.' },
-      { find:['export','csv','excel','print','pdf'], text:'Use the report’s Export or Print controls. Printed reports can be saved as PDF through the browser print dialog where supported.' }
-    ]},
-    { id:'compensation', title:'Review technician compensation', keywords:['technician pay','technician compensation','pay period','incentive','technician metrics'], steps:[
-      { find:['technician','repairs','work orders'], text:'Open the technician/service management area.' },
-      { find:['compensation','pay period','performance'], text:'Open Technician Compensation / Performance.' },
-      { find:['rate','plan','metrics'], text:'Review the admin-configured rate and compensation plan that applies to the pay period.' },
-      { find:['finalize','approve payroll','payroll'], text:'Check QC, rework and attendance records before finalizing. If required information is missing, the system should show that clearly instead of guessing.' }
-    ]},
-    { id:'supplier-recovery', title:'Recover money owed by a supplier', keywords:['supplier recoverable','supplier credit note','supplier return','shorted goods','supplier owes us','recover money from supplier','supplier statement'], steps:[
-      { find:['purchasing','supplier recoverables'], text:'Open Purchasing and go to Supplier Recoverables. Start from the exact shortage, return, credit-note or supplier obligation evidence.' },
-      { find:['supplier recoverables','recovery attention'], text:'Review the recoverable amount, supplier evidence, age and next action. Identified exposure is not the same as confirmed money owed.' },
-      { find:['credit notes','supplier returns','statements'], text:'Use Credit Notes, Supplier Returns or Statements to attach the authoritative supplier evidence and reconcile the amount.' },
-      { find:['recovery attention','resolve','settle'], text:'Close or settle only through the controlled recoverable/AP workflow after the financial evidence agrees. Guide Me never creates the settlement for you.' }
-    ]},
-    { id:'supplier-payment-control', title:'Plan and pay suppliers safely', keywords:['supplier payment','supplier bills','accounts payable','cash forecast','payment priorities','pay supplier','supplier credits','ap forecast'], steps:[
-      { find:['supplier bills & payments','supplier bills','payments'], text:'Open Supplier Bills & Payments. Formal AP begins from posted supplier invoices, not estimates or purchase requests.' },
-      { find:['payment priorities','cash forecast'], text:'Review Payment priorities and Cash forecast before sending cash. Check due dates, documented discounts, late-fee exposure and eligible recoverable offsets.' },
-      { find:['record payment'], text:'When payment is justified, use Record payment. The payment guard will recheck unused supplier credits, duplicate risk and the current net-payment plan.' },
-      { find:['supplier credit','offset','minimum cash'], text:'Apply eligible supplier recoverable offsets first where appropriate. If usable credit remains and cash is still sent, the independent finance override remains authoritative.' }
-    ]},
-    { id:'operating-spend', title:'Review recurring operating costs and commitments', keywords:['operating commitments','recurring expenses','rent lease','utilities','software subscriptions','maintenance contract','recurring costs','renewal costs'], steps:[
-      { find:['supplier bills & payments'], text:'Open Supplier Bills & Payments, then Operating commitments.' },
-      { find:['operating commitments'], text:'Review the expected recurring amount, cadence, allocation target, next due date and renewal evidence for the commitment.' },
-      { find:['match invoice','reconcile'], text:'Match the actual supplier invoice to the correct service period, then Reconcile expected versus invoiced cost. Matching is evidence only and does not change AP.' },
-      { find:['performance'], text:'Use Performance to review repeated overruns, bill drift, annualized run rate and renewals that deserve renegotiation attention before they roll over.' }
-    ]},
-    { id:'erp', title:'Stock Planning & Replenishment', keywords:['stock planning','replenishment','reordering','smart transfer','recommendation','slow moving','stockout','supplier performance','what to order'], steps:[
-      { find:['stock planning','stock health','reordering'], text:'Open Stock Planning & Replenishment.' },
-      { find:['low stock','move between branches','what to order','supplier choice'], text:'Review why the system is suggesting the action: branch stock, demand, supplier performance or stock history.' },
-      { find:['create transfer','purchase request'], text:'If the action makes sense, use the normal transfer or purchasing process. Suggestions must never change stock automatically.' }
-    ]}
-  ];
-
-  const state = { open:false, task:null, step:0, target:null, observer:null, returnFocus:null };
-  const norm = s => String(s || '').toLowerCase().replace(/\s+/g,' ').trim();
-  const visible = el => !!el && el instanceof Element && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
-
-  function textCandidates() {
-    return [...document.querySelectorAll('button,a,[role="button"],[role="tab"],nav li,.nav-item,.menu-item,.sidebar-item,.tab,th,h1,h2,h3,label')].filter(visible);
-  }
-  function findTarget(terms=[]) {
-    const exactId = terms.map(t => document.querySelector(`[data-guide-id="${CSS.escape(t)}"]`)).find(visible);
-    if (exactId) return exactId;
-    const candidates = textCandidates();
-    for (const term of terms) {
-      const n = norm(term);
-      const exact = candidates.find(el => norm(el.textContent) === n); if (exact) return exact;
-      const starts = candidates.find(el => norm(el.textContent).startsWith(n)); if (starts) return starts;
-      const contains = candidates.find(el => norm(el.textContent).includes(n)); if (contains) return contains;
-    }
-    return null;
-  }
-  function clearHighlight() { document.querySelectorAll('.'+GUIDE_CLASS).forEach(el => el.classList.remove(GUIDE_CLASS)); state.target=null; }
-  function highlight(step) {
-    clearHighlight();
-    const target = findTarget(step.find || []);
-    state.target = target;
-    if (!target) return false;
-    target.classList.add(GUIDE_CLASS);
-    target.scrollIntoView({ behavior: matchMedia('(prefers-reduced-motion: reduce)').matches ? 'auto':'smooth', block:'center', inline:'nearest' });
-    return true;
-  }
-  function bestTask(query) {
-    const q = norm(query); if (!q) return null;
-    let best=null, score=0;
-    TASKS.forEach(task => {
-      let s=0; [...task.keywords,task.title].forEach(k => { const n=norm(k); if(q===n)s+=12; else if(q.includes(n))s+=7; else n.split(' ').forEach(w=>{if(w.length>3&&q.includes(w))s+=1;}); });
-      if(s>score){score=s;best=task;}
-    });
-    return score ? best : null;
-  }
-  function shell() { return document.getElementById('tt-guided-mode'); }
-  function render() {
-    const root=shell(); if(!root)return;
-    const task=state.task; const step=task?.steps[state.step]; const found=step ? highlight(step) : false;
-    root.innerHTML=`<div class="tt-guide-backdrop" aria-hidden="true"></div><section class="tt-guide" role="dialog" aria-modal="false" aria-labelledby="tt-guide-title" aria-describedby="tt-guide-description">
-      <div class="tt-guide__head"><div><span class="tt-guide__eyebrow">Total Tools</span><h2 id="tt-guide-title">Guide Me</h2><p id="tt-guide-description">${task ? escapeHtml(task.title) : 'Tell me what you need to do. I’ll take you to the right place and stay with you while you work.'}</p></div><button class="tt-guide__close" type="button" aria-label="Close Guide Me" data-guide-close>&times;</button></div>
-      <div class="tt-guide__body">${task ? `<div class="tt-guide__step"><span class="tt-guide__step-count">Step ${state.step+1} of ${task.steps.length}</span><h3>${found?'Follow the highlighted control':'Control not currently available'}</h3><p>${escapeHtml(step.text)}</p>${found?'<p class="tt-guide__hint">The correct area is highlighted on the screen. Complete the action there, then choose Next.</p>':'<p class="tt-guide__hint">This control may be hidden because of your permissions, the current record state, or a missing prerequisite. Guide Me will not tell you to click a control that is not actually available.</p>'}</div><div class="tt-guide__actions"><button type="button" data-guide-home>Choose another task</button><div><button type="button" data-guide-prev ${state.step===0?'disabled':''}>Back</button><button type="button" class="is-primary" data-guide-next>${state.step===task.steps.length-1?'Finish':'Next'}</button></div></div>` : `<form class="tt-guide__search" data-guide-search><input id="tt-guide-input" autocomplete="off" placeholder="e.g. dispatch a delivery, receive a PO, close my drawer" aria-label="What do you want to do?"/><button type="submit">Guide me</button></form><div class="tt-guide__suggestions">${TASKS.map(t=>`<button type="button" class="tt-guide__chip" data-task="${t.id}">${escapeHtml(t.title)}</button>`).join('')}</div>`}</div>
-    </section>`;
-    bind();
-    queueMicrotask(()=>root.querySelector(task?'[data-guide-next]':'#tt-guide-input')?.focus());
-  }
-  function escapeHtml(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
-  function choose(task){state.task=task;state.step=0;render();}
-  function close(){clearHighlight();state.open=false;state.task=null;state.step=0;shell()?.remove();state.observer?.disconnect();state.observer=null;const target=state.returnFocus&&state.returnFocus.isConnected?state.returnFocus:document.getElementById('shell-guide');state.returnFocus=null;target?.focus?.({preventScroll:true});}
-  function open(){if(state.open){shell()?.querySelector('#tt-guide-input,[data-guide-next]')?.focus?.({preventScroll:true});return;}state.returnFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;state.open=true;const root=document.createElement('div');root.id='tt-guided-mode';document.body.appendChild(root);render();requestAnimationFrame(()=>root.classList.add('is-open'));state.observer=new MutationObserver(()=>{if(state.task){const step=state.task.steps[state.step]; if(step && !visible(state.target)) highlight(step);}});state.observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});}
-  function bind(){const root=shell(); if(!root)return; root.querySelectorAll('[data-guide-close]').forEach(x=>x.addEventListener('click',close)); root.querySelector('[data-guide-search]')?.addEventListener('submit',e=>{e.preventDefault();const q=root.querySelector('#tt-guide-input')?.value||'';const task=bestTask(q);if(task)choose(task);else{const toast=document.createElement('div');toast.className='tt-guide-toast';toast.textContent='I could not match that task yet. Try words like sale, repair, dispatch, rental, purchase order, transfer, inventory, report, drawer or technician pay.';document.body.appendChild(toast);setTimeout(()=>toast.remove(),4500);}}); root.querySelectorAll('[data-task]').forEach(btn=>btn.addEventListener('click',()=>choose(TASKS.find(t=>t.id===btn.dataset.task)))); root.querySelector('[data-guide-home]')?.addEventListener('click',()=>{clearHighlight();state.task=null;state.step=0;render();}); root.querySelector('[data-guide-prev]')?.addEventListener('click',()=>{if(state.step>0){state.step--;render();}}); root.querySelector('[data-guide-next]')?.addEventListener('click',()=>{if(!state.task)return;if(state.step>=state.task.steps.length-1)close();else{state.step++;render();}});}
-  window.TotalToolsGuideMe={open,openTask:(id)=>{const task=TASKS.find(t=>t.id===id);if(!task)return false;if(!state.open)open();choose(task);return true;},tasks:()=>TASKS.map(t=>({id:t.id,title:t.title}))};
-  function install(){
-    if(!document.querySelector('.tt-pos-skip')){const skip=document.createElement('a');skip.className='tt-pos-skip';skip.href='#main-content';skip.textContent='Skip to POS content';document.body.prepend(skip);}
-    const main=document.querySelector('main,.main-content,#content,.content') || document.body.querySelector(':scope > div'); if(main && !main.id)main.id='main-content';
-    document.getElementById('tt-guide-launcher')?.remove();
-    document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.open)close();});
-  }
-  if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();
+(()=>{'use strict';
+const GUIDE_CLASS='tt-guide-highlight';
+const TASKS=[
+{id:'sale',title:'Complete a sale',keywords:['sale','checkout','cashier','ring up','sell','payment'],domain:'sales',feature:'sales-workspace',featureTitle:'Point of Sale',steps:['Open the Point of Sale workspace.','Search for or scan the product.','Select the customer when required.','Review the authoritative cart total and complete checkout with the correct tender. If the connection fails after submit, refresh/reconcile before creating a new sale.']},
+{id:'hold',title:'Hold or recall a sale',keywords:['hold','recall','suspend sale'],domain:'sales',feature:'held-sales-workspace',featureTitle:'Held Sales',steps:['Open Held Sales.','Choose the correct held transaction.','Review the recalled cart and source evidence before continuing checkout.']},
+{id:'return',title:'Process a controlled return',keywords:['return item','return transaction','return merchandise','credit note'],domain:'sales',feature:'cashier-controls-workspace',featureTitle:'Returns, Voids & Receipt Evidence',guideId:'return-workflow',steps:['Open Returns, Voids & Receipt Evidence and locate the original completed retail transaction.','Select only the quantities physically being returned and enter the reason/evidence.','Choose refund or credit note when appropriate. Charge-account sales use credit note; rental and repair reversals stay in their own workflows.','Process the return once. If the response is lost, refresh the transaction and return history before trying anything again.']},
+{id:'replacement',title:'Issue a like-for-like replacement',keywords:['replacement','replace item','exchange item','exchange product','warranty exchange','like for like'],domain:'sales',feature:'cashier-controls-workspace',featureTitle:'Returns, Voids & Receipt Evidence',guideId:'replacement-workflow',steps:['Open Returns, Voids & Receipt Evidence and select the original completed sale at the authoritative branch.','Select only the exact quantity physically being exchanged and choose Replacement. The POS rechecks remaining return entitlement and branch stock at commit time.','For ordinary inventory, the returned unit is quarantined and the replacement issue is recorded as separate custody evidence. Serial- or lot-controlled products fail closed until the controlled identity exchange workflow can record both the returned identity and the replacement identity—never substitute an unrecorded serial or lot.','Submit once. Replacement returns require durable operation identity; if the response is lost, refresh the original transaction and return history before attempting another exchange.']},
+{id:'refund-settlement',title:'Settle a customer refund',keywords:['settle refund','refund settlement','pay refund','cash refund','card refund','bank refund','check refund'],domain:'sales',feature:'cashier-controls-workspace',featureTitle:'Returns, Voids & Receipt Evidence',guideId:'refund-settlement',steps:['Open Returns, Voids & Receipt Evidence and select the transaction containing the recorded refund return.','In Return history, choose Settle refund for the return that still has an external tender amount due.','Allocate the exact refund amount only across the remaining original tender methods. Cash requires your open drawer at the return branch; card, bank transfer, and check require settlement/reference evidence.','Record settlement once. If the outcome is uncertain, refresh the settlement evidence; do not create a second refund. Accounting clears the refund payable from this recorded evidence.']},
+{id:'void',title:'Void an eligible retail transaction',keywords:['void transaction','void sale','cancel completed sale','manager void'],domain:'sales',feature:'cashier-controls-workspace',featureTitle:'Returns, Voids & Receipt Evidence',guideId:'void-transaction',steps:['Open Returns, Voids & Receipt Evidence and select the completed retail transaction.','Confirm the sale has no existing return evidence and is not a rental or repair transaction. Those workflows must use their own reversal workflows.','Enter an authorized manager override PIN and a specific void reason.','Submit the void once. The system serializes the reversal, restores eligible inventory/cost evidence, removes unpaid commission evidence atomically, and requires refresh/reconciliation after any uncertain response.']},
+{id:'repair',title:'Create or work a repair',keywords:['repair','work order','service','technician'],domain:'service',feature:'work-orders-workspace',featureTitle:'Work Orders',steps:['Open Repairs & Work Orders.','Select or create the correct work order.','Complete diagnosis, parts/labor authorization, repair and QC through the controlled workflow.']},
+{id:'rental',title:'Create or manage a rental',keywords:['rental','rent','hire equipment'],domain:'rentals',feature:'rentals-workspace',featureTitle:'Rental Operations',steps:['Open Rental Operations.','Select or create the agreement with the correct customer, branch, asset and dates.','Follow issue, return, damage/missing-asset and settlement controls as required.']},
+{id:'dispatch',title:'Dispatch, route or complete a delivery',keywords:['dispatch','route','delivery','pickup','logistics','vehicle'],domain:'dispatch',feature:'logistics-intelligence',featureTitle:'Dispatch Command Center',steps:['Open Dispatch Command Center.','Choose the correct job and verify priority, address and custody context.','Assign the authorized driver and vehicle.','Move the job through pickup, transit and delivery evidence.']},
+{id:'dispatch-control',title:'Use the Dispatch Control dashboard',keywords:['dispatch dashboard','dispatch control','track drivers','all drivers','dispatch tasks','driver fleet'],dashboard:'dispatch',guideId:'dispatch-control',steps:['Open Dispatch Control.','Review driver workload, open tasks, security holds and in-transit work.','Search or filter the active dispatch queue.','Open Dispatch Command Center when you need to assign, route or change a job.']},
+{id:'driver-dashboard',title:'Use My Driver Dashboard',keywords:['driver dashboard','my deliveries','my pickups','driver tasks','driver route','driver job'],dashboard:'driver',guideId:'driver-dashboard',steps:['Open My Driver Dashboard.','Review your assigned tasks, vehicle and security status.','Record each physical milestone only when it happens: depart, arrive, pickup and destination arrival.','Record delivery proof for the person who accepted the shipment.']},
+{id:'security-dashboard',title:'Release an outbound shipment as Security',keywords:['security dashboard','security sign off','release shipment','gate release','security shipment','check delivery'],dashboard:'security',guideId:'security-dashboard',steps:['Open Security Shipment Control.','Find the outbound shipment after the assigned driver arrives at the Total Tools origin.','Physically verify the shipment, assigned driver, vehicle and package count.','Use Inspect & sign off to release custody to the driver.']},
+{id:'accounts-dashboard',title:'Review a credit or commercial account application',keywords:['accounts approval','credit application','commercial account','approve credit','website credit request','account application'],dashboard:'accounts',guideId:'accounts-dashboard',steps:['Open Accounts Approval Desk.','Find the pending credit or commercial account application.','Review the requested credit exposure, payment terms and applicant evidence.','Approve with documented limits and terms, mark under review, or reject with a defensible reason.']},
+{id:'inventory-adjust',title:'Adjust inventory',keywords:['adjust inventory','stock adjustment','inventory correction'],domain:'inventory',feature:'inventory-workspace',featureTitle:'Inventory Operations',steps:['Open Inventory Operations.','Select the exact item and branch.','Enter the verified adjustment quantity and audit reason, then confirm the protected mutation.']},
+{id:'count',title:'Run a stock or cycle count',keywords:['cycle count','stock count','physical count'],domain:'inventory',feature:'inventory-workspace',featureTitle:'Inventory Operations',steps:['Open Inventory Operations.','Open the controlled count workflow for the correct branch/location.','Enter physical quantities, review variances and commit the count.']},
+{id:'pr',title:'Create or approve a purchase request',keywords:['purchase request','replenish','request purchase'],domain:'purchasing',feature:'purchasing-workspace',featureTitle:'Purchasing Operations',steps:['Open Purchasing Operations.','Create or select the purchase request.','Review demand and sourcing evidence before approval/rejection.']},
+{id:'po',title:'Create, edit, copy, cancel or receive a PO',keywords:['purchase order','po','receive po','cancel po'],domain:'purchasing',feature:'purchasing-workspace',featureTitle:'Purchasing Operations',steps:['Open Purchasing Operations.','Create or select the correct PO and verify supplier, branch and lines.','Use the protected approve/cancel/receive action and only receive quantities physically received.']},
+{id:'transfer',title:'Create, dispatch or receive a branch transfer',keywords:['transfer','branch transfer','move stock'],domain:'inventory',feature:'transfers-workspace',featureTitle:'Inter-Branch Transfers',steps:['Open Inter-Branch Transfers.','Create or select the transfer with the correct source/destination branches.','Dispatch and receive through the controlled custody workflow.']},
+{id:'reports',title:'Run, export or print a report',keywords:['report','reports','export','print','pdf'],domain:'finance',feature:'operational-reports',featureTitle:'Reports',steps:['Open Reports.','Set the date, branch and other filters.','Run the report, review results and use the provided export/print controls.']},
+{id:'compensation',title:'Review technician compensation',keywords:['technician pay','technician compensation','pay period','incentive'],domain:'service',feature:'repair-operations',featureTitle:'Equipment & Repair History',steps:['Open the service area.','Open the technician/performance evidence relevant to the pay period.','Verify attributable evidence before approving compensation.']},
+{id:'supplier-recovery',title:'Recover money owed by a supplier',keywords:['supplier recoverable','supplier credit note','supplier return','shorted goods','supplier owes us','recover money from supplier','supplier statement'],domain:'purchasing',feature:'supplier-ledger',featureTitle:'Supplier Bills & Payments',targetHints:[{find:['purchasing','supplier recoverables']},{find:['credit notes','supplier returns','statements']}],steps:['Open Purchasing / Supplier Recoverables from Supplier Bills & Payments and start from the exact shortage, return, credit-note or supplier obligation evidence.','Review the recoverable amount, supplier evidence, age and next action. Identified exposure is not the same as confirmed money owed.','Use Credit Notes, Supplier Returns or Statements to attach the authoritative supplier evidence and reconcile the amount.','Close or settle only through the controlled recoverable/AP workflow after the financial evidence agrees. Guide Me never creates the settlement for you.']},
+{id:'supplier-payment-control',title:'Plan and pay suppliers safely',keywords:['supplier payment','supplier bills','accounts payable','cash forecast','payment priorities','pay supplier','supplier credits','ap forecast'],domain:'finance',feature:'supplier-ledger',featureTitle:'Supplier Bills & Payments',targetHints:[{find:['payment priorities','cash forecast']},{find:['record payment']}],steps:['Open Supplier Bills & Payments. Formal AP begins from posted supplier invoices, not estimates or purchase requests.','Review Payment priorities and Cash forecast before sending cash. Check due dates, documented discounts, late-fee exposure and eligible recoverable offsets.','When payment is justified, use Record payment. The payment guard will recheck unused supplier credits, duplicate risk and the current net-payment plan.','Apply eligible supplier recoverable offsets first where appropriate. If usable credit remains and cash is still sent, the independent finance override remains authoritative.']},
+{id:'operating-spend',title:'Review recurring operating costs and commitments',keywords:['operating commitments','recurring expenses','rent lease','utilities','software subscriptions','maintenance contract','recurring costs','renewal costs'],domain:'finance',feature:'supplier-ledger',featureTitle:'Supplier Bills & Payments',targetHints:[{find:['supplier bills & payments']},{find:['match invoice','reconcile']},{find:['performance']}],steps:['Open Supplier Bills & Payments, then Operating commitments.','Review the expected recurring amount, cadence, allocation target, next due date and renewal evidence for the commitment.','Match the actual supplier invoice to the correct service period, then Reconcile expected versus invoiced cost. Matching is evidence only and does not change AP.','Use Performance to review repeated overruns, bill drift, annualized run rate and renewals that deserve renegotiation attention before they roll over.']}
+];
+const WORKFLOW_COVERAGE={
+ 'routes/retail-return-hardening.js':['return'],
+ 'routes/retail-refund-settlement.js':['refund-settlement'],
+ 'routes/transaction-void-hardening.js':['void'],
+ 'routes/retail-checkout-hardening.js':['sale'],
+ 'routes/held-sale-recall-hardening.js':['hold'],
+ 'routes/purchase-order-hardening.js':['po'],
+ 'routes/replacement-return-hardening.js':['replacement'],
+ 'routes/retail-return-traceability-guard.js':['return','replacement'],
+ 'routes/multi-branch-integrity-guard.js':['sale','return','replacement','refund-settlement','void','repair','rental','po','transfer'],
+ 'routes/lifecycle-concurrency-guard.js':['sale','return','replacement','refund-settlement','void','hold','po','repair','rental','transfer','dispatch'],
+ 'routes/rentals.js':['rental'],
+ 'routes/work-orders.js':['repair'],
+ 'routes/logistics-intelligence.js':['dispatch','dispatch-control'],
+ 'routes/role-operations-dashboards.js':['dispatch-control','driver-dashboard','security-dashboard','accounts-dashboard']
+};
+const state={open:false,task:null,step:0,target:null,lastFocus:null};
+const norm=s=>String(s||'').toLowerCase().replace(/\s+/g,' ').trim();
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const delay=ms=>new Promise(r=>setTimeout(r,ms));
+function visible(el){return !!el&&el instanceof Element&&el.getClientRects().length>0&&getComputedStyle(el).visibility!=='hidden';}
+function bestTask(query){const q=norm(query);if(!q)return null;let best=null,score=0;for(const task of TASKS){let s=0;for(const k of [task.title,...task.keywords]){const n=norm(k);if(q===n)s+=12;else if(q.includes(n)||n.includes(q))s+=7;else for(const w of n.split(' '))if(w.length>3&&q.includes(w))s+=1;}if(s>score){score=s;best=task;}}return score?best:null;}
+function clearHighlight(){document.querySelectorAll('.'+GUIDE_CLASS).forEach(x=>x.classList.remove(GUIDE_CLASS));state.target=null;}
+function highlight(el){clearHighlight();if(!visible(el))return false;state.target=el;el.classList.add(GUIDE_CLASS);el.scrollIntoView({behavior:matchMedia('(prefers-reduced-motion: reduce)').matches?'auto':'smooth',block:'center',inline:'nearest'});return true;}
+function findText(terms){const nodes=[...document.querySelectorAll('[data-guide-id],button,a,[role="button"],[role="tab"],input,select,label,h1,h2,h3,.shell-card,.tt-wo-row,.tt-li-job')].filter(visible);for(const term of terms){const byGuide=nodes.find(el=>el.dataset?.guideId===term);if(byGuide)return byGuide;const n=norm(term);const exact=nodes.find(el=>norm(el.textContent||el.getAttribute('aria-label')||el.getAttribute('placeholder'))===n);if(exact)return exact;const partial=nodes.find(el=>norm(el.textContent||el.getAttribute('aria-label')||el.getAttribute('placeholder')).includes(n));if(partial)return partial;}return null;}
+async function routeTask(task){if(!task)return false;
+ if(task.dashboard){const api=window.TotalToolsRoleDashboards;const method={dispatch:'openDispatch',driver:'openDriver',security:'openSecurity',accounts:'openAccounts'}[task.dashboard];if(api?.[method]){try{await api[method]();await delay(100);return true;}catch(error){showMessage(`I could not open ${task.title}: ${error.message}`,'error');return false;}}showMessage('This dashboard is not available for your signed-in role or has not finished loading.','error');return false;}
+ const domain=document.querySelector(`[data-domain="${CSS.escape(task.domain)}"]`);if(domain){domain.click();await new Promise(r=>requestAnimationFrame(()=>requestAnimationFrame(r)));}
+ if(task.feature&&window.TotalToolsShellOpen){try{await window.TotalToolsShellOpen(task.feature,task.featureTitle||task.title);await delay(90);return true;}catch(error){showMessage(`I could not open ${task.featureTitle||task.title}: ${error.message}`,'error');return false;}}
+ const button=[...document.querySelectorAll('#shell-root [data-open]')].find(b=>b.dataset.open===task.feature);if(button){button.click();return true;}return false;}
+function stepTarget(task,step){
+ if(task.guideId){if(step===0||['return','replacement','refund-settlement','void'].includes(task.id))return findText([task.guideId,task.featureTitle,task.title]);if(task.id==='security-dashboard'&&step>=1)return findText(['security-shipment','Inspect & sign off']);if(task.id==='accounts-dashboard'&&step>=1)return findText(['account-application','Review application']);if(task.id==='driver-dashboard'&&step>=1)return findText(['driver-task','Depart for pickup','Arrived at pickup','Take custody','Record delivery proof']);if(task.id==='dispatch-control'&&step>=1)return findText(['dispatch-control','Open Command Center','Search dispatch dashboard']);}
+ if(step===0)return findText([task.featureTitle,task.title]);const words=task.steps[step].toLowerCase();const hints=[];if(words.includes('search')||words.includes('locate'))hints.push('search');if(words.includes('customer'))hints.push('customer');if(words.includes('checkout')||words.includes('tender'))hints.push('checkout','payment');if(words.includes('select'))hints.push('select');if(words.includes('receive'))hints.push('receive');if(words.includes('dispatch'))hints.push('dispatch');if(words.includes('approve'))hints.push('approve');if(words.includes('reason'))hints.push('reason');if(words.includes('settle'))hints.push('settle','refund');if(words.includes('void'))hints.push('void');if(words.includes('replacement')||words.includes('exchange'))hints.push('replacement','return');return findText(hints.length?hints:[task.featureTitle]);}
+function shell(){return document.getElementById('tt-guided-mode');}
+function showMessage(message,tone='info'){let host=document.getElementById('tt-guide-toast');if(!host){host=document.createElement('div');host.id='tt-guide-toast';host.className='tt-guide-toast';document.body.appendChild(host);}host.dataset.tone=tone;host.textContent=message;clearTimeout(showMessage.t);showMessage.t=setTimeout(()=>host.remove(),5000);}
+function render(){const root=shell();if(!root)return;const task=state.task;const text=task?.steps[state.step]||'';root.innerHTML=`<div class="tt-guide-backdrop" data-guide-close></div><section class="tt-guide" role="dialog" aria-modal="true" aria-labelledby="tt-guide-title"><div class="tt-guide__head"><div><span class="tt-guide__eyebrow">Total Tools POS</span><h2 id="tt-guide-title">Guided Mode</h2><p>${task?esc(task.title):'Tell me what you need to do and I’ll take you to the right workspace.'}</p></div><button class="tt-guide__close" type="button" aria-label="Close Guided Mode" data-guide-close>×</button></div><div class="tt-guide__body">${task?`<div class="tt-guide__step"><span class="tt-guide__step-count">Step ${state.step+1} of ${task.steps.length}</span><h3>${esc(text)}</h3><p class="tt-guide__hint">Guided Mode routes to the authoritative workspace or role dashboard, then highlights the safest next control available to your permissions.</p></div><div class="tt-guide__actions"><button type="button" data-guide-home>Choose another task</button><div><button type="button" data-guide-prev ${state.step===0?'disabled':''}>Back</button><button type="button" class="is-primary" data-guide-next>${state.step===task.steps.length-1?'Finish':'Next'}</button></div></div>`:`<form class="tt-guide__search" data-guide-search><input id="tt-guide-input" autocomplete="off" placeholder="e.g. exchange an item, settle a refund, void a sale, release a shipment, receive a PO" aria-label="What do you want to do?"><button type="submit">Guide me</button></form><div class="tt-guide__suggestions">${TASKS.map(t=>`<button type="button" class="tt-guide__chip" data-task="${t.id}">${esc(t.title)}</button>`).join('')}</div>`}</div></section>`;bind();queueMicrotask(()=>root.querySelector(task?'[data-guide-next]':'#tt-guide-input')?.focus());if(task)setTimeout(()=>highlight(stepTarget(task,state.step)),140);}
+async function choose(task){state.task=task;state.step=0;render();const routed=await routeTask(task);if(routed)setTimeout(()=>highlight(stepTarget(task,0)),160);}
+function close(){clearHighlight();state.open=false;state.task=null;state.step=0;shell()?.remove();state.lastFocus?.focus?.();}
+function open(options={}){if(state.open){if(options.task){const task=TASKS.find(t=>t.id===options.task)||bestTask(options.task);if(task)choose(task);}else shell()?.querySelector('#tt-guide-input')?.focus();return;}state.lastFocus=document.activeElement;state.open=true;const root=document.createElement('div');root.id='tt-guided-mode';document.body.appendChild(root);render();if(options.task){const task=TASKS.find(t=>t.id===options.task)||bestTask(options.task);if(task)choose(task);}}
+function bind(){const root=shell();if(!root)return;root.querySelectorAll('[data-guide-close]').forEach(x=>x.addEventListener('click',close));root.querySelector('[data-guide-search]')?.addEventListener('submit',e=>{e.preventDefault();const task=bestTask(root.querySelector('#tt-guide-input')?.value);if(task)choose(task);else showMessage('Try sale, return, replacement, refund settlement, void, repair, rental, dispatch, driver tasks, security sign-off, account application, inventory, purchase order, transfer or reports.','error');});root.querySelectorAll('[data-task]').forEach(b=>b.addEventListener('click',()=>choose(TASKS.find(t=>t.id===b.dataset.task))));root.querySelector('[data-guide-home]')?.addEventListener('click',()=>{clearHighlight();state.task=null;state.step=0;render();});root.querySelector('[data-guide-prev]')?.addEventListener('click',()=>{if(state.step>0){state.step--;render();}});root.querySelector('[data-guide-next]')?.addEventListener('click',()=>{if(!state.task)return;if(state.step>=state.task.steps.length-1)return close();state.step++;render();});}
+function install(){if(!document.getElementById('tt-guide-launcher')){const btn=document.createElement('button');btn.id='tt-guide-launcher';btn.className='tt-guide-launcher';btn.type='button';btn.setAttribute('aria-haspopup','dialog');btn.innerHTML='<span aria-hidden="true">✦</span><span>Guided Mode</span>';btn.addEventListener('click',()=>open());document.body.appendChild(btn);}document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.open)close();});}
+window.TotalToolsGuidedMode={open,close,chooseTask:id=>{const task=TASKS.find(t=>t.id===id)||bestTask(id);if(!state.open)open();if(task)choose(task);},tasks:TASKS,workflowCoverage:WORKFLOW_COVERAGE};
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install,{once:true});else install();
 })();

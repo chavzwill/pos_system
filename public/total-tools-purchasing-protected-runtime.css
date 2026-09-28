@@ -1,0 +1,11 @@
+/* Total Tools POS — protected purchasing interaction details. */
+.tt-purch-dispatch-hint{display:grid;grid-template-columns:minmax(0,1fr) auto;gap:4px 12px;align-items:center}
+.tt-purch-dispatch-hint strong{grid-column:1}.tt-purch-dispatch-hint:not(:has(button))::after{content:''}
+.tt-purch-dispatch-hint button[data-tt-supplier-pickups]{grid-column:2;grid-row:1 / span 2;min-height:36px;padding:0 11px;border:1px solid #b9d3c3;border-radius:9px;background:#fff;color:var(--tt26-green-deep,#073d25);font-size:10px;font-weight:850;white-space:nowrap}
+.tt-purch-dispatch-hint button[data-tt-supplier-pickups]:hover{border-color:var(--tt26-green,#087a3b);background:#eef8f2;color:var(--tt26-green,#087a3b)}
+.tt-purch__row[role="button"]:focus-visible{outline:3px solid rgba(243,197,29,.82);outline-offset:-1px;box-shadow:inset 4px 0 0 var(--tt26-green,#087a3b)}
+.tt-purch__actions .danger[data-action="cancel-po"]{border-color:#e3b9b4!important;color:#9d2f28!important;background:#fff8f7!important}
+.tt-purch__actions .danger[data-action="cancel-po"]:hover{background:#fff0ee!important;border-color:#d89b94!important}
+.tt-purch__actions [data-action="receive"]{background:var(--tt26-green,#087a3b)!important;border-color:var(--tt26-green,#087a3b)!important;color:#fff!important}
+@media(max-width:700px){.tt-purch-dispatch-hint{grid-template-columns:1fr}.tt-purch-dispatch-hint button[data-tt-supplier-pickups]{grid-column:1;grid-row:auto;width:100%;margin-top:6px}}
+@media(forced-colors:active){.tt-purch__row[role="button"]:focus-visible{outline:2px solid Highlight;box-shadow:none}.tt-purch-dispatch-hint button[data-tt-supplier-pickups]{border:1px solid ButtonText}}

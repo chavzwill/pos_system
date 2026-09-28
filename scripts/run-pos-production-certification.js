@@ -20,8 +20,11 @@ if(externalBase && process.env.POS_TEST_ALLOW_MUTATIONS!=='YES'){
 
 run('Static production contract',process.execPath,['scripts/check-pos-production-certification.js']);
 run('Native runtime architecture contract',process.execPath,['scripts/check-native-pos-runtime.js']);
+run('Branch variation inventory integrity contract',process.execPath,['scripts/check-branch-variation-integrity-contract.js']);
 run('Backup and recovery contract',process.execPath,['scripts/check-production-recovery-contract.js']);
 run('Startup health and cutover contract',process.execPath,['scripts/check-production-observability-contract.js']);
+run('Disposable release certification contract',process.execPath,['scripts/check-disposable-release-certification-contract.js']);
+run('Shared POS test target contract',process.execPath,['scripts/check-shared-test-target-contract.js']);
 
 if(process.env.POS_RECOVERY_REHEARSAL_ARCHIVE){
   run('Non-destructive recovery rehearsal','bash',['scripts/production-recovery-rehearsal.sh',process.env.POS_RECOVERY_REHEARSAL_ARCHIVE]);
@@ -40,12 +43,16 @@ try{
 const suites=[
   'tests/native-pos-certification.spec.js',
   'tests/native-responsive-shell.spec.js',
+  'tests/native-all-workspaces.spec.js',
+  'tests/native-workspace-visual-integrity.spec.js',
+  'tests/native-fluid-responsive-sweep.spec.js',
   'tests/operations-acceptance.spec.js',
   'tests/security-boundaries.spec.js',
   'tests/multi-branch-read-integrity.spec.js',
   'tests/operation-idempotency.spec.js',
   'tests/lifecycle-concurrency.spec.js',
   'tests/business-integrity.spec.js',
+  'tests/purchase-order-hardening.spec.js',
   'tests/pos-financial-runtime.js',
   'tests/accounting-ledger-integrity.spec.js',
   'tests/accounting-source-sync-rbac.spec.js',

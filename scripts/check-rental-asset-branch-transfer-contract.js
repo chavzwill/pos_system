@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const route=read('routes/rental-asset-branch-transfers.js'),trace=read('routes/inventory-traceability.js'),ui=read('public/rental-fleet-transfer.js'),shell=read('public/shell-deferred.js'),syntax=read('scripts/check-client-syntax.js');
+const route=read('routes/rental-asset-branch-transfers.js'),trace=read('routes/inventory-traceability.js'),ui=read('public/rental-fleet-transfer.js'),shell=read('public/shell-deferred.js'),loader=read('public/workspace-loader-hardening.js'),syntax=read('scripts/check-client-syntax.js');
 new vm.Script(route,{filename:'rental asset branch transfers'});new vm.Script(ui,{filename:'rental fleet transfer ui'});
 const checks=[
  ['exact rental transfer route is mounted before destructive disposition flows',trace.includes("require('./rental-asset-branch-transfers')")&&trace.indexOf('rental-asset-branch-transfers')<trace.indexOf('rental-asset-disposal')&&trace.indexOf('rental-asset-branch-transfers')<trace.indexOf('rental-asset-sales')],
@@ -27,7 +27,7 @@ const checks=[
  ['employee fleet UI exposes transfer dispatch receive and cancellation controls',ui.includes('Transfer branch')&&ui.includes('Dispatch transfer')&&ui.includes('Receive transfer')&&ui.includes('Cancel transfer')],
  ['fleet UI communicates exact serial physical handoff semantics',ui.includes('one exact serialized rental asset')&&ui.includes('Source stock leaves only at dispatch')&&ui.includes('destination stock returns only when the exact serial is received')],
  ['transfer states are visible in the Fleet Management filter',ui.includes('transfer_pending')&&ui.includes('in_transit')],
- ['fleet transfer UI is deferred through the application shell',shell.includes("'/rental-fleet-transfer.js'")],
+ ['fleet transfer UI is deferred through the application shell or rental workspace',shell.includes("'/rental-fleet-transfer.js'")||(loader.includes("'rentals-workspace'")&&loader.includes('/rental-fleet-transfer.js'))],
  ['fleet transfer UI is included in browser syntax certification',syntax.includes("'rental-fleet-transfer.js'" )]
 ];
 let failed=0;for(const [name,ok]of checks){console.log(`${ok?'PASS':'FAIL'} Rental asset branch transfer: ${name}`);if(!ok)failed++;}

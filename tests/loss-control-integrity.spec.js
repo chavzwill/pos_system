@@ -1,9 +1,12 @@
 import { test, expect } from '@playwright/test';
+import { TEST_BASE_URL, assertSafeMutationTarget } from './test-base-url.js';
 
-const BASE='http://localhost:3001';
-const TEST_USER=process.env.POS_TEST_USER||'admin';
-const TEST_PASSWORD=process.env.POS_TEST_PASSWORD||'CI-Test-Auth!2026';
-const TEST_PIN=process.env.POS_TEST_PIN||'864209';
+const BASE=TEST_BASE_URL;
+const TEST_USER=process.env.POS_TEST_USER;
+const TEST_PASSWORD=process.env.POS_TEST_PASSWORD;
+const TEST_PIN=process.env.POS_TEST_PIN;
+if(!TEST_USER||!TEST_PASSWORD||!TEST_PIN)throw new Error('POS_TEST_USER, POS_TEST_PASSWORD, and POS_TEST_PIN are required');
+assertSafeMutationTarget();
 async function login(){const r=await fetch(`${BASE}/api/employees/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username:TEST_USER,password:TEST_PASSWORD})});expect(r.status).toBe(200);return (r.headers.get('set-cookie')||'').split(';')[0];}
 async function api(cookie,method,path,body){const r=await fetch(`${BASE}${path}`,{method,headers:{Cookie:cookie,'Content-Type':'application/json'},body:body===undefined?undefined:JSON.stringify(body)});return {status:r.status,body:await r.json().catch(()=>null)};}
 

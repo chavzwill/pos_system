@@ -8,10 +8,16 @@ const completion=read('routes/work-order-completion-hardening.js');
 const quality=read('routes/repair-quality.js');
 const workorders=read('routes/work-orders.js');
 const accounting=read('routes/accounting-source-sync.js');
-const helper=read('tests/repair-financial-runtime-helper.js');
+const helperWrapper=read('tests/repair-financial-runtime-helper.js');
+const helper=helperWrapper.includes('repair-financial-runtime-helper.migrated.js')
+  ? read('tests/repair-financial-runtime-helper.migrated.js')
+  : helperWrapper;
 const business=read('tests/business-integrity.spec.js');
 for(const [name,src] of Object.entries({server,guard,completion,quality,workorders,accounting,helper,business})){
-  const cleaned=src.replace(/^import .*$/mg,'').replace(/^export /mg,'');
+  const cleaned=src
+    .replace(/^import .*$/mg,'')
+    .replace(/^export\s+\{.*\}\s+from\s+['"].*['"];?$/mg,'')
+    .replace(/^export /mg,'');
   try{new vm.Script(cleaned,{filename:name});}catch(e){console.error(`FAIL Repair runtime prerequisite: syntax ${name}`);throw e;}
 }
 const checks=[

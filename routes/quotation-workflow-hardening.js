@@ -28,18 +28,22 @@ router.patch('/:id/status',async(req,res,next)=>{
     const nextStatus=String(req.body?.status||'');const {rows:[quote]}=await db.execute({sql:'SELECT id,status,converted_to_tx,converted_to_agreement_id FROM quotations WHERE id=?',args:[req.params.id]});
     if(!quote)return next();
     if(quote.status==='converted'||quote.converted_to_tx||quote.converted_to_agreement_id)return res.status(409).json({error:'Converted quotation status cannot be changed'});
-    const rank={draft:0,sent:1,accepted:2,declined:2};
+    const allowed=new Set(['draft','sent','accepted','declined','cancelled']);
+    if(!allowed.has(nextStatus))return res.status(400).json({error:'Invalid quotation status'});
+    const rank={draft:0,sent:1,accepted:2,declined:2,cancelled:2};
     if(rank[quote.status]!=null&&rank[nextStatus]!=null&&rank[nextStatus]<rank[quote.status])return res.status(409).json({error:`Quotation cannot move backward from ${quote.status} to ${nextStatus}`});
+    if(quote.status==='accepted'&&nextStatus!=='accepted')return res.status(409).json({error:'Accepted quotation is commercially committed. Use the controlled cancellation/reversal workflow rather than changing its status directly.'});
     next();
   }catch(e){res.status(500).json({error:e.message});}
 });
 
 router.post('/:id/convert',async(req,res,next)=>{
   try{
-    const {rows:[quote]}=await db.execute({sql:'SELECT id,status,converted_to_tx,converted_to_agreement_id FROM quotations WHERE id=?',args:[req.params.id]});
+    const {rows:[quote]}=await db.execute({sql:'SELECT id,status,quote_type,converted_to_tx,converted_to_agreement_id FROM quotations WHERE id=?',args:[req.params.id]});
     if(!quote)return next();
     if(quote.status==='converted'||quote.converted_to_tx||quote.converted_to_agreement_id)return res.status(409).json({error:'Quotation is already converted'});
     if(quote.status==='declined'||quote.status==='cancelled')return res.status(409).json({error:`${quote.status} quotation cannot be converted`});
+    if(quote.status!=='accepted')return res.status(409).json({error:'Quotation must be accepted before conversion'});
     next();
   }catch(e){res.status(500).json({error:e.message});}
 });

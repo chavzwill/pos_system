@@ -3,6 +3,7 @@ const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
 const {can}=require('../lib/permissions');
+const {withLifecycleLocks}=require('../lib/lifecycleLock');
 
 const num=v=>Number(v);
 const moneyFields=['cash_counted','card_counted','check_counted','gift_card_counted','credit_counted','direct_deposit_counted'];
@@ -23,7 +24,13 @@ async function session(id){const {rows:[row]}=await db.execute({sql:'SELECT * FR
 // reflected in custody/reconciliation views before the older drawer detail route.
 router.use(require('./drawer-refund-evidence'));
 
-router.post('/sessions',async(req,res,next)=>{
+router.post('/sessions',
+  withLifecycleLocks(req=>{
+    const emp=req.employee?.id||req.body?.employee_id;
+    const drawer=req.body?.drawer_id;
+    return [drawer&&`cash-drawer:${Number(drawer)}`,emp&&`cashier-drawer:${Number(emp)}`];
+  },{ttlSeconds:90,label:'cash drawer operation'}),
+  async(req,res,next)=>{
   try{
     const emp=requireEmployeeSession(req,res);if(!emp)return;
     if(!can(emp.permissions,'drawers_open')&&!manager(req))return res.status(403).json({error:'Missing permission: drawers_open'});
@@ -36,12 +43,16 @@ router.post('/sessions',async(req,res,next)=>{
     const opening=num(req.body?.opening_float||0);if(!Number.isFinite(opening)||opening<0)return res.status(400).json({error:'Opening float must be zero or greater'});
     const {rows:[drawerOpen]}=await db.execute({sql:"SELECT ds.*,e.first_name||' '||e.last_name employee_name FROM drawer_sessions ds LEFT JOIN employees e ON e.id=ds.employee_id WHERE ds.drawer_id=? AND ds.status='open'",args:[drawerId]});
     if(drawerOpen&&String(drawerOpen.employee_id)!==String(emp.id))return res.status(409).json({error:`${drawer.name} is already open by ${drawerOpen.employee_name||'another employee'}`});
+    const {rows:[employeeOpen]}=await db.execute({sql:"SELECT ds.*,d.name drawer_name FROM drawer_sessions ds LEFT JOIN cash_drawers d ON d.id=ds.drawer_id WHERE ds.employee_id=? AND ds.status='open' ORDER BY ds.opened_at DESC LIMIT 1",args:[emp.id]});
+    if(employeeOpen&&String(employeeOpen.drawer_id)!==String(drawerId))return res.status(409).json({error:`You already have ${employeeOpen.drawer_name||'another cash drawer'} open. Close or reconcile that session before opening a different drawer.`});
     req.body.employee_id=emp.id;req.body.branch_id=drawer.branch_id;req.body.opening_float=opening;
     next();
   }catch(e){res.status(500).json({error:e.message});}
 });
 
-router.patch('/sessions/:id/close',async(req,res,next)=>{
+router.patch('/sessions/:id/close',
+  withLifecycleLocks(req=>[`drawer-session:${Number(req.params.id)}`],{ttlSeconds:90,label:'cash drawer close'}),
+  async(req,res,next)=>{
   try{
     const emp=requireEmployeeSession(req,res);if(!emp)return;
     const s=await session(req.params.id);if(!s)return res.status(404).json({error:'Drawer session not found'});
@@ -52,7 +63,9 @@ router.patch('/sessions/:id/close',async(req,res,next)=>{
   }catch(e){res.status(500).json({error:e.message});}
 });
 
-router.post('/sessions/:id/reconcile',async(req,res,next)=>{
+router.post('/sessions/:id/reconcile',
+  withLifecycleLocks(req=>[`drawer-session:${Number(req.params.id)}`],{ttlSeconds:120,label:'cash drawer reconciliation'}),
+  async(req,res,next)=>{
   try{
     const emp=requireEmployeeSession(req,res);if(!emp)return;
     const s=await session(req.params.id);if(!s)return res.status(404).json({error:'Drawer session not found'});

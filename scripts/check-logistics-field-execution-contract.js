@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const route=read('routes/logistics-field-execution.js'),parent=read('routes/logistics-intelligence.js'),ui=read('public/logistics-field-execution.js'),deferred=read('public/shell-deferred.js');
+const route=read('routes/logistics-field-execution.js'),parent=read('routes/logistics-intelligence.js'),ui=read('public/logistics-field-execution.js'),deferred=read('public/shell-deferred.js'),loader=read('public/workspace-loader-hardening.js');
 new vm.Script(route,{filename:'logistics field execution'});new vm.Script(parent,{filename:'logistics parent'});new vm.Script(ui,{filename:'logistics field execution ui'});
 const checks=[
  ['field execution is mounted inside logistics',parent.includes("router.use(require('./logistics-field-execution'))")],
@@ -31,7 +31,7 @@ const checks=[
  ['dispatcher UI follows ordered field stages',ui.includes('Depart for origin')&&ui.includes('Arrived at origin')&&ui.includes('Confirm pickup / custody')&&ui.includes('Arrived destination')],
  ['dispatcher UI captures photo capable proof',ui.includes('type="file"')&&ui.includes('/proof')&&ui.includes('Add delivery proof')],
  ['dispatcher UI supports failed attempt and reschedule',ui.includes('Failed attempt')&&ui.includes('Reschedule')],
- ['field execution UI is deferred through shell',deferred.includes('/logistics-field-execution.js')]
+ ['field execution UI is deferred through shell or its logistics workspace',deferred.includes('/logistics-field-execution.js')||(loader.includes("'logistics-intelligence'")&&loader.includes('/logistics-field-execution.js'))]
 ];
 let failed=0;for(const [name,ok] of checks){console.log(`${ok?'PASS':'FAIL'} Dispatch field execution: ${name}`);if(!ok)failed++;}
 if(failed){console.error(`Dispatch field execution contract FAILED (${failed}/${checks.length} failed).`);process.exit(1);}console.log(`Dispatch field execution contract OK (${checks.length} checks).`);

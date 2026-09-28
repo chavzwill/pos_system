@@ -5,6 +5,7 @@ const { db } = require('../database');
 const { requirePermission, can } = require('../lib/permissions');
 const { getAvailableQty } = require('../lib/inventory-stock-status');
 const { getReservedQty } = require('../lib/inventory-reservations');
+const { withLifecycleLocks } = require('../lib/lifecycleLock');
 
 // Idempotency must claim the client operation before any stock reservation or
 // monetary mutation so duplicate/replayed checkout attempts cannot fan out.
@@ -20,14 +21,119 @@ router.use(require('./retail-cost-snapshot'));
 
 const allowedPayments = new Set(['cash','card','credit','bank_transfer']);
 const asMoney = v => Number.parseFloat(v || 0);
+let promotionUsageReady = null;
 
 function canOperateCrossBranch(employee) {
   if (!employee) return false;
   return can(employee.permissions, 'branches') || can(employee.permissions, 'security_manage');
 }
 
-router.post('/', requirePermission('pos'), async (req,res,next) => {
+async function ensurePromotionUsageIntegrity() {
+  if (promotionUsageReady) return promotionUsageReady;
+  promotionUsageReady = db.batch([
+    { sql: `CREATE TRIGGER IF NOT EXISTS trg_transaction_promotion_usage
+      AFTER INSERT ON transactions
+      WHEN NEW.status='completed' AND NEW.promotion_code IS NOT NULL AND TRIM(NEW.promotion_code)<>''
+      BEGIN
+        UPDATE promotion_codes
+        SET times_used=COALESCE(times_used,0)+1
+        WHERE UPPER(code)=UPPER(NEW.promotion_code);
+      END` },
+  ], 'write').catch(error => { promotionUsageReady = null; throw error; });
+  return promotionUsageReady;
+}
+
+async function promotionLockKeys(req) {
+  const keys = [];
+  if (req.body?.customer_id) keys.push(`customer-commerce:${Number(req.body.customer_id)}`);
+  const code = String(req.body?.promotion_code || '').trim();
+  if (code) {
+    const { rows: [row] } = await db.execute({ sql: 'SELECT id FROM promotion_codes WHERE code=? COLLATE NOCASE', args: [code] });
+    keys.push(`promotion-code:${row?.id || code.toUpperCase()}`);
+  }
+  return keys;
+}
+
+function promotionDiscount(promo, eligibleAmount) {
+  const value = Number(promo.value);
+  if (!Number.isFinite(value) || value < 0) throw new Error('Promotion value is invalid');
+  if (promo.type === 'percentage') {
+    if (value > 100) throw new Error('Promotion percentage cannot exceed 100%');
+    return Number((eligibleAmount * value / 100).toFixed(2));
+  }
+  if (promo.type === 'fixed') return Number(Math.min(value, eligibleAmount).toFixed(2));
+  throw new Error('Promotion type is invalid');
+}
+
+async function validatePromotionAtCheckout(body, authoritativeSubtotal, authoritativeLines) {
+  const code = String(body.promotion_code || '').trim();
+  if (!code) {
+    if (String(body.promotion_name || '').trim()) return { error: 'Promotion name cannot be supplied without a promotion code' };
+    return { discount: asMoney(body.discount_amount), evidence: null };
+  }
+
+  const { rows: [promo] } = await db.execute({ sql: `
+    SELECT pc.id AS code_id, pc.code, pc.active AS code_active, pc.usage_limit, pc.times_used,
+           p.id AS promotion_id, p.name, p.type, p.value, p.min_purchase, p.applies_to,
+           p.start_date, p.end_date, p.active AS promotion_active
+    FROM promotion_codes pc
+    JOIN promotions p ON p.id=pc.promotion_id
+    WHERE pc.code=? COLLATE NOCASE`, args: [code] });
+  if (!promo) return { error: 'Promotion code is invalid or no longer exists' };
+  if (!promo.code_active || !promo.promotion_active) return { error: 'Promotion code is inactive' };
+
+  const today = new Date().toISOString().slice(0,10);
+  if (promo.start_date && today < promo.start_date) return { error: 'Promotion has not started yet' };
+  if (promo.end_date && today > promo.end_date) return { error: 'Promotion has expired' };
+  if (promo.usage_limit != null && Number(promo.times_used || 0) >= Number(promo.usage_limit)) return { error: 'Promotion code has reached its usage limit' };
+  if (Number(promo.min_purchase || 0) > authoritativeSubtotal + 0.001) return { error: `Promotion requires a minimum merchandise subtotal of ${Number(promo.min_purchase).toFixed(2)}` };
+
+  let eligibleAmount = authoritativeSubtotal;
+  if (['specific','categories','items'].includes(String(promo.applies_to || ''))) {
+    const { rows: assignments } = await db.execute({ sql: 'SELECT item_type,item_id FROM promotion_items WHERE promotion_id=?', args: [promo.promotion_id] });
+    const productIds = new Set(assignments.filter(x => x.item_type === 'product').map(x => Number(x.item_id)));
+    const categoryIds = new Set(assignments.filter(x => x.item_type === 'category').map(x => Number(x.item_id)));
+    eligibleAmount = authoritativeLines.reduce((sum, line) => {
+      const productMatch = promo.applies_to !== 'categories' && productIds.has(Number(line.product_id));
+      const categoryMatch = promo.applies_to !== 'items' && categoryIds.has(Number(line.category_id));
+      return sum + (productMatch || categoryMatch ? Number(line.lineTotal) : 0);
+    }, 0);
+    eligibleAmount = Number(eligibleAmount.toFixed(2));
+    if (eligibleAmount <= 0) return { error: 'No item in the current cart qualifies for this promotion' };
+  }
+
+  let authoritativeDiscount;
+  try { authoritativeDiscount = promotionDiscount(promo, eligibleAmount); }
+  catch (error) { return { error: error.message }; }
+  const requested = asMoney(body.discount_amount);
+  if (!Number.isFinite(requested) || Math.abs(requested - authoritativeDiscount) > 0.01) {
+    return { error: `Promotion pricing changed. Expected discount ${authoritativeDiscount.toFixed(2)}; refresh the promotion before completing the sale.` };
+  }
+
+  body.promotion_code = String(promo.code).trim().toUpperCase();
+  body.promotion_name = promo.name;
+  body.discount_amount = authoritativeDiscount;
+  return {
+    discount: authoritativeDiscount,
+    evidence: {
+      code_id: Number(promo.code_id),
+      promotion_id: Number(promo.promotion_id),
+      code: body.promotion_code,
+      name: promo.name,
+      eligible_amount: eligibleAmount,
+      discount_amount: authoritativeDiscount,
+      usage_before: Number(promo.times_used || 0),
+      usage_limit: promo.usage_limit == null ? null : Number(promo.usage_limit),
+      validated_at: new Date().toISOString(),
+    },
+  };
+}
+
+router.post('/',
+  withLifecycleLocks(promotionLockKeys, {ttlSeconds:120,label:'customer checkout or promotion redemption'}),
+  requirePermission('pos'), async (req,res,next) => {
   try {
+    await ensurePromotionUsageIntegrity();
     const body = req.body || {};
     const items = Array.isArray(body.items) ? body.items : [];
     if (!items.length) return res.status(400).json({error:'No items in transaction'});
@@ -56,13 +162,14 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
       }
     }
 
-    const discount = asMoney(body.discount_amount);
     const storeCredit = asMoney(body.store_credit_applied);
-    if (!Number.isFinite(discount) || discount < 0) return res.status(400).json({error:'Discount amount cannot be negative'});
+    const requestedCashBack = asMoney(body.cash_back_applied);
     if (!Number.isFinite(storeCredit) || storeCredit < 0) return res.status(400).json({error:'Store credit amount cannot be negative'});
+    if (!Number.isFinite(requestedCashBack) || requestedCashBack < 0) return res.status(400).json({error:'Cash-back amount cannot be negative'});
 
     let authoritativeSubtotal = 0;
     let authoritativeTax = 0;
+    const authoritativeLines = [];
     for (const line of items) {
       const qty = Number(line.quantity);
       if (!Number.isInteger(qty) || qty <= 0) return res.status(400).json({error:'Sale quantities must be positive whole numbers after UOM conversion'});
@@ -93,31 +200,61 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
       const lineTax = body.tax_exempt ? 0 : Number((lineTotal * Number(product.tax_rate || 0) / 100).toFixed(2));
       authoritativeSubtotal += lineTotal;
       authoritativeTax += lineTax;
+      authoritativeLines.push({ product_id: product.id, category_id: product.category_id, quantity: qty, unit_price: unitPrice, lineTotal });
     }
     authoritativeSubtotal = Number(authoritativeSubtotal.toFixed(2));
     authoritativeTax = Number(authoritativeTax.toFixed(2));
+
+    const promotionValidation = await validatePromotionAtCheckout(body, authoritativeSubtotal, authoritativeLines);
+    if (promotionValidation.error) return res.status(409).json({error:promotionValidation.error,control:'promotion_revalidation'});
+    const discount = Number(promotionValidation.discount || 0);
+    if (!Number.isFinite(discount) || discount < 0) return res.status(400).json({error:'Discount amount cannot be negative'});
     if (discount > authoritativeSubtotal + authoritativeTax) return res.status(400).json({error:'Discount cannot exceed the sale value'});
 
     let customer = null;
+    let authoritativeCashBack = 0;
     if (body.customer_id) {
-      const {rows:[row]} = await db.execute({sql:'SELECT * FROM customers WHERE id=? AND active=1',args:[body.customer_id]});
+      const {rows:[row]} = await db.execute({sql:`SELECT c.*, cbct.points_threshold, cbct.reward_amount, cbct.min_redeem_amount, cbct.min_redeem_days, cbct.active AS cash_back_type_active
+        FROM customers c LEFT JOIN cash_back_card_types cbct ON c.cash_back_card_type_id=cbct.id
+        WHERE c.id=? AND c.active=1`,args:[body.customer_id]});
       if (!row) return res.status(400).json({error:'Selected customer is unavailable'});
       customer = row;
-    }
+      if (requestedCashBack > 0) {
+        const rewardConfig={...row,active:row.cash_back_type_active};
+        const accrued = (!rewardConfig.active || !rewardConfig.points_threshold || !rewardConfig.reward_amount) ? 0 : Math.floor(Number(row.loyalty_points||0)/Number(rewardConfig.points_threshold))*Number(rewardConfig.reward_amount);
+        let availableCashBack=accrued;
+        if (availableCashBack>0 && Number(rewardConfig.min_redeem_amount||0)>0 && availableCashBack<Number(rewardConfig.min_redeem_amount)) availableCashBack=0;
+        if (availableCashBack>0 && Number(rewardConfig.min_redeem_days||0)>0 && row.cash_back_last_redeemed_at) {
+          const days=(Date.now()-new Date(row.cash_back_last_redeemed_at).getTime())/86400000;
+          if (days<Number(rewardConfig.min_redeem_days)) availableCashBack=0;
+        }
+        if (requestedCashBack-availableCashBack>0.01) return res.status(400).json({error:`Cash-back redemption exceeds the customer's available reward (${Number(availableCashBack||0).toFixed(2)})`});
+        authoritativeCashBack=Number(requestedCashBack.toFixed(2));
+      }
+    } else if (requestedCashBack>0) return res.status(400).json({error:'Cash-back redemption requires a customer'});
+
     if (storeCredit > 0) {
       if (!customer) return res.status(400).json({error:'Store credit requires a customer'});
       const availableCredit = Math.max(0, -Number(customer.account_balance || 0));
       if (storeCredit - availableCredit > 0.01) return res.status(400).json({error:`Store credit exceeds the customer’s available balance (${availableCredit.toFixed(2)})`});
     }
 
+    const netTotal=Number((authoritativeSubtotal+authoritativeTax-discount-storeCredit-authoritativeCashBack).toFixed(2));
+    if(netTotal<0)return res.status(400).json({error:'Credits and rewards cannot exceed the sale total'});
+    body.discount_amount=discount;
+    body.cash_back_applied=authoritativeCashBack;
+
     const tenders = Array.isArray(body.tenders) && body.tenders.length ? body.tenders : null;
     if (tenders) {
+      let tenderSum=0;
       for (const leg of tenders) {
         if (!allowedPayments.has(leg.method) || leg.method === 'credit') return res.status(400).json({error:'Invalid split-payment method'});
         const amount = asMoney(leg.amount);
         if (!Number.isFinite(amount) || amount <= 0) return res.status(400).json({error:'Split-payment amounts must be greater than zero'});
         if ((leg.method === 'card' || leg.method === 'bank_transfer') && !String(leg.approval_code || '').trim()) return res.status(400).json({error:`${leg.method === 'card' ? 'Card' : 'Bank transfer'} payment requires an approval/reference code`});
+        tenderSum+=amount;
       }
+      if(Math.abs(Number(tenderSum.toFixed(2))-netTotal)>0.01)return res.status(400).json({error:`Split tender amounts (${tenderSum.toFixed(2)}) do not match the authoritative sale total (${netTotal.toFixed(2)})`});
     } else {
       const method = body.payment_method || 'cash';
       if (!allowedPayments.has(method)) return res.status(400).json({error:'Invalid payment method'});
@@ -125,15 +262,15 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
         if (!customer) return res.status(400).json({error:'Charge Account requires a customer'});
         if (customer.customer_type !== 'credit') return res.status(400).json({error:'Customer does not have a credit account'});
         if (customer.account_blocked) return res.status(400).json({error:'Customer credit account is blocked'});
-        const projected = Number(customer.account_balance || 0) + authoritativeSubtotal + authoritativeTax - discount - storeCredit;
+        const projected = Number(customer.account_balance || 0) + netTotal;
         if (Number(customer.credit_limit || 0) > 0 && projected - Number(customer.credit_limit) > 0.01) return res.status(400).json({error:'Sale would exceed the customer credit limit'});
       }
       if ((method === 'card' || method === 'bank_transfer') && !String(body.approval_code || '').trim()) return res.status(400).json({error:`${method === 'card' ? 'Card' : 'Bank transfer'} payment requires an approval/reference code`});
-      const totalBeforeCashback = authoritativeSubtotal + authoritativeTax - discount - storeCredit;
-      if (method === 'cash' && Number(body.amount_tendered || totalBeforeCashback) + 0.001 < totalBeforeCashback) return res.status(400).json({error:'Cash tendered cannot be less than the sale total'});
+      if (method === 'cash' && Number(body.amount_tendered ?? netTotal) + 0.001 < netTotal) return res.status(400).json({error:'Cash tendered cannot be less than the sale total'});
     }
 
-    req.retailCheckoutEvidence = {authoritativeSubtotal,authoritativeTax,validatedAt:new Date().toISOString(),inventoryReservationKey:req.inventoryReservationKey||null};
+    req.retailPromotionEvidence=promotionValidation.evidence;
+    req.retailCheckoutEvidence = {authoritativeSubtotal,authoritativeTax,authoritativeCashBack,netTotal,promotion:promotionValidation.evidence,validatedAt:new Date().toISOString(),inventoryReservationKey:req.inventoryReservationKey||null};
     next();
   } catch (e) {
     res.status(500).json({error:e.message});
@@ -141,3 +278,5 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
 });
 
 module.exports = router;
+module.exports.ensurePromotionUsageIntegrity=ensurePromotionUsageIntegrity;
+module.exports.validatePromotionAtCheckout=validatePromotionAtCheckout;

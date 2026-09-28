@@ -1,10 +1,11 @@
 import { test, expect } from '@playwright/test';
+import { TEST_BASE_URL as BASE, assertSafeMutationTarget } from './test-base-url.js';
 
-const BASE='http://localhost:3001';
-const ADMIN_USER=process.env.POS_TEST_USER||'admin';
-const ADMIN_PASSWORD=process.env.POS_TEST_PASSWORD||'CI-Test-Auth!2026';
+const ADMIN_USER=process.env.POS_TEST_USER;
+const ADMIN_PASSWORD=process.env.POS_TEST_PASSWORD;
 
 async function login(username=ADMIN_USER,password=ADMIN_PASSWORD){
+  if(!username||!password) throw new Error('POS_TEST_USER and POS_TEST_PASSWORD are required for accounting RBAC certification');
   const r=await fetch(`${BASE}/api/employees/login`,{method:'POST',headers:{'Content-Type':'application/json'},body:JSON.stringify({username,password})});
   return {status:r.status,body:await r.json().catch(()=>null),cookie:(r.headers.get('set-cookie')||'').split(';')[0]};
 }
@@ -14,6 +15,8 @@ async function api(cookie,method,path,body){
 }
 
 test.describe('Accounting financial authority isolation',()=>{
+  test.beforeAll(()=>assertSafeMutationTarget());
+
   test('ordinary reports authority cannot inspect financial intelligence, financial controls, or create ledger postings',async()=>{
     const admin=await login();expect(admin.status).toBe(200);
     const stamp=Date.now();

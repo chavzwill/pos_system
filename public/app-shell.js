@@ -94,7 +94,21 @@ const assets={
 'accounting-ledger':['/accounting-ledger.css','/accounting-ledger.js','TotalToolsAccountingLedger'],
 'supplier-ledger':['/supplier-ledger.css','/supplier-ledger.js','TotalToolsSupplierLedger'],
 'settlement-reconciliation':['/settlement-reconciliation.css','/settlement-reconciliation.js','TotalToolsSettlementReconciliation'],
-'financial-controls-intelligence':['/financial-controls-intelligence.css','/financial-controls-intelligence.js','TotalToolsFinancialControlsIntelligence']};
+'financial-controls-intelligence':['/financial-controls-intelligence.css','/financial-controls-intelligence.js','TotalToolsFinancialControlsIntelligence'],
+'operations-attention':['/operations-attention-center.css','/operations-attention-center.js','TotalToolsOperationsAttentionCenter'],
+'drawer':['/cash-drawer-workspace.css','/cash-drawer-workspace.js','TotalToolsCashDrawerWorkspace'],
+'commerce':['/ecommerce-operations-workspace.css','/ecommerce-operations-workspace.js','TotalToolsEcommerceOperations'],
+'warehouse':['/warehouse-operations-workspace.css','/warehouse-operations-workspace.js','TotalToolsWarehouseOperations'],
+'suppliers':['/suppliers-workspace.css','/suppliers-workspace.js','TotalToolsSuppliersWorkspace'],
+'catalog':['/catalog-admin-workspace.css','/catalog-admin-workspace.js','TotalToolsCatalogAdmin'],
+'ar':['/accounts-receivable-workspace.css','/accounts-receivable-workspace.js','TotalToolsAccountsReceivableWorkspace'],
+'commissions':['/commissions-workspace.css','/commissions-workspace.js','TotalToolsCommissionsWorkspace'],
+'integrations':['/integration-admin-workspace.css','/integration-admin-workspace.js','TotalToolsIntegrationAdmin'],
+'denominations':['/denominations-workspace.css','/denominations-workspace.js','TotalToolsDenominationsWorkspace'],
+'programs':['/customer-programs-workspace.css','/customer-programs-workspace.js','TotalToolsCustomerProgramsWorkspace'],
+'technician-performance':['/technician-compensation.css','/technician-compensation.js','TotalToolsTechnicianCompensation'],
+'technician-coaching':['/technician-coaching.css','/technician-coaching.js','TotalToolsTechnicianCoaching'],
+'technician-management':['/technician-management-intelligence.css','/technician-management-intelligence.js','TotalToolsTechnicianManagementIntelligence']};
 async function openFeature(key,title,options={}){if(key==='purchasing-workspace'){if(/request/i.test(title||''))options={...options,tab:'pr'};else if(/order|receiv/i.test(title||''))options={...options,tab:'po'}}if(key==='admin-workspace'&&/branch/i.test(title||''))options={...options,tab:'branches'};if(key==='legacy'){location.href='/legacy?from=shell&open='+encodeURIComponent(title||'');return;}const a=assets[key];if(!a)return;const [css,js,global]=a;try{await loadCss(css);await loadJs(js);const api=window[global];if(api?.open){if(key==='customer-crm-workspace'&&/pipeline/i.test(title||''))await api.open({...options,tab:'pipeline'});else await api.open(options||{});rememberTask(key,title);renderWorkspace(currentDomain);showToast(`${actionLabel(title,key)} opened.`,'success');}else throw new Error('Module loaded but did not initialize.');}catch(e){showToast(`${title||'Workspace'} could not open: ${e.message}`,'error');}}
 function loadCss(href){return new Promise(resolve=>{let el=[...document.styleSheets].find(x=>x.href&&x.href.includes(href));if(el)return resolve();const l=document.createElement('link');l.rel='stylesheet';l.href=href+'?v=20260922-ui-v2-all';l.onload=resolve;l.onerror=resolve;const authority=document.getElementById('tt-authoritative-ui');if(authority)document.head.insertBefore(l,authority);else document.head.appendChild(l);});}
 function loadJs(src){return new Promise((resolve,reject)=>{const id='shell-'+src.replace(/\W/g,'-');const old=document.getElementById(id);if(old)return resolve();const s=document.createElement('script');s.id=id;s.src=src+'?v=20260824-1344';s.onload=resolve;s.onerror=()=>reject(new Error('Unable to load module'));document.body.appendChild(s);});}
