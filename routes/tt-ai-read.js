@@ -1,10 +1,15 @@
 const express = require('express');
 const router = express.Router();
-const { db } = require('../database');
 const { requireAuth, requireAnyPermission, can } = require('../lib/permissions');
-
-const PRODUCT_READ_PERMISSIONS = ['inventory', 'pos', 'purchasing', 'quotations', 'rentals', 'work_orders'];
-const MACHINE_READ_PERMISSIONS = ['rentals', 'work_orders', 'inventory'];
+const {
+  PRODUCT_READ_PERMISSIONS,
+  MACHINE_READ_PERMISSIONS,
+  resolveBranch,
+  searchProducts,
+  searchRentalAssets,
+  readRentalAsset,
+} = require('../lib/tt-ai-read-tools');
+const { queryTTAI } = require('../lib/tt-ai-client');
 
 function rejectMachineCredential(req, res, next) {
   if (req.apiKey) return res.status(403).json({
@@ -14,274 +19,39 @@ function rejectMachineCredential(req, res, next) {
   next();
 }
 
-function safeLimit(value, fallback = 20, max = 50) {
-  const parsed = Number.parseInt(value, 10);
-  return Number.isFinite(parsed) ? Math.max(1, Math.min(parsed, max)) : fallback;
+function statusFor(error) {
+  return Number(error?.status) || 500;
 }
 
-function branchContext(req, res) {
-  const defaultBranch = req.employee?.default_branch_id == null ? null : String(req.employee.default_branch_id);
-  const requested = req.query.branch_id == null ? defaultBranch : String(req.query.branch_id);
-  if (!requested) {
-    res.status(400).json({
-      error: 'A branch context is required for TT AI operational reads',
-      code: 'TT_AI_BRANCH_REQUIRED',
-    });
-    return null;
-  }
-  if (defaultBranch && requested !== defaultBranch && !can(req.employee?.permissions, 'multi_branch_access')) {
-    res.status(403).json({
-      error: 'You do not have access to the requested branch',
-      code: 'TT_AI_BRANCH_FORBIDDEN',
-    });
-    return null;
-  }
-  return requested;
-}
-
-function canSeeCost(req) {
-  return can(req.employee?.permissions, 'purchasing') || can(req.employee?.permissions, 'reports_financial');
-}
-
-function productProjection(row, includeCost) {
-  const result = {
-    id: row.id,
-    sku: row.sku,
-    barcode: row.barcode,
-    name: row.name,
-    description: row.description,
-    brand: row.brand_name,
-    category: row.category_name,
-    unit: row.unit,
-    price: row.price,
-    stock_qty: row.stock_qty,
-    global_stock_qty: row.global_stock_qty,
-    min_stock: row.min_stock,
-    active: Number(row.active) !== 0,
-    is_rental: Number(row.is_rental) !== 0,
-    is_accessory: Number(row.is_accessory) !== 0,
-    is_service: Number(row.is_service) !== 0,
-    replacement_value: row.replacement_value,
-    rental_rate_type: row.rental_rate_type,
-    rental_rate: row.rental_rate,
-    source: 'pos',
-    authority: 'operational',
-  };
-  if (includeCost) result.cost = row.cost;
-  return result;
-}
-
-async function searchProducts(req, res, { rentalsOnly = false } = {}) {
-  const branchId = branchContext(req, res);
-  if (!branchId) return;
-
-  const q = String(req.query.q || '').trim();
-  if (q.length < 2) return res.status(400).json({
-    error: 'Search text must contain at least 2 characters',
-    code: 'TT_AI_SEARCH_TOO_SHORT',
+function sendError(res, error, fallback) {
+  const status = statusFor(error);
+  if (status >= 500) console.error('tt_ai_gateway_error', {
+    code: error?.code || 'unknown',
+    message: String(error?.message || error).slice(0, 300),
   });
-  const limit = safeLimit(req.query.limit, 20, 50);
-  const like = `%${q}%`;
-
-  try {
-    let sql = `SELECT p.id,p.sku,p.barcode,p.name,p.description,p.cost,p.unit,p.active,
-      p.is_rental,p.is_accessory,p.is_service,p.replacement_value,p.rental_rate_type,p.rental_rate,
-      p.stock_qty AS global_stock_qty,
-      COALESCE(bi.stock_qty,0) AS stock_qty,
-      COALESCE(bi.min_stock,p.min_stock) AS min_stock,
-      MAX(0,ROUND(p.price*(1+COALESCE(b.price_tier_percent,0)/100.0),2)) AS price,
-      c.name AS category_name,br.name AS brand_name
-      FROM products p
-      LEFT JOIN categories c ON c.id=p.category_id
-      LEFT JOIN brands br ON br.id=p.brand_id
-      LEFT JOIN branch_inventory bi ON bi.product_id=p.id AND bi.branch_id=?
-      LEFT JOIN branches b ON b.id=?
-      WHERE p.active=1
-        AND (p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ?)`;
-    const args = [branchId, branchId, like, like, like];
-    if (rentalsOnly) sql += ' AND p.is_rental=1';
-    sql += ' ORDER BY p.name LIMIT ?';
-    args.push(limit);
-
-    const { rows } = await db.execute({ sql, args });
-    const includeCost = canSeeCost(req);
-    return res.json({
-      source: 'pos',
-      authority: 'operational',
-      branch_id: branchId,
-      items: rows.map(row => productProjection(row, includeCost)),
-    });
-  } catch (error) {
-    console.error('TT AI product read failed', {
-      request_id: req.requestId || null,
-      employee_id: req.employee?.id || null,
-      message: String(error?.message || error).slice(0, 300),
-    });
-    return res.status(500).json({ error: 'Unable to read product data for TT AI', request_id: req.requestId || null });
-  }
-}
-
-async function tableExists(name) {
-  const { rows: [row] } = await db.execute({
-    sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
-    args: [name],
+  return res.status(status).json({
+    error: status >= 500 ? fallback : error.message,
+    code: error?.code || 'TT_AI_REQUEST_FAILED',
   });
-  return Boolean(row);
-}
-
-async function rentalAssetProjectionAvailable() {
-  return (await tableExists('rental_assets')) && (await tableExists('inventory_serials'));
-}
-
-function rentalAssetProjection(row, includeCost) {
-  const result = {
-    id: row.id,
-    asset_number: row.asset_number,
-    product_id: row.product_id,
-    product_name: row.product_name,
-    sku: row.sku,
-    branch_id: row.branch_id,
-    branch_name: row.branch_name,
-    serial_id: row.serial_id,
-    serial_number: row.serial_number,
-    status: row.status,
-    acquisition_date: row.acquisition_date,
-    acquisition_evidence_grade: row.acquisition_evidence_grade,
-    created_at: row.created_at,
-    updated_at: row.updated_at,
-    source: 'pos',
-    authority: 'operational',
-  };
-  if (includeCost) {
-    result.acquisition_cost = row.acquisition_cost;
-    result.acquisition_evidence_ref = row.acquisition_evidence_ref;
-  }
-  return result;
-}
-
-async function searchRentalAssets(req, res) {
-  const branchId = branchContext(req, res);
-  if (!branchId) return;
-  const q = String(req.query.q || '').trim();
-  if (q.length < 2) return res.status(400).json({
-    error: 'Search text must contain at least 2 characters',
-    code: 'TT_AI_SEARCH_TOO_SHORT',
-  });
-  if (!(await rentalAssetProjectionAvailable())) {
-    return res.json({
-      source: 'pos',
-      authority: 'operational',
-      branch_id: branchId,
-      tracking_available: false,
-      items: [],
-    });
-  }
-  const limit = safeLimit(req.query.limit, 20, 50);
-  const like = `%${q}%`;
-  try {
-    const { rows } = await db.execute({
-      sql: `SELECT a.*,p.name product_name,p.sku,b.name branch_name,s.serial_number
-        FROM rental_assets a
-        JOIN products p ON p.id=a.product_id
-        JOIN branches b ON b.id=a.branch_id
-        LEFT JOIN inventory_serials s ON s.id=a.serial_id
-        WHERE a.branch_id=?
-          AND (a.asset_number LIKE ? OR s.serial_number LIKE ? OR p.name LIKE ? OR p.sku LIKE ?)
-        ORDER BY a.asset_number
-        LIMIT ?`,
-      args: [branchId, like, like, like, like, limit],
-    });
-    return res.json({
-      source: 'pos',
-      authority: 'operational',
-      branch_id: branchId,
-      tracking_available: true,
-      items: rows.map(row => rentalAssetProjection(row, canSeeCost(req))),
-    });
-  } catch (error) {
-    console.error('TT AI rental asset search failed', {
-      request_id: req.requestId || null,
-      employee_id: req.employee?.id || null,
-      message: String(error?.message || error).slice(0, 300),
-    });
-    return res.status(500).json({ error: 'Unable to read rental asset data for TT AI', request_id: req.requestId || null });
-  }
-}
-
-async function readRentalAsset(req, res) {
-  const branchId = branchContext(req, res);
-  if (!branchId) return;
-  if (!(await rentalAssetProjectionAvailable())) {
-    return res.status(404).json({ error: 'Rental asset tracking is not available', code: 'TT_AI_ASSET_TRACKING_UNAVAILABLE' });
-  }
-  const identifier = String(req.params.identifier || '').trim();
-  try {
-    const { rows: [row] } = await db.execute({
-      sql: `SELECT a.*,p.name product_name,p.sku,b.name branch_name,s.serial_number
-        FROM rental_assets a
-        JOIN products p ON p.id=a.product_id
-        JOIN branches b ON b.id=a.branch_id
-        LEFT JOIN inventory_serials s ON s.id=a.serial_id
-        WHERE a.branch_id=? AND (CAST(a.id AS TEXT)=? OR a.asset_number=? OR s.serial_number=?)
-        LIMIT 1`,
-      args: [branchId, identifier, identifier, identifier],
-    });
-    if (!row) return res.status(404).json({ error: 'Rental asset not found' });
-
-    const result = rentalAssetProjection(row, canSeeCost(req));
-    result.allocations = [];
-    result.maintenance = [];
-
-    if (await tableExists('rental_asset_allocations')) {
-      const { rows } = await db.execute({
-        sql: `SELECT aa.id,aa.agreement_id,aa.agreement_item_id,aa.allocated_at,aa.released_at,aa.release_reason,
-          ra.agreement_number,ra.status agreement_status
-          FROM rental_asset_allocations aa
-          LEFT JOIN rental_agreements ra ON ra.id=aa.agreement_id
-          WHERE aa.asset_id=?
-          ORDER BY aa.allocated_at DESC,aa.id DESC LIMIT 100`,
-        args: [row.id],
-      });
-      result.allocations = rows;
-    }
-
-    if (await tableExists('rental_asset_maintenance')) {
-      const { rows } = await db.execute({
-        sql: `SELECT id,maintenance_type,started_at,ended_at,direct_cost,evidence_ref,notes
-          FROM rental_asset_maintenance WHERE asset_id=? ORDER BY started_at DESC,id DESC LIMIT 100`,
-        args: [row.id],
-      });
-      result.maintenance = rows.map(item => {
-        if (canSeeCost(req)) return item;
-        const { direct_cost, ...safe } = item;
-        return safe;
-      });
-    }
-
-    return res.json(result);
-  } catch (error) {
-    console.error('TT AI rental asset read failed', {
-      request_id: req.requestId || null,
-      employee_id: req.employee?.id || null,
-      message: String(error?.message || error).slice(0, 300),
-    });
-    return res.status(500).json({ error: 'Unable to read rental asset data for TT AI', request_id: req.requestId || null });
-  }
 }
 
 router.use(rejectMachineCredential);
 
 router.get('/context', requireAuth, (req, res) => {
   const permissions = req.employee?.permissions || {};
+  let branchId = null;
+  try { branchId = resolveBranch(req.employee, req.query.branch_id); } catch (_) {}
   res.json({
     employee_id: req.employee.id,
-    branch_id: req.employee.default_branch_id,
+    branch_id: branchId,
     security_group: req.employee.security_group_name || null,
     capabilities: {
       products: PRODUCT_READ_PERMISSIONS.some(key => can(permissions, key)),
       rental_machines: MACHINE_READ_PERMISSIONS.some(key => can(permissions, key)),
+      rental_assets: MACHINE_READ_PERMISSIONS.some(key => can(permissions, key)),
       cost_visibility: can(permissions, 'purchasing') || can(permissions, 'reports_financial'),
       multi_branch: can(permissions, 'multi_branch_access'),
+      query: Boolean(process.env.TT_AI_SERVICE_URL && process.env.TT_AI_SHARED_SECRET),
       writes: false,
     },
   });
@@ -290,26 +60,86 @@ router.get('/context', requireAuth, (req, res) => {
 router.get(
   '/products/search',
   requireAnyPermission(...PRODUCT_READ_PERMISSIONS),
-  (req, res) => searchProducts(req, res)
+  async (req, res) => {
+    try {
+      res.json(await searchProducts({
+        employee: req.employee,
+        branchId: req.query.branch_id,
+        query: req.query.q,
+        limit: req.query.limit,
+      }));
+    } catch (error) {
+      sendError(res, error, 'Unable to read product data for TT AI');
+    }
+  }
 );
 
 router.get(
   '/rental-machines/search',
   requireAnyPermission(...MACHINE_READ_PERMISSIONS),
-  (req, res) => searchProducts(req, res, { rentalsOnly: true })
+  async (req, res) => {
+    try {
+      res.json(await searchProducts({
+        employee: req.employee,
+        branchId: req.query.branch_id,
+        query: req.query.q,
+        limit: req.query.limit,
+        rentalsOnly: true,
+      }));
+    } catch (error) {
+      sendError(res, error, 'Unable to read rental product data for TT AI');
+    }
+  }
 );
-
 
 router.get(
   '/rental-assets/search',
   requireAnyPermission(...MACHINE_READ_PERMISSIONS),
-  (req, res) => searchRentalAssets(req, res)
+  async (req, res) => {
+    try {
+      res.json(await searchRentalAssets({
+        employee: req.employee,
+        branchId: req.query.branch_id,
+        query: req.query.q,
+        limit: req.query.limit,
+      }));
+    } catch (error) {
+      sendError(res, error, 'Unable to read rental asset data for TT AI');
+    }
+  }
 );
 
 router.get(
   '/rental-assets/:identifier',
   requireAnyPermission(...MACHINE_READ_PERMISSIONS),
-  (req, res) => readRentalAsset(req, res)
+  async (req, res) => {
+    try {
+      res.json(await readRentalAsset({
+        employee: req.employee,
+        branchId: req.query.branch_id,
+        identifier: req.params.identifier,
+      }));
+    } catch (error) {
+      sendError(res, error, 'Unable to read rental asset data for TT AI');
+    }
+  }
 );
+
+router.post('/query', requireAuth, async (req, res) => {
+  const message = String(req.body?.message || '').trim();
+  if (message.length < 2 || message.length > 2000) {
+    return res.status(400).json({ error: 'Question must contain between 2 and 2000 characters', code: 'TT_AI_QUESTION_INVALID' });
+  }
+  try {
+    const result = await queryTTAI({
+      employee: req.employee,
+      message,
+      requestId: req.requestId || undefined,
+    });
+    res.json(result);
+  } catch (error) {
+    sendError(res, error, 'TT AI is temporarily unavailable');
+  }
+});
 
 module.exports = router;
