@@ -41,7 +41,7 @@ The POS includes `lib/tt-ai-assertion.js`, which creates a short-lived, audience
 
 The POS holds `TT_AI_SIGNING_PRIVATE_KEY`; the standalone TT AI service receives only `TT_AI_SIGNING_PUBLIC_KEY`. This prevents TT AI from minting arbitrary employee assertions. No signing key is committed to either repository.
 
-The remaining transport step is to use this signer inside the POS -> TT AI server proxy. Do not expose the signed assertion as a general browser credential. Legacy v1 HMAC assertions are not part of the production contract.
+The POS -> TT AI server proxy is now implemented through `POST /api/tt-ai/query`. The browser sends only the question to the POS. POS signs the authenticated employee context, TT AI returns a bounded evidence plan, POS executes only allowlisted read tools, and TT AI synthesizes the evidence-only response. The signed assertion is never exposed to browser JavaScript. Legacy v1 HMAC assertions are not part of the production contract.
 
 ## Authority
 
@@ -66,3 +66,15 @@ node --check server.js
 ```
 
 The contract check fails if TT AI gains mutation routes, stops rejecting machine-key identity, loses branch scoping, exposes unrestricted costs, or loses exact serial/asset lookup.
+
+
+## Environment
+
+POS server:
+- `TT_AI_SERVICE_URL` — standalone TT AI server URL.
+- `TT_AI_SIGNING_PRIVATE_KEY` — Ed25519 private key used only to sign short-lived staff assertions.
+
+Standalone TT AI server:
+- `TT_AI_SIGNING_PUBLIC_KEY` — matching Ed25519 public key used only to verify assertions.
+
+No model-provider credential is required for the current evidence-only query service.
