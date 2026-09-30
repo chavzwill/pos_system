@@ -3,6 +3,20 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const state={messages:[],busy:false,context:null};
 async function api(url,opts={}){const r=await fetch(url,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});const d=await r.json().catch(()=>({}));if(!r.ok){const e=new Error(d.error||'Request failed');e.code=d.code||d.error||null;e.status=r.status;throw e;}return d;}
 function close(){document.getElementById('tt-ai-workspace')?.remove();}
+function ensureLauncher(){
+  const bar=document.querySelector('.shell-topbar');
+  if(!bar||document.getElementById('tt-ai-launcher'))return false;
+  const button=document.createElement('button');
+  button.id='tt-ai-launcher';
+  button.className='tt-ai-launcher';
+  button.type='button';
+  button.setAttribute('aria-label','Ask TT AI');
+  button.innerHTML=icon()+'<span>Ask TT AI</span>';
+  button.addEventListener('click',open);
+  const branch=bar.querySelector(':scope > span');
+  if(branch)bar.insertBefore(button,branch);else bar.appendChild(button);
+  return true;
+}
 function icon(){return '<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3v3M12 18v3M3 12h3M18 12h3M5.64 5.64l2.12 2.12M16.24 16.24l2.12 2.12M18.36 5.64l-2.12 2.12M7.76 16.24l-2.12 2.12M12 8.5A3.5 3.5 0 1 1 12 15.5 3.5 3.5 0 0 1 12 8.5Z" stroke="currentColor" stroke-width="1.6" stroke-linecap="round"/></svg>';}
 
 function normalizedAnswer(result){
@@ -77,5 +91,8 @@ async function open(){
   if(enabled)el.querySelector('#tt-ai-input').focus();
 }
 document.addEventListener('keydown',e=>{if(e.key==='Escape'&&document.getElementById('tt-ai-workspace'))close();});
+const launcherObserver=new MutationObserver(()=>ensureLauncher());
+launcherObserver.observe(document.documentElement,{childList:true,subtree:true});
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',ensureLauncher);else ensureLauncher();
 window.TotalToolsTTAI={open,close,ask:send};
 })();
