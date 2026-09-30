@@ -1,0 +1,14 @@
+{
+  "name": "@total-tools/tt-ai",
+  "version": "0.1.0",
+  "private": true,
+  "description": "Internal Total Tools AI orchestration and product/equipment intelligence foundation.",
+  "type": "module",
+  "scripts": {
+    "test": "node --test",
+    "check": "node --check src/core/policy.js && node --check src/core/tool-registry.js && node --check src/knowledge/schema.js && node --check src/orchestrator.js && node --test"
+  },
+  "engines": {
+    "node": ">=22"
+  }
+}
