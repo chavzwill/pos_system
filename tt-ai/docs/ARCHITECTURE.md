@@ -29,19 +29,19 @@ Every operational or technical response must resolve to one of:
 - inferred: reasoning/recommendation over cited evidence;
 - unknown: insufficient evidence.
 
-## Security gate before POS connection
+## POS security boundary
 
-The reviewed POS documentation still describes a legacy frontend-only permission model on the canonical branch documentation. TT AI must **not** connect directly to unrestricted POS routes.
+The actual POS master was verified to include server-side sessions, API-key scopes, bcrypt credential handling and server-side RBAC. The older CLAUDE.md security description is stale.
 
-Before enabling the POS adapter:
+TT AI does **not** use an integration API key as employee identity. The branch mounts a staff-session-only gateway at /api/tt-ai that:
 
-1. verify server-side staff authentication/session enforcement on the actual release branch;
-2. verify endpoint-level RBAC for every route exposed to TT AI;
-3. issue a server-to-server TT AI credential that cannot impersonate arbitrary employees;
-4. bind every AI request to an authenticated employee ID, branch and resolved permissions;
-5. prevent TT AI headers from becoming trusted identity assertions by themselves;
-6. log user, tool, source record, purpose and outcome;
-7. keep write tools disabled until separately reviewed.
+1. rejects machine API-key identity;
+2. binds requests to the authenticated POS employee;
+3. enforces branch access and existing permissions;
+4. withholds sensitive cost fields unless the employee has purchasing or financial-report authority;
+5. exposes only read operations.
+
+When TT AI becomes a separate service, the POS server should exchange the staff session for a short-lived audience-bound assertion rather than forwarding cookies or trusting browser-supplied identity headers.
 
 ## Model provider
 
@@ -54,9 +54,9 @@ A model may generate language and plans, but it may never become the authority f
 
 ## Next build slice
 
-1. verify hardened POS staff-auth branch against master;
-2. define authenticated read gateway endpoints for TT AI;
-3. add manufacturer/internal-document ingestion metadata;
-4. add product/model/part compatibility storage;
-5. implement retrieval tests using real non-production records;
-6. add the first staff UI only after the auth boundary is proven.
+1. add manufacturer/internal-document ingestion and evidence extraction;
+2. connect the staff-session gateway to TT AI retrieval orchestration;
+3. map existing rental/work-order asset identifiers into machine model and asset records;
+4. import a small real non-production product/manual set and validate compatibility retrieval;
+5. add the first Ask TT AI staff UI after retrieval is evidence-correct;
+6. keep all write actions disabled until separately reviewed.
