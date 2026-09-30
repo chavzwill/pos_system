@@ -1,6 +1,16 @@
 'use strict';
 const crypto=require('crypto');
+const Module=require('module');
+
+const originalLoad=Module._load;
+Module._load=function(request,parent,isMain){
+  if(request==='./permissions'&&String(parent?.filename||'').endsWith('tt-ai-assertion.js')){
+    return {can:(permissions,key)=>Boolean(permissions?.[key])};
+  }
+  return originalLoad.call(this,request,parent,isMain);
+};
 const {createTTAIStaffAssertion,TT_AI_ASSERTION_CONTRACT}=require('../lib/tt-ai-assertion');
+Module._load=originalLoad;
 
 const {privateKey,publicKey}=crypto.generateKeyPairSync('ed25519');
 const privatePem=privateKey.export({type:'pkcs8',format:'pem'});
