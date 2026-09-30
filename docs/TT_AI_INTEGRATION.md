@@ -37,11 +37,11 @@ Rental asset cost/acquisition evidence is returned only when the employee has Pu
 
 Do not forward the POS session cookie to TT AI and do not use a generic POS API key as employee identity.
 
-The POS now includes `lib/tt-ai-assertion.js`, which creates a short-lived, audience-bound HMAC-SHA256 staff assertion after POS authentication. The matching TT AI verifier is implemented in the standalone repository.
+The POS includes `lib/tt-ai-assertion.js`, which creates a short-lived, audience-bound Ed25519 v2 staff assertion after POS authentication. The matching TT AI verifier is implemented in the standalone repository.
 
-The shared secret is supplied server-side as `TT_AI_SHARED_SECRET` and must be at least 32 bytes. No secret is committed to either repository.
+The POS holds `TT_AI_SIGNING_PRIVATE_KEY`; the standalone TT AI service receives only `TT_AI_SIGNING_PUBLIC_KEY`. This prevents TT AI from minting arbitrary employee assertions. No signing key is committed to either repository.
 
-The remaining transport step is to use this signer inside the eventual POS -> TT AI server proxy. Do not expose the signed assertion as a general browser credential.
+The remaining transport step is to use this signer inside the POS -> TT AI server proxy. Do not expose the signed assertion as a general browser credential. Legacy v1 HMAC assertions are not part of the production contract.
 
 ## Authority
 
