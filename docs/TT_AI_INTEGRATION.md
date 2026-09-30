@@ -22,6 +22,10 @@ It:
 - `GET /api/tt-ai/context`
 - `GET /api/tt-ai/products/search?q=...`
 - `GET /api/tt-ai/rental-machines/search?q=...`
+- `GET /api/tt-ai/rental-assets/search?q=...` — exact physical fleet assets with POS asset number and inventory serial
+- `GET /api/tt-ai/rental-assets/:identifier` — exact asset identity plus allocation and maintenance history
+
+Rental asset cost/acquisition evidence is returned only when the employee has Purchasing or Financial Reporting authority.
 
 ## Standalone service connection
 
