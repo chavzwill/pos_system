@@ -51,7 +51,7 @@ router.get('/context', requireAuth, (req, res) => {
       rental_assets: MACHINE_READ_PERMISSIONS.some(key => can(permissions, key)),
       cost_visibility: can(permissions, 'purchasing') || can(permissions, 'reports_financial'),
       multi_branch: can(permissions, 'multi_branch_access'),
-      query: Boolean(process.env.TT_AI_SERVICE_URL && process.env.TT_AI_SHARED_SECRET),
+      query: Boolean(process.env.TT_AI_SERVICE_URL && process.env.TT_AI_SIGNING_PRIVATE_KEY),
       writes: false,
     },
   });
