@@ -22,6 +22,12 @@ It:
 - `GET /api/tt-ai/context`
 - `GET /api/tt-ai/products/search?q=...`
 - `GET /api/tt-ai/rental-machines/search?q=...`
+- `GET /api/tt-ai/rental-assets/search?q=...`
+- `GET /api/tt-ai/rental-assets/:identifier`
+
+The physical-asset reads use the existing POS `rental_assets` registry and `inventory_serials`. If the registry is not initialized, TT AI reports tracking unavailable instead of fabricating asset identities.
+
+Asset detail may include existing allocation and maintenance history when those tables exist. Financial cost fields remain hidden unless the employee already has Purchasing or Financial Reporting authority.
 - `GET /api/tt-ai/rental-assets/search?q=...` — exact physical fleet assets with POS asset number and inventory serial
 - `GET /api/tt-ai/rental-assets/:identifier` — exact asset identity plus allocation and maintenance history
 
@@ -44,3 +50,15 @@ The POS remains authoritative for:
 - operational approvals.
 
 TT AI remains an intelligence/retrieval layer and must not write directly to POS tables.
+
+## Qualification
+
+Run:
+
+```bash
+node scripts/check-tt-ai-read-contract.js
+node --check routes/tt-ai-read.js
+node --check server.js
+```
+
+The contract check fails if TT AI gains mutation routes, stops rejecting machine-key identity, loses branch scoping, exposes unrestricted costs, or loses exact serial/asset lookup.
