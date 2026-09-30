@@ -84,7 +84,12 @@
   }
 
   function evidenceFrom(result) {
-    return Array.isArray(result?.evidence) ? result.evidence : [];
+    return (Array.isArray(result?.evidence) ? result.evidence : []).map(item => ({
+      ...item,
+      label: item?.title || item?.tool || item?.evidence_source_id || 'source',
+      authority: item?.authority || null,
+      observedAt: item?.observedAt || item?.observed_at || null,
+    }));
   }
 
   function normalizeResult(result) {
@@ -131,7 +136,8 @@
     const evidence = result.evidence.map(item => {
       const observed = item.observedAt ? ` · ${esc(item.observedAt)}` : '';
       const records = item.records != null ? ` · ${esc(item.records)} record${Number(item.records) === 1 ? '' : 's'}` : '';
-      return `<span>${esc(item.source || 'POS')} · ${esc(item.tool || 'source')}${records}${observed}</span>`;
+      const authority = item.authority ? ` · ${esc(item.authority)}` : '';
+      return `<span>${esc(item.source || 'POS')}${authority} · ${esc(item.label || 'source')}${records}${observed}</span>`;
     }).join('');
 
     return `<div class="tt-ai-msg tt-ai-msg--assistant">
