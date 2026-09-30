@@ -28,7 +28,7 @@ const checks=[
   ['AI plan is capped before execution',client.includes('MAX_PLAN_STEPS')&&client.includes('TT_AI_PLAN_TOO_LARGE')],
   ['AI may request only POS evidence in this slice',client.includes("step.source !== 'pos'")&&client.includes('TT_AI_SOURCE_NOT_ALLOWED')],
   ['assertion stays server-side',client.includes('createTTAIStaffAssertion')&&!route.includes('signed.token')],
-  ['shared assertion secret is environment-only',signer.includes('process.env.TT_AI_SHARED_SECRET')],
+  ['POS owns asymmetric signing key and no shared secret remains',signer.includes('process.env.TT_AI_SIGNING_PRIVATE_KEY')&&!signer.includes('TT_AI_SHARED_SECRET')&&!client.includes('TT_AI_SHARED_SECRET')],
 ];
 
 const failed=checks.filter(([,ok])=>!ok);
