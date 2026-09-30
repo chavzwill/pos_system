@@ -6,9 +6,9 @@
   "type": "module",
   "scripts": {
     "test": "node --test",
-    "check": "node --check src/core/policy.js && node --check src/core/tool-registry.js && node --check src/knowledge/schema.js && node --check src/orchestrator.js && node --test"
+    "check": "node --check src/core/policy.js && node --check src/core/tool-registry.js && node --check src/knowledge/schema.js && node --check src/knowledge/store.js && node --check src/orchestrator.js && node --check ../routes/tt-ai-read.js && node --test"
   },
   "engines": {
     "node": ">=22"
   }
-}
+}\n
