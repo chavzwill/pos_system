@@ -121,6 +121,154 @@ async function searchProducts(req, res, { rentalsOnly = false } = {}) {
   }
 }
 
+async function tableExists(name) {
+  const { rows: [row] } = await db.execute({
+    sql: "SELECT name FROM sqlite_master WHERE type='table' AND name=?",
+    args: [name],
+  });
+  return Boolean(row);
+}
+
+async function rentalAssetProjectionAvailable() {
+  return (await tableExists('rental_assets')) && (await tableExists('inventory_serials'));
+}
+
+function rentalAssetProjection(row, includeCost) {
+  const result = {
+    id: row.id,
+    asset_number: row.asset_number,
+    product_id: row.product_id,
+    product_name: row.product_name,
+    sku: row.sku,
+    branch_id: row.branch_id,
+    branch_name: row.branch_name,
+    serial_id: row.serial_id,
+    serial_number: row.serial_number,
+    status: row.status,
+    acquisition_date: row.acquisition_date,
+    acquisition_evidence_grade: row.acquisition_evidence_grade,
+    created_at: row.created_at,
+    updated_at: row.updated_at,
+    source: 'pos',
+    authority: 'operational',
+  };
+  if (includeCost) {
+    result.acquisition_cost = row.acquisition_cost;
+    result.acquisition_evidence_ref = row.acquisition_evidence_ref;
+  }
+  return result;
+}
+
+async function searchRentalAssets(req, res) {
+  const branchId = branchContext(req, res);
+  if (!branchId) return;
+  const q = String(req.query.q || '').trim();
+  if (q.length < 2) return res.status(400).json({
+    error: 'Search text must contain at least 2 characters',
+    code: 'TT_AI_SEARCH_TOO_SHORT',
+  });
+  if (!(await rentalAssetProjectionAvailable())) {
+    return res.json({
+      source: 'pos',
+      authority: 'operational',
+      branch_id: branchId,
+      tracking_available: false,
+      items: [],
+    });
+  }
+  const limit = safeLimit(req.query.limit, 20, 50);
+  const like = `%${q}%`;
+  try {
+    const { rows } = await db.execute({
+      sql: `SELECT a.*,p.name product_name,p.sku,b.name branch_name,s.serial_number
+        FROM rental_assets a
+        JOIN products p ON p.id=a.product_id
+        JOIN branches b ON b.id=a.branch_id
+        LEFT JOIN inventory_serials s ON s.id=a.serial_id
+        WHERE a.branch_id=?
+          AND (a.asset_number LIKE ? OR s.serial_number LIKE ? OR p.name LIKE ? OR p.sku LIKE ?)
+        ORDER BY a.asset_number
+        LIMIT ?`,
+      args: [branchId, like, like, like, like, limit],
+    });
+    return res.json({
+      source: 'pos',
+      authority: 'operational',
+      branch_id: branchId,
+      tracking_available: true,
+      items: rows.map(row => rentalAssetProjection(row, canSeeCost(req))),
+    });
+  } catch (error) {
+    console.error('TT AI rental asset search failed', {
+      request_id: req.requestId || null,
+      employee_id: req.employee?.id || null,
+      message: String(error?.message || error).slice(0, 300),
+    });
+    return res.status(500).json({ error: 'Unable to read rental asset data for TT AI', request_id: req.requestId || null });
+  }
+}
+
+async function readRentalAsset(req, res) {
+  const branchId = branchContext(req, res);
+  if (!branchId) return;
+  if (!(await rentalAssetProjectionAvailable())) {
+    return res.status(404).json({ error: 'Rental asset tracking is not available', code: 'TT_AI_ASSET_TRACKING_UNAVAILABLE' });
+  }
+  const identifier = String(req.params.identifier || '').trim();
+  try {
+    const { rows: [row] } = await db.execute({
+      sql: `SELECT a.*,p.name product_name,p.sku,b.name branch_name,s.serial_number
+        FROM rental_assets a
+        JOIN products p ON p.id=a.product_id
+        JOIN branches b ON b.id=a.branch_id
+        LEFT JOIN inventory_serials s ON s.id=a.serial_id
+        WHERE a.branch_id=? AND (CAST(a.id AS TEXT)=? OR a.asset_number=? OR s.serial_number=?)
+        LIMIT 1`,
+      args: [branchId, identifier, identifier, identifier],
+    });
+    if (!row) return res.status(404).json({ error: 'Rental asset not found' });
+
+    const result = rentalAssetProjection(row, canSeeCost(req));
+    result.allocations = [];
+    result.maintenance = [];
+
+    if (await tableExists('rental_asset_allocations')) {
+      const { rows } = await db.execute({
+        sql: `SELECT aa.id,aa.agreement_id,aa.agreement_item_id,aa.allocated_at,aa.released_at,aa.release_reason,
+          ra.agreement_number,ra.status agreement_status
+          FROM rental_asset_allocations aa
+          LEFT JOIN rental_agreements ra ON ra.id=aa.agreement_id
+          WHERE aa.asset_id=?
+          ORDER BY aa.allocated_at DESC,aa.id DESC LIMIT 100`,
+        args: [row.id],
+      });
+      result.allocations = rows;
+    }
+
+    if (await tableExists('rental_asset_maintenance')) {
+      const { rows } = await db.execute({
+        sql: `SELECT id,maintenance_type,started_at,ended_at,direct_cost,evidence_ref,notes
+          FROM rental_asset_maintenance WHERE asset_id=? ORDER BY started_at DESC,id DESC LIMIT 100`,
+        args: [row.id],
+      });
+      result.maintenance = rows.map(item => {
+        if (canSeeCost(req)) return item;
+        const { direct_cost, ...safe } = item;
+        return safe;
+      });
+    }
+
+    return res.json(result);
+  } catch (error) {
+    console.error('TT AI rental asset read failed', {
+      request_id: req.requestId || null,
+      employee_id: req.employee?.id || null,
+      message: String(error?.message || error).slice(0, 300),
+    });
+    return res.status(500).json({ error: 'Unable to read rental asset data for TT AI', request_id: req.requestId || null });
+  }
+}
+
 router.use(rejectMachineCredential);
 
 router.get('/context', requireAuth, (req, res) => {
@@ -149,6 +297,19 @@ router.get(
   '/rental-machines/search',
   requireAnyPermission(...MACHINE_READ_PERMISSIONS),
   (req, res) => searchProducts(req, res, { rentalsOnly: true })
+);
+
+
+router.get(
+  '/rental-assets/search',
+  requireAnyPermission(...MACHINE_READ_PERMISSIONS),
+  (req, res) => searchRentalAssets(req, res)
+);
+
+router.get(
+  '/rental-assets/:identifier',
+  requireAnyPermission(...MACHINE_READ_PERMISSIONS),
+  (req, res) => readRentalAsset(req, res)
 );
 
 module.exports = router;
