@@ -71,9 +71,61 @@
     };
   }
 
+  function machineCard(machine) {
+    return {
+      type: 'machine_model',
+      title: [machine.brand, machine.model].filter(Boolean).join(' ') || 'Machine model',
+      subtitle: [machine.product_name, machine.sku].filter(Boolean).join(' · '),
+      source: 'Reviewed knowledge',
+      facts: [
+        machine.engine_model ? { label: 'Engine', value: machine.engine_model } : null,
+        machine.sku ? { label: 'Total Tools SKU', value: machine.sku } : null,
+      ].filter(Boolean),
+    };
+  }
+
+  function technicalPartCard(part) {
+    const catalog = Array.isArray(part.catalogProducts) ? part.catalogProducts : [];
+    const mappedSkus = catalog.map(product => product.sku || product.name).filter(Boolean);
+    const live = catalog.map(product => product.live).filter(Boolean);
+    const stock = live.map(item => item.stock_qty).filter(value => value != null);
+    const prices = live.map(item => item.price).filter(value => value != null);
+    return {
+      type: 'technical_part',
+      title: part.name || 'Compatible part',
+      subtitle: part.manufacturer_part_number ? `OEM ${part.manufacturer_part_number}` : '',
+      source: live.length ? 'Knowledge + POS' : 'Reviewed knowledge',
+      facts: [
+        mappedSkus.length ? { label: 'Total Tools SKU', value: mappedSkus.join(', ') } : null,
+        stock.length ? { label: 'Branch stock', value: stock.join(', ') } : null,
+        prices.length ? { label: 'Price', value: prices.map(money).join(', ') } : null,
+        part.relationship ? { label: 'Relationship', value: part.relationship } : null,
+      ].filter(Boolean),
+    };
+  }
+
+  function reversePartCard(part) {
+    return technicalPartCard(part);
+  }
+
   function cardsFrom(answer) {
     const data = answer && answer.data ? answer.data : null;
     if (!data) return [];
+    if (data.machine && Array.isArray(data.parts)) {
+      return [
+        machineCard(data.machine),
+        ...data.parts.slice(0, 7).map(technicalPartCard),
+      ];
+    }
+    if (data.part && Array.isArray(data.machines)) {
+      return [
+        reversePartCard(data.part),
+        ...data.machines.slice(0, 7).map(machineCard),
+      ];
+    }
+    if (data.machine && Array.isArray(data.facts)) {
+      return [machineCard(data.machine)];
+    }
     if (Array.isArray(data.items)) {
       return data.items.slice(0, 8).map(item =>
         item.asset_number || item.serial_number ? assetCard(item) : productCard(item)
@@ -114,7 +166,7 @@
   function renderCard(card) {
     return `<article class="tt-ai-card">
       <div class="tt-ai-card__head">
-        <span class="tt-ai-card__type">${esc(card.type === 'rental_asset' ? 'Fleet asset' : 'Product')}</span>
+        <span class="tt-ai-card__type">${esc(card.type === 'rental_asset' ? 'Fleet asset' : card.type === 'machine_model' ? 'Machine model' : card.type === 'technical_part' ? 'Compatible part' : 'Product')}</span>
         <span class="tt-ai-card__source">${esc(card.source || 'POS')}</span>
       </div>
       <strong>${esc(card.title || 'Record')}</strong>
@@ -253,9 +305,10 @@
           <button data-q="Find Bosch grinder">Find a product</button>
           <button data-q="Find rental asset GX1-00088">Check a fleet asset</button>
           <button data-q="Do we have generators in stock?">Check branch stock</button>
+          <button data-q="What parts fit GEN-55 and do we have them in stock?">Find compatible parts</button>
         </div>
         <form id="tt-ai-form">
-          <label for="tt-ai-input">Ask about products, stock, rental machines or exact fleet assets</label>
+          <label for="tt-ai-input">Ask about products, stock, machines, parts, specifications or exact fleet assets</label>
           <div>
             <textarea id="tt-ai-input" rows="2" maxlength="2000" placeholder="Example: Find rental asset GX1-00088"></textarea>
             <button id="tt-ai-send">Ask</button>
