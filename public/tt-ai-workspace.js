@@ -72,7 +72,7 @@
   }
 
   function cardsFrom(answer) {
-    const data = answer?.data;
+    const data = answer && answer.data ? answer.data : null;
     if (!data) return [];
     if (Array.isArray(data.items)) {
       return data.items.slice(0, 8).map(item =>
