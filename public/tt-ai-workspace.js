@@ -88,17 +88,36 @@
     const catalog = Array.isArray(part.catalogProducts) ? part.catalogProducts : [];
     const mappedSkus = catalog.map(product => product.sku || product.name).filter(Boolean);
     const live = catalog.map(product => product.live).filter(Boolean);
+    const procurement = catalog.map(product => product.procurement).filter(Boolean);
     const stock = live.map(item => item.stock_qty).filter(value => value != null);
     const prices = live.map(item => item.price).filter(value => value != null);
+    const suppliers = [...new Set(procurement.flatMap(entry =>
+      (entry.suppliers || []).map(supplier => supplier.supplierName).filter(Boolean)
+    ))];
+    const latest = procurement
+      .map(entry => entry.latestPurchase)
+      .filter(Boolean)
+      .sort((a, b) => String(b.order_date || '').localeCompare(String(a.order_date || '')))[0] || null;
+    const openPoLines = procurement.reduce((sum, entry) =>
+      sum + (Array.isArray(entry.openPurchaseOrders) ? entry.openPurchaseOrders.length : 0), 0
+    );
+    const lastCost = latest?.unit_cost != null
+      ? `${Number(latest.unit_cost).toLocaleString(undefined,{maximumFractionDigits:4})}${latest.unit ? ` / ${latest.unit}` : ''}`
+      : null;
+
     return {
       type: 'technical_part',
       title: part.name || 'Compatible part',
       subtitle: part.manufacturer_part_number ? `OEM ${part.manufacturer_part_number}` : '',
-      source: live.length ? 'Knowledge + POS' : 'Reviewed knowledge',
+      source: procurement.length ? 'Knowledge + purchasing' : live.length ? 'Knowledge + POS' : 'Reviewed knowledge',
       facts: [
         mappedSkus.length ? { label: 'Total Tools SKU', value: mappedSkus.join(', ') } : null,
         stock.length ? { label: 'Branch stock', value: stock.join(', ') } : null,
         prices.length ? { label: 'Price', value: prices.map(money).join(', ') } : null,
+        suppliers.length ? { label: 'Historical supplier', value: suppliers.slice(0,3).join(', ') } : null,
+        lastCost ? { label: 'Last imported PO unit cost', value: lastCost } : null,
+        latest?.po_number ? { label: 'Last PO', value: latest.po_number } : null,
+        openPoLines ? { label: 'Outstanding PO lines', value: String(openPoLines) } : null,
         part.relationship ? { label: 'Relationship', value: part.relationship } : null,
       ].filter(Boolean),
     };
@@ -306,6 +325,7 @@
           <button data-q="Find rental asset GX1-00088">Check a fleet asset</button>
           <button data-q="Do we have generators in stock?">Check branch stock</button>
           <button data-q="What parts fit GEN-55 and do we have them in stock?">Find compatible parts</button>
+          <button data-q="What filter fits GX-1, who supplies it, what did we last pay, and is there an open PO?">Part purchasing history</button>
         </div>
         <form id="tt-ai-form">
           <label for="tt-ai-input">Ask about products, stock, machines, parts, specifications or exact fleet assets</label>
