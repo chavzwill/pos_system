@@ -18,6 +18,8 @@ const checks=[
   ['reviewed machine models render as first-class cards',ui.includes('machineCard')&&ui.includes("'Machine model'")],
   ['compatible parts render mapped Total Tools SKUs',ui.includes('technicalPartCard')&&ui.includes("'Total Tools SKU'")],
   ['live compatible-part evidence can render branch stock and price',ui.includes("'Knowledge + POS'")&&ui.includes("'Branch stock'")&&ui.includes("prices.map(money)")],
+  ['authorized part procurement can render supplier cost and open-PO history',ui.includes("'Knowledge + purchasing'")&&ui.includes("'Historical supplier'")&&ui.includes("'Last imported PO unit cost'")&&ui.includes("'Outstanding PO lines'")],
+  ['historical PO unit cost is not forced into JMD formatting',ui.includes("Number(latest.unit_cost).toLocaleString")&&!ui.includes("money(latest.unit_cost)")],
   ['assistant text is escaped before HTML rendering',ui.includes('esc(answer.text)')],
   ['company evidence is shown separately',ui.includes('evidenceFrom')&&ui.includes('Evidence used')],
   ['UI makes read-only boundary visible',ui.includes('Read only')&&ui.includes('No operational changes can be made')],
