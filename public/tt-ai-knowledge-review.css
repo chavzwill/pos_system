@@ -17,3 +17,16 @@
 .ttkr-empty{grid-column:1/-1;min-height:180px;border:1px dashed #cbd7cf;border-radius:18px;background:#fff;display:grid;place-items:center;text-align:center;padding:28px;color:#667069}.ttkr-empty strong{display:block;color:#29362e;font-size:17px}
 @media(max-width:760px){.ttkr-panel{inset:0;border-radius:0}.ttkr-panel>header{padding:18px;align-items:flex-start}.ttkr-panel h2{font-size:23px}.ttkr-boundary{margin:12px 14px 0;align-items:flex-start;flex-direction:column}.ttkr-toolbar{padding:12px 14px;align-items:stretch;flex-direction:column}.ttkr-tabs{overflow:auto}.ttkr-toolbar>div:last-child button{flex:1}.ttkr-scan,.ttkr-error{margin:0 14px 12px;align-items:flex-start;flex-direction:column}.ttkr-list{padding:0 14px 20px;grid-template-columns:1fr}.ttkr-link{grid-template-columns:1fr}.ttkr-arrow{transform:rotate(90deg)}.ttkr-confirm{flex-direction:column}.ttkr-confirm>div:last-child{justify-content:flex-end}.ttkr-card__top{align-items:flex-start}}
 @media(prefers-reduced-motion:reduce){.ttkr *{scroll-behavior:auto!important;transition:none!important;animation:none!important}}
+
+.ttkr-modebar{margin:16px 28px 0;display:flex;gap:8px;padding:5px;background:#edf2ef;border:1px solid #dde6df;border-radius:14px;width:max-content;max-width:calc(100% - 56px)}
+.ttkr-modebar button{background:transparent;border-color:transparent;color:#5f6d64}.ttkr-modebar button.active{background:#fff;border-color:#d7e2da;color:#142119;box-shadow:0 4px 12px rgba(8,36,18,.06)}
+.ttkr-authority{align-self:flex-start;border-radius:999px;padding:7px 10px;font-size:11px;font-weight:800;white-space:nowrap}
+.ttkr-authority--manufacturer{background:#e8f5ec;color:#087b3e;border:1px solid #c6dfce}
+.ttkr-authority--distributor{background:#fff4d9;color:#825600;border:1px solid #ead49d}
+.ttkr-authority--internal{background:#edf2f8;color:#32516f;border:1px solid #cfdae6}
+.ttkr-authority--unknown{background:#f4f1f1;color:#6d5656;border:1px solid #dfd3d3}
+.ttkr-authority-help{margin:10px 0 14px!important;padding:10px 12px;border-radius:12px;background:#f7f9f8;color:#55635a!important}
+.ttkr-kpis{display:flex;flex-wrap:wrap;gap:8px;margin:12px 0}.ttkr-kpis span{display:flex;gap:5px;align-items:baseline;padding:8px 10px;background:#f1f5f2;border-radius:10px;font-size:11px;color:#617067}.ttkr-kpis b{font-size:14px;color:#17241b}
+.ttkr-section{display:flex;flex-direction:column;gap:7px;margin:12px 0}.ttkr-section>strong{font-size:12px;color:#47554c}.ttkr-chips{display:flex;flex-wrap:wrap;gap:7px}.ttkr-chips span{padding:7px 9px;border-radius:999px;background:#f3f6f4;border:1px solid #e0e7e2;font-size:11px;color:#526058}
+.ttkr-card--technical details{margin-top:12px}.ttkr-card--technical details[open] summary{margin-bottom:7px}
+@media(max-width:760px){.ttkr-modebar{margin:12px 14px 0;max-width:calc(100% - 28px);width:auto;overflow:auto}.ttkr-modebar button{flex:0 0 auto}}
