@@ -131,4 +131,50 @@ router.post('/knowledge-review/:proposalId/reject', requireAuth, requirePermissi
   }
 });
 
+
+router.get('/technical-review', requireAuth, requirePermission('settings_integrations'), async (req, res) => {
+  try {
+    const result = await requestTTAIAdmin({
+      employee: req.employee,
+      path: '/v1/admin/knowledge/technical-proposals/list',
+      requestId: req.requestId || undefined,
+      body: {
+        status: safeStatus(req.query.status),
+        limit: safeLimit(req.query.limit),
+      },
+    });
+    res.json(result);
+  } catch (error) {
+    sendError(res, error, 'Unable to load TT AI technical evidence review');
+  }
+});
+
+router.post('/technical-review/:proposalId/approve', requireAuth, requirePermission('settings_integrations'), async (req, res) => {
+  try {
+    const result = await requestTTAIAdmin({
+      employee: req.employee,
+      path: `/v1/admin/knowledge/technical-proposals/${encodeURIComponent(req.params.proposalId)}/approve`,
+      requestId: req.requestId || undefined,
+      body: { notes: notes(req.body?.notes) },
+    });
+    res.json(result);
+  } catch (error) {
+    sendError(res, error, 'Unable to approve TT AI technical evidence');
+  }
+});
+
+router.post('/technical-review/:proposalId/reject', requireAuth, requirePermission('settings_integrations'), async (req, res) => {
+  try {
+    const result = await requestTTAIAdmin({
+      employee: req.employee,
+      path: `/v1/admin/knowledge/technical-proposals/${encodeURIComponent(req.params.proposalId)}/reject`,
+      requestId: req.requestId || undefined,
+      body: { notes: notes(req.body?.notes) },
+    });
+    res.json(result);
+  } catch (error) {
+    sendError(res, error, 'Unable to reject TT AI technical evidence');
+  }
+});
+
 module.exports = router;
