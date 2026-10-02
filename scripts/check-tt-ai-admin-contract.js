@@ -27,7 +27,7 @@ const checks=[
   ['review screen has no bulk approve action',!ui.includes('Approve all')&&!ui.includes('approve-all')],
   ['review screen explains operational non-mutation boundary',ui.includes('They do not change POS products, stock, prices, purchases, rentals or accounting records')],
   ['catalog proposal evidence and match reasons are visible',ui.includes('Why TT AI suggested this match')&&ui.includes('manufacturer_part_number')&&ui.includes('source_filename')],
-  ['technical evidence mode preserves authority distinctions',ui.includes('Manufacturer evidence')&&ui.includes('Trusted distributor')&&ui.includes('manufacturer verification remains pending')&&ui.includes('Technical evidence')],
+  ['technical evidence mode preserves authority distinctions',ui.includes('Manufacturer evidence')&&ui.includes('Trusted distributor')&&ui.toLowerCase().includes('manufacturer verification remains pending')&&ui.includes('Technical evidence')],
   ['technical review routes are proxied through the same explicit permission boundary',route.includes("'/technical-review'")&&route.includes("'/technical-review/:proposalId/approve'")&&route.includes("'/technical-review/:proposalId/reject'")],
   ['responsive mobile treatment exists',css.includes('@media(max-width:760px)')],
   ['reduced motion is respected',css.includes('prefers-reduced-motion')],
