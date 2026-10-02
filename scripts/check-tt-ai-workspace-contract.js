@@ -6,6 +6,8 @@ const root=path.join(__dirname,'..');
 const ui=fs.readFileSync(path.join(root,'public','tt-ai-workspace.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'public','tt-ai-workspace.css'),'utf8');
 const shell=fs.readFileSync(path.join(root,'public','app-shell.html'),'utf8');
+const route=fs.readFileSync(path.join(root,'routes','tt-ai-read.js'),'utf8');
+const client=fs.readFileSync(path.join(root,'lib','tt-ai-client.js'),'utf8');
 
 const checks=[
   ['workspace assets are loaded by the staff shell',shell.includes('/tt-ai-workspace.css')&&shell.includes('/tt-ai-workspace.js')],
@@ -13,6 +15,8 @@ const checks=[
   ['launcher opens TT AI without a separate navigation route',ui.includes("button.addEventListener('click',open)")],
   ['question calls only the read-only TT AI query gateway',ui.includes("api('/api/tt-ai/query',{method:'POST'")],
   ['service capability controls composer availability',ui.includes("capabilities?.query===false")&&ui.includes('setComposer')],
+  ['query capability requires reachable service and ready company data',route.includes('configured && serviceReachable && dataReady')&&client.includes('getTTAIReadiness')&&client.includes("/ready")],
+  ['workspace distinguishes disconnected from data-not-ready',ui.includes('Company data not ready')&&ui.includes('Company data ready')],
   ['structured answer text is supported',ui.includes("result?.answer&&typeof result.answer==='object'")&&ui.includes('result.answer.text')],
   ['structured evidence data becomes cards',ui.includes('cardsFrom')&&ui.includes('answer.data')],
   ['reviewed machine models render as first-class cards',ui.includes('machineCard')&&ui.includes("'Machine model'")],
