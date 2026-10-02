@@ -3,7 +3,7 @@
 const express = require('express');
 const router = express.Router();
 const { requireAuth, requirePermission } = require('../lib/permissions');
-const { requestTTAIAdmin } = require('../lib/tt-ai-client');
+const { requestTTAIAdmin, getTTAIReadiness } = require('../lib/tt-ai-client');
 
 function rejectMachineCredential(req, res, next) {
   if (req.apiKey) return res.status(403).json({
@@ -41,11 +41,28 @@ function notes(value) {
 
 router.use(rejectMachineCredential);
 
-router.get('/context', requireAuth, requirePermission('settings_integrations'), (req, res) => {
+router.get('/context', requireAuth, requirePermission('settings_integrations'), async (req, res) => {
+  const configured = Boolean(process.env.TT_AI_SERVICE_URL && process.env.TT_AI_SIGNING_PRIVATE_KEY);
+  let readiness = null;
+  let serviceReachable = false;
+  if (configured) {
+    try {
+      readiness = await getTTAIReadiness();
+      serviceReachable = true;
+    } catch (error) {
+      console.warn('tt_ai_admin_readiness_unavailable', {
+        code: error?.code || 'unknown',
+        message: String(error?.message || error).slice(0, 200),
+      });
+    }
+  }
   res.json({
     employee_id: req.employee.id,
     permission: 'settings_integrations',
-    configured: Boolean(process.env.TT_AI_SERVICE_URL && process.env.TT_AI_SIGNING_PRIVATE_KEY),
+    configured,
+    service_reachable: serviceReachable,
+    data_ready: Boolean(readiness?.runtime?.ready_for_queries),
+    runtime: readiness?.runtime || null,
     operational_writes: false,
     knowledge_review_writes: true,
   });
