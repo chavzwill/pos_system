@@ -277,7 +277,7 @@
       state.busy = false;
       if (button) button.textContent = 'Ask';
       if (state.context?.capabilities?.query===false) {
-        setComposer(false, 'TT AI is installed, but the standalone service is not connected in this environment.');
+        setComposer(false, state.context?.runtime?.configured && state.context?.runtime?.service_reachable ? 'TT AI is connected, but usable company data is not ready yet.' : 'TT AI is installed, but the standalone service is not connected in this environment.');
       } else {
         setComposer(true);
       }
@@ -316,8 +316,8 @@
         </header>
         <div class="tt-ai-status">
           <span class="tt-ai-dot ${state.context?.capabilities?.query===false ? 'is-offline' : ''}"></span>
-          <strong>${state.context?.capabilities?.query===false ? 'Service not connected' : 'Verified company data'}</strong>
-          <span>${state.context?.branch_id ? `Branch ${esc(state.context.branch_id)} · ` : ''}No operational changes can be made from this workspace.</span>
+          <strong>${state.context?.capabilities?.query===false ? (state.context?.runtime?.configured && state.context?.runtime?.service_reachable ? 'Company data not ready' : 'Service not connected') : 'Company data ready'}</strong>
+          <span>${state.context?.branch_id ? `Branch ${esc(state.context.branch_id)} · ` : ''}${state.context?.runtime?.retail_purchasing?.line_level_evidence ? 'Purchasing line evidence loaded · ' : ''}No operational changes can be made from this workspace.</span>
         </div>
         <main id="tt-ai-thread"></main>
         <div class="tt-ai-suggestions">
