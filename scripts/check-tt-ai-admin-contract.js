@@ -19,6 +19,7 @@ const checks=[
   ['settings integrations remains explicit-only',permissions.includes("EXPLICIT_ONLY_PERMISSIONS = new Set(['customers_sensitive', 'settings_integrations'")&&permissions.includes("if (EXPLICIT_ONLY_PERMISSIONS.has(key)) return permissions[key] === true")],
   ['signed assertion carries integration-admin authority',signer.includes("'settings_integrations'")],
   ['admin client allowlists only TT AI knowledge catalog paths',client.includes('requestTTAIAdmin')&&client.includes('TT_AI_ADMIN_PATH_NOT_ALLOWED')&&client.includes('^\\/v1\\/admin\\/knowledge\\/catalog-links')],
+  ['POS checks standalone TT AI data readiness before enabling admin review',client.includes('getTTAIReadiness')&&client.includes("/ready")&&route.includes('data_ready')&&ui.includes('usable company data is not ready yet')],
   ['workspace is administration-only and explicitly permission-gated',shell.includes("'TT AI Knowledge Review'")&&shell.includes("'tt-ai-knowledge-review':'settings_integrations'")],
   ['workspace lazy-loads its dedicated assets',shell.includes("'tt-ai-knowledge-review':['/tt-ai-knowledge-review.css','/tt-ai-knowledge-review.js','TotalToolsTTAIKnowledgeReview']")],
   ['workspace uses only dedicated TT AI admin proxy endpoints',ui.includes('/api/tt-ai-admin/context')&&ui.includes('/api/tt-ai-admin/knowledge-review')&&!/\/api\/(?:products|inventory|purchase-orders|rentals|transactions)\//.test(ui)],
