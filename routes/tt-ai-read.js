@@ -9,7 +9,7 @@ const {
   searchRentalAssets,
   readRentalAsset,
 } = require('../lib/tt-ai-read-tools');
-const { queryTTAI } = require('../lib/tt-ai-client');
+const { queryTTAI, getTTAIReadiness } = require('../lib/tt-ai-client');
 
 function rejectMachineCredential(req, res, next) {
   if (req.apiKey) return res.status(403).json({
@@ -37,21 +37,45 @@ function sendError(res, error, fallback) {
 
 router.use(rejectMachineCredential);
 
-router.get('/context', requireAuth, (req, res) => {
+router.get('/context', requireAuth, async (req, res) => {
   const permissions = req.employee?.permissions || {};
   let branchId = null;
   try { branchId = resolveBranch(req.employee, req.query.branch_id); } catch (_) {}
+
+  const configured = Boolean(process.env.TT_AI_SERVICE_URL && process.env.TT_AI_SIGNING_PRIVATE_KEY);
+  let readiness = null;
+  let serviceReachable = false;
+  if (configured) {
+    try {
+      readiness = await getTTAIReadiness();
+      serviceReachable = true;
+    } catch (error) {
+      console.warn('tt_ai_readiness_unavailable', {
+        code: error?.code || 'unknown',
+        message: String(error?.message || error).slice(0, 200),
+      });
+    }
+  }
+  const dataReady = Boolean(readiness?.runtime?.ready_for_queries);
+
   res.json({
     employee_id: req.employee.id,
     branch_id: branchId,
     security_group: req.employee.security_group_name || null,
+    runtime: {
+      configured,
+      service_reachable: serviceReachable,
+      data_ready: dataReady,
+      knowledge: readiness?.runtime?.knowledge || null,
+      retail_purchasing: readiness?.runtime?.retail_purchasing || null,
+    },
     capabilities: {
       products: PRODUCT_READ_PERMISSIONS.some(key => can(permissions, key)),
       rental_machines: MACHINE_READ_PERMISSIONS.some(key => can(permissions, key)),
       rental_assets: MACHINE_READ_PERMISSIONS.some(key => can(permissions, key)),
       cost_visibility: can(permissions, 'purchasing') || can(permissions, 'reports_financial'),
       multi_branch: can(permissions, 'multi_branch_access'),
-      query: Boolean(process.env.TT_AI_SERVICE_URL && process.env.TT_AI_SIGNING_PRIVATE_KEY),
+      query: configured && serviceReachable && dataReady,
       writes: false,
     },
   });
