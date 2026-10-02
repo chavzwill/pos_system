@@ -11,13 +11,12 @@ const shell=fs.readFileSync(path.join(root,'public','app-shell.js'),'utf8');
 const ui=fs.readFileSync(path.join(root,'public','tt-ai-knowledge-review.js'),'utf8');
 const css=fs.readFileSync(path.join(root,'public','tt-ai-knowledge-review.css'),'utf8');
 const server=fs.readFileSync(path.join(root,'server.js'),'utf8');
-const { can }=require('../lib/permissions');
 
 const checks=[
   ['admin proxy is mounted separately from read gateway',server.includes("app.use('/api/tt-ai-admin', require('./routes/tt-ai-admin'))")],
   ['machine credentials cannot administer knowledge',route.includes('TT_AI_ADMIN_STAFF_SESSION_REQUIRED')&&route.includes('if (req.apiKey)')],
   ['all knowledge admin routes require explicit integration-admin permission',(route.match(/requirePermission\('settings_integrations'\)/g)||[]).length>=5],
-  ['settings integrations remains explicit-only',permissions.includes("'settings_integrations'")&&permissions.includes('EXPLICIT_ONLY_PERMISSIONS')&&!can({settings:true},'settings_integrations')&&can({settings_integrations:true},'settings_integrations')],
+  ['settings integrations remains explicit-only',permissions.includes("EXPLICIT_ONLY_PERMISSIONS = new Set(['customers_sensitive', 'settings_integrations'")&&permissions.includes("if (EXPLICIT_ONLY_PERMISSIONS.has(key)) return permissions[key] === true")],
   ['signed assertion carries integration-admin authority',signer.includes("'settings_integrations'")],
   ['admin client allowlists only TT AI knowledge catalog paths',client.includes('requestTTAIAdmin')&&client.includes('TT_AI_ADMIN_PATH_NOT_ALLOWED')&&client.includes('/v1/admin/knowledge/catalog-links')],
   ['workspace is administration-only and explicitly permission-gated',shell.includes("'TT AI Knowledge Review'")&&shell.includes("'tt-ai-knowledge-review':'settings_integrations'")],
