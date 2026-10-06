@@ -437,7 +437,7 @@ router.post('/agreements/:id/po-attachment', requireAnyPermission('rentals_check
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
-router.get('/agreements/:id/po-attachment/download', async (req, res) => {
+router.get('/agreements/:id/po-attachment/download', requireAnyPermission('rentals_checkout', 'pos'), async (req, res) => {
   try {
     const { rows: [agreement] } = await db.execute({ sql: 'SELECT customer_po_attachment_path, customer_po_attachment_name FROM rental_agreements WHERE id = ?', args: [req.params.id] });
     if (!agreement || !agreement.customer_po_attachment_path) return res.status(404).json({ error: 'Not found' });
