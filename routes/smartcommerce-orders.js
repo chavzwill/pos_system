@@ -1,4 +1,5 @@
 const express = require('express');
+const crypto = require('crypto');
 const router = express.Router();
 const { db } = require('../database');
 const { nextNumber } = require('../lib/nextNumber');
@@ -13,6 +14,7 @@ async function ensureSchema() {
       "ALTER TABLE transactions ADD COLUMN external_quote_id TEXT",
       "ALTER TABLE transactions ADD COLUMN external_payment_reference TEXT",
       "ALTER TABLE transactions ADD COLUMN external_customer_id TEXT",
+      "ALTER TABLE transactions ADD COLUMN external_payload_hash TEXT",
       "ALTER TABLE transactions ADD COLUMN delivery_amount REAL NOT NULL DEFAULT 0",
       "ALTER TABLE transactions ADD COLUMN service_amount REAL NOT NULL DEFAULT 0",
       "ALTER TABLE transactions ADD COLUMN handling_amount REAL NOT NULL DEFAULT 0",
@@ -40,6 +42,10 @@ function money(value, field) {
     throw e;
   }
   return parseFloat(n.toFixed(2));
+}
+
+function stableHash(value) {
+  return crypto.createHash('sha256').update(JSON.stringify(value)).digest('hex');
 }
 
 async function loadTransactionByExternalId(externalOrderId) {
@@ -89,21 +95,63 @@ router.post('/', requireApiKey, async (req, res) => {
     if (!externalOrderId || externalOrderId.length > 120) return res.status(400).json({ error: 'external_order_id is required' });
     if (!Array.isArray(items) || items.length === 0) return res.status(400).json({ error: 'No items in transaction' });
 
-    const existing = await loadTransactionByExternalId(externalOrderId);
-    if (existing) return res.status(200).json({ ...existing, idempotent_replay: true });
-
     let branchId = requestedBranchId || null;
     if (!branchId) {
       const { rows: [setting] } = await db.execute({ sql: "SELECT value FROM settings WHERE key='woo_sync_branch_id'", args: [] });
       if (setting?.value) branchId = setting.value;
     }
     if (!branchId) return res.status(409).json({ error: 'Ecommerce fulfilment branch is not configured' });
+    branchId = Number(branchId);
+    if (!Number.isSafeInteger(branchId) || branchId <= 0) return res.status(409).json({ error: 'Ecommerce fulfilment branch is invalid' });
 
     const delivery = money(delivery_amount, 'delivery_amount');
     const service = money(service_amount, 'service_amount');
     const handling = money(handling_amount, 'handling_amount');
     const isTaxExempt = tax_exempt ? 1 : 0;
-    const method = String(payment_method || 'online').trim() || 'online';
+    const method = String(payment_method || 'online').trim().toLowerCase() || 'online';
+
+    if (items.length > 200) return res.status(400).json({ error: 'SmartCommerce orders are limited to 200 line items' });
+    const canonicalItems = [];
+    const seenProducts = new Set();
+    for (const requested of items) {
+      const productId = Number(requested?.product_id);
+      const quantity = Number(requested?.quantity);
+      if (!Number.isInteger(productId) || productId <= 0 || !Number.isFinite(quantity) || quantity <= 0) {
+        return res.status(400).json({ error: 'Each item requires a valid product_id and positive quantity' });
+      }
+      if (seenProducts.has(productId)) return res.status(400).json({ error: `Duplicate product_id ${productId} in SmartCommerce order` });
+      seenProducts.add(productId);
+      canonicalItems.push({ product_id: productId, quantity });
+    }
+    canonicalItems.sort((a, b) => a.product_id - b.product_id);
+    const normalizedEmployeeId = Number.isSafeInteger(Number(employee_id)) && Number(employee_id) > 0 ? Number(employee_id) : 1;
+    const normalizedCustomerId = Number.isSafeInteger(Number(customer_id)) && Number(customer_id) > 0 ? Number(customer_id) : null;
+    const payloadHash = stableHash({
+      external_order_id: externalOrderId,
+      external_quote_id: String(external_quote_id || '').trim() || null,
+      external_payment_reference: String(external_payment_reference || '').trim() || null,
+      external_customer_id: String(external_customer_id || '').trim() || null,
+      customer_id: normalizedCustomerId,
+      employee_id: normalizedEmployeeId,
+      branch_id: branchId,
+      items: canonicalItems,
+      payment_method: method,
+      notes: String(notes || '').trim() || null,
+      delivery_amount: delivery,
+      service_amount: service,
+      handling_amount: handling,
+      tax_exempt: isTaxExempt,
+      tax_exemption_number: String(tax_exemption_number || '').trim() || null,
+      approval_code: String(approval_code || '').trim() || null,
+    });
+
+    const existing = await loadTransactionByExternalId(externalOrderId);
+    if (existing) {
+      if (existing.external_payload_hash && existing.external_payload_hash !== payloadHash) {
+        return res.status(409).json({ error: 'external_order_id already exists with different order data' });
+      }
+      return res.status(200).json({ ...existing, idempotent_replay: true, idempotency_verified: !!existing.external_payload_hash });
+    }
 
     if (method === 'credit') {
       if (!customer_id) return res.status(400).json({ error: 'Credit orders require a customer_id' });
@@ -116,12 +164,9 @@ router.post('/', requireApiKey, async (req, res) => {
     let subtotal = 0;
     let taxAmount = 0;
     const processedItems = [];
-    for (const requested of items) {
-      const productId = Number(requested.product_id);
-      const quantity = Number(requested.quantity);
-      if (!Number.isInteger(productId) || productId <= 0 || !Number.isFinite(quantity) || quantity <= 0) {
-        return res.status(400).json({ error: 'Each item requires a valid product_id and positive quantity' });
-      }
+    for (const requested of canonicalItems) {
+      const productId = requested.product_id;
+      const quantity = requested.quantity;
       const { rows: [product] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ? AND active = 1', args: [productId] });
       if (!product) return res.status(409).json({ error: `Product ${productId} is unavailable` });
       const { rows: [branchStock] } = await db.execute({ sql: 'SELECT stock_qty FROM branch_inventory WHERE product_id = ? AND branch_id = ? LIMIT 1', args: [productId, branchId] });
@@ -144,11 +189,15 @@ router.post('/', requireApiKey, async (req, res) => {
     const txn = await db.transaction('write');
     let committed = false;
     try {
-      const duplicateCheck = await txn.execute({ sql: 'SELECT id FROM transactions WHERE external_order_id = ? LIMIT 1', args: [externalOrderId] });
+      const duplicateCheck = await txn.execute({ sql: 'SELECT id, external_payload_hash FROM transactions WHERE external_order_id = ? LIMIT 1', args: [externalOrderId] });
       if (duplicateCheck.rows?.[0]) {
+        const duplicate = duplicateCheck.rows[0];
         await txn.rollback();
+        if (duplicate.external_payload_hash && duplicate.external_payload_hash !== payloadHash) {
+          return res.status(409).json({ error: 'external_order_id already exists with different order data' });
+        }
         const replay = await loadTransactionByExternalId(externalOrderId);
-        return res.status(200).json({ ...replay, idempotent_replay: true });
+        return res.status(200).json({ ...replay, idempotent_replay: true, idempotency_verified: !!duplicate.external_payload_hash });
       }
 
       for (const line of processedItems) {
@@ -180,6 +229,7 @@ router.post('/', requireApiKey, async (req, res) => {
         ],
       });
       const txId = Number(txResult.lastInsertRowid);
+      await txn.execute({ sql: 'UPDATE transactions SET external_payload_hash = ? WHERE id = ?', args: [payloadHash, txId] });
 
       await txn.execute({ sql: 'INSERT INTO transaction_payments (transaction_id, payment_method, amount, approval_code) VALUES (?,?,?,?)', args: [txId, method, total, approval_code || null] });
 
@@ -190,6 +240,10 @@ router.post('/', requireApiKey, async (req, res) => {
         });
         await txn.execute({ sql: 'UPDATE products SET stock_qty = MAX(0, stock_qty - ?) WHERE id = ?', args: [line.quantity, line.product.id] });
         await syncBinQty(txn, line.product.id, branchId, -line.quantity);
+        await txn.execute({
+          sql: 'INSERT INTO stock_movements (product_id,branch_id,quantity_change,type,reference,reason) VALUES (?,?,?,?,?,?)',
+          args: [line.product.id, branchId, -line.quantity, 'sale', externalOrderId, 'SmartCommerce paid order'],
+        });
       }
 
       if (customer_id) {
@@ -208,7 +262,10 @@ router.post('/', requireApiKey, async (req, res) => {
       }
       if (/unique|constraint/i.test(String(e?.message || ''))) {
         const replay = await loadTransactionByExternalId(externalOrderId);
-        if (replay) return res.status(200).json({ ...replay, idempotent_replay: true });
+        if (replay?.external_payload_hash && replay.external_payload_hash !== payloadHash) {
+          return res.status(409).json({ error: 'external_order_id already exists with different order data' });
+        }
+        if (replay) return res.status(200).json({ ...replay, idempotent_replay: true, idempotency_verified: !!replay.external_payload_hash });
       }
       throw e;
     }
