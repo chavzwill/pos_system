@@ -127,8 +127,24 @@ app.get('/legacy-pos-app.js', (req,res)=>{ try{res.set('Cache-Control','public, 
 app.get('/', sendFastShell);
 app.get('/legacy', sendEnhancedIndex);
 app.use(express.static(publicDir, { index:false, etag:true, maxAge:'1h', setHeaders:(res,filePath)=>{ if (/\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico)$/i.test(filePath)) res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400'); else res.set('Cache-Control','no-cache, must-revalidate'); } }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { maxAge:'1h', dotfiles:'deny', index:false, fallthrough:false }));
 app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.error('POS database initialization failed:',e&&(e.stack||e.message||e));res.status(500).json({error:'Database initialization failed',request_id:req.requestId});}});
+
+// Sensitive local documents must never be reachable through the generic static
+// upload tree. Attachments are served only by their permission-gated API
+// download routes. Legacy customer ID scans and rental signatures may still
+// be referenced by the UI, so they require a signed-in employee session.
+app.use(['/uploads/po-attachments', '/uploads/rental-po-attachments'], (req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+app.use(['/uploads/customer-ids', '/uploads/rental-signatures'], sessionAuth, (req, res, next) => {
+  if (req.employee) return next();
+  if (req.method === 'GET' && req.accepts(['json', 'html']) === 'html') {
+    return res.redirect(`/?next=${encodeURIComponent(req.originalUrl)}`);
+  }
+  return res.status(401).json({ error: 'Authentication required' });
+});
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { maxAge:'1h', dotfiles:'deny', index:false, fallthrough:false }));
+
 
 app.use('/api', apiKeyAuth);
 app.use('/api', sessionAuth);
@@ -248,6 +264,10 @@ app.use('/api', (err,req,res,next)=>{
   console.error('POS API request failed:', { request_id:req.requestId, path:req.originalUrl, method:req.method, error:err && (err.stack || err.message || err) });
   res.status(err.status||500).json({error:err.status && err.status < 500 ? (err.message||'Request failed') : 'Request failed',request_id:req.requestId});
 });
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.path}` });
+});
+
 app.get('*', (req,res)=> req.path.startsWith('/legacy') ? sendEnhancedIndex(req,res) : sendFastShell(req,res));
 
 if (!process.env.VERCEL) {
