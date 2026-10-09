@@ -90,6 +90,20 @@ The release adds `scripts/check-gate0-credential-contract.js` and wires it into 
 
 Source-level finalization check: **20/20 Gate 0 contract conditions passed**. Changed runtime and contract JavaScript files parsed successfully through the connected GitHub source.
 
+### Private files and API fallback
+
+A final upstream/security review found that the generic `/uploads` static mount could bypass otherwise-authorized attachment routes. The release branch closes that boundary:
+
+- direct static access to purchase-order and rental-PO attachments returns 404;
+- customer identity scans and rental signatures require an authenticated employee session;
+- new customer identity scans are stored outside the public upload tree;
+- purchase-order attachment downloads inherit `purchasing` permission;
+- rental PO attachment downloads require `rentals_checkout` or `pos` authority;
+- product/branding assets remain available through the controlled public upload mount;
+- unmatched `/api/*` requests return JSON 404 instead of falling through to the SPA.
+
+The existing `scripts/check-upload-security-contract.js` is wired into `npm run check:syntax`. Source-level finalization confirmed all **9/9 upload/API boundary conditions** plus the release-script binding, and the changed server/rental/upload-security files parse successfully.
+
 ## Historical PR cleanup
 
 The following stale/superseded PRs were closed with traceability comments:
@@ -121,3 +135,5 @@ npx playwright test tests/password-reset-security.spec.js tests/pin-reset-securi
 ```
 
 A passing run is the remaining boundary between **release candidate** and **production-certified complete**.
+
+The security hardening above is included in that pending clean-checkout runtime pass; no claim is made that the post-hardening branch has completed fresh end-to-end execution in this finalization environment.
