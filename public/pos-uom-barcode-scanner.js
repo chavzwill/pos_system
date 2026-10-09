@@ -1,4 +1,5 @@
 (()=>{'use strict';
+const errorNotice=message=>window.TotalToolsShellUI?.toast?window.TotalToolsShellUI.toast(String(message||''),'error'):console.error(String(message||''));
 const SEARCH_ID='tt-sales-search';
 const API='/api/inventory-traceability/uom/commerce/resolve-barcode';
 let busy=false;
@@ -38,7 +39,7 @@ async function handleEnter(event){
   const barcode=input.value.trim();if(!barcode||busy)return;
   event.preventDefault();event.stopPropagation();busy=true;announce(`Resolving barcode ${barcode}…`);
   try{await scanPackageBarcode(barcode);await setCatalogSearch('');const fresh=await waitFor(()=>document.getElementById(SEARCH_ID));fresh?.focus()}
-  catch(error){if(error.status===404){announce('No package barcode match. Search results remain available.','muted')}else{announce(error.message||'Unable to scan this barcode.','error');alert(error.message||'Unable to scan this barcode.')}}
+  catch(error){if(error.status===404){announce('No package barcode match. Search results remain available.','muted')}else{announce(error.message||'Unable to scan this barcode.','error');errorNotice(error.message||'Unable to scan this barcode.')}}
   finally{busy=false}
 }
 document.addEventListener('keydown',handleEnter,true);

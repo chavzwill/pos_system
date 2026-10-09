@@ -10,8 +10,8 @@ check('journey summary uses existing lifecycle evidence',modern.includes('Agreem
 check('journey includes pause and resume evidence',modern.includes('Rental paused')&&modern.includes('Rental resumed'));
 check('journey names custody actors',modern.includes('issue_security_employee_name')&&modern.includes('return_driver_employee_name')&&modern.includes('return_security_employee_name'));
 check('journey reports customer signature capture',modern.includes('Customer signature captured'));
-check('journey is surfaced in modern rental workspace',modern.includes('<h4>Rental journey</h4>')&&modern.includes('${journey(a)}'));
-check('journey timeline has responsive styling',css.includes('.tt-rent__journey-row')&&css.includes('@media(max-width:720px)'));
+check('journey is surfaced in modern rental workspace',modern.includes('<summary><span>History</span><em>Agreement, issue, return and settlement</em></summary>')&&modern.includes('${journey(a)}'));
+check('journey timeline has responsive styling',css.includes('.tt-rent__journey-row')&&css.includes('@media(max-width:900px)')&&css.includes('.tt-rent__journey-row time{grid-column:2;white-space:normal}'));
 check('rental hold uses a persistent completion handoff',legacy.includes('showRentalHoldCompletion(agreement)')&&legacy.includes('Rental saved successfully')&&legacy.includes('Ready for payment'));
 check('completion handoff explains the next staff action',legacy.includes('Collect payment at the register')&&legacy.includes('recall this rental from Held Orders'));
 check('completion handoff exposes governed follow-up actions',legacy.includes('View Rental')&&legacy.includes('Process Payment')&&legacy.includes("const canCollect = this.can('pos')"));

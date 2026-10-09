@@ -30,7 +30,7 @@ const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
 const fastShellPath = path.join(publicDir, 'app-shell.html');
-const CLIENT_ASSET_VERSION = '20260824-0800';
+const CLIENT_ASSET_VERSION = '20260922-ui-v2-all';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -56,7 +56,9 @@ function getLegacyAppScript() {
 function getEnhancedIndex() {
   if (enhancedIndexCache) return enhancedIndexCache;
   const source = fs.readFileSync(indexPath, 'utf8');
-  const legacy = extractLegacyApp(source);
+  const retiredThemePattern = /<link\b[^>]*href=["'][^"']*\/(?:workspace-quality-pass|premium-shell-v2|premium-shell-v3|late-2020s-workspaces|late-2020s-intelligence-finance|late-2020s-operations|late-2020s-pos-commerce|late-2020s-admin-marketing|late-2020s-config-crm|meeting-demo-shell|meeting-readiness|unified-ui-system)\.css(?:\?[^"']*)?["'][^>]*>\s*/gi;
+  const presentationSource = source.replace(retiredThemePattern, '');
+  const legacy = extractLegacyApp(presentationSource);
   legacyAppScriptCache = legacy.script;
   const headAssets = [
     '<script src="' + versioned('/client-diagnostics.js') + '" defer></script>',
@@ -64,7 +66,8 @@ function getEnhancedIndex() {
     '<link rel="stylesheet" href="' + versioned('/pos-experience.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/employee-workspace-home.css') + '">',
     '<link rel="stylesheet" href="' + versioned('/predictive-lookup.css') + '">',
-'<link rel="stylesheet" href="' + versioned('/employee-assist-ui.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/employee-assist-ui.css') + '">',
+    '<link id="tt-authoritative-ui" rel="stylesheet" href="' + versioned('/unified-ui-system.css') + '">',
   ];
   const bodyAssets = [
     '<script src="' + versioned('/pos-guide-map.js') + '" defer></script>',
@@ -77,7 +80,7 @@ function getEnhancedIndex() {
 '<script src="' + versioned('/employee-assist-ui.js') + '" defer></script>',
     '<script src="' + versioned('/login-controller.js') + '" defer></script>',
   ];
-  let html = source.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '" defer></script>' + source.slice(legacy.end);
+  let html = presentationSource.slice(0, legacy.start) + '<script src="' + versioned('/legacy-pos-app.js') + '" defer></script>' + presentationSource.slice(legacy.end);
   for (const tag of headAssets) html = html.replace('</head>', `  ${tag}\n</head>`);
   for (const tag of bodyAssets) html = html.replace('</body>', `  ${tag}\n</body>`);
   enhancedIndexCache = html;
@@ -124,8 +127,24 @@ app.get('/legacy-pos-app.js', (req,res)=>{ try{res.set('Cache-Control','public, 
 app.get('/', sendFastShell);
 app.get('/legacy', sendEnhancedIndex);
 app.use(express.static(publicDir, { index:false, etag:true, maxAge:'1h', setHeaders:(res,filePath)=>{ if (/\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico)$/i.test(filePath)) res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400'); else res.set('Cache-Control','no-cache, must-revalidate'); } }));
-app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { maxAge:'1h', dotfiles:'deny', index:false, fallthrough:false }));
 app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.error('POS database initialization failed:',e&&(e.stack||e.message||e));res.status(500).json({error:'Database initialization failed',request_id:req.requestId});}});
+
+// Sensitive local documents must never be reachable through the generic static
+// upload tree. Attachments are served only by their permission-gated API
+// download routes. Legacy customer ID scans and rental signatures may still
+// be referenced by the UI, so they require a signed-in employee session.
+app.use(['/uploads/po-attachments', '/uploads/rental-po-attachments'], (req, res) => {
+  res.status(404).json({ error: 'Not found' });
+});
+app.use(['/uploads/customer-ids', '/uploads/rental-signatures'], sessionAuth, (req, res, next) => {
+  if (req.employee) return next();
+  if (req.method === 'GET' && req.accepts(['json', 'html']) === 'html') {
+    return res.redirect(`/?next=${encodeURIComponent(req.originalUrl)}`);
+  }
+  return res.status(401).json({ error: 'Authentication required' });
+});
+app.use('/uploads', express.static(path.join(__dirname, 'uploads'), { maxAge:'1h', dotfiles:'deny', index:false, fallthrough:false }));
+
 
 app.use('/api', apiKeyAuth);
 app.use('/api', sessionAuth);
@@ -245,6 +264,10 @@ app.use('/api', (err,req,res,next)=>{
   console.error('POS API request failed:', { request_id:req.requestId, path:req.originalUrl, method:req.method, error:err && (err.stack || err.message || err) });
   res.status(err.status||500).json({error:err.status && err.status < 500 ? (err.message||'Request failed') : 'Request failed',request_id:req.requestId});
 });
+app.all('/api/*', (req, res) => {
+  res.status(404).json({ error: `API endpoint not found: ${req.method} ${req.path}` });
+});
+
 app.get('*', (req,res)=> req.path.startsWith('/legacy') ? sendEnhancedIndex(req,res) : sendFastShell(req,res));
 
 if (!process.env.VERCEL) {
