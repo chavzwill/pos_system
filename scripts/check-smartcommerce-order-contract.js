@@ -34,6 +34,15 @@ check('duplicate product lines are rejected before stock mutation',
   route.includes('Duplicate product_id') && route.includes('seenProducts'));
 check('order line count is bounded',
   route.includes('SmartCommerce orders are limited to 200 line items'));
+check('settled website total is a required POS precondition',
+  route.includes("expected_pos_total is required") &&
+  route.includes("const expectedTotal = money(expected_pos_total, 'expected_pos_total')"));
+check('expected total participates in idempotency intent',
+  route.includes('expected_pos_total: expectedTotal'));
+check('price drift is rejected before transaction number allocation and stock mutation',
+  route.includes("code: 'POS_TOTAL_MISMATCH'") &&
+  route.indexOf("code: 'POS_TOTAL_MISMATCH'") < route.indexOf("nextNumber(db, 'transactions'") &&
+  route.indexOf("code: 'POS_TOTAL_MISMATCH'") < route.indexOf("UPDATE branch_inventory SET stock_qty = stock_qty - ?"));
 check('branch stock decrement is conditional and transactional',
   route.includes('AND stock_qty >= ?') && route.includes("db.transaction('write')"));
 check('SmartCommerce sales write attributable stock movement evidence',
