@@ -221,14 +221,20 @@ router.put('/:id/change-pin', requireAuth, async (req, res) => {
   }
 });
 
-router.post('/:id/reset-pin', requirePermission('security_manage'), async (req, res) => {
+router.post('/:id/reset-pin', requirePermission('security_manage'), loginRateLimit, async (req, res) => {
   if (req.apiKey) return res.status(403).json({ error: 'API keys cannot reset employee credentials' });
   const targetId = Number(req.params.id);
   if (Number(req.employee?.id) === targetId) return res.status(400).json({ error: 'Use change-pin for your own account' });
-  const { pin, reason } = req.body || {};
+  const { pin, reason, reauth_password } = req.body || {};
   if (!validPin(pin)) return res.status(400).json({ error: 'PIN must be 6-10 digits' });
   if (String(reason || '').trim().length < 8) return res.status(400).json({ error: 'A PIN reset reason is required' });
+  if (!reauth_password) return res.status(403).json({ error: 'Elevated reauthentication is required', code: 'REAUTHENTICATION_REQUIRED' });
   try {
+    const { rows: [actor] } = await db.execute({ sql: 'SELECT id,password,active FROM employees WHERE id=?', args: [req.employee.id] });
+    if (!actor || Number(actor.active) === 0 || !(await verifyPassword(actor.password, reauth_password))) {
+      return res.status(403).json({ error: 'Elevated reauthentication failed', code: 'REAUTHENTICATION_REQUIRED' });
+    }
+    resetRequestRateLimit(req);
     const { rows: [target] } = await db.execute({ sql: 'SELECT id,pin,active FROM employees WHERE id=?', args: [targetId] });
     if (!target) return res.status(404).json({ error: 'Employee not found' });
     if (Number(target.active) === 0) return res.status(400).json({ error: 'Cannot reset an inactive employee' });
@@ -245,7 +251,7 @@ router.post('/:id/reset-pin', requirePermission('security_manage'), async (req, 
         targetType: 'employee',
         targetId,
         oldValue: { credential: 'pin' },
-        newValue: { credential: 'pin', sessions_revoked: true },
+        newValue: { credential: 'pin', sessions_revoked: true, elevated_reauthentication: true },
         reason: String(reason).trim(),
         requestId: req.requestId || null,
         method: req.method,
@@ -264,15 +270,21 @@ router.post('/:id/reset-pin', requirePermission('security_manage'), async (req, 
   }
 });
 
-router.post('/:id/reset-password', requirePermission('security_manage'), async (req, res) => {
+router.post('/:id/reset-password', requirePermission('security_manage'), loginRateLimit, async (req, res) => {
   if (req.apiKey) return res.status(403).json({ error: 'API keys cannot reset employee credentials' });
   const targetId = Number(req.params.id);
   if (Number(req.employee?.id) === targetId) return res.status(400).json({ error: 'Use change-password for your own account' });
-  const { temporary_password, reason } = req.body || {};
+  const { temporary_password, reason, reauth_password } = req.body || {};
   const policyError = passwordPolicyError(temporary_password);
   if (policyError) return res.status(400).json({ error: policyError });
   if (String(reason || '').trim().length < 8) return res.status(400).json({ error: 'A reset reason is required' });
+  if (!reauth_password) return res.status(403).json({ error: 'Elevated reauthentication is required', code: 'REAUTHENTICATION_REQUIRED' });
   try {
+    const { rows: [actor] } = await db.execute({ sql: 'SELECT id,password,active FROM employees WHERE id=?', args: [req.employee.id] });
+    if (!actor || Number(actor.active) === 0 || !(await verifyPassword(actor.password, reauth_password))) {
+      return res.status(403).json({ error: 'Elevated reauthentication failed', code: 'REAUTHENTICATION_REQUIRED' });
+    }
+    resetRequestRateLimit(req);
     const { rows: [target] } = await db.execute({ sql: 'SELECT id,username,active,must_change_password FROM employees WHERE id=?', args: [targetId] });
     if (!target) return res.status(404).json({ error: 'Employee not found' });
     if (Number(target.active) === 0) return res.status(400).json({ error: 'Cannot reset an inactive employee' });
@@ -288,7 +300,7 @@ router.post('/:id/reset-password', requirePermission('security_manage'), async (
         targetType: 'employee',
         targetId,
         oldValue: { must_change_password: Number(target.must_change_password || 0) },
-        newValue: { must_change_password: 1, sessions_revoked: true },
+        newValue: { must_change_password: 1, sessions_revoked: true, elevated_reauthentication: true },
         reason: String(reason).trim(),
         requestId: req.requestId || null,
         method: req.method,

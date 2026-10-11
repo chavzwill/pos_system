@@ -106,7 +106,7 @@
     ]}
   ];
 
-  const state = { open:false, task:null, step:0, target:null, observer:null };
+  const state = { open:false, task:null, step:0, target:null, observer:null, returnFocus:null };
   const norm = s => String(s || '').toLowerCase().replace(/\s+/g,' ').trim();
   const visible = el => !!el && el instanceof Element && el.getClientRects().length > 0 && getComputedStyle(el).visibility !== 'hidden';
 
@@ -148,8 +148,8 @@
   function render() {
     const root=shell(); if(!root)return;
     const task=state.task; const step=task?.steps[state.step]; const found=step ? highlight(step) : false;
-    root.innerHTML=`<div class="tt-guide-backdrop" data-guide-close></div><section class="tt-guide" role="dialog" aria-modal="true" aria-labelledby="tt-guide-title">
-      <div class="tt-guide__head"><div><span class="tt-guide__eyebrow">Total Tools POS</span><h2 id="tt-guide-title">Guide Me</h2><p>${task ? escapeHtml(task.title) : 'Tell me what you want to do and I’ll guide you through the POS.'}</p></div><button class="tt-guide__close" type="button" aria-label="Close Guide Me" data-guide-close>×</button></div>
+    root.innerHTML=`<div class="tt-guide-backdrop" aria-hidden="true"></div><section class="tt-guide" role="dialog" aria-modal="false" aria-labelledby="tt-guide-title" aria-describedby="tt-guide-description">
+      <div class="tt-guide__head"><div><span class="tt-guide__eyebrow">Total Tools</span><h2 id="tt-guide-title">Guide Me</h2><p id="tt-guide-description">${task ? escapeHtml(task.title) : 'Tell me what you need to do. I’ll take you to the right place and stay with you while you work.'}</p></div><button class="tt-guide__close" type="button" aria-label="Close Guide Me" data-guide-close>&times;</button></div>
       <div class="tt-guide__body">${task ? `<div class="tt-guide__step"><span class="tt-guide__step-count">Step ${state.step+1} of ${task.steps.length}</span><h3>${found?'Follow the highlighted control':'Control not currently available'}</h3><p>${escapeHtml(step.text)}</p>${found?'<p class="tt-guide__hint">The correct area is highlighted on the screen. Complete the action there, then choose Next.</p>':'<p class="tt-guide__hint">This control may be hidden because of your permissions, the current record state, or a missing prerequisite. Guide Me will not tell you to click a control that is not actually available.</p>'}</div><div class="tt-guide__actions"><button type="button" data-guide-home>Choose another task</button><div><button type="button" data-guide-prev ${state.step===0?'disabled':''}>Back</button><button type="button" class="is-primary" data-guide-next>${state.step===task.steps.length-1?'Finish':'Next'}</button></div></div>` : `<form class="tt-guide__search" data-guide-search><input id="tt-guide-input" autocomplete="off" placeholder="e.g. dispatch a delivery, receive a PO, close my drawer" aria-label="What do you want to do?"/><button type="submit">Guide me</button></form><div class="tt-guide__suggestions">${TASKS.map(t=>`<button type="button" class="tt-guide__chip" data-task="${t.id}">${escapeHtml(t.title)}</button>`).join('')}</div>`}</div>
     </section>`;
     bind();
@@ -157,15 +157,14 @@
   }
   function escapeHtml(s){return String(s).replace(/[&<>'"]/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;',"'":'&#39;','"':'&quot;'}[c]));}
   function choose(task){state.task=task;state.step=0;render();}
-  function close(){clearHighlight();state.open=false;state.task=null;state.step=0;shell()?.remove();state.observer?.disconnect();state.observer=null;document.getElementById('tt-guide-launcher')?.focus();}
-  function open(){if(state.open)return;state.open=true;const root=document.createElement('div');root.id='tt-guided-mode';document.body.appendChild(root);render();state.observer=new MutationObserver(()=>{if(state.task){const step=state.task.steps[state.step]; if(step && !visible(state.target)) highlight(step);}});state.observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});}
+  function close(){clearHighlight();state.open=false;state.task=null;state.step=0;shell()?.remove();state.observer?.disconnect();state.observer=null;const target=state.returnFocus&&state.returnFocus.isConnected?state.returnFocus:document.getElementById('shell-guide');state.returnFocus=null;target?.focus?.({preventScroll:true});}
+  function open(){if(state.open){shell()?.querySelector('#tt-guide-input,[data-guide-next]')?.focus?.({preventScroll:true});return;}state.returnFocus=document.activeElement instanceof HTMLElement?document.activeElement:null;state.open=true;const root=document.createElement('div');root.id='tt-guided-mode';document.body.appendChild(root);render();requestAnimationFrame(()=>root.classList.add('is-open'));state.observer=new MutationObserver(()=>{if(state.task){const step=state.task.steps[state.step]; if(step && !visible(state.target)) highlight(step);}});state.observer.observe(document.body,{subtree:true,childList:true,attributes:true,attributeFilter:['class','style','hidden']});}
   function bind(){const root=shell(); if(!root)return; root.querySelectorAll('[data-guide-close]').forEach(x=>x.addEventListener('click',close)); root.querySelector('[data-guide-search]')?.addEventListener('submit',e=>{e.preventDefault();const q=root.querySelector('#tt-guide-input')?.value||'';const task=bestTask(q);if(task)choose(task);else{const toast=document.createElement('div');toast.className='tt-guide-toast';toast.textContent='I could not match that task yet. Try words like sale, repair, dispatch, rental, purchase order, transfer, inventory, report, drawer or technician pay.';document.body.appendChild(toast);setTimeout(()=>toast.remove(),4500);}}); root.querySelectorAll('[data-task]').forEach(btn=>btn.addEventListener('click',()=>choose(TASKS.find(t=>t.id===btn.dataset.task)))); root.querySelector('[data-guide-home]')?.addEventListener('click',()=>{clearHighlight();state.task=null;state.step=0;render();}); root.querySelector('[data-guide-prev]')?.addEventListener('click',()=>{if(state.step>0){state.step--;render();}}); root.querySelector('[data-guide-next]')?.addEventListener('click',()=>{if(!state.task)return;if(state.step>=state.task.steps.length-1)close();else{state.step++;render();}});}
   window.TotalToolsGuideMe={open,openTask:(id)=>{const task=TASKS.find(t=>t.id===id);if(!task)return false;if(!state.open)open();choose(task);return true;},tasks:()=>TASKS.map(t=>({id:t.id,title:t.title}))};
   function install(){
-    if(document.getElementById('tt-guide-launcher'))return;
-    const skip=document.createElement('a');skip.className='tt-pos-skip';skip.href='#main-content';skip.textContent='Skip to POS content';document.body.prepend(skip);
+    if(!document.querySelector('.tt-pos-skip')){const skip=document.createElement('a');skip.className='tt-pos-skip';skip.href='#main-content';skip.textContent='Skip to POS content';document.body.prepend(skip);}
     const main=document.querySelector('main,.main-content,#content,.content') || document.body.querySelector(':scope > div'); if(main && !main.id)main.id='main-content';
-    const btn=document.createElement('button');btn.id='tt-guide-launcher';btn.className='tt-guide-launcher';btn.type='button';btn.setAttribute('aria-haspopup','dialog');btn.innerHTML='<svg viewBox="0 0 24 24" fill="none" aria-hidden="true"><path d="M12 3a7 7 0 0 0-4.2 12.6c.8.6 1.2 1.2 1.3 1.9h5.8c.1-.7.5-1.3 1.3-1.9A7 7 0 0 0 12 3Z" stroke="currentColor" stroke-width="1.8"/><path d="M9.5 21h5M9.5 18.5h5" stroke="currentColor" stroke-width="1.8" stroke-linecap="round"/></svg><span>Guide Me</span>';btn.addEventListener('click',open);document.body.appendChild(btn);
+    document.getElementById('tt-guide-launcher')?.remove();
     document.addEventListener('keydown',e=>{if(e.key==='Escape'&&state.open)close();});
   }
   if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',install);else install();

@@ -1,4 +1,5 @@
 (()=>{'use strict';
+const errorNotice=message=>window.TotalToolsShellUI?.toast?window.TotalToolsShellUI.toast(String(message||''),'error'):console.error(String(message||''));
 function approvals(){return window.TotalToolsDepartmentApprovals;}
 function harden(root=document){
  const panel=root.querySelector?.('#tt-purchasing-workspace');if(!panel)return;
@@ -11,7 +12,7 @@ function harden(root=document){
  button.type='button';button.dataset.openDepartmentApprovals='true';button.textContent='Review in Department Approvals';
  button.addEventListener('click',async()=>{
   try{await approvals()?.open?.();}
-  catch(error){alert(approvals()?.friendlyError?.(error)||'Department Approvals could not open. Try again.');}
+  catch(error){errorNotice(approvals()?.friendlyError?.(error)||'Department Approvals could not open. Try again.');}
  });
  row.appendChild(button);
  const note=document.createElement('span');note.className='tt-purch__approval-note';note.textContent='An authorized department manager must approve or reject this request.';row.appendChild(note);
