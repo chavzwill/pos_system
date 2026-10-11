@@ -198,8 +198,6 @@ router.post('/', requireApiKey, async (req, res) => {
         current_total: total,
       });
     }
-    const transactionNumber = await nextNumber(db, 'transactions', 'transaction_number', 'TXN-', 6);
-
     const txn = await db.transaction('write');
     let committed = false;
     try {
@@ -213,6 +211,44 @@ router.post('/', requireApiKey, async (req, res) => {
         const replay = await loadTransactionByExternalId(externalOrderId);
         return res.status(200).json({ ...replay, idempotent_replay: true, idempotency_verified: !!duplicate.external_payload_hash });
       }
+
+      let confirmedSubtotal = 0;
+      let confirmedTaxAmount = 0;
+      for (const line of processedItems) {
+        const { rows: [currentProduct] } = await txn.execute({
+          sql: 'SELECT id,name,sku,price,tax_rate,active FROM products WHERE id = ? LIMIT 1',
+          args: [line.product.id],
+        });
+        if (!currentProduct || Number(currentProduct.active) !== 1) {
+          const e = new Error(`Product ${line.product.id} is unavailable`);
+          e.status = 409;
+          throw e;
+        }
+        const currentUnitPrice = Number(currentProduct.price || 0);
+        const currentLineTotal = parseFloat((currentUnitPrice * line.quantity).toFixed(2));
+        const currentLineTax = isTaxExempt ? 0 : parseFloat((currentLineTotal * Number(currentProduct.tax_rate || 0) / 100).toFixed(2));
+        confirmedSubtotal += currentLineTotal;
+        confirmedTaxAmount += currentLineTax;
+        line.product = currentProduct;
+        line.unitPrice = currentUnitPrice;
+        line.lineTotal = currentLineTotal;
+        line.lineTax = currentLineTax;
+      }
+      confirmedSubtotal = parseFloat(confirmedSubtotal.toFixed(2));
+      confirmedTaxAmount = parseFloat(confirmedTaxAmount.toFixed(2));
+      const confirmedTotal = parseFloat((confirmedSubtotal + confirmedTaxAmount + delivery + service + handling).toFixed(2));
+      if (Math.round(confirmedTotal * 100) !== Math.round(expectedTotal * 100)) {
+        await txn.rollback();
+        return res.status(409).json({
+          error: 'POS total changed before SmartCommerce order commit',
+          code: 'POS_TOTAL_MISMATCH',
+          expected_total: expectedTotal,
+          current_total: confirmedTotal,
+        });
+      }
+      subtotal = confirmedSubtotal;
+      taxAmount = confirmedTaxAmount;
+      const transactionNumber = await nextNumber(txn, 'transactions', 'transaction_number', 'TXN-', 6);
 
       for (const line of processedItems) {
         const reserved = await txn.execute({
