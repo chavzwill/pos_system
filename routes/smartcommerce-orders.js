@@ -86,6 +86,7 @@ router.post('/', requireApiKey, async (req, res) => {
       delivery_amount,
       service_amount,
       handling_amount,
+      expected_pos_total,
       tax_exempt,
       tax_exemption_number,
       approval_code,
@@ -107,6 +108,10 @@ router.post('/', requireApiKey, async (req, res) => {
     const delivery = money(delivery_amount, 'delivery_amount');
     const service = money(service_amount, 'service_amount');
     const handling = money(handling_amount, 'handling_amount');
+    if (expected_pos_total === undefined || expected_pos_total === null || expected_pos_total === '') {
+      return res.status(400).json({ error: 'expected_pos_total is required', code: 'EXPECTED_TOTAL_REQUIRED' });
+    }
+    const expectedTotal = money(expected_pos_total, 'expected_pos_total');
     const isTaxExempt = tax_exempt ? 1 : 0;
     const method = String(payment_method || 'online').trim().toLowerCase() || 'online';
 
@@ -140,6 +145,7 @@ router.post('/', requireApiKey, async (req, res) => {
       delivery_amount: delivery,
       service_amount: service,
       handling_amount: handling,
+      expected_pos_total: expectedTotal,
       tax_exempt: isTaxExempt,
       tax_exemption_number: String(tax_exemption_number || '').trim() || null,
       approval_code: String(approval_code || '').trim() || null,
@@ -184,6 +190,14 @@ router.post('/', requireApiKey, async (req, res) => {
     subtotal = parseFloat(subtotal.toFixed(2));
     taxAmount = parseFloat(taxAmount.toFixed(2));
     const total = parseFloat((subtotal + taxAmount + delivery + service + handling).toFixed(2));
+    if (Math.round(total * 100) !== Math.round(expectedTotal * 100)) {
+      return res.status(409).json({
+        error: 'POS total differs from settled SmartCommerce total',
+        code: 'POS_TOTAL_MISMATCH',
+        expected_total: expectedTotal,
+        current_total: total,
+      });
+    }
     const transactionNumber = await nextNumber(db, 'transactions', 'transaction_number', 'TXN-', 6);
 
     const txn = await db.transaction('write');
