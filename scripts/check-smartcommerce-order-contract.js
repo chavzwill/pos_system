@@ -41,8 +41,12 @@ check('expected total participates in idempotency intent',
   route.includes('expected_pos_total: expectedTotal'));
 check('price drift is rejected before transaction number allocation and stock mutation',
   route.includes("code: 'POS_TOTAL_MISMATCH'") &&
-  route.indexOf("code: 'POS_TOTAL_MISMATCH'") < route.indexOf("nextNumber(db, 'transactions'") &&
+  route.indexOf("code: 'POS_TOTAL_MISMATCH'") < route.indexOf("nextNumber(txn, 'transactions'") &&
   route.indexOf("code: 'POS_TOTAL_MISMATCH'") < route.indexOf("UPDATE branch_inventory SET stock_qty = stock_qty - ?"));
+check('authoritative prices are revalidated inside the write transaction',
+  route.includes("SELECT id,name,sku,price,tax_rate,active FROM products") &&
+  route.includes('confirmedTotal') &&
+  route.includes("nextNumber(txn, 'transactions'"));
 check('branch stock decrement is conditional and transactional',
   route.includes('AND stock_qty >= ?') && route.includes("db.transaction('write')"));
 check('SmartCommerce sales write attributable stock movement evidence',
