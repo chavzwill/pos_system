@@ -41,6 +41,10 @@ async function uploadSignature(dataUrl, filenamePrefix) {
     resource_type: 'image',
   });
   if (cloudResult) return cloudResult.secure_url;
+  if (process.env.VERCEL) {
+    if (buffer.length > 512 * 1024) return null;
+    return `data:image/${match[1]};base64,${match[2]}`;
+  }
   const dir = path.join(__dirname, '../uploads/rental-signatures');
   fs.mkdirSync(dir, { recursive: true });
   const filename = `${filenamePrefix}-${Date.now()}.${match[1]}`;
@@ -427,6 +431,7 @@ router.post('/agreements/:id/po-attachment', requireAnyPermission('rentals_check
     if (cloudResult) {
       storedName = cloudResult.secure_url;
     } else {
+      if (process.env.VERCEL) return res.status(503).json({ error: 'Durable private attachment storage is not configured for this serverless environment', code: 'PRIVATE_STORAGE_UNAVAILABLE' });
       fs.mkdirSync(localPoAttachmentDir, { recursive: true });
       storedName = `rental-${req.params.id}-po-${Date.now()}${path.extname(req.file.originalname)}`;
       fs.writeFileSync(path.join(localPoAttachmentDir, storedName), req.file.buffer);
