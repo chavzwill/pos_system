@@ -13,13 +13,14 @@ const {validateMemoryUpload,imageMulterFilter}=require('../lib/uploadSecurity');
 const clean=v=>String(v??'').trim();
 const finiteNonNegative=v=>{const n=Number(v??0);return Number.isFinite(n)&&n>=0?n:null;};
 const PUBLIC_ID_DIR=path.resolve(__dirname,'../uploads/customer-ids');
-const PROTECTED_ID_DIR=path.resolve(__dirname,'../protected_uploads/customer-ids');
+const SERVERLESS_READONLY=!!process.env.VERCEL;
+const PROTECTED_ID_DIR=SERVERLESS_READONLY?path.join('/tmp','pos-protected','customer-ids'):path.resolve(__dirname,'../protected_uploads/customer-ids');
 fs.mkdirSync(PROTECTED_ID_DIR,{recursive:true,mode:0o700});
 try{
   // This module is loaded before the server begins listening. Move any legacy
   // local identity scans out of the generic /uploads static tree immediately,
   // so old database URLs cannot remain anonymously retrievable during startup.
-  if(fs.existsSync(PUBLIC_ID_DIR)){
+  if(!SERVERLESS_READONLY&&fs.existsSync(PUBLIC_ID_DIR)){
     for(const entry of fs.readdirSync(PUBLIC_ID_DIR,{withFileTypes:true})){
       if(!entry.isFile())continue;
       const source=path.join(PUBLIC_ID_DIR,entry.name),target=path.join(PROTECTED_ID_DIR,path.basename(entry.name));
@@ -151,6 +152,7 @@ router.get('/:id/id-scan/content',employeeSensitiveOnly,async(req,res)=>{
 });
 router.post('/:id/id-scan',employeeSensitiveOnly,secureIdUpload.single('id_scan'),async(req,res)=>{
   if(!req.file)return res.status(400).json({error:'A JPEG, PNG, or WebP identity image is required'});
+  if(SERVERLESS_READONLY)return res.status(503).json({error:'Durable private identity-document storage is not configured for this serverless environment',code:'PRIVATE_STORAGE_UNAVAILABLE'});
   const validation=validateMemoryUpload(req.file,{kind:'image'});if(!validation.ok)return res.status(415).json({error:validation.error});
   try{
     const customerId=Number(req.params.id);
