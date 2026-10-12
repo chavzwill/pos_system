@@ -362,6 +362,7 @@ router.post('/:id/attachments', upload.single('file'), async (req, res) => {
     if (cloudResult) {
       storedName = cloudResult.secure_url;
     } else {
+      if (process.env.VERCEL) return res.status(503).json({ error: 'Durable private attachment storage is not configured for this serverless environment', code: 'PRIVATE_STORAGE_UNAVAILABLE' });
       fs.mkdirSync(localUploadDir, { recursive: true });
       const unique = `${Date.now()}-${Math.round(Math.random() * 1e6)}`;
       storedName = `${unique}${path.extname(req.file.originalname)}`;
