@@ -36,6 +36,17 @@ check('new customer identity scans are stored outside the public upload tree',
 check('unknown API routes return JSON 404 before the SPA catch-all',
   api404At>=0&&spaAt>api404At&&server.includes('API endpoint not found:'));
 
+check('serverless customer evidence uses writable tmp only for startup compatibility',
+  customerGuard.includes("SERVERLESS_READONLY=!!process.env.VERCEL")&&
+  customerGuard.includes("path.join('/tmp','pos-protected','customer-ids')"));
+check('serverless customer ID uploads fail closed without durable private storage',
+  customerGuard.includes("PRIVATE_STORAGE_UNAVAILABLE"));
+check('serverless purchase-order attachment fallback fails closed',
+  purchaseOrders.includes("process.env.VERCEL")&&purchaseOrders.includes("PRIVATE_STORAGE_UNAVAILABLE"));
+check('serverless rental signatures persist without filesystem writes',
+  rentals.includes("return `data:image/${match[1]};base64,${match[2]}`"));
+check('serverless rental PO attachment fallback fails closed',
+  rentals.includes("process.env.VERCEL")&&rentals.includes("PRIVATE_STORAGE_UNAVAILABLE"));
 for(const c of checks) console.log(`${c.pass?'PASS':'FAIL'} Upload security: ${c.name}`);
 if(checks.some(c=>!c.pass)) process.exit(1);
 console.log(`Upload/API boundary contract OK (${checks.length} checks).`);
