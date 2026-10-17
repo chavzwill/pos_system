@@ -6,6 +6,9 @@ on:
 permissions:
   contents: write
   actions: read
+concurrency:
+  group: total-tools-final-design-review
+  cancel-in-progress: true
 jobs:
   review:
     runs-on: ubuntu-latest
