@@ -116,7 +116,7 @@
       "--max-screens",
       "5",
       "--out-dir",
-      "docs/ui-design/support-system",
+      "docs/ui-design/evidence/support-system",
       "--idempotency-key",
       "total-tools-support-v1",
       "--concept",
