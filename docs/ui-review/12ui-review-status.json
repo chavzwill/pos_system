@@ -1,5 +1,6 @@
 {
-  "state": "starting_authentication",
+  "state": "awaiting_authentication",
+  "verificationUrl": "https://12ui.com/connect-cli?user_code=SEYS-KCYD",
   "sourceSha": "515df2f7d4a5848edd04c24de583925d9a839eaa",
-  "updatedAt": "2026-10-17T21:42:41.063Z"
+  "updatedAt": "2026-10-17T21:42:46.016Z"
 }
