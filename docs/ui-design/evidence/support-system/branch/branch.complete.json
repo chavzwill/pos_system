@@ -1,0 +1,338 @@
+{
+  "version": 1,
+  "status": "succeeded",
+  "runId": "crt-8d77e3acb90f4fb8dc791b1bce571d4b3cf50ceb",
+  "runKey": "total-tools-support-v1",
+  "workflowRevision": "branch-execute-v3",
+  "scope": "site",
+  "concept": "Extend this approved Total Tools POS design into five supporting operational states: Finance and Accounting journal ledger with balances and posting review, Reports filter form and scannable results table, Admin employee and permission management, Settings company and integration configuration forms, and Guide Me as a focused non-modal contextual task companion shown alongside a receiving form with numbered steps, one next action and graceful completion. Reuse the selected neutral shell, restrained exact green #0B7A3E and yellow #F2D11F, modern sans typography, fine line icons and consistent controls. No green sidebar, dashboard filler, fake charts or invented product functionality. Accessible focus, well-labelled forms, clear table hierarchy, refined dialogs. Reference designs only; certified handlers will remain the implementation authority.",
+  "conceptSha256": "eb809710580791e99c8ef41ecddc7f0ccc6665f84821ea408e9c0f0fe1cf4aae",
+  "origin": "https://12ui.com",
+  "outDir": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch",
+  "attemptPath": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/branch.attempt.json",
+  "planPath": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/branch.plan.json",
+  "startedAt": "2026-10-17T15:37:49.133Z",
+  "completedAt": "2026-10-17T15:45:46.914Z",
+  "screenCount": 5,
+  "succeededCount": 5,
+  "failedCount": 0,
+  "blockedCount": 0,
+  "pageCount": 6,
+  "logicalPageCount": 5,
+  "convertedPageCount": 6,
+  "winner": {
+    "path": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/screens/winner.png",
+    "sha256": "bf863ecf7d804cafc40f4b2a0322df4167f3872bc3119ee924a9fb0ef8f3dd5f",
+    "bytes": 1312822,
+    "width": 1536,
+    "height": 1024
+  },
+  "screens": [
+    {
+      "slot": "a",
+      "pageIndex": 1,
+      "pageId": "p0-total-tools-pos-a",
+      "viewportOrdinal": 1,
+      "generationPageIndex": 0,
+      "generationViewportOrdinal": 2,
+      "status": "succeeded",
+      "direction": "Total Tools POS (part 2)",
+      "path": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/screens/a.png",
+      "sha256": "264c7a68cd2c033e29e70157d57a0a12f5719a20de705d9e7ab088026492609e",
+      "bytes": 1280947,
+      "width": 1536,
+      "height": 1024,
+      "canvasDecision": {
+        "provenance": "inherited-from-winner",
+        "sourceCanvas": {
+          "width": 1536,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "slot": "b",
+      "pageIndex": 2,
+      "pageId": "p1-finance-and-accounting",
+      "viewportOrdinal": 1,
+      "generationPageIndex": 1,
+      "status": "succeeded",
+      "direction": "Finance and Accounting",
+      "path": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/screens/b.png",
+      "sha256": "672c777c2d6932f70c05d9ba183fe576deb8d86896ccdee31db644cef099bf1c",
+      "bytes": 1416179,
+      "width": 1536,
+      "height": 1024,
+      "canvasDecision": {
+        "provenance": "inherited-from-winner",
+        "sourceCanvas": {
+          "width": 1536,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "slot": "c",
+      "pageIndex": 3,
+      "pageId": "p2-reports",
+      "viewportOrdinal": 1,
+      "generationPageIndex": 2,
+      "status": "succeeded",
+      "direction": "Reports",
+      "path": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/screens/c.png",
+      "sha256": "5cd487fefd57e0d65122ec9bdd99b6a8655f4318f0b0c66648533623cc01dd98",
+      "bytes": 1315327,
+      "width": 1536,
+      "height": 1024,
+      "canvasDecision": {
+        "provenance": "inherited-from-winner",
+        "sourceCanvas": {
+          "width": 1536,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "slot": "d",
+      "pageIndex": 4,
+      "pageId": "p3-admin",
+      "viewportOrdinal": 1,
+      "generationPageIndex": 3,
+      "status": "succeeded",
+      "direction": "Admin",
+      "path": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/screens/d.png",
+      "sha256": "7b8d76c8d46f0467f8f8078fe66baee0a53b24459a3b9b78b065a2a64f90a7e2",
+      "bytes": 1351040,
+      "width": 1536,
+      "height": 1024,
+      "canvasDecision": {
+        "provenance": "inherited-from-winner",
+        "sourceCanvas": {
+          "width": 1536,
+          "height": 1024
+        }
+      }
+    },
+    {
+      "slot": "e",
+      "pageIndex": 5,
+      "pageId": "p4-settings",
+      "viewportOrdinal": 1,
+      "generationPageIndex": 4,
+      "status": "succeeded",
+      "direction": "Settings",
+      "path": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/screens/e.png",
+      "sha256": "db9e544b64dc9d5f0501fb2b6439bf67c461085ec459d6d70fdb51811c06a155",
+      "bytes": 1365063,
+      "width": 1536,
+      "height": 1024,
+      "canvasDecision": {
+        "provenance": "inherited-from-winner",
+        "sourceCanvas": {
+          "width": 1536,
+          "height": 1024
+        }
+      }
+    }
+  ],
+  "pages": [
+    {
+      "index": 0,
+      "id": "p0-total-tools-pos",
+      "kind": "source",
+      "title": "Total Tools POS",
+      "slots": [],
+      "startsFromWinner": true,
+      "sourcePageIndex": 0,
+      "sourcePageId": "p0-total-tools-pos",
+      "sourceViewportOrdinal": 1,
+      "conversion": {
+        "status": "succeeded",
+        "packageId": "a9530b4a-65cb-405f-98a5-9b4724b7ef3a",
+        "idempotencyKey": "branch-package:v2:crt-8d77e3acb90f4fb8dc791b1bce571d4b3cf50ceb:93c80b300904c2b2:0:88c5887dddfb7ea8044a:html:standard:default",
+        "output": "html",
+        "canonicalWidth": 1536,
+        "conversionId": "3bab5f79-5d94-4f73-a063-324509d68173",
+        "outFile": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/pages/p0-total-tools-pos.html",
+        "sha256": "6497f92ea0cdee589ec164c145f9a1543aae7931bcf861cfa5a97b2aeec002b9",
+        "bytes": 335074,
+        "viewports": [
+          {
+            "id": "winner",
+            "ordinal": 1,
+            "status": "succeeded",
+            "conversionId": "32f5b6c3-93d4-4bb4-a7e4-00a32915cb89",
+            "sha256": "bf863ecf7d804cafc40f4b2a0322df4167f3872bc3119ee924a9fb0ef8f3dd5f",
+            "bought": true
+          }
+        ]
+      }
+    },
+    {
+      "index": 1,
+      "id": "p0-total-tools-pos-a",
+      "kind": "additional",
+      "title": "Total Tools POS (part 2)",
+      "slots": [
+        "a"
+      ],
+      "startsFromWinner": false,
+      "sourcePageIndex": 0,
+      "sourcePageId": "p0-total-tools-pos",
+      "sourceViewportOrdinal": 2,
+      "conversion": {
+        "status": "succeeded",
+        "packageId": "aa28f29c-6f93-4485-8e9e-d073c6c3d93a",
+        "idempotencyKey": "branch-package:v2:crt-8d77e3acb90f4fb8dc791b1bce571d4b3cf50ceb:c40bd48a3e462883:0:eda9435b01ae306eb727:html:standard:default",
+        "output": "html",
+        "canonicalWidth": 1536,
+        "conversionId": "2fa1cf27-6ce9-4411-a8c9-17010612393e",
+        "outFile": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/pages/p0-total-tools-pos-a.html",
+        "sha256": "70d134966514c78c1a7abe70ef781a6164e9eca8cb5345a60edae964700c7c1c",
+        "bytes": 219976,
+        "viewports": [
+          {
+            "id": "a",
+            "ordinal": 2,
+            "status": "succeeded",
+            "conversionId": "f5e3e91c-48b4-4ad2-8dae-db2cdd2e426e",
+            "sha256": "264c7a68cd2c033e29e70157d57a0a12f5719a20de705d9e7ab088026492609e",
+            "bought": true
+          }
+        ]
+      }
+    },
+    {
+      "index": 2,
+      "id": "p1-finance-and-accounting",
+      "kind": "additional",
+      "title": "Finance and Accounting",
+      "slots": [
+        "b"
+      ],
+      "startsFromWinner": false,
+      "sourcePageIndex": 1,
+      "sourcePageId": "p1-finance-and-accounting",
+      "conversion": {
+        "status": "succeeded",
+        "packageId": "0c152508-7628-4ed0-b702-2148377ab120",
+        "idempotencyKey": "branch-package:v1:crt-8d77e3acb90f4fb8dc791b1bce571d4b3cf50ceb:1:66bfeedcf04660de5c61ddd4117d9279:html:standard:default",
+        "output": "html",
+        "canonicalWidth": 1536,
+        "conversionId": "06728b44-5b06-4464-b63f-217fe24e177e",
+        "outFile": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/pages/p1-finance-and-accounting.html",
+        "sha256": "8b963bac7afa25fa304768fa62f21b95d46ab8c7bd968315a402e346a64ef85c",
+        "bytes": 122723,
+        "viewports": [
+          {
+            "id": "b",
+            "ordinal": 1,
+            "status": "succeeded",
+            "conversionId": "6fe5cda9-cd63-4b98-bef6-f86fe6fe3f59",
+            "sha256": "672c777c2d6932f70c05d9ba183fe576deb8d86896ccdee31db644cef099bf1c",
+            "bought": true
+          }
+        ]
+      }
+    },
+    {
+      "index": 3,
+      "id": "p2-reports",
+      "kind": "additional",
+      "title": "Reports",
+      "slots": [
+        "c"
+      ],
+      "startsFromWinner": false,
+      "sourcePageIndex": 2,
+      "sourcePageId": "p2-reports",
+      "conversion": {
+        "status": "succeeded",
+        "packageId": "63f0d1db-0f1e-454e-9d81-b1199a04d9fc",
+        "idempotencyKey": "branch-package:v1:crt-8d77e3acb90f4fb8dc791b1bce571d4b3cf50ceb:2:395c970e78fad42fd1eabfbef7aab8c1:html:standard:default",
+        "output": "html",
+        "canonicalWidth": 1536,
+        "conversionId": "0828242c-b398-47af-aace-d3dfe6befcf6",
+        "outFile": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/pages/p2-reports.html",
+        "sha256": "21964de5928d0f443b947defac5df1bb108fb16e7d073271f599ae7d486b12ca",
+        "bytes": 125565,
+        "viewports": [
+          {
+            "id": "c",
+            "ordinal": 1,
+            "status": "succeeded",
+            "conversionId": "bbe2201d-a63d-41b9-a7b3-8b81cee712ab",
+            "sha256": "5cd487fefd57e0d65122ec9bdd99b6a8655f4318f0b0c66648533623cc01dd98",
+            "bought": true
+          }
+        ]
+      }
+    },
+    {
+      "index": 4,
+      "id": "p3-admin",
+      "kind": "additional",
+      "title": "Admin",
+      "slots": [
+        "d"
+      ],
+      "startsFromWinner": false,
+      "sourcePageIndex": 3,
+      "sourcePageId": "p3-admin",
+      "conversion": {
+        "status": "succeeded",
+        "packageId": "323bc2a6-1bf2-4a09-b7a7-7c34b08d2b2f",
+        "idempotencyKey": "branch-package:v1:crt-8d77e3acb90f4fb8dc791b1bce571d4b3cf50ceb:3:8f3a0d9f00413c703bff20a95900e1b9:html:standard:default",
+        "output": "html",
+        "canonicalWidth": 1536,
+        "conversionId": "7e31c168-c34c-4a31-abac-8be380d2744b",
+        "outFile": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/pages/p3-admin.html",
+        "sha256": "7f5b8f7654be719816b473a79e4948988c0c55ac0aa52ea955fcb97b60cadb20",
+        "bytes": 97305,
+        "viewports": [
+          {
+            "id": "d",
+            "ordinal": 1,
+            "status": "succeeded",
+            "conversionId": "38bedf21-bb2d-41f9-99bf-ec31e77329f1",
+            "sha256": "7b8d76c8d46f0467f8f8078fe66baee0a53b24459a3b9b78b065a2a64f90a7e2",
+            "bought": true
+          }
+        ]
+      }
+    },
+    {
+      "index": 5,
+      "id": "p4-settings",
+      "kind": "additional",
+      "title": "Settings",
+      "slots": [
+        "e"
+      ],
+      "startsFromWinner": false,
+      "sourcePageIndex": 4,
+      "sourcePageId": "p4-settings",
+      "conversion": {
+        "status": "succeeded",
+        "packageId": "dc9a4425-86df-42d3-abf7-b27dd2cb70f5",
+        "idempotencyKey": "branch-package:v1:crt-8d77e3acb90f4fb8dc791b1bce571d4b3cf50ceb:4:40cf29acb193d9b11f3dbde7051d0899:html:standard:default",
+        "output": "html",
+        "canonicalWidth": 1536,
+        "conversionId": "25f331d0-b919-4aa4-872a-f711981c2033",
+        "outFile": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/pages/p4-settings.html",
+        "sha256": "1f831c77115ceec136fd2e64bbf996fb9f369762926ac030b56d37f1cf4a6228",
+        "bytes": 59396,
+        "viewports": [
+          {
+            "id": "e",
+            "ordinal": 1,
+            "status": "succeeded",
+            "conversionId": "e22543c8-fb7a-45ed-9a5f-2b3734c66b2e",
+            "sha256": "db9e544b64dc9d5f0501fb2b6439bf67c461085ec459d6d70fdb51811c06a155",
+            "bought": true
+          }
+        ]
+      }
+    }
+  ]
+}

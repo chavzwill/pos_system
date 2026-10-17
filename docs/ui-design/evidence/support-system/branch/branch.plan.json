@@ -1,0 +1,279 @@
+{
+  "version": 1,
+  "runId": "crt-8d77e3acb90f4fb8dc791b1bce571d4b3cf50ceb",
+  "concept": "Extend this approved Total Tools POS design into five supporting operational states: Finance and Accounting journal ledger with balances and posting review, Reports filter form and scannable results table, Admin employee and permission management, Settings company and integration configuration forms, and Guide Me as a focused non-modal contextual task companion shown alongside a receiving form with numbered steps, one next action and graceful completion. Reuse the selected neutral shell, restrained exact green #0B7A3E and yellow #F2D11F, modern sans typography, fine line icons and consistent controls. No green sidebar, dashboard filler, fake charts or invented product functionality. Accessible focus, well-labelled forms, clear table hierarchy, refined dialogs. Reference designs only; certified handlers will remain the implementation authority.",
+  "aspect": "landscape",
+  "scope": "site",
+  "sitePurpose": "Help Total Tools staff complete retail operations, review financial records, and manage business configuration.",
+  "statusUpdate": "I’ll extend your POS into accounting, reporting, employee administration, and company settings, with Guide Me supporting a receiving task. These connected operational states will keep each task focused and preserve the relevant working context.",
+  "approvedScreenSummary": "The approved Sales state contains product search and category filters, a five-line editable cart, checkout totals and payment actions, service and rental additions, estimate creation, operational navigation, and a Guide Me entry point.",
+  "winnerCanvas": {
+    "width": 1536,
+    "height": 1024
+  },
+  "pages": [
+    {
+      "index": 0,
+      "id": "p0-total-tools-pos",
+      "kind": "source",
+      "title": "Total Tools POS",
+      "pageType": "application",
+      "surfaceType": "web_app",
+      "purpose": "Support retail transactions and contextual assistance across operational tasks.",
+      "startsFromWinner": true,
+      "slots": [
+        "a"
+      ]
+    },
+    {
+      "index": 1,
+      "id": "p1-finance-and-accounting",
+      "kind": "additional",
+      "title": "Finance and Accounting",
+      "pageType": "application",
+      "surfaceType": "web_app",
+      "purpose": "Review journal entries, account balances, and posting readiness.",
+      "startsFromWinner": false,
+      "slots": [
+        "b"
+      ]
+    },
+    {
+      "index": 2,
+      "id": "p2-reports",
+      "kind": "additional",
+      "title": "Reports",
+      "pageType": "application",
+      "surfaceType": "web_app",
+      "purpose": "Run operational reports using explicit criteria and inspect the resulting records.",
+      "startsFromWinner": false,
+      "slots": [
+        "c"
+      ]
+    },
+    {
+      "index": 3,
+      "id": "p3-admin",
+      "kind": "additional",
+      "title": "Admin",
+      "pageType": "application",
+      "surfaceType": "web_app",
+      "purpose": "Manage employee access and review role-based permissions.",
+      "startsFromWinner": false,
+      "slots": [
+        "d"
+      ]
+    },
+    {
+      "index": 4,
+      "id": "p4-settings",
+      "kind": "additional",
+      "title": "Settings",
+      "pageType": "application",
+      "surfaceType": "web_app",
+      "purpose": "Maintain company details and configure existing integrations.",
+      "startsFromWinner": false,
+      "slots": [
+        "e"
+      ]
+    }
+  ],
+  "screens": [
+    {
+      "slot": "a",
+      "pageIndex": 0,
+      "viewportOrdinal": 2,
+      "status": "pending",
+      "direction": "Total Tools POS (part 2)",
+      "header": null,
+      "footer": null,
+      "pageEndsHere": true,
+      "dependsOnSlot": null,
+      "width": 1536,
+      "height": 1024,
+      "canvasDecision": {
+        "provenance": "inherited-from-winner",
+        "sourceCanvas": {
+          "width": 1536,
+          "height": 1024
+        }
+      },
+      "content": "Show receiving for purchase order PO-2048 from Metro Industrial Supply, with ordered and received quantities for work gloves and sanding discs. Guide Me provides numbered steps, one current next action, and completion feedback without blocking form access or discarding entered quantities."
+    },
+    {
+      "slot": "b",
+      "pageIndex": 1,
+      "viewportOrdinal": 1,
+      "status": "pending",
+      "direction": "Finance and Accounting",
+      "header": null,
+      "footer": null,
+      "pageEndsHere": true,
+      "dependsOnSlot": null,
+      "width": 1536,
+      "height": 1024,
+      "canvasDecision": {
+        "provenance": "inherited-from-winner",
+        "sourceCanvas": {
+          "width": 1536,
+          "height": 1024
+        }
+      },
+      "content": "Provide period and account filters, opening and closing balances, and a journal ledger with dates, references, accounts, debits, credits, and posting status. Select draft journal JRN-1086 to review balanced entries and supporting references before confirming posting or returning to the ledger."
+    },
+    {
+      "slot": "c",
+      "pageIndex": 2,
+      "viewportOrdinal": 1,
+      "status": "pending",
+      "direction": "Reports",
+      "header": null,
+      "footer": null,
+      "pageEndsHere": true,
+      "dependsOnSlot": null,
+      "width": 1536,
+      "height": 1024,
+      "canvasDecision": {
+        "provenance": "inherited-from-winner",
+        "sourceCanvas": {
+          "width": 1536,
+          "height": 1024
+        }
+      },
+      "content": "Offer a sales report form with date range, store, and transaction-status filters. Show applied criteria and results for completed sales at Central Store, including transaction reference, date, employee, net sales, tax, and total, with record count and aggregate totals."
+    },
+    {
+      "slot": "d",
+      "pageIndex": 3,
+      "viewportOrdinal": 1,
+      "status": "pending",
+      "direction": "Admin",
+      "header": null,
+      "footer": null,
+      "pageEndsHere": true,
+      "dependsOnSlot": null,
+      "width": 1536,
+      "height": 1024,
+      "canvasDecision": {
+        "provenance": "inherited-from-winner",
+        "sourceCanvas": {
+          "width": 1536,
+          "height": 1024
+        }
+      },
+      "content": "List employees with name, role, store, and access status, supporting search and employee selection. Review Morgan Lee’s Sales Associate access through labelled employee fields and permission categories for sales, receiving, and accounting, with save, cancel, and confirmation for access removal."
+    },
+    {
+      "slot": "e",
+      "pageIndex": 4,
+      "viewportOrdinal": 1,
+      "status": "pending",
+      "direction": "Settings",
+      "header": null,
+      "footer": null,
+      "pageEndsHere": true,
+      "dependsOnSlot": null,
+      "width": 1536,
+      "height": 1024,
+      "canvasDecision": {
+        "provenance": "inherited-from-winner",
+        "sourceCanvas": {
+          "width": 1536,
+          "height": 1024
+        }
+      },
+      "content": "Provide company fields for legal name, business address, contact details, and tax registration. Include an existing accounting integration’s connection status and configuration fields without inventing a provider; support editing, validation, saving, and confirmation before disconnecting, while protecting sensitive credentials."
+    }
+  ],
+  "packagePages": [
+    {
+      "index": 0,
+      "id": "p0-total-tools-pos",
+      "kind": "source",
+      "title": "Total Tools POS",
+      "pageType": "application",
+      "surfaceType": "web_app",
+      "purpose": "Support retail transactions and contextual assistance across operational tasks.",
+      "startsFromWinner": true,
+      "slots": [],
+      "packageLineage": {
+        "pageIndex": 0,
+        "pageId": "p0-total-tools-pos",
+        "viewportOrdinal": 1,
+        "state": "winner"
+      }
+    },
+    {
+      "index": 0,
+      "id": "p0-total-tools-pos-a",
+      "kind": "additional",
+      "title": "Total Tools POS (part 2)",
+      "pageType": "application",
+      "surfaceType": "web_app",
+      "purpose": "Show receiving for purchase order PO-2048 from Metro Industrial Supply, with ordered and received quantities for work gloves and sanding discs. Guide Me provides numbered steps, one current next action, and completion feedback without blocking form access or discarding entered quantities.",
+      "startsFromWinner": false,
+      "slots": [
+        "a"
+      ],
+      "packageLineage": {
+        "pageIndex": 0,
+        "pageId": "p0-total-tools-pos",
+        "viewportOrdinal": 2,
+        "state": "screen",
+        "slot": "a"
+      }
+    },
+    {
+      "index": 1,
+      "id": "p1-finance-and-accounting",
+      "kind": "additional",
+      "title": "Finance and Accounting",
+      "pageType": "application",
+      "surfaceType": "web_app",
+      "purpose": "Review journal entries, account balances, and posting readiness.",
+      "startsFromWinner": false,
+      "slots": [
+        "b"
+      ]
+    },
+    {
+      "index": 2,
+      "id": "p2-reports",
+      "kind": "additional",
+      "title": "Reports",
+      "pageType": "application",
+      "surfaceType": "web_app",
+      "purpose": "Run operational reports using explicit criteria and inspect the resulting records.",
+      "startsFromWinner": false,
+      "slots": [
+        "c"
+      ]
+    },
+    {
+      "index": 3,
+      "id": "p3-admin",
+      "kind": "additional",
+      "title": "Admin",
+      "pageType": "application",
+      "surfaceType": "web_app",
+      "purpose": "Manage employee access and review role-based permissions.",
+      "startsFromWinner": false,
+      "slots": [
+        "d"
+      ]
+    },
+    {
+      "index": 4,
+      "id": "p4-settings",
+      "kind": "additional",
+      "title": "Settings",
+      "pageType": "application",
+      "surfaceType": "web_app",
+      "purpose": "Maintain company details and configure existing integrations.",
+      "startsFromWinner": false,
+      "slots": [
+        "e"
+      ]
+    }
+  ]
+}

@@ -1,0 +1,301 @@
+
+12ui branch engine: api (No Codex CLI was found: TWELVE_UI_CODEX_BIN and CODEX_CLI_PATH are not set, codex is not on PATH, and the ChatGPT app is not installed.)
+12ui engine: api (No Codex CLI was found: TWELVE_UI_CODEX_BIN and CODEX_CLI_PATH are not set, codex is not on PATH, and the ChatGPT app is not installed.)
+branch execute: scope site, converting pages to html
+  paid: one branch screen per planned slot, plus one package conversion per exported page; each complete app state is an exported page
+  done: screens in /home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/screens, pages in /home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/pages, prototype in /home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/prototype
+  expect: ~8m 12s (measured phase medians; a run whose page conversions all overlap generation finishes nearer 6m)
+  this command blocks until done; progress ticks at least every 15s
+[0s] claiming the run
+[0s] claiming planned screens — planning the screens (10-20s, buys no image)
+[15s] still claiming planned screens — planning the screens (10-20s, buys no image), 15s in stage
+[23s] planning screens — 5 logical page group(s) packaged as 6 conversion page(s), with complete app states separate — the approved page plus 5 — 5 screen(s) to generate
+[23s] dispatching — 0 of 5 screens generated, 5 waiting, 0 blocked, 0 failed
+[23s] dispatching — screen a dispatched
+[23s] dispatching — 0 of 5 screens generated, 1 running, 4 waiting, 0 blocked, 0 failed
+[23s] dispatching — screen b dispatched
+[23s] dispatching — 0 of 5 screens generated, 2 running, 3 waiting, 0 blocked, 0 failed
+[23s] dispatching — screen c dispatched
+[23s] dispatching — 0 of 5 screens generated, 3 running, 2 waiting, 0 blocked, 0 failed
+[23s] dispatching — screen d dispatched
+[23s] dispatching — 0 of 5 screens generated, 4 running, 1 waiting, 0 blocked, 0 failed
+[23s] dispatching — screen e dispatched
+[23s] dispatching — 0 of 5 screens generated, 5 running, 0 waiting, 0 blocked, 0 failed
+[26s] converting viewports — 0 of 1 viewports, page p0-total-tools-pos
+[27s] converting viewports — 0 of 5 screens generated, 5 running, 0 waiting, 0 blocked, 0 failed
+[31s] converting viewports — 0 of 1 viewports, 1 running, page p0-total-tools-pos
+[31s] converting viewports — 0 of 5 screens generated, 5 running, 0 waiting, 0 blocked, 0 failed
+[37s] converting viewports — 0 of 1 viewports, 1 running, page p0-total-tools-pos
+[37s] converting viewports — 0 of 5 screens generated, 5 running, 0 waiting, 0 blocked, 0 failed
+[38s] converting viewports — screen a succeeded
+[38s] converting viewports — 1 of 5 screens generated, 4 running, 0 waiting, 0 blocked, 0 failed
+[39s] converting viewports — screen e succeeded
+[39s] converting viewports — 2 of 5 screens generated, 3 running, 0 waiting, 0 blocked, 0 failed
+[39s] converting viewports — screen d succeeded
+[39s] converting viewports — 3 of 5 screens generated, 2 running, 0 waiting, 0 blocked, 0 failed
+[40s] converting viewports — screen b succeeded
+[40s] converting viewports — 4 of 5 screens generated, 1 running, 0 waiting, 0 blocked, 0 failed
+[41s] converting viewports — screen c succeeded
+[41s] converting viewports — 5 of 5 screens generated, 0 waiting, 0 blocked, 0 failed
+[41s] downloading screens — 5 of 5 screens generated, 0 waiting, 0 blocked, 0 failed
+[41s] downloading screens — 0 of 1 viewports, page p4-settings
+[41s] downloading screens — 0 of 1 viewports, page p0-total-tools-pos-a
+[41s] downloading screens — 5 screen(s) on disk
+[41s] converting pages — 5 of 5 screens generated, 0 waiting, 0 blocked, 0 failed
+[41s] converting pages — 6 package conversion page(s): continuous documents stay joined, complete app states stay separate; up to 3 at a time
+[42s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos
+[45s] converting pages — 0 of 1 viewports, 1 running, page p4-settings
+[45s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a
+[46s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos
+[49s] converting pages — 0 of 1 viewports, 1 running, page p4-settings
+[50s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a
+[50s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos
+[54s] converting pages — 0 of 1 viewports, 1 running, page p4-settings
+[54s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a
+[54s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos
+[58s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 16s in stage
+[58s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 17s in stage
+[58s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 17s in stage
+[62s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 20s in stage
+[62s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 21s in stage
+[63s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 21s in stage
+[66s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 25s in stage
+[66s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 25s in stage
+[67s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 25s in stage
+[70s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 29s in stage
+[71s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 29s in stage
+[71s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 30s in stage
+[75s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 33s in stage
+[75s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 34s in stage
+[75s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 34s in stage
+[79s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 37s in stage
+[79s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 38s in stage
+[79s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 38s in stage
+[83s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 41s in stage
+[83s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 42s in stage
+[83s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 42s in stage
+[87s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 46s in stage
+[87s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 46s in stage
+[88s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 46s in stage
+[1m 31s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 50s in stage
+[1m 32s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 50s in stage
+[1m 33s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 51s in stage
+[1m 35s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 54s in stage
+[1m 36s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 54s in stage
+[1m 37s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 55s in stage
+[1m 39s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 58s in stage
+[1m 40s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 58s in stage
+[1m 41s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 59s in stage
+[1m 44s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 63s in stage
+[1m 45s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 63s in stage
+[1m 45s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 64s in stage
+[1m 48s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 67s in stage
+[1m 49s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 68s in stage
+[1m 50s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 69s in stage
+[1m 52s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 71s in stage
+[1m 53s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 72s in stage
+[1m 54s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 73s in stage
+[1m 57s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 75s in stage
+[1m 57s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 76s in stage
+[1m 58s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 77s in stage
+[2m 1s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 79s in stage
+[2m 1s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 80s in stage
+[2m 2s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 81s in stage
+[2m 5s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 84s in stage
+[2m 5s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 84s in stage
+[2m 7s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 85s in stage
+[2m 9s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 88s in stage
+[2m 10s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 88s in stage
+[2m 11s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 89s in stage
+[2m 13s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 1m 32s in stage
+[2m 14s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 1m 33s in stage
+[2m 16s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 1m 35s in stage
+[2m 17s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 1m 36s in stage
+[2m 18s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 1m 37s in stage
+[2m 20s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 1m 39s in stage
+[2m 21s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 1m 40s in stage
+[2m 22s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 1m 41s in stage
+[2m 25s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 1m 43s in stage
+[2m 25s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 1m 44s in stage
+[2m 27s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 1m 45s in stage
+[2m 29s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 1m 47s in stage
+[2m 30s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 1m 48s in stage
+[2m 31s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 1m 50s in stage
+[2m 33s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 1m 51s in stage
+[2m 34s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 1m 52s in stage
+[2m 35s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 1m 54s in stage
+[2m 37s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 1m 56s in stage
+[2m 38s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 1m 56s in stage
+[2m 39s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 1m 58s in stage
+[2m 42s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 2m in stage
+[2m 42s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 2m 1s in stage
+[2m 44s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 2m 2s in stage
+[2m 46s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 2m 4s in stage
+[2m 47s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 2m 6s in stage
+[2m 48s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-a, 2m 6s in stage
+[2m 50s] converting pages — 0 of 1 viewports, 1 running, page p4-settings, 2m 8s in stage
+[2m 51s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos, 2m 10s in stage
+[2m 52s] exporting pages — 0 of 1 pages, page p0-total-tools-pos-a
+[2m 54s] exporting pages — 0 of 1 viewports, 1 running, page p4-settings
+[2m 55s] exporting pages — 0 of 1 pages, page p0-total-tools-pos
+[2m 56s] exporting pages — 0 of 1 pages, 1 running, page p0-total-tools-pos-a
+[2m 58s] exporting pages — 0 of 1 viewports, 1 running, page p4-settings
+[3m] exporting pages — 0 of 1 pages, 1 running, page p0-total-tools-pos
+[3m] collecting artifacts — page p0-total-tools-pos-a
+[3m 2s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings
+[3m 4s] collecting artifacts — 1 of 1 pages, page p0-total-tools-pos
+[3m 5s] collecting artifacts — 0 of 1 viewports, page p3-admin
+[3m 7s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings
+[3m 8s] collecting artifacts — page p0-total-tools-pos
+[3m 9s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin
+[3m 10s] collecting artifacts — 0 of 1 viewports, page p1-finance-and-accounting
+[3m 11s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings
+[3m 13s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin
+[3m 15s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting
+[3m 15s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings
+[3m 17s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 17s in stage
+[3m 19s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 19s in stage
+[3m 20s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 19s in stage
+[3m 21s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 21s in stage
+[3m 23s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 23s in stage
+[3m 24s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 24s in stage
+[3m 25s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 25s in stage
+[3m 27s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 27s in stage
+[3m 28s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 28s in stage
+[3m 29s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 29s in stage
+[3m 31s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 31s in stage
+[3m 32s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 32s in stage
+[3m 33s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 33s in stage
+[3m 36s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 36s in stage
+[3m 36s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 36s in stage
+[3m 38s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 37s in stage
+[3m 40s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 40s in stage
+[3m 40s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 40s in stage
+[3m 42s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 41s in stage
+[3m 44s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 44s in stage
+[3m 44s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 44s in stage
+[3m 46s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 46s in stage
+[3m 48s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 48s in stage
+[3m 49s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 48s in stage
+[3m 51s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 51s in stage
+[3m 52s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 52s in stage
+[3m 53s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 52s in stage
+[3m 55s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 55s in stage
+[3m 56s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 56s in stage
+[3m 57s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 57s in stage
+[3m 59s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 59s in stage
+[4m] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 60s in stage
+[4m 1s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 61s in stage
+[4m 3s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 63s in stage
+[4m 5s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 64s in stage
+[4m 5s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 65s in stage
+[4m 7s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 67s in stage
+[4m 9s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 68s in stage
+[4m 9s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 69s in stage
+[4m 11s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 71s in stage
+[4m 13s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 72s in stage
+[4m 13s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 73s in stage
+[4m 16s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 75s in stage
+[4m 17s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 77s in stage
+[4m 17s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 77s in stage
+[4m 20s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 79s in stage
+[4m 22s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 82s in stage
+[4m 24s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 84s in stage
+[4m 25s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 84s in stage
+[4m 27s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 86s in stage
+[4m 28s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 88s in stage
+[4m 29s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 88s in stage
+[4m 31s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 1m 30s in stage
+[4m 32s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 1m 32s in stage
+[4m 33s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 1m 33s in stage
+[4m 35s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 1m 35s in stage
+[4m 36s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 1m 36s in stage
+[4m 37s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 1m 37s in stage
+[4m 39s] collecting artifacts — 0 of 1 viewports, 1 running, page p4-settings, 1m 39s in stage
+[4m 40s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 1m 40s in stage
+[4m 41s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 1m 41s in stage
+[4m 43s] collecting artifacts — 1 of 1 viewports, page p4-settings, 1m 43s in stage
+[4m 44s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 1m 44s in stage
+[4m 45s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 1m 45s in stage
+[4m 47s] collecting artifacts — 0 of 1 pages, 1 running, page p4-settings, 1m 47s in stage
+[4m 49s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 1m 49s in stage
+[4m 49s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 1m 49s in stage
+[4m 51s] collecting artifacts — 0 of 1 pages, 1 running, page p4-settings, 1m 51s in stage
+[4m 54s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 1m 54s in stage
+[4m 55s] collecting artifacts — page p4-settings, 1m 55s in stage
+[4m 56s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 1m 56s in stage
+[4m 58s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 1m 58s in stage
+[4m 59s] collecting artifacts — 0 of 1 viewports, page p2-reports, 1m 58s in stage
+[5m] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m in stage
+[5m 2s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 2m 2s in stage
+[5m 3s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 2s in stage
+[5m 4s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 4s in stage
+[5m 6s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 2m 6s in stage
+[5m 7s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 7s in stage
+[5m 8s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 8s in stage
+[5m 11s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 2m 10s in stage
+[5m 11s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 11s in stage
+[5m 13s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 12s in stage
+[5m 15s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 2m 14s in stage
+[5m 15s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 15s in stage
+[5m 17s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 16s in stage
+[5m 19s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 2m 19s in stage
+[5m 19s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 19s in stage
+[5m 21s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 20s in stage
+[5m 23s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 2m 23s in stage
+[5m 23s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 23s in stage
+[5m 26s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 26s in stage
+[5m 27s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 2m 27s in stage
+[5m 28s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 27s in stage
+[5m 30s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 30s in stage
+[5m 31s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 2m 31s in stage
+[5m 32s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 32s in stage
+[5m 34s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 34s in stage
+[5m 35s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 2m 35s in stage
+[5m 36s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 36s in stage
+[5m 38s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 38s in stage
+[5m 39s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 2m 39s in stage
+[5m 40s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 40s in stage
+[5m 42s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 42s in stage
+[5m 43s] collecting artifacts — 0 of 1 viewports, 1 running, page p3-admin, 2m 43s in stage
+[5m 44s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 44s in stage
+[5m 46s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 46s in stage
+[5m 47s] collecting artifacts — 0 of 1 pages, page p3-admin, 2m 47s in stage
+[5m 48s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 48s in stage
+[5m 50s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 50s in stage
+[5m 52s] collecting artifacts — 0 of 1 pages, 1 running, page p3-admin, 2m 51s in stage
+[5m 52s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 52s in stage
+[5m 54s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 54s in stage
+[5m 56s] collecting artifacts — page p3-admin, 2m 56s in stage
+[5m 57s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 2m 57s in stage
+[5m 59s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 2m 58s in stage
+[6m 2s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 3m 1s in stage
+[6m 3s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 3m 3s in stage
+[6m 6s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 3m 5s in stage
+[6m 7s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-finance-and-accounting, 3m 7s in stage
+[6m 10s] collecting artifacts — 0 of 1 viewports, 1 running, page p2-reports, 3m 10s in stage
+[6m 11s] composing pages — 0 of 1 pages, page p1-finance-and-accounting
+[6m 14s] composing pages — 0 of 1 viewports, 1 running, page p2-reports
+[6m 15s] composing pages — 0 of 1 pages, 1 running, page p1-finance-and-accounting
+[6m 18s] composing pages — 0 of 1 viewports, 1 running, page p2-reports
+[6m 19s] composing pages — 0 of 1 pages, 1 running, page p1-finance-and-accounting
+[6m 22s] composing pages — 0 of 1 viewports, 1 running, page p2-reports
+[6m 24s] composing pages — page p1-finance-and-accounting
+[6m 26s] composing pages — 0 of 1 viewports, 1 running, page p2-reports, 15s in stage
+[6m 40s] still composing pages — 0 of 1 viewports, 1 running, page p2-reports, 29s in stage
+[6m 50s] still composing pages — 0 of 1 viewports, 1 running, page p2-reports, 39s in stage
+[7m] still composing pages — 0 of 1 viewports, 1 running, page p2-reports, 49s in stage
+[7m 10s] still composing pages — 0 of 1 viewports, 1 running, page p2-reports, 59s in stage
+[7m 20s] still composing pages — 0 of 1 viewports, 1 running, page p2-reports, 69s in stage
+[7m 30s] still composing pages — 0 of 1 viewports, 1 running, page p2-reports, 79s in stage
+[7m 40s] still composing pages — 0 of 1 viewports, 1 running, page p2-reports, 89s in stage
+[7m 44s] composing pages — 1 of 1 viewports, page p2-reports, 1m 33s in stage
+[7m 48s] composing pages — 0 of 1 pages, 1 running, page p2-reports, 1m 37s in stage
+[7m 52s] composing pages — 1 of 1 pages, page p2-reports, 1m 41s in stage
+[7m 57s] composing pages — page p2-reports, 1m 46s in stage
+Prototype inventory cannot start because Chromium is not installed in the managed 12ui browser directory at /home/runner/.local/share/12ui/cache/ms-playwright.
+Install the matching browser for this environment, then retry:
+
+  PLAYWRIGHT_BROWSERS_PATH='/home/runner/.local/share/12ui/cache/ms-playwright' '/opt/hostedtoolcache/node/22.23.3/x64/bin/node' '/home/runner/.local/share/12ui/versions/0.2.130/node_modules/playwright/cli.js' install --only-shell chromium
+
+Detailed stage diagnostics remain in /home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/.prototype-work/inventory.log.

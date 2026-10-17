@@ -1,0 +1,10 @@
+{
+  "version": 1,
+  "policyRevision": "conversion-receipt-policy-v1",
+  "sha256": "db9e544b64dc9d5f0501fb2b6439bf67c461085ec459d6d70fdb51811c06a155",
+  "conversionId": "e22543c8-fb7a-45ed-9a5f-2b3734c66b2e",
+  "model": "standard",
+  "boughtBy": "crt-8d77e3acb90f4fb8dc791b1bce571d4b3cf50ceb",
+  "expiresAt": "2026-10-24T15:38:29.059Z",
+  "createdAt": "2026-10-17T15:42:44.507Z"
+}

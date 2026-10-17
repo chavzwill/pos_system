@@ -1,0 +1,49 @@
+{
+  "version": 1,
+  "workflowRevision": "branch-execute-v3",
+  "status": "succeeded",
+  "runKey": "total-tools-support-v1",
+  "origin": "https://12ui.com",
+  "scope": "site",
+  "concept": "Extend this approved Total Tools POS design into five supporting operational states: Finance and Accounting journal ledger with balances and posting review, Reports filter form and scannable results table, Admin employee and permission management, Settings company and integration configuration forms, and Guide Me as a focused non-modal contextual task companion shown alongside a receiving form with numbered steps, one next action and graceful completion. Reuse the selected neutral shell, restrained exact green #0B7A3E and yellow #F2D11F, modern sans typography, fine line icons and consistent controls. No green sidebar, dashboard filler, fake charts or invented product functionality. Accessible focus, well-labelled forms, clear table hierarchy, refined dialogs. Reference designs only; certified handlers will remain the implementation authority.",
+  "conceptSha256": "eb809710580791e99c8ef41ecddc7f0ccc6665f84821ea408e9c0f0fe1cf4aae",
+  "winner": {
+    "kind": "image",
+    "imagePath": "/home/runner/work/pos_system/pos_system/docs/ui-design/recovered/candidates/B.png",
+    "sha256": "bf863ecf7d804cafc40f4b2a0322df4167f3872bc3119ee924a9fb0ef8f3dd5f",
+    "mediaType": "image/png",
+    "width": 1536,
+    "height": 1024
+  },
+  "generationCanvas": {
+    "provenance": "inherited-from-winner",
+    "winner": {
+      "width": 1536,
+      "height": 1024
+    }
+  },
+  "maxScreens": 5,
+  "generation": {
+    "engine": "api",
+    "reason": "No Codex CLI was found: TWELVE_UI_CODEX_BIN and CODEX_CLI_PATH are not set, codex is not on PATH, and the ChatGPT app is not installed."
+  },
+  "convert": {
+    "output": "html",
+    "imageBackendExplicit": false,
+    "requestedEngine": "auto",
+    "selection": {
+      "engine": "api",
+      "reason": "No Codex CLI was found: TWELVE_UI_CODEX_BIN and CODEX_CLI_PATH are not set, codex is not on PATH, and the ChatGPT app is not installed.",
+      "codexBin": "",
+      "codexHome": "/home/runner/.codex",
+      "quiet": false
+    },
+    "model": "standard"
+  },
+  "prototype": true,
+  "polish": true,
+  "createdAt": "2026-10-17T15:37:49.133Z",
+  "runId": "crt-8d77e3acb90f4fb8dc791b1bce571d4b3cf50ceb",
+  "completedAt": "2026-10-17T15:45:46.914Z",
+  "completionPath": "/home/runner/work/pos_system/pos_system/docs/ui-design/evidence/support-system/branch/branch.complete.json"
+}
