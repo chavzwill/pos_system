@@ -1,0 +1,35 @@
+name: Inspect 12ui Recovery
+on:
+  push:
+    branches: [redesign/total-tools-frontend]
+    paths: ['.github/workflows/inspect-12ui-recovery.yml']
+permissions:
+  contents: write
+jobs:
+  inspect:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: redesign/total-tools-frontend
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - run: npx -y @12ui/design cli install
+      - name: Read installed recovery implementation
+        run: |
+          node <<'NODE'
+          const fs=require('fs'),path=require('path');
+          const base=process.env.HOME+'/.local/share/12ui/node_modules/@12ui/design';
+          const out=[];
+          const walk=p=>{for(const e of fs.readdirSync(p,{withFileTypes:true})){if(e.name==='node_modules')continue;const f=path.join(p,e.name);if(e.isDirectory())walk(f);else if(/\.(js|mjs|cjs|json)$/.test(e.name)){const s=fs.readFileSync(f,'utf8');if(!/draft|hosted-run/.test(s))continue;out.push('\nFILE '+path.relative(base,f));const re=/draft\.json|draft-run|run\.json|hostedRunId|kind:\s*['"]draft|api\/v1\/create|downloadCandidate|draft-state|createRunId/g;let m;while((m=re.exec(s))){out.push(s.slice(Math.max(0,m.index-700),m.index+1500));if(out.join('').length>350000)break;}}}};
+          walk(base);fs.mkdirSync('docs/ui-design/evidence',{recursive:true});fs.writeFileSync('docs/ui-design/evidence/cli-recovery-source.txt',out.join('\n'));
+          NODE
+          git config user.name "Total Tools Design CI"
+          git config user.email "design-ci@users.noreply.github.com"
+          git add docs/ui-design/evidence/cli-recovery-source.txt
+          git commit -m "docs(ui): document installed design recovery implementation [skip ci]"
+          git pull --rebase origin redesign/total-tools-frontend
+          git push origin HEAD:redesign/total-tools-frontend
