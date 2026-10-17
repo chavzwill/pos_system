@@ -1,0 +1,505 @@
+
+12ui branch engine: api (No Codex CLI was found: TWELVE_UI_CODEX_BIN and CODEX_CLI_PATH are not set, codex is not on PATH, and the ChatGPT app is not installed.)
+12ui engine: api (No Codex CLI was found: TWELVE_UI_CODEX_BIN and CODEX_CLI_PATH are not set, codex is not on PATH, and the ChatGPT app is not installed.)
+branch execute: scope site, converting pages to html
+  paid: one branch screen per planned slot, plus one package conversion per exported page; each complete app state is an exported page
+  done: screens in /home/runner/work/pos_system/pos_system/docs/ui-design/operations-system/branch/screens, pages in /home/runner/work/pos_system/pos_system/docs/ui-design/operations-system/branch/pages, prototype in /home/runner/work/pos_system/pos_system/docs/ui-design/operations-system/branch/prototype
+  expect: ~8m 12s (measured phase medians; a run whose page conversions all overlap generation finishes nearer 6m)
+  this command blocks until done; progress ticks at least every 15s
+[0s] claiming the run
+[0s] claiming planned screens — planning the screens (10-20s, buys no image)
+[15s] still claiming planned screens — planning the screens (10-20s, buys no image), 15s in stage
+[25s] still claiming planned screens — planning the screens (10-20s, buys no image), 25s in stage
+[35s] still claiming planned screens — planning the screens (10-20s, buys no image), 35s in stage
+[39s] planning screens — 5 logical page group(s) packaged as 9 conversion page(s), with complete app states separate — the approved page plus 8 — 8 screen(s) to generate
+[39s] dispatching — 0 of 8 screens generated, 8 waiting, 0 blocked, 0 failed
+[39s] dispatching — screen a dispatched
+[39s] dispatching — 0 of 8 screens generated, 1 running, 7 waiting, 0 blocked, 0 failed
+[39s] dispatching — screen c dispatched
+[39s] dispatching — 0 of 8 screens generated, 2 running, 6 waiting, 0 blocked, 0 failed
+[39s] dispatching — screen e dispatched
+[39s] dispatching — 0 of 8 screens generated, 3 running, 5 waiting, 0 blocked, 0 failed
+[39s] dispatching — screen g dispatched
+[39s] dispatching — 0 of 8 screens generated, 4 running, 4 waiting, 0 blocked, 0 failed
+[39s] dispatching — screen h dispatched
+[39s] dispatching — 0 of 8 screens generated, 5 running, 3 waiting, 0 blocked, 0 failed
+[44s] converting viewports — 0 of 1 viewports, page p0-total-tools-pos-sales-and-reference-reco
+[45s] converting viewports — 0 of 8 screens generated, 5 running, 3 waiting, 0 blocked, 0 failed
+[49s] converting viewports — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco
+[51s] converting viewports — 0 of 8 screens generated, 5 running, 3 waiting, 0 blocked, 0 failed
+[52s] converting viewports — screen h succeeded
+[52s] converting viewports — 1 of 8 screens generated, 4 running, 3 waiting, 0 blocked, 0 failed
+[52s] converting viewports — screen a succeeded
+[52s] converting viewports — 2 of 8 screens generated, 3 running, 3 waiting, 0 blocked, 0 failed
+[52s] converting viewports — screen b dispatched
+[52s] converting viewports — 2 of 8 screens generated, 4 running, 2 waiting, 0 blocked, 0 failed
+[53s] converting viewports — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco
+[53s] converting viewports — 0 of 1 viewports, page p4-phone-sales-checkout
+[54s] converting viewports — 0 of 1 viewports, page p0-total-tools-pos-sales-and-reference-reco-a
+[54s] converting viewports — screen c succeeded
+[54s] converting viewports — 3 of 8 screens generated, 3 running, 2 waiting, 0 blocked, 0 failed
+[54s] converting viewports — screen d dispatched
+[54s] converting viewports — 3 of 8 screens generated, 4 running, 1 waiting, 0 blocked, 0 failed
+[55s] converting viewports — screen e succeeded
+[55s] converting viewports — 4 of 8 screens generated, 3 running, 1 waiting, 0 blocked, 0 failed
+[55s] converting viewports — screen f dispatched
+[55s] converting viewports — 4 of 8 screens generated, 4 running, 0 waiting, 0 blocked, 0 failed
+[56s] converting viewports — screen g succeeded
+[56s] converting viewports — 5 of 8 screens generated, 3 running, 0 waiting, 0 blocked, 0 failed
+[57s] converting viewports — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout
+[58s] converting viewports — 5 of 8 screens generated, 3 running, 0 waiting, 0 blocked, 0 failed
+[58s] converting viewports — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[59s] converting viewports — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco
+[60s] converting viewports — 5 of 8 screens generated, 3 running, 0 waiting, 0 blocked, 0 failed, 16s in stage
+[62s] converting viewports — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 18s in stage
+[62s] converting viewports — 5 of 8 screens generated, 3 running, 0 waiting, 0 blocked, 0 failed, 18s in stage
+[62s] converting viewports — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 18s in stage
+[63s] converting viewports — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 19s in stage
+[64s] converting viewports — 5 of 8 screens generated, 3 running, 0 waiting, 0 blocked, 0 failed, 20s in stage
+[65s] converting viewports — screen b succeeded, 21s in stage
+[65s] converting viewports — 6 of 8 screens generated, 2 running, 0 waiting, 0 blocked, 0 failed, 21s in stage
+[66s] converting viewports — screen d succeeded, 22s in stage
+[66s] converting viewports — 7 of 8 screens generated, 1 running, 0 waiting, 0 blocked, 0 failed, 22s in stage
+[66s] converting viewports — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 22s in stage
+[67s] converting viewports — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 23s in stage
+[67s] converting viewports — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 23s in stage
+[68s] converting viewports — 7 of 8 screens generated, 1 running, 0 waiting, 0 blocked, 0 failed, 24s in stage
+[68s] converting viewports — screen f succeeded, 24s in stage
+[68s] converting viewports — 8 of 8 screens generated, 0 waiting, 0 blocked, 0 failed, 24s in stage
+[68s] downloading screens — 8 of 8 screens generated, 0 waiting, 0 blocked, 0 failed
+[69s] downloading screens — 8 screen(s) on disk
+[69s] converting pages — 8 of 8 screens generated, 0 waiting, 0 blocked, 0 failed
+[69s] converting pages — 9 package conversion page(s): continuous documents stay joined, complete app states stay separate; up to 3 at a time
+[71s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[71s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout
+[71s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco
+[75s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[75s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout
+[76s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco
+[79s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[79s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout
+[80s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco
+[83s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[83s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout
+[84s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 16s in stage
+[87s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 18s in stage
+[87s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 19s in stage
+[88s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 20s in stage
+[1m 31s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 22s in stage
+[1m 31s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 23s in stage
+[1m 33s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 24s in stage
+[1m 35s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 26s in stage
+[1m 36s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 27s in stage
+[1m 37s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 28s in stage
+[1m 40s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 32s in stage
+[1m 41s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 32s in stage
+[1m 41s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 32s in stage
+[1m 45s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 36s in stage
+[1m 45s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 36s in stage
+[1m 47s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 38s in stage
+[1m 49s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 40s in stage
+[1m 49s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 40s in stage
+[1m 51s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 42s in stage
+[1m 53s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 44s in stage
+[1m 53s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 45s in stage
+[1m 55s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 46s in stage
+[1m 57s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 48s in stage
+[1m 58s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 49s in stage
+[1m 59s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 50s in stage
+[2m 1s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 52s in stage
+[2m 2s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 53s in stage
+[2m 3s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 54s in stage
+[2m 5s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 57s in stage
+[2m 6s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 57s in stage
+[2m 7s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 58s in stage
+[2m 9s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 61s in stage
+[2m 10s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 61s in stage
+[2m 12s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 63s in stage
+[2m 14s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 65s in stage
+[2m 14s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 65s in stage
+[2m 16s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 68s in stage
+[2m 18s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 69s in stage
+[2m 18s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 70s in stage
+[2m 20s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 72s in stage
+[2m 22s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 73s in stage
+[2m 23s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 74s in stage
+[2m 25s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 76s in stage
+[2m 26s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 77s in stage
+[2m 27s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 78s in stage
+[2m 29s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 80s in stage
+[2m 30s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 81s in stage
+[2m 31s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 82s in stage
+[2m 33s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 84s in stage
+[2m 34s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 85s in stage
+[2m 35s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 86s in stage
+[2m 37s] converting pages — 0 of 1 viewports, 1 running, page p4-phone-sales-checkout, 88s in stage
+[2m 38s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 1m 30s in stage
+[2m 39s] converting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 1m 30s in stage
+[2m 41s] exporting pages — 0 of 1 pages, page p4-phone-sales-checkout
+[2m 43s] exporting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[2m 44s] exporting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco
+[2m 45s] exporting pages — 0 of 1 pages, 1 running, page p4-phone-sales-checkout
+[2m 47s] exporting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[2m 48s] exporting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco
+[2m 49s] exporting pages — 0 of 1 pages, 1 running, page p4-phone-sales-checkout
+[2m 52s] exporting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[2m 52s] exporting pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco
+[2m 53s] collecting artifacts — page p4-phone-sales-checkout
+[2m 56s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[2m 56s] collecting artifacts — 0 of 1 viewports, page p1-purchasing-and-receiving
+[2m 56s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco
+[3m] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[3m] collecting artifacts — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving
+[3m 1s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco
+[3m 4s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[3m 4s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving
+[3m 5s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco
+[3m 8s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[3m 9s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 15s in stage
+[3m 9s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 15s in stage
+[3m 12s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 19s in stage
+[3m 13s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 19s in stage
+[3m 13s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 20s in stage
+[3m 17s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 24s in stage
+[3m 18s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 24s in stage
+[3m 21s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 28s in stage
+[3m 22s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 28s in stage
+[3m 22s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 28s in stage
+[3m 25s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco, 32s in stage
+[3m 26s] collecting artifacts — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 32s in stage
+[3m 26s] collecting artifacts — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 33s in stage
+[3m 30s] composing pages — 0 of 1 pages, page p0-total-tools-pos-sales-and-reference-reco
+[3m 30s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[3m 30s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving
+[3m 34s] composing pages — 0 of 1 pages, 1 running, page p0-total-tools-pos-sales-and-reference-reco
+[3m 34s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[3m 35s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving
+[3m 38s] composing pages — page p0-total-tools-pos-sales-and-reference-reco
+[3m 38s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[3m 39s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving
+[3m 40s] composing pages — 0 of 1 viewports, page p2-rentals-and-repairs
+[3m 42s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a
+[3m 44s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving
+[3m 45s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 16s in stage
+[3m 47s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 17s in stage
+[3m 49s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 19s in stage
+[3m 49s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 20s in stage
+[3m 51s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 21s in stage
+[3m 53s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 23s in stage
+[3m 54s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 24s in stage
+[3m 55s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 25s in stage
+[3m 57s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 27s in stage
+[3m 58s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 28s in stage
+[3m 59s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 29s in stage
+[4m 1s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 32s in stage
+[4m 2s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 32s in stage
+[4m 3s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 34s in stage
+[4m 5s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 36s in stage
+[4m 6s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 36s in stage
+[4m 7s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 38s in stage
+[4m 9s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 40s in stage
+[4m 10s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 40s in stage
+[4m 11s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 42s in stage
+[4m 13s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 44s in stage
+[4m 14s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 45s in stage
+[4m 15s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 46s in stage
+[4m 18s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 48s in stage
+[4m 18s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 49s in stage
+[4m 21s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 51s in stage
+[4m 22s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 52s in stage
+[4m 22s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 53s in stage
+[4m 25s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 55s in stage
+[4m 26s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 56s in stage
+[4m 26s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 57s in stage
+[4m 29s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 59s in stage
+[4m 30s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 60s in stage
+[4m 31s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 61s in stage
+[4m 33s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 63s in stage
+[4m 34s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 64s in stage
+[4m 35s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 65s in stage
+[4m 37s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 67s in stage
+[4m 38s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 69s in stage
+[4m 39s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 69s in stage
+[4m 41s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 72s in stage
+[4m 42s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 73s in stage
+[4m 43s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 73s in stage
+[4m 45s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 76s in stage
+[4m 46s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 77s in stage
+[4m 47s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 78s in stage
+[4m 49s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 80s in stage
+[4m 50s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 81s in stage
+[4m 52s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 83s in stage
+[4m 53s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 84s in stage
+[4m 55s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 85s in stage
+[4m 56s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 87s in stage
+[4m 58s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 88s in stage
+[4m 59s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 89s in stage
+[5m] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 1m 31s in stage
+[5m 2s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 1m 32s in stage
+[5m 3s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 1m 33s in stage
+[5m 4s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 1m 35s in stage
+[5m 6s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 1m 37s in stage
+[5m 7s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 1m 37s in stage
+[5m 9s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 1m 39s in stage
+[5m 10s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 1m 41s in stage
+[5m 11s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 1m 42s in stage
+[5m 13s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 1m 43s in stage
+[5m 14s] composing pages — 0 of 1 pages, page p0-total-tools-pos-sales-and-reference-reco-a, 1m 45s in stage
+[5m 15s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 1m 46s in stage
+[5m 17s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 1m 47s in stage
+[5m 18s] composing pages — 0 of 1 pages, 1 running, page p0-total-tools-pos-sales-and-reference-reco-a, 1m 49s in stage
+[5m 19s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 1m 50s in stage
+[5m 21s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 1m 51s in stage
+[5m 24s] composing pages — page p0-total-tools-pos-sales-and-reference-reco-a, 1m 55s in stage
+[5m 25s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 1m 55s in stage
+[5m 25s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 1m 56s in stage
+[5m 28s] composing pages — 0 of 1 viewports, page p3-dispatch-jobs, 1m 58s in stage
+[5m 29s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 1m 59s in stage
+[5m 29s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m in stage
+[5m 32s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 2m 2s in stage
+[5m 33s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 2m 3s in stage
+[5m 33s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m 4s in stage
+[5m 36s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 2m 7s in stage
+[5m 37s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 2m 7s in stage
+[5m 38s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m 8s in stage
+[5m 41s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 2m 11s in stage
+[5m 41s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 2m 12s in stage
+[5m 42s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m 12s in stage
+[5m 45s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 2m 15s in stage
+[5m 46s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 2m 17s in stage
+[5m 46s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m 17s in stage
+[5m 52s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 2m 22s in stage
+[5m 52s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 2m 22s in stage
+[5m 52s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m 22s in stage
+[5m 56s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 2m 26s in stage
+[5m 56s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m 26s in stage
+[5m 59s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 2m 30s in stage
+[6m] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 2m 31s in stage
+[6m 3s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m 33s in stage
+[6m 4s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 2m 34s in stage
+[6m 5s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 2m 35s in stage
+[6m 7s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m 37s in stage
+[6m 8s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 2m 38s in stage
+[6m 9s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 2m 39s in stage
+[6m 11s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m 41s in stage
+[6m 12s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 2m 43s in stage
+[6m 13s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 2m 44s in stage
+[6m 15s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m 45s in stage
+[6m 16s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 2m 47s in stage
+[6m 17s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 2m 48s in stage
+[6m 19s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m 50s in stage
+[6m 20s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 2m 51s in stage
+[6m 21s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving, 2m 52s in stage
+[6m 23s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m 54s in stage
+[6m 25s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 2m 55s in stage
+[6m 26s] composing pages — 1 of 1 viewports, page p1-purchasing-and-receiving, 2m 56s in stage
+[6m 27s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 2m 58s in stage
+[6m 29s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 2m 59s in stage
+[6m 31s] composing pages — 0 of 1 pages, 1 running, page p1-purchasing-and-receiving, 3m 1s in stage
+[6m 32s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 2s in stage
+[6m 33s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 3s in stage
+[6m 35s] composing pages — page p1-purchasing-and-receiving, 3m 6s in stage
+[6m 36s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 6s in stage
+[6m 37s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 8s in stage
+[6m 39s] composing pages — 0 of 1 viewports, page p0-total-tools-pos-sales-and-reference-reco-b, 3m 9s in stage
+[6m 40s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 10s in stage
+[6m 41s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 12s in stage
+[6m 43s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 3m 13s in stage
+[6m 44s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 15s in stage
+[6m 45s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 16s in stage
+[6m 47s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 3m 18s in stage
+[6m 48s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 19s in stage
+[6m 50s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 20s in stage
+[6m 51s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 3m 22s in stage
+[6m 52s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 23s in stage
+[6m 54s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 25s in stage
+[6m 55s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 3m 26s in stage
+[6m 57s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 27s in stage
+[6m 58s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 29s in stage
+[7m] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 3m 30s in stage
+[7m 2s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 32s in stage
+[7m 2s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 33s in stage
+[7m 4s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 3m 34s in stage
+[7m 6s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 37s in stage
+[7m 6s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 37s in stage
+[7m 8s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 3m 38s in stage
+[7m 10s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 41s in stage
+[7m 11s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 41s in stage
+[7m 12s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 3m 43s in stage
+[7m 14s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 45s in stage
+[7m 15s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 45s in stage
+[7m 16s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 3m 47s in stage
+[7m 18s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 49s in stage
+[7m 19s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 49s in stage
+[7m 20s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 3m 51s in stage
+[7m 23s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 53s in stage
+[7m 23s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 54s in stage
+[7m 25s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 3m 55s in stage
+[7m 27s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 3m 57s in stage
+[7m 27s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 3m 58s in stage
+[7m 29s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 3m 59s in stage
+[7m 31s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 4m 1s in stage
+[7m 31s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 2s in stage
+[7m 34s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 4m 4s in stage
+[7m 35s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs, 4m 5s in stage
+[7m 36s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 6s in stage
+[7m 38s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 4m 8s in stage
+[7m 39s] composing pages — 1 of 1 viewports, page p2-rentals-and-repairs, 4m 10s in stage
+[7m 40s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 10s in stage
+[7m 42s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 4m 13s in stage
+[7m 43s] composing pages — 0 of 1 pages, page p2-rentals-and-repairs, 4m 14s in stage
+[7m 44s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 14s in stage
+[7m 46s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 4m 17s in stage
+[7m 47s] composing pages — 0 of 1 pages, 1 running, page p2-rentals-and-repairs, 4m 18s in stage
+[7m 48s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 18s in stage
+[7m 51s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 4m 21s in stage
+[7m 52s] composing pages — 0 of 1 pages, 1 running, page p2-rentals-and-repairs, 4m 22s in stage
+[7m 52s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 23s in stage
+[7m 55s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 4m 26s in stage
+[7m 56s] composing pages — page p2-rentals-and-repairs, 4m 26s in stage
+[7m 57s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 27s in stage
+[7m 59s] composing pages — 0 of 1 viewports, page p1-purchasing-and-receiving-d, 4m 30s in stage
+[7m 59s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 4m 30s in stage
+[8m 1s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 31s in stage
+[8m 3s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 4m 34s in stage
+[8m 4s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 4m 35s in stage
+[8m 6s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 36s in stage
+[8m 7s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 4m 38s in stage
+[8m 9s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 4m 39s in stage
+[8m 10s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 41s in stage
+[8m 12s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 4m 42s in stage
+[8m 13s] branch execute has been running 8m 13s, past its ~8m 12s typical — still advancing: 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b. The service reports stage facts, not a completion time; ticks continue.
+[8m 13s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 4m 43s in stage
+[8m 14s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 45s in stage
+[8m 16s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 4m 46s in stage
+[8m 17s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 4m 47s in stage
+[8m 18s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 49s in stage
+[8m 20s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 4m 50s in stage
+[8m 21s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 4m 52s in stage
+[8m 23s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 53s in stage
+[8m 24s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 4m 54s in stage
+[8m 26s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 4m 56s in stage
+[8m 27s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 4m 57s in stage
+[8m 28s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 4m 59s in stage
+[8m 30s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m in stage
+[8m 31s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 5m 1s in stage
+[8m 32s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 3s in stage
+[8m 34s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 4s in stage
+[8m 35s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 5m 5s in stage
+[8m 37s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 8s in stage
+[8m 38s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 8s in stage
+[8m 39s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 5m 10s in stage
+[8m 42s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 12s in stage
+[8m 42s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 13s in stage
+[8m 43s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 5m 14s in stage
+[8m 46s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 16s in stage
+[8m 46s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 17s in stage
+[8m 47s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 5m 18s in stage
+[8m 50s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 20s in stage
+[8m 50s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 21s in stage
+[8m 51s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 5m 22s in stage
+[8m 54s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 25s in stage
+[8m 55s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 25s in stage
+[8m 56s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 5m 26s in stage
+[8m 58s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 29s in stage
+[8m 59s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 29s in stage
+[9m] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 5m 30s in stage
+[9m 2s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 33s in stage
+[9m 3s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 33s in stage
+[9m 4s] composing pages — 0 of 1 viewports, 1 running, page p3-dispatch-jobs, 5m 34s in stage
+[9m 6s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 37s in stage
+[9m 7s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 37s in stage
+[9m 9s] composing pages — 0 of 1 pages, page p3-dispatch-jobs, 5m 40s in stage
+[9m 11s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 41s in stage
+[9m 11s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 42s in stage
+[9m 13s] composing pages — 0 of 1 pages, page p3-dispatch-jobs, 5m 44s in stage
+[9m 15s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 45s in stage
+[9m 15s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 46s in stage
+[9m 18s] composing pages — 0 of 1 pages, page p3-dispatch-jobs, 5m 48s in stage
+[9m 19s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 49s in stage
+[9m 19s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 50s in stage
+[9m 22s] composing pages — 0 of 1 pages, page p3-dispatch-jobs, 5m 52s in stage
+[9m 23s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 53s in stage
+[9m 24s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 54s in stage
+[9m 26s] composing pages — 0 of 1 pages, page p3-dispatch-jobs, 5m 56s in stage
+[9m 27s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 5m 58s in stage
+[9m 28s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 5m 58s in stage
+[9m 30s] composing pages — 0 of 1 pages, page p3-dispatch-jobs, 6m in stage
+[9m 31s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 6m 2s in stage
+[9m 32s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 6m 2s in stage
+[9m 34s] composing pages — 0 of 1 pages, 1 running, page p3-dispatch-jobs, 6m 5s in stage
+[9m 35s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 6m 6s in stage
+[9m 36s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 6m 7s in stage
+[9m 38s] composing pages — 1 of 1 pages, page p3-dispatch-jobs, 6m 9s in stage
+[9m 41s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 6m 11s in stage
+[9m 41s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 6m 12s in stage
+[9m 43s] composing pages — page p3-dispatch-jobs, 6m 13s in stage
+[9m 45s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 6m 15s in stage
+[9m 45s] composing pages — 0 of 1 viewports, page p2-rentals-and-repairs-f, 6m 15s in stage
+[9m 46s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 6m 16s in stage
+[9m 49s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 6m 20s in stage
+[9m 50s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 6m 20s in stage
+[9m 50s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 6m 20s in stage
+[9m 53s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 6m 24s in stage
+[9m 54s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 6m 25s in stage
+[9m 54s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 6m 25s in stage
+[9m 57s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 6m 28s in stage
+[9m 58s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 6m 29s in stage
+[10m 1s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 6m 32s in stage
+[10m 1s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 6m 32s in stage
+[10m 3s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 6m 33s in stage
+[10m 6s] composing pages — 0 of 1 viewports, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 6m 36s in stage
+[10m 6s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 6m 36s in stage
+[10m 7s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 6m 37s in stage
+[10m 10s] composing pages — 0 of 1 pages, page p0-total-tools-pos-sales-and-reference-reco-b, 6m 40s in stage
+[10m 10s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 6m 40s in stage
+[10m 12s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 6m 42s in stage
+[10m 14s] composing pages — 0 of 1 pages, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 6m 44s in stage
+[10m 16s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 6m 46s in stage
+[10m 17s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 6m 47s in stage
+[10m 18s] composing pages — 0 of 1 pages, 1 running, page p0-total-tools-pos-sales-and-reference-reco-b, 6m 49s in stage
+[10m 20s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 6m 51s in stage
+[10m 21s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 6m 51s in stage
+[10m 22s] composing pages — page p0-total-tools-pos-sales-and-reference-reco-b, 6m 53s in stage
+[10m 25s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 6m 55s in stage
+[10m 25s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 6m 55s in stage
+[10m 29s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 6m 59s in stage
+[10m 29s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 7m in stage
+[10m 33s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 7m 3s in stage
+[10m 33s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 7m 4s in stage
+[10m 37s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 7m 8s in stage
+[10m 37s] composing pages — 0 of 1 viewports, 1 running, page p1-purchasing-and-receiving-d, 7m 8s in stage
+[10m 41s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 7m 12s in stage
+[10m 42s] composing pages — 1 of 1 viewports, page p1-purchasing-and-receiving-d, 7m 12s in stage
+[10m 46s] composing pages — 0 of 1 pages, page p1-purchasing-and-receiving-d, 7m 16s in stage
+[10m 46s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 7m 17s in stage
+[10m 50s] composing pages — 0 of 1 pages, page p1-purchasing-and-receiving-d, 7m 20s in stage
+[10m 51s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 7m 21s in stage
+[10m 54s] composing pages — 0 of 1 pages, 1 running, page p1-purchasing-and-receiving-d, 7m 24s in stage
+[10m 55s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 7m 25s in stage
+[10m 58s] composing pages — 0 of 1 pages, 1 running, page p1-purchasing-and-receiving-d, 7m 29s in stage
+[10m 59s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 7m 29s in stage
+[11m 2s] composing pages — 0 of 1 pages, 1 running, page p1-purchasing-and-receiving-d, 7m 33s in stage
+[11m 3s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 7m 34s in stage
+[11m 7s] composing pages — 1 of 1 pages, page p1-purchasing-and-receiving-d, 7m 37s in stage
+[11m 7s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 7m 38s in stage
+[11m 11s] composing pages — page p1-purchasing-and-receiving-d, 7m 41s in stage
+[11m 12s] composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 7m 42s in stage
+[11m 25s] still composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 7m 56s in stage
+[11m 35s] still composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 8m 6s in stage
+[11m 45s] still composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 8m 16s in stage
+[11m 55s] still composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 8m 26s in stage
+[12m 5s] still composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 8m 36s in stage
+[12m 15s] still composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 8m 46s in stage
+[12m 25s] still composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 8m 56s in stage
+[12m 35s] still composing pages — 0 of 1 viewports, 1 running, page p2-rentals-and-repairs-f, 9m 6s in stage
+[12m 35s] composing pages — 1 of 1 viewports, page p2-rentals-and-repairs-f, 9m 6s in stage
+[12m 41s] composing pages — 0 of 1 pages, 1 running, page p2-rentals-and-repairs-f, 9m 11s in stage
+[12m 45s] composing pages — 1 of 1 pages, page p2-rentals-and-repairs-f, 9m 15s in stage
+[12m 50s] composing pages — page p2-rentals-and-repairs-f, 9m 20s in stage
+Prototype inventory cannot start because Chromium is not installed in the managed 12ui browser directory at /home/runner/.local/share/12ui/cache/ms-playwright.
+Install the matching browser for this environment, then retry:
+
+  PLAYWRIGHT_BROWSERS_PATH='/home/runner/.local/share/12ui/cache/ms-playwright' '/opt/hostedtoolcache/node/22.23.3/x64/bin/node' '/home/runner/.local/share/12ui/versions/0.2.130/node_modules/playwright/cli.js' install --only-shell chromium
+
+Detailed stage diagnostics remain in /home/runner/work/pos_system/pos_system/docs/ui-design/operations-system/branch/.prototype-work/inventory.log.
