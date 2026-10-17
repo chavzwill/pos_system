@@ -48,7 +48,12 @@ FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-capabilities.js
 //# sourceMappingURL=cli-capabilities.js.map
 
 FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-draft-command.js
-} from './cli-usage.js';
+import { readFile, stat } from 'node:fs/promises';
+import path from 'node:path';
+import { TwelveUiBranchClient, } from './branch-client.js';
+import { booleanFlag, stringFlag } from './cli-arguments.js';
+import { CliRefusal } from './cli-refusal.js';
+import { usageRefusal } from './cli-usage.js';
 import { createLongRunningProgress, nextActionLine, secondsSince, } from './cli-progress.js';
 import { readConversionConfig } from './config.js';
 import { INSPIRATION_ATTEMPT_FILE } from './cli-corpus-types.js';
@@ -58,21 +63,6 @@ import { draftLocalRunKey } from './draft-identity.js';
 import { draftPaths, readDraftRecord, writeDraftCompletion, } from './draft-workspace.js';
 import { DRAFT_CANDIDATE_COUNT, DRAFT_CANDIDATE_COUNT_MAXIMUM, DRAFT_CANDIDATE_COUNT_MINIMUM, DRAFT_CORPUS_MODE_FLAG, parseDraftCorpusMode, draftReferenceRetrieval, prepareDraftRun, } from './draft-run.js';
 import { assertReferenceSearchServable } from './reference-search-mode.js';
-import { readDraftConcept, readDraftCorpusQuery } from './draft-corpus-query.js';
-import { loadCorpusReferenceImage } from './cli-corpus-reference-image.js';
-import { DEFAULT_DRAFT_REFERENCE_RETAIN, DRAFT_LAYOUT_RETAIN, draftRetainIdentity, draftRetainsLayout, parseDraftRetainFlag, } from './draft-retain.js';
-import { IMPROVE_RETAIN_ALL_KEPT_REFUSAL, improveRetainKeepsEverything, } from './improve-concept.js';
-import { dispatchHostedDraftSlots, downloadHostedDraftCandidates, hostedDraftRunIsSettled, HOSTED_DRAFT_CANDIDATE_DURATION_SECONDS, HostedDraftFailureError, summarizeHostedDraftRun, waitForHostedDraftRun, } from './hosted-draft-run.js';
-import { finishDraftDispatchAttempt, startDraftDispatchAttempt, } from './draft-dispatch-attempt.js';
-/** `12ui draft` owns corpus retrieval, the hosted run, and local image materialization. */
-/**
- * A draft is the CLI's primitive for redesign, improve and branch work, never the first round of a user choosing among
- * new designs: that is the Design workspace started from the brief, whose first round is twelve options each drawn from
- * its own sketch (workspace-start.ts). Measured 2026-10-10 (sketches-first-round): agents followed this answer's earlier
- * "the Design workspace comes first" to a draft first round in 11 of 11 product sessions, so no session showed a sketch.
- */
-export const CHOOSING_STARTS_FROM_BRIEF = 'A user choosing among new de
-ertReferenceSearchServable } from './reference-search-mode.js';
 import { readDraftConcept, readDraftCorpusQuery } from './draft-corpus-query.js';
 import { loadCorpusReferenceImage } from './cli-corpus-reference-image.js';
 import { DEFAULT_DRAFT_REFERENCE_RETAIN, DRAFT_LAYOUT_RETAIN, draftRetainIdentity, draftRetainsLayout, parseDraftRetainFlag, } from './draft-retain.js';
@@ -101,7 +91,636 @@ const parseMode = (flags, hasSource) => {
     throw new Error('--mode must be exploratory or reskin');
 };
 const parseAspect = (flags) => {
-    const aspect = stringFlag(
+    const aspect = stringFlag(flags, 'aspect')?.trim();
+    if (aspect === undefined)
+        return 'landscape';
+    if (aspect === 'landscape' || aspect === 'portrait' || aspect === 'square')
+        return aspect;
+    throw new Error('--aspect must be landscape, portrait, or square');
+};
+/** Undocumented legacy alias, normalized to a public profile before every hosted call. */
+const DRAFT_IMAGE_MODEL_FLAG = '--image-model';
+/** Customer-facing Draft tier. */
+export const DRAFT_IMAGE_PROFILE_FLAG = '--profile';
+const parseProfile = (value) => {
+    if (value === 'standard' || value === 'pro')
+        return value;
+    throw new Error('--profile must be standard or pro.');
+};
+const legacyProfileFor = (value) => {
+    if (value === 'flare')
+        return 'standard';
+    if (value === 'sunburst')
+        return 'pro';
+    throw new Error('--image-model must name a supported legacy Draft profile.');
+};
+const parseDraftImageProfile = (flags) => {
+    const profile = stringFlag(flags, 'profile')?.trim();
+    const legacyModel = stringFlag(flags, 'image-model')?.trim();
+    const selectedProfile = profile === undefined ? undefined : parseProfile(profile);
+    const selectedLegacyProfile = legacyModel === undefined
+        ? undefined
+        : legacyProfileFor(legacyModel);
+    if (selectedProfile && selectedLegacyProfile && selectedProfile !== selectedLegacyProfile) {
+        throw new Error('--profile and --image-model choose different Draft profiles.');
+    }
+    return selectedProfile ?? selectedLegacyProfile ?? 'standard';
+};
+const rejectLocalProviderFlags = (flags) => {
+    const retired = ['provider', 'project-root'].filter((flag) => flags[flag] !== undefined);
+    if (retired.length > 0) {
+        throw new Error(`${retired.map((flag) => `--${flag}`).join(', ')} retired from 12ui draft.`
+            + ' Draft image generation is hosted and authenticates only to 12ui.');
+    }
+};
+/**
+ * The build route, offered once, for a reference a person handed to `12ui draft`.
+ *
+ * It is wrong advice inside `12ui improve`: that reference is improve's own
+ * screenshot of the page being improved, so it is ALWAYS a finished design, and
+ * converting the screenshot rebuilds the interface the run exists to replace.
+ * Improve suppresses it with `referenceFromCapture`; `12ui draft` still prints
+ * it on every reference.
+ */
+export const redesignRouteNotice = (source) => (`\`${source}\` is already a finished design. To build it rather than redraw it:`
+    + ` \`12ui convert ${source} --output html\`. Continuing with a redesign draft.`);
+const readCandidateCount = (flags) => {
+    const value = stringFlag(flags, 'candidates');
+    if (value === undefined)
+        return DRAFT_CANDIDATE_COUNT;
+    const count = Number(value);
+    if (!Number.isSafeInteger(count)
+        || count < DRAFT_CANDIDATE_COUNT_MINIMUM
+        || count > DRAFT_CANDIDATE_COUNT_MAXIMUM) {
+        throw new Error(`--candidates must be an integer between ${DRAFT_CANDIDATE_COUNT_MINIMUM}`
+            + ` and ${DRAFT_CANDIDATE_COUNT_MAXIMUM}`);
+    }
+    return count;
+};
+const preparedFromRecord = (args) => {
+    const paths = draftPaths(args.record.runDir);
+    return {
+        runDir: paths.runDir,
+        recordPath: paths.draftRecord,
+        runId: args.record.hosted.runId,
+        candidateCount: args.record.hosted.candidates.length,
+        adopted: args.adopted,
+        runKey: args.runKey,
+        record: args.record,
+        nextAction: nextActionLine({
+            what: `${args.record.hosted.candidates.length} hosted draft candidates`,
+            typicalSeconds: HOSTED_DRAFT_CANDIDATE_DURATION_SECONDS,
+            statusCommand: `12ui next ${paths.runDir}`,
+            waitHint: `or run \`12ui next ${paths.runDir} --wait\` to collect in this shell`,
+        }),
+    };
+};
+/** Claim one corpus set and exactly one hosted run, then persist the resumable handle. */
+export const prepareDraftCommand = async (flags, dependencies = {}) => {
+    dependencies.progress?.update({ stage: 'prepare', detail: 'validating draft inputs' });
+    rejectLocalProviderFlags(flags);
+    const conceptValue = stringFlag(flags, 'concept');
+    if (!conceptValue?.trim()) {
+        throw usageRefusal({
+            reason: 'A draft starts from the design problem in words, and --concept was not given.',
+            code: 'draft_usage',
+            verb: ['draft'],
+        });
+    }
+    const query = readDraftConcept(flags);
+    const candidateCount = readCandidateCount(flags);
+    const corpusMode = parseDraftCorpusMode(stringFlag(flags, 'corpus-mode'));
+    const plannedDraft = dependencies.plannedDraft;
+    const write = dependencies.write ?? ((line) => { process.stdout.write(`${line}\n`); });
+    const warn = dependencies.warn ?? ((line) => { process.stderr.write(`${line}\n`); });
+    const referenceInput = stringFlag(flags, 'reference');
+    const redesignSourceInput = stringFlag(flags, 'redesign-source');
+    const referenceFlag = referenceInput?.trim();
+    const redesignSourceFlag = redesignSourceInput?.trim();
+    if (referenceInput !== undefined && !referenceFlag) {
+        throw new Error('--reference requires a path or URL');
+    }
+    if (redesignSourceInput !== undefined && !redesignSourceFlag) {
+        throw new Error('--redesign-source requires a path or URL');
+    }
+    if (referenceInput !== undefined && redesignSourceInput !== undefined) {
+        throw new Error('Pass one of --reference or --redesign-source, not both');
+    }
+    const sourceFlag = referenceFlag ?? redesignSourceFlag;
+    // Beside the flags it arbitrates between, and before anything is claimed,
+    // loaded, or bought: an explicit hedge against a reference image is a mode
+    // the corpus will not serve, so it refuses here rather than 400ing after the
+    // caller has been shown a run directory. `runDraftCommand` runs the same
+    // assertion once more before it prints the paid brief.
+    assertReferenceSearchServable({
+        mode: corpusMode,
+        referenceImage: Boolean(sourceFlag),
+        flag: DRAFT_CORPUS_MODE_FLAG,
+    });
+    const requestedMode = parseMode(flags, Boolean(sourceFlag));
+    const retainInput = stringFlag(flags, 'retain');
+    const retainFlag = retainInput?.trim();
+    if (retainInput !== undefined && !sourceFlag) {
+        throw new Error('--retain requires --reference');
+    }
+    if (plannedDraft && !sourceFlag) {
+        throw new Error('A planned draft requires its captured reference image.');
+    }
+    if (plannedDraft && retainInput !== undefined) {
+        throw new Error('A planned draft uses the retained policy from its durable redesign plan.');
+    }
+    // WHAT THE REFERENCE IS. `--retain` says what to hold; this says what it is
+    // being held FROM, because an exclusion means opposite things against a
+    // design the caller liked and against the caller's own page. `12ui improve`
+    // replays its draft stage through this command, so without it every improve
+    // draft would reach the model as "do not reuse its actual content or text".
+    const retainSourceFlag = stringFlag(flags, 'retain-source')?.trim();
+    if (retainSourceFlag !== undefined && retainSourceFlag !== 'inspiration' && retainSourceFlag !== 'subject') {
+        throw new Error('--retain-source must be inspiration or subject');
+    }
+    const retainSource = retainSourceFlag === 'subject' ? 'subject' : undefined;
+    const baseRetain = plannedDraft
+        ? plannedDraft.retain
+        : sourceFlag
+            ? retainInput !== undefined
+                ? parseDraftRetainFlag(retainFlag ?? '')
+                : requestedMode === 'structure-preserving-reskin'
+                    ? DRAFT_LAYOUT_RETAIN
+                    : DEFAULT_DRAFT_REFERENCE_RETAIN
+            : null;
+    const retain = baseRetain && retainSource
+        ? { ...baseRetain, source: retainSource }
+        : baseRetain;
+    // AT LEAST ONE FACET MUST BE FREE, and only against the caller's OWN page
+    // (owner, 2026-09-02). An inspiration reference is a design they liked, and
+    // "take all of it" is a coherent request there; a subject run with nothing
+    // free asks an image edit to return its input. `12ui improve` replays its
+    // draft stage through this command, so it is refused in both spellings, and
+    // before the hosted run is started.
+    if (retain && retainSource === 'subject' && improveRetainKeepsEverything(retain)) {
+        throw new Error(IMPROVE_RETAIN_ALL_KEPT_REFUSAL);
+    }
+    const mode = !sourceFlag
+        ? 'new-interface'
+        : draftRetainsLayout(retain)
+            ? 'structure-preserving-reskin'
+            : 'exploratory-redesign';
+    const corpusQuery = await readDraftCorpusQuery(flags, query, plannedDraft?.corpusQuery);
+    const retrieval = draftReferenceRetrieval({ override: corpusMode, candidateCount, query: corpusQuery, referenceImage: Boolean(sourceFlag) });
+    if (retrieval.adjustment && !dependencies.corpusAdjustmentReported)
+        warn(retrieval.adjustment.reason);
+    const aspect = parseAspect(flags);
+    const imageProfile = parseDraftImageProfile(flags);
+    const redesignSource = sourceFlag
+        ? await (async () => {
+            const loaded = await loadCorpusReferenceImage(sourceFlag, undefined, {
+                label: referenceFlag ? '--reference' : '--redesign-source',
+            });
+            return {
+                path: loaded.evidence.sourcePath,
+                sha256: loaded.evidence.sha256,
+                evidence: loaded.evidence,
+                input: loaded.input,
+            };
+        })()
+        : undefined;
+    if (redesignSource && !dependencies.referenceFromCapture)
+        warn(redesignRouteNotice(sourceFlag));
+    const pageRoute = dependencies.pageRoute?.trim();
+    const runKey = draftLocalRunKey({
+        query,
+        corpusQuery,
+        candidateCount,
+        redesignSourceSha256: redesignSource?.sha256 ?? null,
+        aspect,
+        mode,
+        retainIdentity: draftRetainIdentity(retain),
+        ...(corpusMode ? { corpusMode } : {}),
+        ...(retrieval.adjustment ? { corpusAdjustedMode: retrieval.mode } : {}),
+        imageProfile,
+        ...(pageRoute ? { pageRoute } : {}),
+        ...(dependencies.redrawGeneration && dependencies.redrawGeneration > 0
+            ? { redrawGeneration: dependencies.redrawGeneration }
+            : {}),
+    });
+    const config = (dependencies.readConfig ?? readConversionConfig)({
+        origin: stringFlag(flags, 'origin'),
+        apiKey: stringFlag(flags, 'api-key'),
+    });
+    const { paths, adopted } = await acquireDraftRunDirectory({
+        query,
+        runKey,
+        ...(dependencies.workspaceRoot ? { root: dependencies.workspaceRoot } : {}),
+    });
+    write(paths.runDir);
+    dependencies.onRunDirectory?.(paths.runDir);
+    const existing = adopted ? await readDraftRecord(paths.draftRecord) : undefined;
+    if (existing?.version === 2)
+        return preparedFromRecord({ record: existing, adopted, runKey });
+    const corpusClient = (dependencies.createCorpusClient
+        ?? ((value) => new TwelveUiCorpusClient(value)))(config);
+    const hostedClient = (dependencies.createHostedClient
+        ?? ((value) => new TwelveUiBranchClient(value)))(config);
+    dependencies.progress?.update({
+        stage: 'retrieving_corpus',
+        detail: 'retrieving references and claiming the hosted run',
+    });
+    const pageWords = dependencies.pageWords?.trim();
+    const record = await prepareDraftRun({
+        paths,
+        client: corpusClient,
+        hostedClient,
+        origin: config.origin,
+        query,
+        corpusQuery,
+        mode,
+        aspect,
+        imageProfile,
+        candidateCount,
+        ...(corpusMode ? { corpusMode } : {}),
+        retain,
+        ...(pageWords ? { pageWords } : {}),
+        ...(pageRoute ? { pageRoute } : {}),
+        ...(dependencies.redrawGeneration && dependencies.redrawGeneration > 0
+            ? { redrawGeneration: dependencies.redrawGeneration }
+            : {}),
+        ...(redesignSource ? { redesignSource } : {}),
+    });
+    return preparedFromRecord({ record, adopted, runKey });
+};
+const draftHostedClient = (flags, dependencies) => {
+    if (dependencies.hostedClient)
+        return dependencies.hostedClient;
+    const config = (dependencies.readConfig ?? readConversionConfig)({
+        origin: stringFlag(flags, 'origin'),
+        apiKey: stringFlag(flags, 'api-key'),
+    });
+    return (dependencies.createHostedClient
+        ?? ((value) => new TwelveUiBranchClient(value)))(config);
+};
+const dispatchPreparedDraft = async (args) => {
+    const client = draftHostedClient(args.flags, args.dependencies);
+    const progress = args.dependencies.progress;
+    const attemptFile = draftPaths(args.prepared.runDir).dispatchAttempt;
+    const attempt = await startDraftDispatchAttempt({
+        file: attemptFile,
+        runId: args.prepared.runId,
+    });
+    try {
+        // Identity said once; ticks carry counts, not the run id.
+        progress?.note(`claimed hosted run ${args.prepared.runId}`);
+        progress?.update({
+            stage: 'dispatching',
+            completed: 0,
+            total: args.prepared.candidateCount,
+            unit: 'slots settled',
+        });
+        const dispatched = await dispatchHostedDraftSlots({
+            client,
+            runId: args.prepared.runId,
+            onReceiptFreeRecovery: (message) => { progress?.note(message); },
+        });
+        const pending = dispatched.run.candidates.filter((candidate) => candidate.status === 'pending');
+        if (dispatched.failures.length > 0) {
+            const detail = dispatched.failures.map((failure) => (`${failure.slot}: ${failure.error}`)).join('; ');
+            throw new HostedDraftFailureError(args.context === 'draft'
+                ? `Hosted draft foreground dispatch could not be confirmed: ${detail}.`
+                    + ` Check it with \`12ui next ${args.prepared.runDir}\` before retrying.`
+                : `Hosted draft repair could not be confirmed: ${detail}.`
+                    + ' This wait stopped; the recorded run is unchanged.'
+                    + ' Check the hosted state before retrying it.', 'hosted_draft_dispatch_unconfirmed');
+        }
+        if (pending.length > 0) {
+            const failureBySlot = new Map(dispatched.failures.map((failure) => [failure.slot, failure.error]));
+            const detail = pending.map((candidate) => (`${candidate.slot}: ${failureBySlot.get(candidate.slot) ?? 'dispatch did not start'}`)).join('; ');
+            throw new HostedDraftFailureError(args.context === 'draft'
+                ? `Hosted draft dispatch did not start every slot: ${detail}.`
+                    + ` Recover with \`12ui next ${args.prepared.runDir} --wait\`.`
+                : `Hosted draft repair did not start every pending slot: ${detail}.`
+                    + ' This wait stopped; the recorded run is unchanged.'
+                    + ' Restore network access before retrying it.', 'hosted_draft_dispatch_incomplete');
+        }
+        const counts = summarizeHostedDraftRun(dispatched.run);
+        progress?.update({
+            stage: 'dispatched',
+            completed: counts.succeeded + counts.failed,
+            total: dispatched.run.candidates.length,
+            unit: 'slots settled',
+            running: counts.dispatched,
+            detail: `${dispatched.dispatched.length} foreground dispatch request(s) completed`,
+        });
+        return { client, dispatched };
+    }
+    finally {
+        await finishDraftDispatchAttempt({ file: attemptFile, attempt }).catch(() => undefined);
+    }
+};
+const materializePreparedDraft = async (args) => {
+    const progress = args.progress;
+    const run = await waitForHostedDraftRun({
+        client: args.client,
+        run: args.run,
+        ...(args.sleep ? { sleep: args.sleep } : {}),
+        onProgress: (current) => {
+            const counts = summarizeHostedDraftRun(current);
+            progress?.update({
+                stage: 'generating',
+                completed: counts.succeeded + counts.failed,
+                total: current.candidates.length,
+                unit: 'slots settled',
+                running: counts.dispatched,
+                detail: `${counts.pending} waiting, ${counts.failed} failed`,
+            });
+        },
+    });
+    if (!hostedDraftRunIsSettled(run)) {
+        throw new HostedDraftFailureError(`Hosted draft ${run.id} did not settle within 30 minutes; 12ui next ${args.prepared.runDir}`, 'hosted_draft_unsettled');
+    }
+    const failed = run.candidates.filter((candidate) => candidate.status === 'failed');
+    if (failed.length > 0) {
+        const detail = failed.map((candidate) => (`${candidate.slot}: ${candidate.error?.message ?? 'generation failed'}`)).join('; ');
+        throw new HostedDraftFailureError(`Hosted draft ${run.id} settled with failed slot(s): ${detail}`, 'hosted_draft_generation_failed');
+    }
+    const files = await downloadHostedDraftCandidates({
+        client: args.client,
+        run,
+        candidates: args.prepared.record.hosted.candidates,
+    });
+    progress?.update({
+        stage: 'materialize',
+        completed: files.length,
+        total: args.prepared.candidateCount,
+        unit: 'candidates downloaded',
+        detail: 'writing hosted candidates locally',
+    });
+    if (files.length !== args.prepared.candidateCount) {
+        throw new HostedDraftFailureError(`Hosted draft ${run.id} settled ${args.prepared.candidateCount} slot(s) but downloaded ${files.length}`, 'hosted_draft_download_incomplete');
+    }
+    const paths = draftPaths(args.prepared.runDir);
+    await writeDraftCompletion(paths.completion, {
+        version: 1,
+        runId: run.id,
+        completedAt: new Date().toISOString(),
+        candidates: files,
+    });
+    if (args.emitResult !== false) {
+        const newlyDispatchedCount = args.newlyDispatchedCount ?? 0;
+        progress?.finish('succeeded', {
+            artifacts: [{
+                    name: `${files.length} candidate image(s)`,
+                    state: 'succeeded',
+                    path: paths.candidatesDir,
+                }],
+            spend: newlyDispatchedCount > 0
+                ? `${newlyDispatchedCount} recorded pending draft slot(s) dispatched;`
+                    + ' settled slots were not re-bought'
+                : 'nothing new — the recorded run was collected',
+            next: `choose an image, then 12ui branch execute --start <image> or 12ui convert <image>. ${CHOOSING_STARTS_FROM_BRIEF}`,
+        });
+        console.log(JSON.stringify({
+            runDir: args.prepared.runDir,
+            runId: run.id,
+            candidates: files,
+            nextAction: `Pass the chosen image in ${paths.candidatesDir} to 12ui branch execute --start or 12ui convert. ${CHOOSING_STARTS_FROM_BRIEF}`,
+        }, null, 2));
+    }
+    return [paths.draftRecord, paths.completion, ...files.map((file) => file.path)];
+};
+/**
+ * The resumable handle for a run already on disk. Its `runKey` has to come out
+ * equal to the one that run claimed, so it is rebuilt from recorded fields
+ * only — including `corpus.explicitMode`, which exists for exactly this.
+ */
+export const preparedDraftFromDirectory = async (runDir) => {
+    const paths = draftPaths(runDir);
+    const record = await readDraftRecord(paths.draftRecord);
+    if (!record || record.version !== 2)
+        throw new Error(`No resumable hosted draft in ${paths.runDir}`);
+    const runKey = draftLocalRunKey({
+        query: record.query,
+        corpusQuery: record.corpus.query,
+        candidateCount: record.hosted.candidates.length,
+        redesignSourceSha256: record.redesignSource?.sha256 ?? null,
+        aspect: record.aspect,
+        mode: record.mode,
+        retainIdentity: draftRetainIdentity(record.retain ?? null),
+        // The recorded explicit mode, never the resolved one: an image-conditioned
+        // run resolves to balanced without anyone naming it, and treating that as
+        // an override would rebuild a key the run never claimed.
+        ...(record.corpus.explicitMode ? { corpusMode: record.corpus.explicitMode } : {}),
+        ...(record.corpus.retrievalAdjustment ? { corpusAdjustedMode: record.corpus.retrievalAdjustment.effectiveMode } : {}),
+        ...(record.imageProfile ? { imageProfile: record.imageProfile } : {}),
+        ...(record.imageProfile ? {} : record.imageModel ? { imageModel: record.imageModel } : {}),
+        ...(record.pageRoute ? { pageRoute: record.pageRoute } : {}),
+        ...(record.redrawGeneration && record.redrawGeneration > 0
+            ? { redrawGeneration: record.redrawGeneration }
+            : {}),
+    });
+    return preparedFromRecord({ record, adopted: true, runKey });
+};
+/** Foreground repair for the exact recorded run. Settled slots are never posted. */
+export const repairDraftDispatch = async (runDir, flags = {}, dependencies = {}) => {
+    const prepared = await preparedDraftFromDirectory(runDir);
+    return (await dispatchPreparedDraft({
+        prepared,
+        flags,
+        dependencies,
+        context: 'repair',
+    })).dispatched.run;
+};
+/** Materialize a settled successful run once; polling remains the caller's job. */
+export const materializeDraftIfSettled = async (runDir, flags = {}, dependencies = {}) => {
+    const prepared = await preparedDraftFromDirectory(runDir);
+    const paths = draftPaths(prepared.runDir);
+    const alreadyComplete = await stat(paths.completion).then(() => true).catch(() => false);
+    if (alreadyComplete)
+        return true;
+    const client = draftHostedClient(flags, dependencies);
+    const run = await client.getRun(prepared.runId);
+    if (!hostedDraftRunIsSettled(run))
+        return false;
+    if (run.candidates.some((candidate) => candidate.status === 'failed'))
+        return false;
+    await materializePreparedDraft({
+        prepared,
+        client,
+        run,
+        emitResult: false,
+    });
+    return true;
+};
+export const runDraftCommand = async (flags, dependencies = {}) => {
+    if (booleanFlag(flags, 'dry-run')) {
+        throw new CliRefusal('`12ui draft --dry-run` is not supported. Nothing was claimed, dispatched, or bought.', 'draft_dry_run_unsupported');
+    }
+    const progress = createLongRunningProgress({
+        label: 'draft',
+        typicalSeconds: HOSTED_DRAFT_CANDIDATE_DURATION_SECONDS,
+        quiet: booleanFlag(flags, 'quiet'),
+    });
+    try {
+        const candidateCount = readCandidateCount(flags);
+        // Before the paid brief, not after it: a Draft that cannot run must not
+        // first be quoted a price. The same assertion runs again inside
+        // prepareDraftCommand, which improve and redesign enter directly.
+        assertReferenceSearchServable({
+            mode: parseDraftCorpusMode(stringFlag(flags, 'corpus-mode')),
+            referenceImage: Boolean(stringFlag(flags, 'reference')?.trim() ?? stringFlag(flags, 'redesign-source')?.trim()),
+            flag: DRAFT_CORPUS_MODE_FLAG,
+        });
+        const corpusQuery = await readDraftCorpusQuery(flags, readDraftConcept(flags), dependencies.plannedDraft?.corpusQuery);
+        const retrieval = draftReferenceRetrieval({
+            override: parseDraftCorpusMode(stringFlag(flags, 'corpus-mode')),
+            candidateCount,
+            query: corpusQuery,
+            referenceImage: Boolean(stringFlag(flags, 'reference')?.trim() ?? stringFlag(flags, 'redesign-source')?.trim()),
+        });
+        if (retrieval.adjustment) {
+            (dependencies.warn ?? ((line) => { process.stderr.write(`${line}\n`); }))(retrieval.adjustment.reason);
+        }
+        progress.brief({
+            request: `draft: ${candidateCount} hosted candidate(s) from the concept`,
+            paid: `up to ${candidateCount} never-started draft slot(s);`
+                + ' the recorded hosted run replays without a second purchase',
+            done: booleanFlag(flags, 'wait')
+                ? 'one PNG per candidate in <run-dir>/candidates'
+                : 'every candidate slot durably dispatched; `12ui next <run-dir> --wait` collects PNGs',
+            expectation: {
+                typicalSeconds: HOSTED_DRAFT_CANDIDATE_DURATION_SECONDS,
+                basis: 'measured median per candidate; slots run concurrently',
+            },
+            blocking: true,
+        });
+        progress.update({ stage: 'prepare', detail: 'preparing the hosted draft' });
+        const prepared = await prepareDraftCommand(flags, { ...dependencies, progress, corpusAdjustmentReported: Boolean(retrieval.adjustment) });
+        const { client, dispatched } = await dispatchPreparedDraft({
+            prepared,
+            flags,
+            dependencies: { ...dependencies, progress },
+            context: 'draft',
+        });
+        if (!booleanFlag(flags, 'wait')) {
+            const paths = draftPaths(prepared.runDir);
+            const collect = `12ui next ${prepared.runDir} --wait`;
+            // The draft's own answer carries the redirect, so it reaches an agent whose project notes name this route.
+            const nextAction = `Collect the candidates: ${collect}. ${CHOOSING_STARTS_FROM_BRIEF}`;
+            progress.finish('succeeded', {
+                detail: 'every never-started slot completed its foreground dispatch request',
+                artifacts: [{
+                        name: 'hosted run',
+                        state: `generation stays server-side (run ${prepared.runId})`,
+                    }],
+                spend: dispatched.dispatched.length > 0
+                    ? `${dispatched.dispatched.length} recorded pending draft slot(s) dispatched`
+                    : 'nothing new — the recorded run was already in flight or settled',
+                next: nextAction,
+            });
+            console.log(JSON.stringify({
+                runDir: prepared.runDir,
+                runId: prepared.runId,
+                dispatched: dispatched.dispatched,
+                nextAction,
+            }, null, 2));
+            return {
+                prepared,
+                complete: false,
+                artifacts: [prepared.recordPath, paths.dispatchAttempt],
+            };
+        }
+        const artifacts = await materializePreparedDraft({
+            prepared,
+            client,
+            run: dispatched.run,
+            progress,
+            newlyDispatchedCount: dispatched.dispatched.length,
+            ...(dependencies.emitResult === false ? { emitResult: false } : {}),
+            ...(dependencies.sleep ? { sleep: dependencies.sleep } : {}),
+        });
+        if (dependencies.emitResult === false)
+            progress.finish('succeeded', { detail: `${prepared.candidateCount} candidate image(s) in ${draftPaths(prepared.runDir).candidatesDir}` });
+        return { prepared, complete: true, artifacts };
+    }
+    catch (error) {
+        progress.finish('stopped', {
+            detail: error instanceof Error ? error.message : String(error),
+        });
+        throw error;
+    }
+};
+const readDraftAttemptRecord = async (referencesDir) => {
+    try {
+        const parsed = JSON.parse(await readFile(path.join(referencesDir, INSPIRATION_ATTEMPT_FILE), 'utf8'));
+        return { createdAt: typeof parsed.createdAt === 'string' ? parsed.createdAt : 'an earlier time' };
+    }
+    catch {
+        return null;
+    }
+};
+export const readDraftStatus = async (runDirArgument, flags = {}, dependencies = {}) => {
+    const paths = draftPaths(runDirArgument);
+    const record = await readDraftRecord(paths.draftRecord);
+    if (!record || record.version !== 2) {
+        const started = await readDraftAttemptRecord(paths.referencesDir);
+        throw new CliRefusal(started
+            ? `The draft run in ${paths.runDir} failed before its hosted run was recorded — it started`
+                + ` at ${started.createdAt}. Re-run the same draft command; its corpus key replays rather`
+                + ' than starting a new retrieval.'
+            : `No hosted draft run is recorded in ${paths.runDir}. Start one with`
+                + ' `12ui draft --concept "<product, audience, surface, goal, personality>"`.', started ? 'draft_incomplete' : 'draft_absent');
+    }
+    const client = dependencies.hostedClient ?? new TwelveUiBranchClient((dependencies.readConfig ?? readConversionConfig)({
+        origin: stringFlag(flags, 'origin'),
+        apiKey: stringFlag(flags, 'api-key'),
+    }));
+    const run = await client.getRun(record.hosted.runId);
+    if (run.id !== record.hosted.runId)
+        throw new Error('The hosted draft service returned the wrong run');
+    const bySlot = new Map(run.candidates.map((candidate) => [candidate.slot, candidate]));
+    const candidates = record.hosted.candidates.map((candidate) => ({
+        id: candidate.id,
+        slot: candidate.slot,
+        status: bySlot.get(candidate.slot)?.status ?? 'missing',
+        path: candidate.outputPath,
+    }));
+    const counts = summarizeHostedDraftRun(run);
+    const settled = hostedDraftRunIsSettled(run);
+    const localCount = (await Promise.all(record.hosted.candidates.map((candidate) => (stat(candidate.outputPath).then(() => true).catch(() => false))))).filter(Boolean).length;
+    const failed = counts.failed > 0;
+    const stalled = !settled && counts.pending > 0 && counts.dispatched === 0;
+    const observedAt = (dependencies.now ?? Date.now)();
+    const completionRecorded = await stat(paths.completion).then(() => true).catch(() => false);
+    const materialized = localCount === record.hosted.candidates.length && completionRecorded;
+    const elapsedSeconds = secondsSince(run.createdAt, observedAt);
+    return {
+        runDir: paths.runDir,
+        runId: run.id,
+        query: record.query,
+        phase: failed
+            ? 'failed'
+            : stalled
+                ? 'stalled'
+                : settled
+                    ? materialized ? 'ready' : 'materializing'
+                    : 'generating',
+        complete: settled && (failed || materialized),
+        recoverable: stalled,
+        ...(elapsedSeconds === undefined ? {} : { elapsedSeconds: Math.round(elapsedSeconds) }),
+        candidates,
+        narrative: failed
+            ? `${counts.failed} of ${run.candidates.length} hosted draft slot(s) failed; settled slots are not re-bought.`
+            : stalled
+                ? `The hosted draft run has ${counts.pending} pending slot${counts.pending === 1 ? '' : 's'} and nothing running server-side.`
+                    + ` Recover with \`12ui next ${paths.runDir} --wait\`.`
+                : settled && materialized
+                    ? `${counts.succeeded} hosted candidates settled; ${localCount} image(s) are in ${paths.candidatesDir}.`
+                    : settled
+                        ? `${counts.succeeded} hosted candidates settled; ${localCount} of`
+                            + ` ${record.hosted.candidates.length} image(s) are materialized locally.`
+                        : `${counts.succeeded + counts.failed} of ${run.candidates.length} hosted candidates settled.`,
+    };
+};
+export const readHostedRunStatus = async (args) => await args.client.getRun(args.runId);
+//# sourceMappingURL=cli-draft-command.js.map
 
 FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-help/design.js
 ms: [
@@ -668,7 +1287,244 @@ export const draftLocalRunKey = (args) => [
 FILE versions/0.2.130/node_modules/@12ui/design/dist/draft-retain.js
 
 FILE versions/0.2.130/node_modules/@12ui/design/dist/draft-run.js
-fest.idempotencyKey,
+import { mkdir, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { downloadCorpusInspiration } from './cli-corpus-run.js';
+import { INSPIRATION_MANIFEST_FILE, } from './cli-corpus-types.js';
+import { DEFAULT_INSPIRATION_MODE, INSPIRATION_MODES, } from './corpus-client.js';
+import { draftCorpusKey } from './draft-identity.js';
+import { hedgeReferenceImageRefusal, resolveReferenceSearch, } from './reference-search-mode.js';
+import { draftRetainIdentity, draftRetainsLayout } from './draft-retain.js';
+import { hostedDraftRunKey, } from './hosted-draft-identity.js';
+import { DRAFT_CANDIDATE_IDS, draftReferenceFile, writeDraftRecord, } from './draft-workspace.js';
+/** Hosted draft preparation: one corpus search, one service run claim, no local provider. */
+export const DRAFT_CANDIDATE_COUNT = 4;
+export const DRAFT_CANDIDATE_COUNT_MINIMUM = 2;
+export const DRAFT_CANDIDATE_COUNT_MAXIMUM = DRAFT_CANDIDATE_IDS.length;
+/**
+ * The slate every mode but hedge asks for: the historical Draft width, widened
+ * to the slot count when a Draft asks for more slots than that, because a
+ * Draft that cannot pair one reference per slot refuses outright.
+ */
+export const DRAFT_WIDE_REFERENCE_COUNT = 12;
+/** What a caller writes to choose a mode other than the default, at both surfaces. */
+export const DRAFT_CORPUS_MODE_FLAG = '--corpus-mode';
+export const DRAFT_CORPUS_MODE_FLAG_REFUSAL = `${DRAFT_CORPUS_MODE_FLAG} must be one of ${INSPIRATION_MODES.join(', ')}; without it a Draft searches ${DEFAULT_INSPIRATION_MODE}.`;
+/** `--corpus-mode` as the caller wrote it; absent means the default, not balanced. */
+export const parseDraftCorpusMode = (value) => {
+    const trimmed = value?.trim();
+    if (!trimmed)
+        return undefined;
+    if (!INSPIRATION_MODES.includes(trimmed)) {
+        throw new Error(DRAFT_CORPUS_MODE_FLAG_REFUSAL);
+    }
+    return trimmed;
+};
+/** An explicit hedge against an image query would 400 after the run was claimed. */
+export const DRAFT_HEDGE_REFERENCE_IMAGE_REFUSAL = hedgeReferenceImageRefusal(DRAFT_CORPUS_MODE_FLAG);
+/**
+ * The retrieval a Draft runs, and the only place that decides it.
+ *
+ * Hedge is the default and needs no flag (COO with owner authority,
+ * 2026-09-07): it spreads the first references across distinct directions
+ * while holding the query, which is exactly what pairing one reference per
+ * Draft slot is for. The default is `DEFAULT_INSPIRATION_MODE`, the same
+ * constant `12ui corpus inspire` and the MCP surface read, so the command line
+ * has one reference-search default rather than two that can drift.
+ *
+ * The caller selects it with `--corpus-mode`; overlong hedge queries use
+ * balanced with their full text and a recorded reason. The
+ * Worker's advertised `draftReferenceMode` deliberately does not override it,
+ * and is no longer read here: the Worker resolves anything that is not the
+ * exact string `hedge` to `balanced` (`workers/api/src/corpus/route.ts`), so an
+ * advertised `balanced` cannot be told apart from an unset variable and carries
+ * no operator intent for a client default to yield to. Nothing is bypassed by
+ * ignoring it — the inspire route accepts any mode per request from an
+ * account-tier caller (`workers/api/src/corpus/validation.ts`), so the old gate
+ * was the CLI policing itself.
+ *
+ * The one thing that outranks the default is not a preference but a fact the
+ * caller already handed in: whether this search carries their own image. A
+ * redesign Draft (`--reference`, `--redesign-source`) and every `12ui improve`
+ * draft stage condition retrieval on the captured page, and the corpus refuses
+ * hedge for those outright, so they run `REFERENCE_IMAGE_SEARCH_MODE` — the
+ * second hardcoded mode in the CLI, and deliberately so; see
+ * `reference-search-mode.ts`, which owns both the mode and the refusal. This
+ * function only adds the slate width; it does not decide the mode.
+ */
+export const draftReferenceRetrieval = (args) => {
+    // The only meaningful bound is the Draft slot window the CLI already
+    // advertises (--candidates 2-16). It is deliberately expressed with those
+    // constants and not with a retrieval cap: an earlier 4..12 here mirrored the
+    // corpus serving cap of the day and hard-refused the 2- and 3-slot Drafts the
+    // CLI accepts everywhere else.
+    if (!Number.isInteger(args.candidateCount)
+        || args.candidateCount < DRAFT_CANDIDATE_COUNT_MINIMUM
+        || args.candidateCount > DRAFT_CANDIDATE_COUNT_MAXIMUM) {
+        throw new Error(`A Draft needs between ${DRAFT_CANDIDATE_COUNT_MINIMUM} and ${DRAFT_CANDIDATE_COUNT_MAXIMUM}`
+            + ` slots; received ${args.candidateCount}.`);
+    }
+    const resolution = resolveReferenceSearch({
+        ...(args.override ? { override: args.override } : {}),
+        referenceImage: args.referenceImage,
+        flag: DRAFT_CORPUS_MODE_FLAG,
+        query: args.query ?? '',
+    });
+    const { mode, adjustment } = resolution;
+    return mode === 'hedge'
+        ? { mode, k: args.candidateCount }
+        : { mode, k: Math.max(DRAFT_WIDE_REFERENCE_COUNT, args.candidateCount), ...(adjustment ? { adjustment } : {}) };
+};
+/**
+ * Paid retrieval identity. The resolved retrieval is required, not defaulted:
+ * a Draft's mode is decided by `draftReferenceRetrieval`, and a default here
+ * would let a caller that forgot to pass it mint a second identity for the
+ * same search. Mode and k are both hashed, so a Draft of the same concept run
+ * under a different mode is a different paid search, not a replay of the old
+ * one — which is what a different reference set deserves.
+ */
+export const draftRunCorpusKey = (args) => draftCorpusKey({
+    query: args.query,
+    mode: args.retrieval.mode,
+    count: args.retrieval.k,
+    redesignSourceSha256: args.redesignSourceSha256 ?? null,
+});
+const draftSlotFor = (index) => String.fromCharCode('a'.charCodeAt(0) + index);
+const assertClaimedSlots = (expected, actual) => {
+    const expectedSlots = expected.map((candidate) => candidate.slot);
+    const actualSlots = actual.candidates.map((candidate) => candidate.slot);
+    if (JSON.stringify(expectedSlots) !== JSON.stringify(actualSlots)) {
+        throw new Error(`Hosted draft ${actual.id} returned slots ${actualSlots.join(', ') || '(none)'};`
+            + ` expected ${expectedSlots.join(', ')}`);
+    }
+};
+export const prepareDraftRun = async (input) => {
+    const now = input.now ?? (() => new Date());
+    const corpusQuery = input.corpusQuery ?? input.query;
+    const retrieval = draftReferenceRetrieval({
+        ...(input.corpusMode ? { override: input.corpusMode } : {}),
+        candidateCount: input.candidateCount,
+        query: corpusQuery,
+        referenceImage: Boolean(input.redesignSource),
+    });
+    const manifest = await downloadCorpusInspiration({
+        client: input.client,
+        ...(retrieval.adjustment ? { retrievalAdjustment: retrieval.adjustment } : {}),
+        request: { q: corpusQuery, mode: retrieval.mode, k: retrieval.k },
+        outDir: input.paths.referencesDir,
+        origin: input.origin,
+        idempotencyKey: draftRunCorpusKey({
+            query: corpusQuery,
+            retrieval,
+            redesignSourceSha256: input.redesignSource?.sha256 ?? null,
+        }),
+        derivedIdempotencyKey: true,
+        ...(input.redesignSource
+            ? { referenceImage: { evidence: input.redesignSource.evidence, input: input.redesignSource.input } }
+            : {}),
+        now,
+    });
+    const references = [...manifest.references].sort((left, right) => left.ordinal - right.ordinal);
+    if (references.length < input.candidateCount) {
+        throw new Error(`The corpus returned ${references.length} reference(s) for this query and a draft needs`
+            + ` ${input.candidateCount}. Broaden the concept and run 12ui draft again; no hosted image`
+            + ' slot has been dispatched.');
+    }
+    const usesUpload = Boolean(input.redesignSource);
+    const retainsLayout = draftRetainsLayout(input.retain);
+    const requestCandidates = DRAFT_CANDIDATE_IDS
+        .slice(0, input.candidateCount)
+        .map((_id, index) => usesUpload
+        ? { slot: draftSlotFor(index), useReferenceImage: true }
+        : {
+            slot: draftSlotFor(index),
+            referenceId: references[index].id,
+            ...(references[index].evidence ? { referenceEvidence: references[index].evidence } : {}),
+        });
+    let referenceImage;
+    if (input.redesignSource) {
+        referenceImage = {
+            data: Buffer.from(input.redesignSource.input.bytes).toString('base64'),
+            mediaType: input.redesignSource.input.mediaType,
+            sha256: input.redesignSource.evidence.sha256,
+        };
+    }
+    const hostedMode = retainsLayout ? 'preserve-structure' : 'inspiration';
+    const idempotencyKey = hostedDraftRunKey({
+        concept: input.query,
+        aspect: input.aspect,
+        mode: hostedMode,
+        candidates: requestCandidates,
+        ...(referenceImage ? { referenceImageSha256: referenceImage.sha256 } : {}),
+        retainIdentity: draftRetainIdentity(input.retain),
+        ...(input.pageWords ? { pageWords: input.pageWords } : {}),
+        ...(input.pageRoute ? { pageRoute: input.pageRoute } : {}),
+        ...(input.redrawGeneration && input.redrawGeneration > 0
+            ? { redrawGeneration: input.redrawGeneration }
+            : {}),
+        imageProfile: input.imageProfile,
+    });
+    const hosted = await input.hostedClient.startCreateRun({
+        concept: input.query,
+        aspect: input.aspect,
+        mode: hostedMode,
+        imageProfile: input.imageProfile,
+        ...(input.retain ? { retain: input.retain } : {}),
+        candidates: requestCandidates,
+        ...(referenceImage ? { referenceImage } : {}),
+        ...(input.pageWords ? { words: input.pageWords } : {}),
+    }, idempotencyKey);
+    assertClaimedSlots(requestCandidates, hosted);
+    await mkdir(input.paths.candidatesDir, { recursive: true });
+    // The caller's own image is kept in the run by its digest, so later work on this run (the local workspace's brand
+    // reference, slate-brand.ts) draws with the very bytes this draft did, wherever the original path goes.
+    const referenceFile = input.redesignSource
+        ? draftReferenceFile(input.redesignSource.sha256, input.redesignSource.input.mediaType)
+        : null;
+    if (input.redesignSource && referenceFile) {
+        await mkdir(path.join(input.paths.runDir, path.dirname(referenceFile)), { recursive: true, mode: 0o700 });
+        await writeFile(path.join(input.paths.runDir, referenceFile), input.redesignSource.input.bytes, { mode: 0o600 });
+    }
+    const candidates = DRAFT_CANDIDATE_IDS
+        .slice(0, input.candidateCount)
+        .map((id, index) => {
+        const reference = references[index];
+        const serviceCandidate = hosted.candidates[index];
+        return {
+            id,
+            slot: serviceCandidate.slot,
+            direction: serviceCandidate.direction,
+            outputPath: path.join(input.paths.candidatesDir, `${id}.png`),
+            referenceId: usesUpload ? null : reference.id,
+            referencePath: usesUpload ? input.redesignSource.path : reference.file,
+            referenceSha256: usesUpload ? input.redesignSource.sha256 : reference.sha256,
+        };
+    });
+    const record = {
+        version: 2,
+        createdAt: now().toISOString(),
+        ...(input.redrawGeneration && input.redrawGeneration > 0
+            ? { redrawGeneration: input.redrawGeneration }
+            : {}),
+        runDir: input.paths.runDir,
+        query: input.query,
+        mode: input.mode,
+        aspect: input.aspect,
+        referenceMode: hostedMode,
+        imageProfile: input.imageProfile,
+        retain: input.retain,
+        origin: input.origin,
+        redesignSource: input.redesignSource
+            ? { path: input.redesignSource.path, sha256: input.redesignSource.sha256, ...(referenceFile ? { file: referenceFile } : {}) }
+            : null,
+        ...(input.pageRoute ? { pageRoute: input.pageRoute } : {}),
+        corpus: {
+            query: corpusQuery,
+            mode: manifest.response.mode,
+            ...(retrieval.adjustment ? { retrievalAdjustment: retrieval.adjustment } : {}),
+            ...(input.corpusMode ? { explicitMode: input.corpusMode } : {}),
+            setId: manifest.response.setId,
+            idempotencyKey: manifest.idempotencyKey,
             manifestPath: path.join(input.paths.referencesDir, INSPIRATION_MANIFEST_FILE),
             references: references.map((reference) => ({
                 ordinal: reference.ordinal,
@@ -691,7 +1547,7 @@ fest.idempotencyKey,
 //# sourceMappingURL=draft-run.js.map
 
 FILE versions/0.2.130/node_modules/@12ui/design/dist/draft-workspace.js
- from 'node:fs/promises';
+import { mkdtemp, readFile, writeFile } from 'node:fs/promises';
 import os from 'node:os';
 import path from 'node:path';
 /**
@@ -736,12 +1592,233 @@ export const draftSlug = (query) => {
     return slug || 'design';
 };
 export const draftPaths = (runDir) => {
-    const resolved = path.reso
+    const resolved = path.resolve(runDir);
+    return {
+        runDir: resolved,
+        referencesDir: path.join(resolved, DRAFT_REFERENCES_DIRECTORY),
+        candidatesDir: path.join(resolved, DRAFT_CANDIDATES_DIRECTORY),
+        draftRecord: path.join(resolved, DRAFT_RECORD_FILENAME),
+        dispatchAttempt: path.join(resolved, DRAFT_DISPATCH_ATTEMPT_FILENAME),
+        completion: path.join(resolved, DRAFT_COMPLETION_FILENAME),
+        branchDir: path.join(resolved, DRAFT_BRANCH_DIRECTORY),
+    };
+};
+export const createDraftWorkspace = async (args) => {
+    const root = args.root ?? os.tmpdir();
+    const runDir = await mkdtemp(path.join(root, `12ui-${draftSlug(args.query)}-`));
+    return draftPaths(runDir);
+};
+export const writeDraftRecord = async (file, record) => {
+    await writeFile(file, `${JSON.stringify(record, null, 2)}\n`, { encoding: 'utf8', mode: 0o600 });
+};
+export const writeDraftCompletion = async (file, record) => {
+    await writeFile(file, `${JSON.stringify(record, null, 2)}\n`, {
+        encoding: 'utf8',
+        mode: 0o600,
+    });
+};
+export const readDraftRecord = async (file) => {
+    try {
+        return JSON.parse(await readFile(file, 'utf8'));
+    }
+    catch {
+        return undefined;
+    }
+};
+//# sourceMappingURL=draft-workspace.js.map
 
 FILE versions/0.2.130/node_modules/@12ui/design/dist/hosted-draft-identity.js
 
 FILE versions/0.2.130/node_modules/@12ui/design/dist/hosted-draft-run.js
-      const image = await args.client.downloadScreen(args.run.id, candidate.slot);
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { OPERATION_DURATION_HINTS } from './cli-progress.js';
+/** One hosted draft image, generated by the service rather than this machine. */
+export const HOSTED_DRAFT_CANDIDATE_DURATION_SECONDS = (OPERATION_DURATION_HINTS.hostedDraftCandidate);
+/**
+ * The service repairs a receipt-free `dispatched` candidate only when a run
+ * read observes it at least ten minutes old. This intentionally mirrors
+ * `workers/api/src/create/candidateDispatchRecovery.ts`; the CLI cannot
+ * import Worker code, but must not redrive before that durable contract.
+ */
+export const HOSTED_DRAFT_RECEIPT_FREE_RECOVERY_HORIZON_MS = 10 * 60_000;
+/**
+ * The 2026-08-29 incident study measured 43.761 s for a healthy two-slot
+ * draft from claim through terminal state. Sixteen healthy totals is
+ * 700,176 ms (11m 40s): 100,176 ms beyond the service's ten-minute
+ * receipt-free reclamation horizon, so a client timeout cannot outrun the
+ * server's safe recovery rule.
+ */
+export const HOSTED_DRAFT_HEALTHY_TOTAL_MS = 43_761;
+export const HOSTED_DRAFT_RECEIPT_FREE_STALL_MULTIPLIER = 16;
+export const HOSTED_DRAFT_RECEIPT_FREE_STALL_TIMEOUT_MS = (HOSTED_DRAFT_HEALTHY_TOTAL_MS * HOSTED_DRAFT_RECEIPT_FREE_STALL_MULTIPLIER);
+export const summarizeHostedDraftRun = (run) => {
+    const counts = { pending: 0, dispatched: 0, succeeded: 0, failed: 0 };
+    for (const candidate of run.candidates)
+        counts[candidate.status] += 1;
+    return counts;
+};
+export const hostedDraftRunIsSettled = (run) => {
+    const counts = summarizeHostedDraftRun(run);
+    return counts.succeeded + counts.failed === run.candidates.length;
+};
+/**
+ * A hosted draft outcome the CLI already recognizes by shape — dispatch left
+ * ambiguous, a slot never started, the run never settled, settlement carried
+ * a failed slot, or a settled candidate did not download. Each is a stable,
+ * meaningful stop, not an opaque runtime exception, so it carries its own
+ * closed-vocabulary {@link classifyRunJournalError} token instead of falling
+ * through to `unclassified`. The message stays human-readable prose;
+ * `journalErrorClass` is the separate token the journal persists.
+ */
+const HOSTED_DRAFT_FAILURE_CLASSES = new Set([
+    'hosted_draft_dispatch_unconfirmed',
+    'hosted_draft_dispatch_incomplete',
+    'hosted_draft_unsettled',
+    'hosted_draft_generation_failed',
+    'hosted_draft_download_incomplete',
+]);
+export class HostedDraftFailureError extends Error {
+    journalErrorClass;
+    constructor(message, journalErrorClass) {
+        super(message);
+        this.name = 'HostedDraftFailureError';
+        if (!HOSTED_DRAFT_FAILURE_CLASSES.has(journalErrorClass)) {
+            throw new TypeError(`Invalid hosted draft error class: ${journalErrorClass}`);
+        }
+        this.journalErrorClass = journalErrorClass;
+    }
+}
+const receiptFreeRecoveryMessage = (slot, elapsedMs) => (`slot ${slot.toUpperCase()}: re-dispatched after ${Math.max(1, Math.round(elapsedMs / 60_000))}m without receipt`);
+/** Abort one foreground POST rather than leaving its shell pinned forever. */
+const dispatchSlotWithDeadline = async (args) => {
+    const controller = new AbortController();
+    const timeout = setTimeout(() => { controller.abort(); }, args.timeoutMs);
+    try {
+        await args.client.dispatchScreen(args.runId, args.slot, { signal: controller.signal });
+        return 'completed';
+    }
+    catch (error) {
+        // The request is ambiguous only after OUR deadline. Other errors keep their
+        // normal failure path rather than being mistaken for safe receipt recovery.
+        if (controller.signal.aborted)
+            return 'timed-out';
+        throw error;
+    }
+    finally {
+        clearTimeout(timeout);
+    }
+};
+/**
+ * A timed-out POST might already own paid work. The recovery run read is the
+ * server's receipt-free repair trigger: only its explicit `pending` result can
+ * permit one unkeyed replay. A still-`dispatched` result is either genuinely
+ * active or has an ambiguous receipt, so it fails closed instead of keeping a
+ * foreground shell pinned. `attempt_key` remains server-owned, so the replay
+ * never creates a second paid effect.
+ */
+const dispatchHostedDraftSlot = async (args) => {
+    const startedAt = args.now();
+    const initial = await dispatchSlotWithDeadline(args);
+    if (initial === 'completed')
+        return;
+    const current = await args.client.getRun(args.runId);
+    const candidate = current.candidates.find((entry) => entry.slot === args.slot);
+    if (!candidate)
+        throw new Error(`Hosted draft service returned no state for slot ${args.slot}`);
+    if (candidate.status === 'dispatched') {
+        throw new Error(`slot ${args.slot.toUpperCase()} remains dispatched after the receipt-free recovery read;`
+            + ' no re-dispatch was attempted');
+    }
+    if (candidate.status !== 'pending')
+        return;
+    // Exactly one replay: another timeout remains a truthful foreground failure,
+    // never a client-side retry loop that could create ambiguity around paid work.
+    const replay = await dispatchSlotWithDeadline(args);
+    if (replay === 'timed-out') {
+        throw new Error(`slot ${args.slot.toUpperCase()} re-dispatch timed out after`
+            + ` ${Math.max(1, Math.round((args.now() - startedAt) / 60_000))}m without receipt`);
+    }
+    args.onReceiptFreeRecovery?.(receiptFreeRecoveryMessage(args.slot, args.now() - startedAt));
+};
+/**
+ * Dispatch only slots which have never started.
+ *
+ * `dispatched`, `succeeded`, and `failed` are all durable service states. A
+ * resume observes them and never posts those slots again; the service remains
+ * the paid-effect and ledger authority. A deadline-expired POST is the narrow
+ * exception: it performs the server's receipt-free recovery read; only a
+ * published `pending` state replays that exact slot once.
+ */
+export const dispatchHostedDraftSlots = async (args) => {
+    const claimed = await args.client.getRun(args.runId);
+    const slots = claimed.candidates
+        .filter((candidate) => candidate.status === 'pending')
+        .map((candidate) => candidate.slot);
+    const timeoutMs = args.timeoutMs ?? HOSTED_DRAFT_RECEIPT_FREE_STALL_TIMEOUT_MS;
+    const now = args.now ?? Date.now;
+    const settled = await Promise.allSettled(slots.map(async (slot) => await dispatchHostedDraftSlot({
+        client: args.client,
+        runId: claimed.id,
+        slot,
+        timeoutMs,
+        now,
+        ...(args.onReceiptFreeRecovery ? { onReceiptFreeRecovery: args.onReceiptFreeRecovery } : {}),
+    })));
+    const failures = settled.flatMap((result, index) => (result.status === 'rejected'
+        ? [{
+                slot: slots[index],
+                error: result.reason instanceof Error ? result.reason.message : String(result.reason),
+            }]
+        : []));
+    return {
+        run: slots.length > 0 ? await args.client.getRun(claimed.id) : claimed,
+        dispatched: slots,
+        failures,
+    };
+};
+export const waitForHostedDraftRun = async (args) => {
+    const now = args.now ?? Date.now;
+    const sleep = args.sleep
+        ?? ((milliseconds) => new Promise((resolve) => { setTimeout(resolve, milliseconds); }));
+    const deadline = now() + (args.timeoutMs ?? 30 * 60 * 1_000);
+    let current = args.run;
+    while (!hostedDraftRunIsSettled(current) && now() < deadline) {
+        await sleep(args.pollIntervalMs ?? 5_000);
+        current = await args.client.getRun(current.id);
+        args.onProgress?.(current);
+    }
+    return current;
+};
+const sha256 = (bytes) => createHash('sha256').update(bytes).digest('hex');
+const writeVerifiedImage = async (file, bytes, digest) => {
+    const existing = await readFile(file).catch(() => null);
+    if (existing) {
+        if (sha256(existing) !== digest) {
+            throw new Error(`Refusing to replace changed draft candidate ${file}`);
+        }
+        return;
+    }
+    await mkdir(path.dirname(file), { recursive: true });
+    const temporary = path.join(path.dirname(file), `.${path.basename(file)}.${randomUUID()}.tmp`);
+    try {
+        await writeFile(temporary, bytes, { flag: 'wx', mode: 0o600 });
+        await rename(temporary, file);
+    }
+    finally {
+        await rm(temporary, { force: true });
+    }
+};
+/** Download settled service images without overwriting a changed local artifact. */
+export const downloadHostedDraftCandidates = async (args) => {
+    const bySlot = new Map(args.run.candidates.map((candidate) => [candidate.slot, candidate]));
+    return await Promise.all(args.candidates.flatMap((candidate) => {
+        const state = bySlot.get(candidate.slot);
+        if (state?.status !== 'succeeded')
+            return [];
+        return [async () => {
+                const image = await args.client.downloadScreen(args.run.id, candidate.slot);
                 const digest = sha256(image.bytes);
                 if (digest !== image.sha256) {
                     throw new Error(`Hosted candidate ${candidate.slot} failed its download digest check`);
