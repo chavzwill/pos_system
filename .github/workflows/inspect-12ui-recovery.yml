@@ -24,7 +24,7 @@ jobs:
           const fs=require('fs'),path=require('path');
           const base=process.env.HOME+'/.local/share/12ui';
           const out=[];
-          const walk=p=>{for(const e of fs.readdirSync(p,{withFileTypes:true})){if(out.join('').length>350000)return;const f=path.join(p,e.name);if(e.isDirectory())walk(f);else if(/\.(js|mjs|cjs|json)$/.test(e.name)){const s=fs.readFileSync(f,'utf8');if(!/draft|hosted-run/.test(s))continue;out.push('\nFILE '+path.relative(base,f));const re=/draft\.json|draft-run|run\.json|hostedRunId|kind:\s*['"]draft|api\/v1\/create|downloadCandidate|draft-state|createRunId/g;let m;while((m=re.exec(s))){out.push(s.slice(Math.max(0,m.index-700),m.index+1500));if(out.join('').length>350000)break;}}}};
+          const walk=p=>{for(const e of fs.readdirSync(p,{withFileTypes:true})){if(out.join('').length>350000)return;const f=path.join(p,e.name);if(e.isDirectory())walk(f);else if(/\.(js|mjs|cjs|json)$/.test(e.name)){const s=fs.readFileSync(f,'utf8');if(['draft-workspace.js','draft-run.js','cli-draft-command.js','hosted-draft-run.js'].includes(e.name)){out.push('\nFILE '+path.relative(base,f)+'\n'+s);continue;}if(!/draft|hosted-run/.test(s))continue;out.push('\nFILE '+path.relative(base,f));const re=/draft\.json|draft-run|run\.json|hostedRunId|kind:\s*['"]draft|api\/v1\/create|downloadCandidate|draft-state|createRunId/g;let m;while((m=re.exec(s))){out.push(s.slice(Math.max(0,m.index-700),m.index+1500));if(out.join('').length>350000)break;}}}};
           walk(base);fs.mkdirSync('docs/ui-design/evidence',{recursive:true});fs.writeFileSync('docs/ui-design/evidence/cli-recovery-source.txt',out.join('\n'));
           NODE
           git config user.name "Total Tools Design CI"
