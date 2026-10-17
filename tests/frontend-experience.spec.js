@@ -53,6 +53,7 @@ for(const width of widths){
   const coach=page.locator('#tt-guided-mode [role=dialog]');
   await expect(coach).toBeVisible();
   await expect(coach).toHaveAttribute('aria-modal','false');
+  fs.mkdirSync('test-results/frontend-experience',{recursive:true});await page.screenshot({path:'test-results/frontend-experience/guide-me-home-'+width+'.png',fullPage:true});
   const rect=await coach.boundingBox();expect(rect.x).toBeGreaterThanOrEqual(0);expect(rect.x+rect.width).toBeLessThanOrEqual(width+1);
   await page.keyboard.press('Escape');await expect(coach).toHaveCount(0);await expect(guide).toBeFocused();
   await page.keyboard.press('Control+k');
@@ -100,5 +101,18 @@ for(const width of [375,1440]){
   await dialog.evaluate(n=>{const a=[...n.querySelectorAll('button,input,select,textarea,a[href]')].filter(x=>!x.disabled&&x.getClientRects().length);a.at(-1).focus()});
   await page.keyboard.press('Tab');expect(await dialog.evaluate(n=>n.contains(document.activeElement))).toBe(true);
   await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(page.locator('#tt-purch-new-po')).toBeFocused();
+ });
+}
+
+for(const width of widths){
+ test('Guide Me opens Inventory and leaves its controls usable at '+width+'px',async({page})=>{
+  await page.setViewportSize({width,height:1000});await login(page);await page.locator('#shell-guide').click();
+  await page.locator('#tt-guide-input').fill('adjust inventory');await page.locator('[data-guide-search] button[type=submit]').click();
+  const inventory=page.locator('[data-tt-workspace="inventory-workspace"]');await expect(inventory).toBeVisible({timeout:15000});
+  await expect(page.locator('.tt-guide__step-count')).toContainText('Step 2',{timeout:15000});
+  const search=inventory.locator('#tt-inv-search');await search.click();await search.fill('Baseball');await expect(search).toHaveValue('Baseball');
+  const coach=page.locator('#tt-guided-mode .tt-guide');const box=await coach.boundingBox();expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width+1);
+  expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width+1);
+  fs.mkdirSync('test-results/frontend-experience',{recursive:true});await page.screenshot({path:'test-results/frontend-experience/guide-me-inventory-'+width+'.png',fullPage:true});
  });
 }

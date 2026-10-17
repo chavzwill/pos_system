@@ -72,7 +72,7 @@ jobs:
           import os,base64,json,hashlib
           from PIL import Image
           from io import BytesIO
-          names=[p[:-4] for p in os.listdir('/tmp/ui-review-source') if p.endswith(('-1440.png','-390.png'))]
+          names=[p[:-4] for p in os.listdir('/tmp/ui-review-source') if p.endswith('.png')]
           src='/tmp/ui-review-source'
           out='docs/ui-review/'+os.environ['SOURCE_SHA'][:7]+'/image-transport'
           os.makedirs(out,exist_ok=True)
