@@ -19,5 +19,5 @@ window.fetch=async function(input,init){const url=typeof input==='string'?input:
   const response=await nativeFetch(input,nextInit);try{if(/^\/api\/purchase-orders\/\d+$/.test(url)&&String(init?.method||'GET').toUpperCase()==='GET'&&response.ok){const clone=response.clone(),data=await clone.json();if(data?.id){cache.po.set(String(data.id),data);setTimeout(enhance,0)}}}catch(e){}
   return response
 };
-const style=document.createElement('style');style.textContent=`.tt-uom-field{min-width:120px}.tt-uom-field small,[data-tt-receive-preview]{display:block;margin-top:4px;color:#64736d;font-size:10px;line-height:1.25}.tt-uom-field select,[data-tt-receive-uom]{min-height:38px;border:1px solid rgba(18,61,43,.16);border-radius:8px;background:#fff;padding:0 8px;color:#17382b}[data-tt-receive-uom]{margin-left:6px;max-width:105px}`;document.head.appendChild(style);setTimeout(enhance,500);
+/* Screen presentation is owned by ui-workspaces.css. */setTimeout(enhance,500);
 })();

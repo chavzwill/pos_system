@@ -34,7 +34,7 @@ async function run(){
   try{
     const catalog=await request(base,'/api/commerce-sync/catalog');
     assert.equal(catalog.status,200);
-    assert.equal(catalog.body.contract_version,'2026-09-20.1');
+    assert.equal(catalog.body.contract_version,'2026-09-20.3');
     assert.ok(catalog.body.products.some(p=>Number(p.id)===survivor));
     assert.ok(!catalog.body.products.some(p=>Number(p.id)===duplicate));
     const mapping=catalog.body.product_consolidations.find(x=>Number(x.duplicate_product_id)===duplicate);

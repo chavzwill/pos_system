@@ -17,5 +17,5 @@ window.fetch=async function(input,init){const url=typeof input==='string'?input:
   try{const payload=JSON.parse(init.body);if(Array.isArray(payload.items))payload.items=payload.items.map((item,index)=>{const s=selected.get(key(index));return s&&Number(item.product_id)===s.product_id?{...item,uom_code:s.uom_code}:item;});init={...init,body:JSON.stringify(payload)};}catch(_){}
 }return nativeFetch(input,init);};
 const observer=new MutationObserver(enhance);observer.observe(document.documentElement,{childList:true,subtree:true});enhance();
-const style=document.createElement('style');style.textContent='.tt-purch-uom{display:grid;gap:var(--space-1,5px);min-width:170px}.tt-purch-uom select{min-height:40px}.tt-purch-uom__note{font-size:11px;line-height:1.3;opacity:.72}.tt-purch__compose-line:has(.tt-purch-uom){grid-template-columns:minmax(220px,2fr) minmax(90px,.7fr) minmax(120px,.9fr) minmax(170px,1.2fr) auto}';document.head.appendChild(style);
+/* Screen presentation is owned by ui-workspaces.css. */
 })();

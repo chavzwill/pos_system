@@ -6,6 +6,7 @@ const home=read('employee-workspace-home.js'),assist=read('employee-assist-ui.js
 const wo=read('work-orders-workspace.js'),rent=read('rentals-workspace.js'),purch=read('purchasing-workspace.js');
 const inv=read('inventory-workspace.js'),log=read('logistics-intelligence.js');
 const loader=read('workspace-loader-hardening.js'),shell=read('app-shell.js');
+const presentation=read('ui-presentation.js');
 const endShift=fs.readFileSync(path.join(repo,'routes','employee-end-shift-assistant.js'),'utf8');
 new vm.Script(endShift,{filename:'employee-end-shift-assistant.js'});
 const employeeAssistRoute=fs.readFileSync(path.join(repo,'routes','employee-assist.js'),'utf8');
@@ -20,7 +21,7 @@ const checks=[
  ['Purchasing can open an exact request or PO',purch.includes('openRecord:(id,opts={})=>open({...opts,recordId:id})')],
  ['Inventory can open an exact item',inv.includes('openRecord:(id)=>open({recordId:id})')],
  ['Dispatch can focus an exact job',log.includes('data-job="${j.id}"')&&log.includes('openRecord:(id)=>open({recordId:id})')],
- ['Deferred loader preserves context',loader.includes("openFeature(key,title='Workspace',options={})")&&loader.includes('api.open(options||{})')],
+ ['Deferred loader preserves context',loader.includes("openFeature(key,title='Workspace',options={})")&&loader.includes('TotalToolsPresentation.mount(key,title,api,options||{})')&&presentation.includes("api.open(key==='receiving-workspace'?(options?.poId||null):options)")],
  ['Fast shell preserves context',shell.includes('openFeature(key,title,options={})')&&shell.includes('api.open(options||{})')],
  ['Employee assist loads deferred workspace with record context',assist.includes('TotalToolsWorkspaceLoader?.open')&&assist.includes('await loader(hit[2],action,{recordId:id')],
  ['Employee assist exports contextual opener',assist.includes('openHandovers,openEndShift,openContext')],

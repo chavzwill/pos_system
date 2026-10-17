@@ -24,7 +24,7 @@ const checks=[
  ['loss intelligence is mounted under Loss Control',trace.includes("router.use('/loss-control',require('./loss-control-rental-missing-asset-leaks'))")],
  ['loss intelligence surfaces pending approval, uncollected recovery, and waiver exposure',loss.includes('rental_missing_asset_pending_approval')&&loss.includes('rental_missing_asset_charge_uncollected')&&loss.includes('rental_missing_asset_recovery_waiver')],
  ['loss intelligence remains non-accusatory and cannot mutate financial records',loss.includes('not findings of misconduct')&&loss.includes('No rental, inventory, customer, payment or employee record was changed automatically')],
- ['fast shell exposes the native rentals workspace',shell.includes("'rentals-workspace':['/rentals-workspace.css','/rentals-workspace.js','TotalToolsRentalsWorkspace']")],
+ ['fast shell exposes the native rentals workspace',shell.includes("'rentals-workspace':['/ui-workspaces.css','/rentals-workspace.js','TotalToolsRentalsWorkspace']")],
  ['native rental detail fetches missing-asset cases',ui.includes('/api/rentals/missing-assets?agreement_id=')],
  ['native rental item view separates physical returns missing and unresolved quantities',ui.includes('physically returned')&&ui.includes('quantity_missing')&&ui.includes('unresolved')],
  ['mandatory accessories remain visible for accountability',ui.includes('Required accessory')&&!ui.includes("filter(i=>i.parent_item_id==null)")],

@@ -30,7 +30,7 @@ const PORT = process.env.PORT || 3001;
 const publicDir = path.join(__dirname, 'public');
 const indexPath = path.join(publicDir, 'index.html');
 const fastShellPath = path.join(publicDir, 'app-shell.html');
-const CLIENT_ASSET_VERSION = '20260922-ui-v2-all';
+const CLIENT_ASSET_VERSION = '20261017-design';
 
 let enhancedIndexCache = null;
 let legacyAppScriptCache = null;
@@ -53,21 +53,23 @@ function getLegacyAppScript() {
   legacyAppScriptCache = extractLegacyApp(source).script;
   return legacyAppScriptCache;
 }
+function stripLegacyPresentation(source) {
+  const end=source.indexOf('</head>');
+  if(end<0)throw new Error('Legacy presentation head is missing.');
+  const head=source.slice(0,end).replace(/<style\b[^>]*>[\s\S]*?<\/style>/gi,'').replace(/<link\b[^>]*rel=["']stylesheet["'][^>]*>/gi,'');
+  return head+source.slice(end);
+}
 function getEnhancedIndex() {
   if (enhancedIndexCache) return enhancedIndexCache;
   const source = fs.readFileSync(indexPath, 'utf8');
   const retiredThemePattern = /<link\b[^>]*href=["'][^"']*\/(?:workspace-quality-pass|premium-shell-v2|premium-shell-v3|late-2020s-workspaces|late-2020s-intelligence-finance|late-2020s-operations|late-2020s-pos-commerce|late-2020s-admin-marketing|late-2020s-config-crm|meeting-demo-shell|meeting-readiness|unified-ui-system)\.css(?:\?[^"']*)?["'][^>]*>\s*/gi;
-  const presentationSource = source.replace(retiredThemePattern, '');
+  const presentationSource = stripLegacyPresentation(source.replace(retiredThemePattern, ''));
   const legacy = extractLegacyApp(presentationSource);
   legacyAppScriptCache = legacy.script;
   const headAssets = [
     '<script src="' + versioned('/client-diagnostics.js') + '" defer></script>',
-    '<link rel="stylesheet" href="' + versioned('/total-tools-pos.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/pos-experience.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/employee-workspace-home.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/predictive-lookup.css') + '">',
-    '<link rel="stylesheet" href="' + versioned('/employee-assist-ui.css') + '">',
-    '<link id="tt-authoritative-ui" rel="stylesheet" href="' + versioned('/unified-ui-system.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/ui-tokens.css') + '">',
+    '<link rel="stylesheet" href="' + versioned('/ui-workspaces.css') + '">',
   ];
   const bodyAssets = [
     '<script src="' + versioned('/pos-guide-map.js') + '" defer></script>',
@@ -125,6 +127,7 @@ app.post('/client-diagnostics', diagnosticsRateLimit, (req, res) => {
 });
 app.get('/legacy-pos-app.js', (req,res)=>{ try{res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400');res.type('application/javascript').send(getLegacyAppScript());}catch(error){console.error('Unable to serve validated legacy POS application script:',error&&(error.stack||error.message||error));res.status(500).type('application/javascript').send('throw new Error("POS application script validation failed");');}});
 app.get('/', sendFastShell);
+app.get('/index.html', sendFastShell);
 app.get('/legacy', sendEnhancedIndex);
 app.use(express.static(publicDir, { index:false, etag:true, maxAge:'1h', setHeaders:(res,filePath)=>{ if (/\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico)$/i.test(filePath)) res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400'); else res.set('Cache-Control','no-cache, must-revalidate'); } }));
 app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.error('POS database initialization failed:',e&&(e.stack||e.message||e));res.status(500).json({error:'Database initialization failed',request_id:req.requestId});}});

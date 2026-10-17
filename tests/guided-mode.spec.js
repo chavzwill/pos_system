@@ -13,7 +13,7 @@ test.describe('Total Tools Guide Me', () => {
   test('native theme and Guide Me assets load', async ({ page }) => {
     await login(page);
     await expect(page.locator('#shell-guide')).toBeVisible();
-    await expect(page.locator('link[href*="/unified-ui-system.css"]')).toHaveCount(1);
+    await expect(page.locator('link[href*="/ui-workspaces.css"]')).toHaveCount(1);
     await expect(page.locator('script[src*="/guided-mode.js"]')).toHaveCount(1);
   });
 

@@ -1,0 +1,31 @@
+name: 12ui Implementation Alignment
+# Capture the CLI public sign-in URL without assuming a particular authorization path.
+on:
+  push:
+    branches: [redesign/total-tools-frontend]
+    paths: ['.github/workflows/12ui-implementation-alignment.yml']
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: total-tools-final-design-review
+  cancel-in-progress: true
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 40
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install design CLI
+        run: npx -y @12ui/design cli install
+      - name: Authenticate and review the tested implementation
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          node scripts/cloud-ui-alignment-review.cjs
