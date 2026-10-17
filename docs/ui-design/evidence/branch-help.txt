@@ -1,0 +1,37 @@
+
+Usage:
+  12ui branch execute --start <png|jpeg|webp> --concept <text>|--concept-file <file> --scope page|site [--engine auto|codex|api] [--convert html] [--prototype] [--polish] [--convert-model fast|standard|pro] [--convert-quality standard|pro] [--source-conversion-id <id>] [--max-screens <n,keeps-the-first-n-planned-screens-and-names-any-page-left-out>] [--page-concurrency <n>] [--idempotency-key <key>] [--out-dir <run-directory>] [--dry-run] [--aspect landscape|portrait|square] [--resume [--retry]] [--wait]
+
+Plan and generate the rest of an approved page or site.
+
+Behavior:
+  - Starts from the PNG, JPEG, or WebP named by --start and creates a unique run directory when
+    --out-dir is omitted.
+  - scope page continues the approved page below its first screen, and ends with no screens when
+    that page already closes with its footer; scope site also plans sibling pages.
+  - Runs on your own Codex when it is signed in with ChatGPT (one planner turn and one image per
+    screen, no 12ui account); otherwise on the 12ui branch service with your 12ui sign-in. --engine
+    codex|api chooses; a resumed run keeps its engine.
+  - With --convert html, each complete page is converted as one ordered viewport package while other
+    work continues.
+  - --prototype runs after --convert html, labels each screen once through the product provider, and
+    publishes a clickable prototype manifest.
+  - --polish requires --prototype and applies the retained deterministic polish rules before runtime
+    verification.
+  - Every claim, dispatch, poll, download, and conversion stays in this foreground process. Screens
+    and converted pages land beneath the branch directory.
+
+Controls:
+  - --max-screens keeps the first N planned screens and records what was omitted.
+  - Generated screens inherit the --start image canvas. --aspect explicitly declares one different
+    canvas for every generated slot.
+  - --page-concurrency allows 1–10 simultaneous page conversions and defaults to 3.
+    --source-conversion-id reuses a proven source conversion.
+  - --dry-run validates inputs and prints the run identity and estimate without claiming or buying
+    work.
+  - --resume --retry plans afresh when the recorded run settled without drawing a screen (no usable
+    plan, or an older run that planned nothing), keeping that run's record beside the new one; any
+    other run resumes as --resume alone would.
+
+Next:
+  - Run `12ui next <run-dir>` to inspect durable progress.
