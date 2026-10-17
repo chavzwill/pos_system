@@ -3,7 +3,7 @@ const errorNotice=message=>window.TotalToolsShellUI?.toast?window.TotalToolsShel
 const S={suppliers:[],products:[],doc:null,draft:[],ocr:null,addLine:null,pendingImport:null};
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 const api=async(url,opts={})=>{const r=await fetch(url,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});const d=await r.json().catch(()=>({}));if(!r.ok)throw new Error(d.error||`Request failed (${r.status})`);return d};
-function css(){if(document.querySelector('link[data-quote-import-css]'))return;const l=document.createElement('link');l.rel='stylesheet';l.href='/ui-workspaces.css?v=20261017-design';l.dataset.quoteImportCss='1';document.head.appendChild(l)}
+function css(){if(document.querySelector('link[data-quote-import-css]'))return;const l=document.createElement('link');l.rel='stylesheet';l.href='/ui-workspaces.css';l.dataset.quoteImportCss='1';document.head.appendChild(l)}
 function root(){let r=document.getElementById('tt-quote-import-workspace');if(!r){r=document.createElement('div');r.id='tt-quote-import-workspace';document.body.appendChild(r)}return r}
 function close(){document.getElementById('tt-quote-import-workspace')?.remove()}
 function notice(msg,type=''){const e=document.querySelector('#tt-quote-import-workspace [data-notice]');if(e){e.className=`tt-qi__notice ${type}`;e.textContent=msg||'';e.hidden=!msg}}

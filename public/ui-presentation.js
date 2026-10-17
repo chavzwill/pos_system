@@ -3,6 +3,13 @@ let active=null,opening=false,lastTrigger=null,sequence=0;
 const dialogs=new WeakSet(),returns=new Map();
 const visible=n=>n instanceof HTMLElement&&n.getClientRects().length>0&&getComputedStyle(n).visibility!=='hidden';
 const focusable=root=>[...root.querySelectorAll('input:not([disabled]):not([type=hidden]),select:not([disabled]),textarea:not([disabled]),button:not([disabled]),a[href],[tabindex="0"]')].filter(visible);
+function normalizeWorkspace(root){
+ const heading=root.querySelector('h1,h2,h3');if(!heading)return;
+ const panel=heading.closest('section,article')||root;
+ panel.dataset.ttPanel='';
+ for(let node=panel;node&&node!==root;node=node.parentElement){node.dataset.ttFrame='';if(node.getAttribute('role')==='dialog'){node.removeAttribute('role');node.removeAttribute('aria-modal');}}
+ const header=heading.closest('header,[class*="__top"]');if(header&&root.contains(header))header.dataset.ttHeading='';
+}
 function labelControls(root){
  root.querySelectorAll('input,select,textarea').forEach(n=>{if(!n.labels?.length&&!n.hasAttribute('aria-label')&&!n.hasAttribute('aria-labelledby'))n.setAttribute('aria-label',n.placeholder||String(n.name||'').replace(/_/g,' ')||'Select option');});
  root.querySelectorAll('button').forEach(n=>{const t=n.textContent.trim();if(!n.hasAttribute('aria-label')&&/^[×✕]$/.test(t))n.setAttribute('aria-label',n.matches('[data-remove],[data-tender-remove]')?'Remove item':'Close dialog');});
@@ -38,7 +45,7 @@ async function mount(key,title,api,options={}){
   if(heading){if(!heading.id)heading.id='tt-workspace-heading-'+(++sequence);root.setAttribute('aria-labelledby',heading.id);}else root.setAttribute('aria-label',title||'Workspace');
   for(const child of root.children){if(child.getAttribute('role')==='dialog'){child.removeAttribute('role');child.removeAttribute('aria-modal');}}
   content.replaceChildren(root);active={key,title,api,root,trigger};
-  labelControls(root);document.title=(title||'Workspace')+' · Total Tools';
+  normalizeWorkspace(root);labelControls(root);window.TotalToolsShellUI?.remember?.(key,title);document.title=(title||'Workspace')+' · Total Tools';
   document.dispatchEvent(new CustomEvent('tt:workspace-mounted',{detail:{key,title}}));
   const input=root.querySelector('input[type=search],input[id*="search"],[data-search]');
   requestAnimationFrame(()=>{if(input)input.focus({preventScroll:true});else root.focus({preventScroll:true});});
@@ -84,7 +91,7 @@ document.addEventListener('keydown',e=>{
  }
 },true);
 new MutationObserver(records=>{
- for(const record of records)for(const node of record.addedNodes)inspect(node);syncMenu();
+ for(const record of records)for(const node of record.addedNodes)inspect(node);if(active?.root.isConnected)normalizeWorkspace(active.root);syncMenu();
  for(const [dialog,target] of returns){if(!dialog.isConnected){returns.delete(dialog);if(target?.isConnected)requestAnimationFrame(()=>target.focus?.({preventScroll:true}));}}
  if(active&&!opening&&!active.root.isConnected)restoreHome();
 }).observe(document.body,{childList:true,subtree:true});
