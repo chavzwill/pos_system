@@ -46,5 +46,14 @@
       "--wait",
       "--json"
     ]
+  },
+  {
+    "id": "download-existing-candidate-images",
+    "args": [
+      "next",
+      "docs/ui-design/recovered",
+      "--wait",
+      "--json"
+    ]
   }
 ]
