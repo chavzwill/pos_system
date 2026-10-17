@@ -53,7 +53,7 @@ test.describe('Operational reports', () => {
       return typeof window.TotalToolsOperationalReports?.open==='function';
     });
     expect(opened).toBe(true);
-    await expect(page.locator('link[href^="/operational-reports.css"]')).toHaveCount(1);
+    await expect(page.locator('link[href^="/ui-workspaces.css"]')).toHaveCount(1);
     await expect(page.locator('script[src^="/operational-reports.js"]')).toHaveCount(1);
   });
 
