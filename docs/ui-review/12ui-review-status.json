@@ -1,5 +1,8 @@
 {
-  "state": "starting_authentication",
+  "state": "authentication_waiting",
+  "outputBytes": 108,
+  "mentionsCode": true,
+  "mentionsAuthorize": false,
   "sourceSha": "d992e021658c2eb4ae7e7a783d9cea883fbd27cd",
-  "updatedAt": "2026-10-17T20:53:19.184Z"
+  "updatedAt": "2026-10-17T20:53:50.422Z"
 }
