@@ -1,0 +1,56 @@
+name: Publish UI Review
+on:
+  push:
+    branches: [redesign/total-tools-frontend]
+    paths: ['.github/workflows/publish-ui-review.yml']
+permissions:
+  contents: write
+  actions: read
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 5
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          ref: redesign/total-tools-frontend
+          fetch-depth: 0
+      - name: Retrieve cloud UI screenshots
+        run: |
+          gh run download 39047605165 --name frontend-redesign-evidence-29526a9f994524e5503401dacc36351b8f76bd6e --dir /tmp/ui-review-source
+          python3 -m pip install --quiet Pillow
+          git fetch origin evidence/total-tools-ui || true
+          if git show-ref --verify --quiet refs/remotes/origin/evidence/total-tools-ui; then git switch -c publish-ui-evidence origin/evidence/total-tools-ui; else git switch -c publish-ui-evidence; fi
+      - name: Publish inspection copies without altering original screenshots
+        run: |
+          python3 <<'PY'
+          import os,base64,json,hashlib
+          from PIL import Image
+          from io import BytesIO
+          names=['shell-1440','point-of-sale-1440','point-of-sale-390','inventory-1440','receiving-390','repairs-1440','dispatch-390','customers-1440']
+          src='/tmp/ui-review-source/test-results/frontend-experience'
+          out='docs/ui-review/29526a9/image-transport'
+          os.makedirs(out,exist_ok=True)
+          index={}
+          for name in names:
+              p=os.path.join(src,name+'.png')
+              if not os.path.exists(p): continue
+              im=Image.open(p).convert('RGB')
+              stream=BytesIO()
+              im.save(stream,format='JPEG',quality=86,optimize=True)
+              data=base64.b64encode(stream.getvalue()).decode()
+              parts=[]
+              for n,i in enumerate(range(0,len(data),100000)):
+                  fn=name+'-'+str(n)+'.txt'
+                  open(os.path.join(out,fn),'w').write(data[i:i+100000])
+                  parts.append(fn)
+              index[name]={'parts':parts,'original_sha256':hashlib.sha256(open(p,'rb').read()).hexdigest(),'dimensions':im.size}
+          json.dump(index,open(os.path.join(out,'index.json'),'w'))
+          PY
+          git config user.name "Total Tools UI Evidence"
+          git config user.email "ui-evidence@users.noreply.github.com"
+          git add docs/ui-review
+          git commit -m "docs(ui): retain rendered UI inspection evidence [skip ci]"
+          git push origin HEAD:evidence/total-tools-ui
