@@ -35,7 +35,17 @@ jobs:
           key="$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))")"
           printf 'POS_SETTINGS_ENCRYPTION_KEY=%s\n' "$key" >> "$GITHUB_ENV"
           node scripts/ci-runtime-bootstrap.js
+      - name: Check all source contracts and report every mismatch
+        run: |
+          node <<'JS'
+          const {spawnSync}=require('node:child_process');
+          const checks=Object.entries(require('./package.json').scripts).filter(([name,command])=>name.startsWith('check:')&&/^node scripts\/check-[a-z0-9-]+\.js$/.test(command));
+          let failed=0;
+          for(const [name,command] of checks){const r=spawnSync(process.execPath,[command.slice(5)],{encoding:'utf8'});console.log(name+': '+(r.status===0?'PASS':'FAIL'));if(r.status!==0){failed++;console.log(r.stdout,r.stderr);}}
+          console.log('Source contracts:',checks.length,'executed;',failed,'failed');if(failed)process.exit(1);
+          JS
       - name: Check baseline shell and workspace responsiveness
+        if: ${{ !cancelled() }}
         id: baseline
         run: npx playwright test tests/shell-ui-verification.spec.js tests/guided-mode.spec.js tests/frontend-experience.spec.js --workers=1
       - name: Preserve audit and design artifacts

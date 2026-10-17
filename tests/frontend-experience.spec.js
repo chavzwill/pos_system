@@ -73,7 +73,7 @@ for(const width of widths){
    await page.waitForFunction(()=>!!window.TotalToolsWorkspaceLoader?.open);
    await page.evaluate(async({key,title,options})=>window.TotalToolsWorkspaceLoader.open(key,title,options),{key,title,options:key==='receiving-workspace'?{poId:fixture.order.id}:options});
    const root=page.locator('[data-tt-workspace="'+key+'"]').last();await expect(root).toBeVisible();
-   if(key==='sales-workspace'){await root.locator('#tt-sales-search').fill('UI verification');await page.waitForTimeout(500);await root.locator('[data-product="'+fixture.product.id+'"]').click();await expect(root.locator('.tt-sales__line').first()).toBeVisible();const product=root.locator('[data-product="'+fixture.product.id+'"]');expect(await product.evaluate(n=>[...n.querySelectorAll('strong,span,footer')].every(child=>{const a=n.getBoundingClientRect(),b=child.getBoundingClientRect();return b.top>=a.top&&b.bottom<=a.bottom+1}))).toBe(true);}
+   if(key==='sales-workspace'){await root.locator('[data-product="'+fixture.product.id+'"]').click();await expect(root.locator('.tt-sales__line').first()).toBeVisible();const product=root.locator('[data-product="'+fixture.product.id+'"]');expect(await product.evaluate(n=>[...n.querySelectorAll('strong,span,footer')].every(child=>{const a=n.getBoundingClientRect(),b=child.getBoundingClientRect();return b.top>=a.top&&b.bottom<=a.bottom+1}))).toBe(true);}
    const bounds=await root.boundingBox();expect(bounds.x,title).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width,title).toBeLessThanOrEqual(width+1);
    expect(await page.evaluate(()=>document.documentElement.scrollWidth),title).toBeLessThanOrEqual(width+1);
    const controls=await root.locator('button:visible,input:not([type=checkbox]):not([type=radio]):visible,select:visible,textarea:visible').evaluateAll(nodes=>nodes.filter(n=>!n.disabled).map(n=>{const r=n.getBoundingClientRect();return {name:n.getAttribute('aria-label')||n.getAttribute('aria-labelledby')?.split(/\s+/).map(id=>document.getElementById(id)?.textContent||'').join(' ').trim()||[...(n.labels||[])].map(l=>l.textContent.trim()).join(' ')||n.textContent.trim()||n.getAttribute('placeholder'),height:r.height,font:parseFloat(getComputedStyle(n).fontSize)};}));
@@ -89,3 +89,16 @@ test('reduced motion disables decorative transitions',async({page})=>{
  await page.emulateMedia({reducedMotion:'reduce'});await login(page);
  expect(await page.evaluate(()=>[...document.querySelectorAll('button,input,a')].filter(n=>n.getClientRects().length).every(n=>getComputedStyle(n).transitionDuration.split(',').every(t=>parseFloat(t)===0)))).toBe(true);
 });
+
+for(const width of [375,1440]){
+ test('purchasing composer preserves modal keyboard flow at '+width+'px',async({page})=>{
+  await page.setViewportSize({width,height:1000});await login(page);
+  await page.evaluate(()=>window.TotalToolsWorkspaceLoader.open('purchasing-workspace','Purchase Orders',{tab:'po'}));
+  const trigger=page.locator('#tt-purch-new-po');await trigger.click();
+  const dialog=page.getByRole('dialog',{name:'Create Purchase Order',exact:true});await expect(dialog).toBeVisible();
+  const box=await dialog.boundingBox();expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width+1);
+  await dialog.evaluate(n=>{const a=[...n.querySelectorAll('button,input,select,textarea,a[href]')].filter(x=>!x.disabled&&x.getClientRects().length);a.at(-1).focus()});
+  await page.keyboard.press('Tab');expect(await dialog.evaluate(n=>n.contains(document.activeElement))).toBe(true);
+  await page.keyboard.press('Escape');await expect(dialog).toHaveCount(0);await expect(page.locator('#tt-purch-new-po')).toBeFocused();
+ });
+}

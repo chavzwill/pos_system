@@ -16,17 +16,18 @@ function labelControls(root){
 }
 function syncMenu(){const root=document.getElementById('shell-root'),menu=document.getElementById('shell-menu'),side=document.querySelector('.shell-sidebar'),main=document.querySelector('.shell-main');const mobile=matchMedia('(max-width:1023px)').matches,open=!!root?.classList.contains('menu-open');if(menu)menu.setAttribute('aria-expanded',open?'true':'false');if(side)side.inert=mobile&&!open;if(main)main.inert=mobile&&open;}
 window.addEventListener('resize',syncMenu);
+function returnFocus(target){const next=target?.isConnected?target:target?.id?document.getElementById(target.id):target?.dataset?.open?document.querySelector('[data-open="'+CSS.escape(target.dataset.open)+'"]'):null;if(next)requestAnimationFrame(()=>next.focus({preventScroll:true}));}
 function restoreHome(){
  const previous=active?.trigger;active=null;
  window.TotalToolsShellUI?.home?.();
- if(previous?.isConnected)requestAnimationFrame(()=>previous.focus({preventScroll:true}));
+ returnFocus(previous);
 }
 function closeWorkspace(){
  if(!active)return;
  const old=active;active=null;old.api.close?.();
  if(old.root.isConnected)old.root.remove();
  window.TotalToolsShellUI?.home?.();
- if(old.trigger?.isConnected)requestAnimationFrame(()=>old.trigger.focus({preventScroll:true}));
+ returnFocus(old.trigger);
 }
 async function mount(key,title,api,options={}){
  const content=document.getElementById('shell-content');
@@ -92,7 +93,7 @@ document.addEventListener('keydown',e=>{
 },true);
 new MutationObserver(records=>{
  for(const record of records)for(const node of record.addedNodes)inspect(node);if(active?.root.isConnected)normalizeWorkspace(active.root);syncMenu();
- for(const [dialog,target] of returns){if(!dialog.isConnected){returns.delete(dialog);if(target?.isConnected)requestAnimationFrame(()=>target.focus?.({preventScroll:true}));}}
+ for(const [dialog,target] of returns){if(!dialog.isConnected){returns.delete(dialog);returnFocus(target);}}
  if(active&&!opening&&!active.root.isConnected)restoreHome();
 }).observe(document.body,{childList:true,subtree:true});
 window.TotalToolsPresentation={mount,close:closeWorkspace};
