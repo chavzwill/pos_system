@@ -8,7 +8,7 @@ check('learning topics cover core operations',ui.includes("id:'sale'")&&ui.inclu
 check('lesson completion is employee scoped on device',ui.includes("tt-learning-complete:")&&ui.includes('profile()?.employee?.id'));
 check('learning can launch exact Guide Me task',ui.includes('TotalToolsGuideMe.openTask(l.task)'));
 check('Guide Me exposes direct task API',guide.includes('window.TotalToolsGuideMe')&&guide.includes('openTask:(id)'));
-check('fast shell loads learning styles',shell.includes('employee-learning-center.css'));
+check('fast shell loads learning styles',shell.includes('/ui-workspaces.css'));
 check('fast shell loads learning script',shell.includes('employee-learning-center.js'));
 check('legacy surface loads learning styles',legacy.includes('employee-learning-center.css'));
 check('legacy surface loads learning script',legacy.includes('employee-learning-center.js'));

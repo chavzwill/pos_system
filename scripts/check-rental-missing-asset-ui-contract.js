@@ -4,7 +4,7 @@ const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'
 const ui=read('public/rentals-workspace.js'),css=read('public/rentals-workspace.css'),route=read('routes/rental-missing-asset-disposition.js'),guard=read('routes/rental-loss-prevention.js'),shell=read('public/app-shell.js'),server=read('server.js');
 new vm.Script(ui,{filename:'rentals-workspace.js'});new vm.Script(route,{filename:'rental-missing-asset-disposition.js'});
 const checks=[
- ['native shell loads rental workspace',shell.includes("'rentals-workspace':['/rentals-workspace.css','/rentals-workspace.js','TotalToolsRentalsWorkspace']")],
+ ['native shell loads rental workspace',shell.includes("'rentals-workspace':['/ui-workspaces.css','/rentals-workspace.js','TotalToolsRentalsWorkspace']")],
  ['rental detail loads missing-asset cases',ui.includes('/api/rentals/missing-assets?agreement_id=')],
  ['item lifecycle visibly separates physical returns from missing units',ui.includes('physically returned')&&ui.includes('quantity_missing')&&ui.includes('unresolved')],
  ['mandatory accessories remain visible in the same accountability workflow',ui.includes('Required accessory')&&!ui.includes("filter(i=>i.parent_item_id==null)")],

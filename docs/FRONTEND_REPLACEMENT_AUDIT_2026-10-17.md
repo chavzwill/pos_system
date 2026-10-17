@@ -1,6 +1,6 @@
 # Total Tools frontend replacement audit — 2026-10-17
 
-Status: audit and cloud tooling only. The replacement frontend is not implemented, certified, or deployed.
+Status: replacement frontend implemented in draft PR #104; final visual alignment and exact-head release certification are in progress. No deployment has been performed.
 
 ## Source of truth and served entry points
 

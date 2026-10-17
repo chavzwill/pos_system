@@ -1,4 +1,5 @@
 (()=>{'use strict';
+function icon(name){const paths={"report":"<path d=\"M5 3h10l4 4v14H5zM15 3v5h4M8 12h8M8 16h8\"/>","company":"<path d=\"M4 21V7l8-4 8 4v14M9 21v-5h6v5M8 8h1m6 0h1M8 12h1m6 0h1\"/>","email":"<rect x=\"3\" y=\"5\" width=\"18\" height=\"14\" rx=\"2\"/><path d=\"m3 6 9 7 9-7\"/>","notifications":"<path d=\"M6 8a6 6 0 0 1 12 0v6l2 3H4l2-3zM10 21h4\"/>","integrations":"<path d=\"m10 8 3-3a4 4 0 0 1 6 6l-3 3M14 16l-3 3a4 4 0 0 1-6-6l3-3m0 6 8-8\"/>","settings":"<path d=\"M4 7h16M4 17h16\"/><circle cx=\"9\" cy=\"7\" r=\"3\"/><circle cx=\"15\" cy=\"17\" r=\"3\"/>"};return '<svg viewBox="0 0 24 24" width="20" height="20" fill="none" stroke="currentColor" stroke-width="1.6" stroke-linecap="round" stroke-linejoin="round" aria-hidden="true">'+(paths[name]||paths.settings)+'</svg>';}
 let active=null,opening=false,lastTrigger=null,sequence=0;
 const dialogs=new WeakSet(),returns=new Map();
 const visible=n=>n instanceof HTMLElement&&n.getClientRects().length>0&&getComputedStyle(n).visibility!=='hidden';
@@ -96,5 +97,5 @@ new MutationObserver(records=>{
  for(const [dialog,target] of returns){if(!dialog.isConnected){returns.delete(dialog);returnFocus(target);}}
  if(active&&!opening&&!active.root.isConnected)restoreHome();
 }).observe(document.body,{childList:true,subtree:true});
-window.TotalToolsPresentation={mount,close:closeWorkspace};
+window.TotalToolsPresentation={mount,close:closeWorkspace,icon};
 })();

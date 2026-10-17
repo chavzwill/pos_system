@@ -30,8 +30,8 @@ check('browser uses AbortController cancellation',ui.includes('AbortController')
 check('browser suppresses stale responses',/request|sequence|token/i.test(ui));
 check('browser exposes accessible combobox/listbox semantics',ui.includes('aria-autocomplete')&&ui.includes('listbox'));
 check('browser handles keyboard selection',ui.includes('ArrowDown')&&ui.includes('ArrowUp')&&ui.includes('Enter')&&ui.includes('Escape'));
-check('shell loads predictive lookup client',shell.includes('predictive-lookup.js')&&shell.includes('predictive-lookup.css'));
-check('legacy enhanced shell loads predictive lookup client',server.includes("versioned('/predictive-lookup.js')")&&server.includes("versioned('/predictive-lookup.css')"));
+check('shell loads predictive lookup client',shell.includes('predictive-lookup.js')&&shell.includes('/ui-workspaces.css'));
+check('legacy enhanced shell loads predictive lookup client',server.includes("versioned('/predictive-lookup.js')")&&server.includes("versioned('/ui-workspaces.css')"));
 check('alias schema is initialized centrally, not created by search requests',read('database.js').includes('CREATE TABLE IF NOT EXISTS lookup_aliases')&&!engine.includes('CREATE TABLE IF NOT EXISTS lookup_aliases'));
 check('catalog picker consumes shared predictive lookup',read('public/catalog-picker.js').includes('TotalToolsPredictiveLookup'));
 check('sales customer lookup consumes shared predictive lookup',read('public/sales-workspace.js').includes('TotalToolsPredictiveLookup'));

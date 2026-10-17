@@ -1,5 +1,0 @@
-
-12ui engine: api (saved run backend)
-Sign in/Create an account with this magic link: https://12ui.com/connect-cli?user_code=Q6RM-5V2C
-Takes 5 seconds and you can use 12ui for free.
-Agent: Give this coded link to your user, then retry after they approve it.
