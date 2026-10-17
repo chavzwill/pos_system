@@ -1,0 +1,56 @@
+
+Usage:
+  12ui draft --concept <text> [--corpus-query <visual-caption|@file,hedge-max-400>] [--candidates <2-16,default-4>] [--reference <path-or-url>] [--retain <comma-separated>] [--retain-source inspiration|subject,default-inspiration] [--redesign-source <png|jpeg|webp>] [--mode exploratory|reskin] [--corpus-mode direct|balanced|adventurer|hedge,default-hedge] [--aspect landscape|portrait|square] [--wait]
+
+Retrieve references and generate first-viewport UI candidates.
+
+Behavior:
+  - Creates a resumable temporary run directory, prints it first, retrieves a corpus reference set,
+    and claims one hosted /api/v1/create run.
+  - --candidates accepts 2–16 and defaults to four; prefer at least four distinct directions.
+  - --concept reaches every candidate word for word: write it for one screen, never a set of
+    options, with the copy that must survive exactly, the brand to keep (its logo or lettering goes
+    on --reference, and --retain carries only what the person asked to keep of it: brand, font,
+    style, layout) and what must not appear, and leave composition, palette and type open unless the
+    user fixed them. Optionally pass --corpus-query "<short visual caption>" or --corpus-query
+    @file: hedge retrieval accepts at most 400 UTF-16 characters after whitespace normalization.
+    Describe the surface and intended layout, typography, imagery, and palette. Longer queries
+    automatically use balanced retrieval with the full text and an explanation. The separate query
+    is recorded and part of the run identity.
+  - The reference search runs hedge and needs no flag: one reference per candidate slot, spread
+    across distinct directions while holding the concept. --corpus-mode direct|balanced|adventurer
+    chooses another; those retrieve the wider twelve-reference slate and pair its first candidates.
+    A search conditioned on your own image (--reference, --redesign-source) runs balanced instead:
+    the corpus refuses a hedge query that carries an image. An explicit mode is its own run, so it
+    searches again instead of resuming the default run in the same workspace.
+  - Every service dispatch request stays in the foreground. The command returns after no slot
+    remains pending; generation stays server-side.
+  - Run `12ui next <run-dir> --wait` to poll, repair only recorded slots that never started, and
+    download real PNGs into <run-dir>/candidates/.
+  - Defaults to landscape. Authentication is 12ui-only; no Codex session or caller-side
+    image-provider key is read.
+  - --concept takes the whole brief, up to 20,000 characters (the Design workspace's brief ceiling);
+    a longer one is refused before anything is bought.
+
+Redesign modes:
+  - Without --reference, creates a new interface and pairs one corpus reference with each candidate.
+  - --reference accepts a local path or HTTP(S) URL, conditions corpus retrieval, and sends those
+    original bytes to every candidate.
+  - A reference retains style by default while excluding layout, content, and assets. --retain
+    accepts comma-separated values; layout is the explicit structure-preserving opt-in. --retain
+    brand,font keeps a brand reference's logo and typefaces without its layout, content or palette
+    (brand alone leaves the typeface free), and the local Design workspace then takes the image as
+    its brand for later rounds and edits.
+  - --retain-source says what the reference IS. inspiration (the default) is a design you like, so
+    an exclusion is a prohibition: do not reuse its words or its logo. subject is your own page, so
+    the same exclusion is a licence: its words may be rewritten, its brand may be replaced. `12ui
+    improve` sends subject. Against a subject, at least one of layout, copy, brand, and style must
+    be left free to change: keeping all four asks for the page back unchanged and is refused.
+  - --redesign-source remains an alias for local redesign workflows. --mode reskin is the
+    layout-retain shorthand.
+
+Next:
+  - Run `12ui next <run-dir> --wait` to collect the candidates. Pass the chosen image to `12ui
+    branch execute --start` or `12ui convert`. A user choosing among new designs starts from the
+    brief: design.slate.create where the workspace shows in the conversation (the Codex app), else
+    `12ui workspace open --concept "<brief>" --wait`.
