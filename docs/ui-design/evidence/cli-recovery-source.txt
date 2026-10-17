@@ -1,0 +1,1700 @@
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/branch-engine.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/branch-winner.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-branch-command.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-capabilities.js
+
+        /** Reuse requires every one of these to match the bytes about to be sent. */
+        proves: ['sha256', 'conversionId', 'model', 'expiresAt'],
+        bestEffort: true,
+    },
+    /** Ordered viewports of one continuous page: ONE conversion, not N. */
+    conversionPackage: {
+        command: '12ui convert package --manifest <package.json> --out-dir <directory>',
+        endpoint: '/api/v1/convert/package',
+        sourceConversionReuse: 'sourceConversionId',
+        expectedSeconds: OPERATION_DURATION_HINTS.package,
+    },
+    branch: {
+        command: '12ui branch execute',
+        scopes: ['page', 'site'],
+        completionSentinel: 'branch.complete.json',
+        endpoint: '/api/v1/create',
+        /**
+         * A page's package depends on its own screens and nothing else, so pages
+         * convert as they become whole and several at a time.
+         */
+        pageConcurrency: {
+            flag: '--page-concurrency',
+            default: BRANCH_PAGE_CONCURRENCY_DEFAULT,
+            maximum: 10,
+        },
+        expectedSecondsPerPage: OPERATION_DURATION_HINTS.branchPackage,
+    },
+    prototype: {
+        command: '12ui prototype <run-dir>',
+        branchFlag: '--prototype (requires --convert html)',
+        polishFlag: '--polish (opt-in; requires --prototype on branch execute)',
+        output: '<branch-dir>/prototype/proto-manifest.json',
+        labelSchema: ['navigate', 'dropdown', 'modal', 'none'],
+        labelSpend: 'prototype defaults to local deterministic interactions; --labels workflow --workspace prepares local operations without dispatch and consumes their verified results; --labels 12ui explicitly enables one hosted label call per screen',
+        precedence: 'deterministic navigation applies; dropdowns bind only from three or more distinct labeled options',
+        hardGates: ['branch.plan.json', 'semantic viewport section ids or verified local-page identity'],
+    },
+};
+//# sourceMappingURL=cli-capabilities.js.map
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-draft-command.js
+} from './cli-usage.js';
+import { createLongRunningProgress, nextActionLine, secondsSince, } from './cli-progress.js';
+import { readConversionConfig } from './config.js';
+import { INSPIRATION_ATTEMPT_FILE } from './cli-corpus-types.js';
+import { TwelveUiCorpusClient } from './corpus-client.js';
+import { acquireDraftRunDirectory, } from './draft-adoption.js';
+import { draftLocalRunKey } from './draft-identity.js';
+import { draftPaths, readDraftRecord, writeDraftCompletion, } from './draft-workspace.js';
+import { DRAFT_CANDIDATE_COUNT, DRAFT_CANDIDATE_COUNT_MAXIMUM, DRAFT_CANDIDATE_COUNT_MINIMUM, DRAFT_CORPUS_MODE_FLAG, parseDraftCorpusMode, draftReferenceRetrieval, prepareDraftRun, } from './draft-run.js';
+import { assertReferenceSearchServable } from './reference-search-mode.js';
+import { readDraftConcept, readDraftCorpusQuery } from './draft-corpus-query.js';
+import { loadCorpusReferenceImage } from './cli-corpus-reference-image.js';
+import { DEFAULT_DRAFT_REFERENCE_RETAIN, DRAFT_LAYOUT_RETAIN, draftRetainIdentity, draftRetainsLayout, parseDraftRetainFlag, } from './draft-retain.js';
+import { IMPROVE_RETAIN_ALL_KEPT_REFUSAL, improveRetainKeepsEverything, } from './improve-concept.js';
+import { dispatchHostedDraftSlots, downloadHostedDraftCandidates, hostedDraftRunIsSettled, HOSTED_DRAFT_CANDIDATE_DURATION_SECONDS, HostedDraftFailureError, summarizeHostedDraftRun, waitForHostedDraftRun, } from './hosted-draft-run.js';
+import { finishDraftDispatchAttempt, startDraftDispatchAttempt, } from './draft-dispatch-attempt.js';
+/** `12ui draft` owns corpus retrieval, the hosted run, and local image materialization. */
+/**
+ * A draft is the CLI's primitive for redesign, improve and branch work, never the first round of a user choosing among
+ * new designs: that is the Design workspace started from the brief, whose first round is twelve options each drawn from
+ * its own sketch (workspace-start.ts). Measured 2026-10-10 (sketches-first-round): agents followed this answer's earlier
+ * "the Design workspace comes first" to a draft first round in 11 of 11 product sessions, so no session showed a sketch.
+ */
+export const CHOOSING_STARTS_FROM_BRIEF = 'A user choosing among new de
+ertReferenceSearchServable } from './reference-search-mode.js';
+import { readDraftConcept, readDraftCorpusQuery } from './draft-corpus-query.js';
+import { loadCorpusReferenceImage } from './cli-corpus-reference-image.js';
+import { DEFAULT_DRAFT_REFERENCE_RETAIN, DRAFT_LAYOUT_RETAIN, draftRetainIdentity, draftRetainsLayout, parseDraftRetainFlag, } from './draft-retain.js';
+import { IMPROVE_RETAIN_ALL_KEPT_REFUSAL, improveRetainKeepsEverything, } from './improve-concept.js';
+import { dispatchHostedDraftSlots, downloadHostedDraftCandidates, hostedDraftRunIsSettled, HOSTED_DRAFT_CANDIDATE_DURATION_SECONDS, HostedDraftFailureError, summarizeHostedDraftRun, waitForHostedDraftRun, } from './hosted-draft-run.js';
+import { finishDraftDispatchAttempt, startDraftDispatchAttempt, } from './draft-dispatch-attempt.js';
+/** `12ui draft` owns corpus retrieval, the hosted run, and local image materialization. */
+/**
+ * A draft is the CLI's primitive for redesign, improve and branch work, never the first round of a user choosing among
+ * new designs: that is the Design workspace started from the brief, whose first round is twelve options each drawn from
+ * its own sketch (workspace-start.ts). Measured 2026-10-10 (sketches-first-round): agents followed this answer's earlier
+ * "the Design workspace comes first" to a draft first round in 11 of 11 product sessions, so no session showed a sketch.
+ */
+export const CHOOSING_STARTS_FROM_BRIEF = 'A user choosing among new designs starts from the brief: design.slate.create where the workspace shows in the conversation (the Codex app), else `12ui workspace open --concept "<brief>" --wait`.';
+const parseMode = (flags, hasSource) => {
+    const mode = stringFlag(flags, 'mode')?.trim();
+    if (!hasSource) {
+        if (mode)
+            throw new Error('--mode applies to a redesign; pass --redesign-source with it');
+        return 'new-interface';
+    }
+    if (mode === undefined || mode === 'exploratory')
+        return 'exploratory-redesign';
+    if (mode === 'reskin')
+        return 'structure-preserving-reskin';
+    throw new Error('--mode must be exploratory or reskin');
+};
+const parseAspect = (flags) => {
+    const aspect = stringFlag(
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-help/design.js
+ms: [
+                    'Reuses the saved request and idempotency key, preserves verified downloads, and fetches only what remains.',
+                    'Completed attempts verify the saved files; missing files resume under the original retrieval identity. Changed reference inputs and incompatible evidence are refused.',
+                ],
+            }],
+    },
+    draft: {
+        summary: 'Retrieve references and generate first-viewport UI candidates.',
+        sections: [
+            {
+                heading: 'Behavior',
+                items: [
+                    'Creates a resumable temporary run directory, prints it first, retrieves a corpus reference set, and claims one hosted /api/v1/create run.',
+                    '--candidates accepts 2–16 and defaults to four; prefer at least four distinct directions.',
+                    '--concept reaches every candidate word for word: write it for one screen, never a set of options, with the copy that must survive exactly, the brand to keep (its logo or lettering goes on --reference, and --retain carries only what the person asked to keep of it: brand, font, style, layout) and what must not appear, and leave composition, palette and type open unless the user fixed them. Optionally pass --corpus-query "<short visual caption>" or --corpus-query @file: hedge retrieval accepts at most 400 UTF-16 characters after whitespace normalization. Describe the surface and intended layout, typography, imagery, and palette. Longer queries automatically use balanced retrieval with the full text and an explanation. The separate query is recorded and part of the run identity.',
+                    'The reference search runs hedge and needs no flag: one reference per candidate slot, spread across distinct directions while holding the concept. --corpus-mode direct|balanced|adventurer chooses another; those retrieve the wider twelve-reference slate and pair its first candidates. A search conditioned on your own image (--reference, --redesign-source) runs balanced instead: the corpus refuses a hedge query that carries an image. An explicit mode is its own run, so it searches again instead of resuming the default run in the same 
+t, branch or convert), runDir, pick, handoff, messages (what the screen would have sent an agent), text (what to run next) and view (what design.slate.data returns).',
+                    'Without --wait it keeps serving until interrupted and prints one such line per decision.',
+                ],
+            },
+        ],
+    },
+    review: {
+        summary: 'Open a local review page for stored drafts, branches, and conversions.',
+        sections: [
+            {
+                heading: 'Behavior',
+                items: [
+                    'Binds an ephemeral 127.0.0.1 port, prints the URL, opens it, and serves only local run artifacts.',
+                    'A run directory may hold draft.json, branch records beneath branch/, or a conversion journal. --all reads temporary 12ui-* runs and .12ui runs under the current project.',
+                    'Branch runs render in plan order as one design: concept, page intent, winner and screens, resizable exported pages, page navigation for sites, and per-page feedback.',
+                    'Notes and pick or approve marks persist in <run-dir>/review.json and appear again after reload.',
+                ],
+            },
+            {
+                heading: 'Paid edits',
+                items: [
+                    'LayerDocs edit directly through /api/v1/edit. Branch pages resolve their ordered stored viewport LayerDocs; draft images say they must convert first and chain that conversion into the edit on one explicit click.',
+                    'Every paid button carries its base price and states possible raster-action additions. Edited output renders beside the original with changed-region evidence, and prompt, quoted cost, and result paths persist in review.json.',
+                ],
+            },
+        ],
+    },
+};
+//# sourceMappingURL=design.js.map
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-help/index.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-help/meta.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-help/workflow.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-improve-command.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-local-improve.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-next-command.js
+import { readRunJournal } from './run-journal.js';
+import { hostedRunAgeSeconds, lastWorkingEnd, unfinishedPaidRun, } from './run-journal-unfinished.js';
+import { readBranchStatus } from './branch-status.js';
+import { CHOOSING_STARTS_FROM_BRIEF, materializeDraftIfSettled, readDraftStatus, repairDraftDispatch, } from './cli-draft-command.js';
+import { observeDraftClaim } from './draft-adoption.js';
+import { resolveNextTarget } from './next-target.js';
+import { acquireNextWaitLease } from './next-wait-lease.js';
+import { readConversionRecovery } from './conversion-recovery.js';
+import { HOSTED_DRAFT_CANDIDATE_DURATION_SECONDS, hostedDraftRunIsSettled, summarizeHostedDraftRun, } from './hosted-draft-run.js';
+const HEARTBEAT_MS = 15_000;
+const callerDeadlineMs = (flags) => {
+    const raw = stringFlag(flags, 'timeout-ms');
+    if (raw === undefined)
+        return undefined;
+    if (!booleanFlag(flags, 'wait')) {
+        throw new CliRefusal('--timeout-ms is a caller deadline for `12ui next --wait`; add --wait or remove the deadline.', 'next_timeout_without_wait');
+    }
+    const parsed = Number(raw);
+    if (!Number.isFinite(parsed) || parsed < 1_000) {
+        throw new CliRefusal('--timeout-ms must be a number of at least 1000', 'next_timeout_invalid');
+    }
+    return Math.floor(parsed);
+};
+const branchClientFor = (flags) => {
+    try {
+        return new TwelveUiBranchClient(readConversionConfig({
+            origin: stringFlag(flags, 'origin'),
+            apiKey: stringFlag(flags, 'api-key'),
+        }));
+    }
+    catch {
+        // A status read works offline; it just cannot refresh from the service.
+        return null;
+    }
+};
+const readBranch = async (directory, flags) => {
+    const client = branchClientFor(flags);
+    const report = await readBranchStatus({
+        outDir: directory,
+        // A run on the person's own Codex is refreshed from its local ledger, never from the service.
+        refresh: async (runId) => (runId.startsWith('local-') ? await readLocalBranchEnvelope(directory) : client ? await client.getRun(runId) : null),
+    });
+    return {
+        kind: 'branch',
+        engine: report.engine,
+        target: directory,
+        state:
+ ticks in one wait).
+            ...(report.packages?.length
+                ? {
+                    children: report.packages
+                        .filter((entry) => entry.stage !== 'succeeded' && entry.stage !== 'failed')
+                        .map((entry) => ({ id: entry.pageId, stage: entry.stage })),
+                }
+                : {}),
+            detail: `${report.counts.waiting} waiting, ${report.counts.blocked} blocked,`
+                + ` ${report.counts.failed} failed`,
+        },
+    };
+};
+/**
+ * A draft whose `12ui draft` has claimed the directory and not yet recorded its
+ * hosted run.
+ *
+ * MEASURED (0.2.104 gate): agents start `12ui draft` and, before it writes
+ * `draft.json`, run `12ui next <dir> --wait`. That directory read as a
+ * workspace, so the wait exited at once and the next command was refused for
+ * want of a finished draft. It is a draft in progress: it answers as one, and
+ * waits as one, until `draft.json` lands and the ordinary draft reading takes
+ * over. A claim whose owner is gone cannot finish, so that is the same refusal
+ * a draft that died before recording its run has always given.
+ */
+const readClaimingDraft = async (directory, observedAt, owner) => {
+    if (owner.owner === 'gone') {
+        throw new CliRefusal(`The draft run in ${directory} failed before its hosted run was recorded: the`
+            + `${owner.pid === undefined ? '' : ` \`12ui draft\` (process ${owner.pid})`}`
+            + ' that claimed this directory is no longer running. Re-run the same draft command;'
+            + ' it continues this directory and its corpus key replays rather than starting'
+            + ' a new retrieval.', 'draft_incomplete');
+    }
+    const elapsedSeconds = secondsSince(owner.claimedAt, observedAt);
+    return {
+        kind: 'draft',
+        target: directory,
+        state: 'claiming',
+        complete: false,
+        typicalSeconds: HOSTED_DRAFT_CANDIDATE_DURATION_SECONDS,
+        ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }),
+        what: 'A draft',
+        narrative: `The draft in ${directory} is still being created: \`12ui draft\` has claimed`
+            + ' this directory and has not recorded 
+  .map((entry) => ({ id: entry.pageId, stage: entry.stage })),
+                }
+                : {}),
+            detail: `${report.counts.waiting} waiting, ${report.counts.blocked} blocked,`
+                + ` ${report.counts.failed} failed`,
+        },
+    };
+};
+/**
+ * A draft whose `12ui draft` has claimed the directory and not yet recorded its
+ * hosted run.
+ *
+ * MEASURED (0.2.104 gate): agents start `12ui draft` and, before it writes
+ * `draft.json`, run `12ui next <dir> --wait`. That directory read as a
+ * workspace, so the wait exited at once and the next command was refused for
+ * want of a finished draft. It is a draft in progress: it answers as one, and
+ * waits as one, until `draft.json` lands and the ordinary draft reading takes
+ * over. A claim whose owner is gone cannot finish, so that is the same refusal
+ * a draft that died before recording its run has always given.
+ */
+const readClaimingDraft = async (directory, observedAt, owner) => {
+    if (owner.owner === 'gone') {
+        throw new CliRefusal(`The draft run in ${directory} failed before its hosted run was recorded: the`
+            + `${owner.pid === undefined ? '' : ` \`12ui draft\` (process ${owner.pid})`}`
+            + ' that claimed this directory is no longer running. Re-run the same draft command;'
+            + ' it continues this directory and its corpus key replays rather than starting'
+            + ' a new retrieval.', 'draft_incomplete');
+    }
+    const elapsedSeconds = secondsSince(owner.claimedAt, observedAt);
+    return {
+        kind: 'draft',
+        target: directory,
+        state: 'claiming',
+        complete: false,
+        typicalSeconds: HOSTED_DRAFT_CANDIDATE_DURATION_SECONDS,
+        ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }),
+        what: 'A draft',
+        narrative: `The draft in ${directory} is still being created: \`12ui draft\` has claimed`
+            + ' this directory and has not recorded its hosted run yet. Nothing has failed.',
+        nextCommand: `12ui next ${directory} --wait`,
+        detail: { directory, claim: owner },
+        progress: {
+            stage: 'claiming',
+            detail: 'preparing the hosted draft',
+       
+at died before recording its run has always given.
+ */
+const readClaimingDraft = async (directory, observedAt, owner) => {
+    if (owner.owner === 'gone') {
+        throw new CliRefusal(`The draft run in ${directory} failed before its hosted run was recorded: the`
+            + `${owner.pid === undefined ? '' : ` \`12ui draft\` (process ${owner.pid})`}`
+            + ' that claimed this directory is no longer running. Re-run the same draft command;'
+            + ' it continues this directory and its corpus key replays rather than starting'
+            + ' a new retrieval.', 'draft_incomplete');
+    }
+    const elapsedSeconds = secondsSince(owner.claimedAt, observedAt);
+    return {
+        kind: 'draft',
+        target: directory,
+        state: 'claiming',
+        complete: false,
+        typicalSeconds: HOSTED_DRAFT_CANDIDATE_DURATION_SECONDS,
+        ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }),
+        what: 'A draft',
+        narrative: `The draft in ${directory} is still being created: \`12ui draft\` has claimed`
+            + ' this directory and has not recorded its hosted run yet. Nothing has failed.',
+        nextCommand: `12ui next ${directory} --wait`,
+        detail: { directory, claim: owner },
+        progress: {
+            stage: 'claiming',
+            detail: 'preparing the hosted draft',
+        },
+    };
+};
+const readDraft = async (directory, flags, dependencies) => {
+    const report = await readDraftStatus(directory, flags, {
+        ...(dependencies.draftClient ? { hostedClient: dependencies.draftClient } : {}),
+    });
+    return {
+        kind: 'draft',
+        target: directory,
+        state: report.phase,
+        complete: report.complete,
+        ...(report.recoverable ? { recoverable: true } : {}),
+        typicalSeconds: HOSTED_DRAFT_CANDIDATE_DURATION_SECONDS,
+        ...(report.elapsedSeconds === undefined ? {} : { elapsedSeconds: report.elapsedSeconds }),
+        what: 'A draft',
+        narrative: report.narrative,
+        nextCommand: report.complete
+            ? `Pass the chosen image in ${directory}/candidates to 12ui branch execute --start or 12ui convert. ${CHOOSING_STARTS_FROM_BRIEF}`
+            : `12ui
+{ elapsedSeconds }),
+        what: 'A draft',
+        narrative: `The draft in ${directory} is still being created: \`12ui draft\` has claimed`
+            + ' this directory and has not recorded its hosted run yet. Nothing has failed.',
+        nextCommand: `12ui next ${directory} --wait`,
+        detail: { directory, claim: owner },
+        progress: {
+            stage: 'claiming',
+            detail: 'preparing the hosted draft',
+        },
+    };
+};
+const readDraft = async (directory, flags, dependencies) => {
+    const report = await readDraftStatus(directory, flags, {
+        ...(dependencies.draftClient ? { hostedClient: dependencies.draftClient } : {}),
+    });
+    return {
+        kind: 'draft',
+        target: directory,
+        state: report.phase,
+        complete: report.complete,
+        ...(report.recoverable ? { recoverable: true } : {}),
+        typicalSeconds: HOSTED_DRAFT_CANDIDATE_DURATION_SECONDS,
+        ...(report.elapsedSeconds === undefined ? {} : { elapsedSeconds: report.elapsedSeconds }),
+        what: 'A draft',
+        narrative: report.narrative,
+        nextCommand: report.complete
+            ? `Pass the chosen image in ${directory}/candidates to 12ui branch execute --start or 12ui convert. ${CHOOSING_STARTS_FROM_BRIEF}`
+            : `12ui next ${directory} --wait`,
+        detail: report,
+        progress: {
+            stage: report.phase,
+            completed: report.candidates.filter((candidate) => (candidate.status === 'succeeded' || candidate.status === 'failed')).length,
+            total: report.candidates.length,
+            unit: 'slots settled',
+            running: report.candidates.filter((candidate) => candidate.status === 'dispatched').length,
+        },
+    };
+};
+const readHostedRun = async (runId, flags) => {
+    const api = new TwelveUiBranchClient(readConversionConfig({
+        origin: stringFlag(flags, 'origin'),
+        apiKey: stringFlag(flags, 'api-key'),
+    }));
+    const run = await api.getRun(runId);
+    const counts = summarizeHostedDraftRun(run);
+    const complete = hostedDraftRunIsSettled(run);
+    const settled = counts.succeeded + counts.failed;
+    const stalledDraft = run.source === 'create'
+ 
+CANDIDATE_DURATION_SECONDS,
+        ...(elapsedSeconds === undefined ? {} : { elapsedSeconds }),
+        what: 'A hosted design run',
+        narrative: stalledDraft
+            ? `This hosted draft run has ${counts.pending} pending slot${counts.pending === 1 ? '' : 's'} and nothing running.`
+                + ' Repair requires its recorded draft directory so candidate and output identity stay bound.'
+            : `${settled} of ${run.candidates.length} hosted slot(s) settled`
+                + `${counts.failed > 0 ? `; ${counts.failed} failed` : ''}.`,
+        nextCommand: complete
+            ? `12ui next <draft-or-branch-run-dir>`
+            : stalledDraft
+                ? '12ui next <draft-run-dir> --wait'
+                : `12ui next ${runId} --wait`,
+        runId: run.id,
+        detail: run,
+        progress: {
+            stage: complete ? 'settled' : stalledDraft ? 'stalled' : 'generating',
+            completed: settled,
+            total: run.candidates.length,
+            running: counts.dispatched,
+            detail: `${counts.pending} waiting, ${counts.failed} failed`,
+        },
+    };
+};
+/**
+ * A conversion the caller is holding the id of.
+ *
+ * WHY THIS ANSWERS RATHER THAN REFUSES. It used to refuse — a conversion is
+ * collected, not watched — and the refusal was right about the mechanics and
+ * useless at the moment it fired. Measured 2026-08-14: an agent holding a
+ * conversion id while its blocking convert ran typed exactly this, five times
+ * across five runs, and got told the id "names no run this command can read".
+ * The id was the only handle it had, reading a conversion is a free GET, and
+ * `resume` — the command that does collect it — blocks for minutes. So the free
+ * read answers, and it names `resume` as what comes next.
+ */
+const readConversion = async (conversionId, flags, observedAt = Date.now()) => {
+    const client = new TwelveUiConversionClient(readConversionConfig({
+        origin: stringFlag(flags, 'origin'),
+        apiKey: stringFlag(flags, 'api-key'),
+    }));
+    const operation = await client.getConversion(conversionId);
+    const linkedExportId = operation.export?.conversion_id ?? null;
+    const linkedExport =
+ttled slots are never bought again',
+                }
+                : { free: 'reading and waiting cost nothing; the paid run continues server-side' }),
+            expectation: {
+                typicalSeconds: report.typicalSeconds,
+                basis: 'whole-run measured median',
+            },
+            blocking: true,
+        });
+        progress.update({
+            ...report.progress,
+            ...(report.elapsedSeconds === undefined ? {} : { elapsedSeconds: report.elapsedSeconds }),
+        });
+        renderedWait = true;
+        const advanceDraft = async (directory) => {
+            if (claiming()) {
+                // Nothing is recorded to materialize or repair until `draft.json` lands;
+                // when it does, this same read already returned the recorded draft.
+                report = await read();
+                if (claiming())
+                    return;
+            }
+            await materializeDraftIfSettled(directory, flags, {
+                ...(dependencies.draftClient ? { hostedClient: dependencies.draftClient } : {}),
+                progress,
+            });
+            report = await read();
+            // A service GET may durably recover an old receipt-free dispatch from
+            // `dispatched` to `pending`. Repair the state just observed, rather than
+            // deciding once from an earlier snapshot and then stopping on the newer one.
+            if (report.recoverable) {
+                await repairDraftDispatch(directory, flags, {
+                    ...(dependencies.draftClient ? { hostedClient: dependencies.draftClient } : {}),
+                });
+                await materializeDraftIfSettled(directory, flags, {
+                    ...(dependencies.draftClient ? { hostedClient: dependencies.draftClient } : {}),
+                    progress,
+                });
+                report = await read();
+            }
+        };
+        try {
+            if (target.kind === 'draft') {
+                await advanceDraft(target.directory);
+                if (!report.complete && !report.recoverable) {
+                    progress.update({
+                        ...report.progress,
+                        ..
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-progress.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-redesign-command.js
+import { createConcurrencyLimiter } from './bounded-concurrency.js';
+import { booleanFlag, stringFlag, stringFlags } from './cli-arguments.js';
+import { CliRefusal } from './cli-refusal.js';
+import { prepareOutputDirectory } from './cli-output-paths.js';
+import { BRANCH_PAGE_CONCURRENCY_DEFAULT } from './cli-progress.js';
+import { usageRefusal } from './cli-usage.js';
+import { readConceptValue } from './concept-input.js';
+import { readConversionConfig } from './config.js';
+import { isConversionModel } from './conversion-models.js';
+import { runDraftCommand } from './cli-draft-command.js';
+import { DRAFT_CANDIDATE_COUNT, DRAFT_CANDIDATE_COUNT_MAXIMUM, DRAFT_CANDIDATE_COUNT_MINIMUM, } from './draft-run.js';
+import { draftPaths, readDraftRecord } from './draft-workspace.js';
+import { TwelveUiPrototypeLabelClient } from './prototype-label-client.js';
+import { isPrototypeSkippedResult, runPrototypePoststep } from './prototype-poststep.js';
+import { runRedesignBranchStage } from './redesign-branch-stage.js';
+import { redesignBranchPageDirectory } from './redesign-branch-identity.js';
+import { InvalidRedesignBranchRecordError, verifyRedesignBranchPages, } from './redesign-branch-record-verification.js';
+import { captureRedesignSite, captureRedesignPages, discoverRedesignPageUrls, parseImproveBootstrap, REDESIGN_DEFAULT_MAX_PAGES, } from './redesign-capture.js';
+import { buildRedesignPlan } from './redesign-plan.js';
+import { TwelveUiRedesignPlanClient, } from './redesign-plan-client.js';
+import { redesignPlanIdempotencyKey } from './redesign-plan-identity.js';
+import { createRedesignWorkspace, InvalidRedesignRecordError, isRedesignStage, loadOrStartRedesignRecord, readRedesignRecord, redesignPaths, REDESIGN_STAGES, writeRedesignRecord, } from './redesign-workspace.js';
+import { draftForPage, pagesNeedingDraft, pagesNeedingPick, recordedDraftPages, recordedPickPages, redesignPageDraftConcept, redesignPageDraftRoute, redesignPrimaryPage, withDraftPages, withPickPages, } from './redesign-page-candidates.js';
+import { InvalidRedesignBranchArtifactError } from './redesign-branch-adoption.js';
+import { InvalidRedesignPageOwnershipError } from './redesign-page-ownership.js';
+
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-run.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-usage.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/cli-workspace-command.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/corpus-access.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/draft-adoption.js
+tch {
+        return { state: 'unreadable' };
+    }
+};
+const processIsAlive = (pid) => {
+    try {
+        process.kill(pid, 0);
+        return true;
+    }
+    catch (error) {
+        // EPERM means the process exists and belongs to somebody else.
+        return error.code === 'EPERM';
+    }
+};
+/**
+ * A claim is stale only when its owner is provably gone. A claim written on
+ * another host cannot be checked from here, so it counts as live: refusing to
+ * adopt costs one stranded sibling, while adopting a directory somebody else is
+ * still writing costs a torn run.
+ */
+const claimIsLive = (claim) => (claim.hostname !== os.hostname() || processIsAlive(claim.pid));
+/**
+ * A directory without `draft.json` has not claimed a hosted run yet and can be
+ * reset before replaying its corpus key. A directory with the record is the
+ * resumable local handle for that exact service run and must be kept intact.
+ */
+const runDirectoryIsIncomplete = async (paths) => {
+    return !await pathExists(paths.draftRecord);
+};
+/** A claim file is created empty and then written; this is how long that may look unreadable. */
+const UNREADABLE_CLAIM_GRACE_MS = 60_000;
+/**
+ * Whether the draft that claimed `runDir` can still be working in it. This is
+ * the one liveness rule adoption already uses, exposed so `12ui next` does not
+ * wait on a draft whose process died before it recorded its hosted run.
+ */
+export const observeDraftClaim = async (runDir, now = Date.now) => {
+    const existing = await readDraftRunClaim(runDir);
+    if (existing.state === 'present') {
+        return {
+            owner: claimIsLive(existing.claim) ? 'live' : 'gone',
+            ...(existing.claim.claimedAt ? { claimedAt: existing.claim.claimedAt } : {}),
+            pid: existing.claim.pid,
+        };
+    }
+    if (existing.state === 'absent')
+        return { owner: 'gone' };
+    const written = await stat(claimPathFor(runDir)).then((entry) => entry.mtimeMs).catch(() => 0);
+    return { owner: now() - written < UNREADABLE_CLAIM_GRACE_MS ? 'live' : 'gone' };
+};
+const writeClaimExclusively = async (runDir, claim) => {
+    try {
+        await writeFile(claimPathFor(runDir), `${JSON.stringify(claim, null, 2)}\n`, 
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/draft-corpus-query.js
+import { readFile } from 'node:fs/promises';
+import { stringFlag } from './cli-arguments.js';
+import { CliRefusal } from './cli-refusal.js';
+import { readConceptValue } from './concept-input.js';
+import { parseDraftCorpusMode } from './draft-run.js';
+import { referenceSearchMode } from './reference-search-mode.js';
+import { draftConceptProblem } from './slate-brief-limit.js';
+/** Keep image instructions intact; retrieval has its own, shorter caption. */
+export const readDraftCorpusQuery = async (flags, concept, plannedQuery) => {
+    const explicit = stringFlag(flags, 'corpus-query');
+    if (explicit !== undefined && plannedQuery !== undefined) {
+        throw new Error('--corpus-query cannot override the query in a durable redesign plan.');
+    }
+    const raw = explicit?.startsWith('@')
+        ? await readFile(explicit.slice(1), 'utf8')
+        : explicit ?? plannedQuery ?? concept;
+    const normalized = raw.replace(/\s+/gu, ' ').trim();
+    if (!normalized)
+        throw new Error('--corpus-query must not be empty');
+    const mode = referenceSearchMode({
+        override: parseDraftCorpusMode(stringFlag(flags, 'corpus-mode')),
+        referenceImage: Boolean(stringFlag(flags, 'reference')?.trim()
+            ?? stringFlag(flags, 'redesign-source')?.trim()),
+        flag: '--corpus-mode',
+    });
+    return mode === 'hedge' || explicit !== undefined ? normalized : raw;
+};
+/**
+ * The draft's concept, whole: it drives every prompt, and it becomes the Design workspace's brief, so it meets the
+ * brief's storage ceiling here, before anything is bought (`slate-brief-limit.ts`).
+ */
+export const readDraftConcept = (flags) => {
+    const value = stringFlag(flags, 'concept') ?? '';
+    const problem = draftCo
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/draft-dispatch-attempt.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/draft-identity.js
+, characters));
+/**
+ * The corpus query is one paid retrieval per (query, mode, count), so the same
+ * draft inputs replay the same set instead of buying another.
+ */
+export const draftCorpusKey = (args) => [
+    'draft-corpus',
+    'v1',
+    shortDigest([
+        args.query,
+        args.mode,
+        String(args.count),
+        args.redesignSourceSha256 ?? '',
+        DRAFT_WORKFLOW_REVISION,
+    ].join('\0')),
+].join(':');
+/**
+ * The local run key is available before retrieval. It keeps an exact retry in
+ * one workspace; the later hosted key additionally binds the returned corpus
+ * reference IDs and is the service-side paid identity.
+ */
+export const draftLocalRunKey = (args) => [
+    'draft-run',
+    'v1',
+    shortDigest([
+        args.query,
+        args.corpusQuery ?? args.query,
+        String(args.candidateCount),
+        args.redesignSourceSha256 ?? '',
+        args.aspect,
+        args.mode,
+        args.retainIdentity ?? '',
+        ...(args.pageRoute ? [args.pageRoute] : []),
+        ...(args.redrawGeneration && args.redrawGeneration > 0
+            ? ['redraw-generation', String(args.redrawGeneration)]
+            : []),
+        ...(args.corpusMode ? ['corpus-mode', args.corpusMode] : []),
+        ...(args.corpusAdjustedMode ? ['corpus-adjusted-mode', args.corpusAdjustedMode] : []),
+        ...(args.imageProfile ? ['image-profile', args.imageProfile] : []),
+        ...(args.imageProfile ? [] : args.imageModel === 'gpt-image-2.5-sunburst'
+            ? ['image-model', args.imageModel]
+            : []),
+        DRAFT_WORKFLOW_REVISION,
+    ].join('\0')),
+].join(':');
+//# sourceMappingURL=draft-identity.js.map
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/draft-retain.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/draft-run.js
+fest.idempotencyKey,
+            manifestPath: path.join(input.paths.referencesDir, INSPIRATION_MANIFEST_FILE),
+            references: references.map((reference) => ({
+                ordinal: reference.ordinal,
+                id: reference.id,
+                path: reference.file,
+                sha256: reference.sha256,
+                aspect: reference.aspect,
+                ...(reference.evidence ? { evidence: reference.evidence } : {}),
+            })),
+        },
+        hosted: {
+            runId: hosted.id,
+            idempotencyKey,
+            candidates,
+        },
+    };
+    await writeDraftRecord(input.paths.draftRecord, record);
+    return record;
+};
+//# sourceMappingURL=draft-run.js.map
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/draft-workspace.js
+ from 'node:fs/promises';
+import os from 'node:os';
+import path from 'node:path';
+/**
+ * The run directory `12ui draft` creates and every later command is handed.
+ *
+ * It lives under the system temp root, not the working directory: measured
+ * across two harness passes, agents both spammed the user's repo with run
+ * artifacts and hardcoded `/tmp/<product>-12ui`, which ignores TMPDIR and
+ * collides the moment two runs share a machine. `mkdtemp` settles both — the
+ * directory is unique by construction and the caller never has to invent a
+ * path. The command prints it as its first line because it is the one value
+ * every subsequent command needs.
+ */
+export const DRAFT_RECORD_FILENAME = 'draft.json';
+export const DRAFT_REFERENCES_DIRECTORY = 'references';
+export const DRAFT_CANDIDATES_DIRECTORY = 'candidates';
+export const DRAFT_DISPATCH_ATTEMPT_FILENAME = 'draft.dispatch.json';
+export const DRAFT_COMPLETION_FILENAME = 'draft.complete.json';
+export const DRAFT_BRANCH_DIRECTORY = 'branch';
+/** The caller's own `--reference` image, kept in the run by its digest (`reference/<sha256>.<ext>`). */
+export const DRAFT_REFERENCE_DIRECTORY = 'reference';
+export const DRAFT_REFERENCE_FILE_PATTERN = /^reference\/[0-9a-f]{64}\.(?:png|jpg|webp)$/u;
+const REFERENCE_EXTENSIONS = { 'image/png': 'png', 'image/jpeg': 'jpg', 'image/webp': 'webp' };
+/** Where a run keeps its reference image, relative to the run directory, so a moved run still finds it. */
+export const draftReferenceFile = (sha256, mediaType) => (`${DRAFT_REFERENCE_DIRECTORY}/${sha256}.${REFERENCE_EXTENSIONS[mediaType]}`);
+export const DRAFT_CANDIDATE_IDS = [
+    'A', 'B', 'C', 'D', 'E', 'F', 'G', 'H',
+    'I', 'J', 'K', 'L', 'M', 'N', 'O', 'P',
+];
+/** `Editorial architecture homepage` -> `editorial-architecture-homepage`. */
+export const draftSlug = (query) => {
+    const slug = query
+        .toLowerCase()
+        .replace(/[^a-z0-9]+/gu, '-')
+        .replace(/^-+|-+$/gu, '')
+        .split('-')
+        .filter(Boolean)
+        .slice(0, 4)
+        .join('-')
+        .slice(0, 32)
+        .replace(/-+$/u, '');
+    return slug || 'design';
+};
+export const draftPaths = (runDir) => {
+    const resolved = path.reso
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/hosted-draft-identity.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/hosted-draft-run.js
+      const image = await args.client.downloadScreen(args.run.id, candidate.slot);
+                const digest = sha256(image.bytes);
+                if (digest !== image.sha256) {
+                    throw new Error(`Hosted candidate ${candidate.slot} failed its download digest check`);
+                }
+                await writeVerifiedImage(candidate.outputPath, image.bytes, digest);
+                return {
+                    slot: candidate.slot,
+                    path: candidate.outputPath,
+                    sha256: digest,
+                    bytes: image.bytes.byteLength,
+                };
+            }];
+    }).map((download) => download()));
+};
+//# sourceMappingURL=hosted-draft-run.js.map
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-bootstrap-history.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-branch-stage.js
+hrow new Error('Cannot branch before every site page is captured');
+    }
+    if (!args.record.pick && !args.record.target)
+        throw new Error('Cannot branch before pick');
+    args.record = await prepareImproveSourceWords(args.record, args.dependencies.warn);
+    await writeImproveRecord(args.options.paths.record, args.record);
+    pagesToBranch = args.record.pages;
+    const rootSha = args.record.pick?.sha256
+        ?? (args.record.target ? improveSha256(await readFile(args.record.target.value)) : undefined);
+    if (!rootSha)
+        throw new Error('Site improve has no accepted root design');
+    let root;
+    if (args.record.draft && args.record.pick) {
+        root = { winner: { createRunId: args.record.draft.runId, slot: args.record.pick.slot.toLowerCase() } };
+    }
+    else if (args.record.target?.kind === 'image') {
+        root = { referenceImage: await referenceImage(args.record.target.value) };
+    }
+    else {
+        root = { referenceImage: await referenceImage(await renderLayerDocRoot({
+                record: args.record,
+                options: args.options,
+                dependencies: args.dependencies,
+                sha256: rootSha,
+            })) };
+    }
+    const screens = await Promise.all(pagesToBranch.map(async (page) => {
+        const [image, words] = await Promise.all([
+            referenceImage(page.capture.sourceImage),
+            Promise.resolve(retainedImproveSourceWords(args.record, page.capture)),
+        ]);
+        return {
+            id: page.id,
+            title: page.title,
+            route: page.route,
+            surfaceType: 'web_page',
+            image,
+            ...(words ? { words } : {}),
+        };
+    }));
+    const client = clientFor({ passthrough: args.options.passthrough, dependencies: args.dependencies });
+    const now = args.dependencies.now ?? Date.now;
+    const deadline = now() + IMPROVE_RUN_DEADLINE_MS;
+    let envelope;
+    let record = args.record;
+    if (record.branch) {
+        envelope = await client.getRun(record.branch.runId);
+    }
+    else {
+        envelope = await client.startImproveRun({
+            concept: record.concept,
+            retain: record.retain,
+            
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-capture-redirect.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-conversion-stage.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-core/improve-concept.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-core/improve-dom-gate.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-core/improve-retain.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-generation-stages.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-kit-readme.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-kit-status.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-options.js
+import path from 'node:path';
+import { booleanFlag, stringFlag, stringFlags, } from './cli-arguments.js';
+import { CliRefusal } from './cli-refusal.js';
+import { DEFAULT_IMPROVE_RETAIN, IMPROVE_RETAIN_ALL_KEPT_REFUSAL, buildImproveConcept, improveRetainFlag, improveRetainKeepsEverything, } from './improve-concept.js';
+import { improvePassthroughFlags, } from './improve-passthrough-flags.js';
+import { isConversionModel } from './conversion-models.js';
+import { isResponsiveConversionQuality, } from './responsive-quality.js';
+import { DRAFT_CANDIDATE_COUNT, DRAFT_CANDIDATE_COUNT_MAXIMUM, DRAFT_CANDIDATE_COUNT_MINIMUM, DRAFT_CORPUS_MODE_FLAG, parseDraftCorpusMode, } from './draft-run.js';
+import { assertReferenceSearchServable } from './reference-search-mode.js';
+import { parseDraftRetainFlag } from './draft-retain.js';
+import { improveConvertStallDefaultSeconds, improveConvertStallFloorSeconds, } from './improve-convert-resilience.js';
+import { httpUrl, parseImproveBootstrap } from './redesign-capture.js';
+import { IMPROVE_STAGES, improvePaths, improveSlug, isImproveStage, } from './improve-workspace.js';
+/**
+ * Improve reports flag problems as coded refusals, so the shared parser's
+ * message is re-thrown as one rather than duplicating the mode list here.
+ *
+ * Hedge is refused outright at this surface, at option-parse time. Every
+ * improve draft stage searches against improve's own capture of the page, so
+ * the reference image is known here without looking at anything: waiting for
+ * `draftReferenceRetrieval` to refuse means a URL input pays a full Playwright
+ * capture first, and `--dry-run` quotes a draft stage the run cannot reach.
+ */
+const improveCorpusMode = (flags) => {
+    const mode = (() => {
+        try {
+            return parseDraftCorpusMode(stringFlag(flags, 'corpus-mode'));
+        }
+        catch (error) {
+            throw new CliRefusal(error.message, 'improve_mode_flag_invalid');
+        }
+    })();
+    try {
+        assertReferenceSearchServable({ mode, referenceImage: true, flag: DRAFT_CORPUS_MODE_FLAG });
+    }
+    catch (error) {
+        throw new CliRefusal(error.message, 'improve_mode_flag_unservable');
+    }
+    r
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-pricing-plan.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-reset.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-run-summary.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-spend-ledger.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-stage-shared.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-terminal-event.js
+journal read, shared. It used to be two — the facts read the file, then
+    // the age read it again — and every one of them sits between the signal and
+    // the end line this whole module exists to guarantee.
+    const { entries } = await readRunJournal({ workspace: args.record.runDir })
+        .catch(() => ({ entries: [] }));
+    const facts = await collectImproveStallFacts({
+        record: args.record,
+        stage: args.stage,
+        error: args.error,
+        kind: args.kind,
+        entries,
+        ...(args.inFlight === undefined ? {} : { inFlight: args.inFlight }),
+    }).catch(() => undefined);
+    const hostedAge = hostedRunAgeSeconds({
+        entries,
+        runId: facts?.hostedRunId,
+        now: args.now ?? Date.now(),
+    });
+    const elapsedSeconds = Math.max(facts?.waitedSeconds ?? 0, hostedAge ?? 0);
+    journal.note({
+        terminal: false,
+        ...(facts?.hostedRunId ? { runId: facts.hostedRunId } : {}),
+        ...(args.writes && args.writes.length > 0 ? { writes: [...args.writes] } : {}),
+        degradations: [errorClass, ...(args.degradations ?? [])],
+    });
+    journal.stop?.({
+        errorClass,
+        progress: {
+            stage: facts?.serviceStage ?? args.stage,
+            elapsedSeconds,
+            ...(facts?.typicalSeconds === undefined ? {} : { typicalSeconds: facts.typicalSeconds }),
+        },
+    });
+    return errorClass;
+};
+//# sourceMappingURL=improve-terminal-event.js.map
+guarantee.
+    const { entries } = await readRunJournal({ workspace: args.record.runDir })
+        .catch(() => ({ entries: [] }));
+    const facts = await collectImproveStallFacts({
+        record: args.record,
+        stage: args.stage,
+        error: args.error,
+        kind: args.kind,
+        entries,
+        ...(args.inFlight === undefined ? {} : { inFlight: args.inFlight }),
+    }).catch(() => undefined);
+    const hostedAge = hostedRunAgeSeconds({
+        entries,
+        runId: facts?.hostedRunId,
+        now: args.now ?? Date.now(),
+    });
+    const elapsedSeconds = Math.max(facts?.waitedSeconds ?? 0, hostedAge ?? 0);
+    journal.note({
+        terminal: false,
+        ...(facts?.hostedRunId ? { runId: facts.hostedRunId } : {}),
+        ...(args.writes && args.writes.length > 0 ? { writes: [...args.writes] } : {}),
+        degradations: [errorClass, ...(args.degradations ?? [])],
+    });
+    journal.stop?.({
+        errorClass,
+        progress: {
+            stage: facts?.serviceStage ?? args.stage,
+            elapsedSeconds,
+            ...(facts?.typicalSeconds === undefined ? {} : { typicalSeconds: facts.typicalSeconds }),
+        },
+    });
+    return errorClass;
+};
+//# sourceMappingURL=improve-terminal-event.js.map
+s } = await readRunJournal({ workspace: args.record.runDir })
+        .catch(() => ({ entries: [] }));
+    const facts = await collectImproveStallFacts({
+        record: args.record,
+        stage: args.stage,
+        error: args.error,
+        kind: args.kind,
+        entries,
+        ...(args.inFlight === undefined ? {} : { inFlight: args.inFlight }),
+    }).catch(() => undefined);
+    const hostedAge = hostedRunAgeSeconds({
+        entries,
+        runId: facts?.hostedRunId,
+        now: args.now ?? Date.now(),
+    });
+    const elapsedSeconds = Math.max(facts?.waitedSeconds ?? 0, hostedAge ?? 0);
+    journal.note({
+        terminal: false,
+        ...(facts?.hostedRunId ? { runId: facts.hostedRunId } : {}),
+        ...(args.writes && args.writes.length > 0 ? { writes: [...args.writes] } : {}),
+        degradations: [errorClass, ...(args.degradations ?? [])],
+    });
+    journal.stop?.({
+        errorClass,
+        progress: {
+            stage: facts?.serviceStage ?? args.stage,
+            elapsedSeconds,
+            ...(facts?.typicalSeconds === undefined ? {} : { typicalSeconds: facts.typicalSeconds }),
+        },
+    });
+    return errorClass;
+};
+//# sourceMappingURL=improve-terminal-event.js.map
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/improve-workspace.js
+SiteRoot = (rootUrl, pageUrl) => {
+    try {
+        return normalizeImproveUrl(rootUrl) === normalizeImproveUrl(pageUrl);
+    }
+    catch {
+        return false;
+    }
+};
+export const improvePaths = (runDir) => {
+    const resolved = path.resolve(runDir);
+    return {
+        runDir: resolved,
+        record: path.join(resolved, IMPROVE_RECORD_FILENAME),
+        stateDir: path.join(resolved, '.state'),
+        captureDir: path.join(resolved, 'capture'),
+        sourceImage: path.join(resolved, 'source.png'),
+        currentDomDoc: path.join(resolved, 'current.domdoc.json'),
+        candidatesDir: path.join(resolved, 'candidates'),
+        candidateRecord: path.join(resolved, 'candidates', 'draft.json'),
+        winnerImage: path.join(resolved, 'winner.png'),
+        targetDir: path.join(resolved, 'target'),
+        targetLayerDoc: path.join(resolved, 'target', 'winner.layerdoc.json'),
+        targetHtml: path.join(resolved, 'target', 'winner.html'),
+        sourceConversionDir: path.join(resolved, '.state', 'source-conversion'),
+        planDir: path.join(resolved, 'plan'),
+        pagesDir: path.join(resolved, 'pages'),
+        sitePlanDir: path.join(resolved, 'site-plan'),
+        rechecksDir: path.join(resolved, 'recheck'),
+        readme: path.join(resolved, 'README.md'),
+    };
+};
+export const improvePagePaths = (runDir, id) => {
+    const pageDir = path.join(path.resolve(runDir), 'pages', id);
+    return {
+        pageDir,
+        captureDir: path.join(pageDir, 'capture'),
+        sourceImage: path.join(pageDir, 'capture', 'source.png'),
+        currentDomDoc: path.join(pageDir, 'current.domdoc.json'),
+        polishedImage: path.join(pageDir, 'polished.png'),
+        targetDir: path.join(pageDir, 'target'),
+        targetLayerDoc: path.join(pageDir, 'target', 'polished.layerdoc.json'),
+        targetHtml: path.join(pageDir, 'target', 'polished.html'),
+        planDir: path.join(pageDir, 'plan'),
+    };
+};
+export const improveRecheckPagePaths = (runDir, n, id) => {
+    const pageDir = path.join(path.resolve(runDir), 'recheck', String(n), 'pages', id);
+    return {
+        pageDir,
+        captureDir: path.join(pageDir, 'capture'),
+        sourceImage: pat
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/legacy-skill-catalog.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/mcp-slate-command.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/mcp-slate-latest.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/mcp-slate-resource.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/mcp-slate-run.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/mcp-slate-tool-defs.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/mcp-slate-ui-copy.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/mcp-slate-ui-script-designs.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/mcp-slate-ui-script-references.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/mcp-slate-workspace-tools.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/mcp-tool-definitions.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/mcp-tool-handler.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/next-target.js
+ typed a directory meant the directory, whatever it is
+    // called.
+    if (!entry && CONVERSION_ID.test(trimmed))
+        return { kind: 'conversion', conversionId: trimmed };
+    if (entry?.isFile()) {
+        return { kind: 'unknown', given: trimmed, resolved };
+    }
+    if (entry?.isDirectory()) {
+        if (await holdsAny(resolved, BRANCH_RECORDS))
+            return { kind: 'branch', directory: resolved };
+        const branchDir = path.join(resolved, DRAFT_BRANCH_DIRECTORY);
+        if (await holdsAny(branchDir, BRANCH_RECORDS))
+            return { kind: 'branch', directory: branchDir };
+        if (await exists(path.join(resolved, DRAFT_RECORD_FILENAME))) {
+            return { kind: 'draft', directory: resolved };
+        }
+        // `12ui draft` claims its directory before it writes anything else; the
+        // finished record above is checked first so a settled draft is unchanged.
+        if (await exists(path.join(resolved, DRAFT_CLAIM_FILENAME))) {
+            return { kind: 'draft', directory: resolved, claiming: true };
+        }
+        // Last, because every other record is more specific: a directory a command
+        // wrote a journal into can still answer what that command is doing.
+        if (await exists(path.join(resolved, RUN_JOURNAL_FILENAME))) {
+            return { kind: 'workspace', directory: resolved };
+        }
+    }
+    return {
+        kind: 'unknown',
+        given: trimmed,
+        resolved,
+        ...(entry?.isDirectory() ? { directory: resolved } : {}),
+    };
+};
+/**
+ * The durable directory a target's record lives in, for the run journal. A
+ * hosted run has none — it is the service's, not this machine's.
+ */
+export const nextTargetWorkspace = (target) => {
+    switch (target.kind) {
+        case 'branch':
+        case 'draft':
+        case 'workspace':
+            return target.directory;
+        case 'unknown':
+            return target.directory;
+        default:
+            return undefined;
+    }
+};
+//# sourceMappingURL=next-target.js.map
+{
+        if (await holdsAny(resolved, BRANCH_RECORDS))
+            return { kind: 'branch', directory: resolved };
+        const branchDir = path.join(resolved, DRAFT_BRANCH_DIRECTORY);
+        if (await holdsAny(branchDir, BRANCH_RECORDS))
+            return { kind: 'branch', directory: branchDir };
+        if (await exists(path.join(resolved, DRAFT_RECORD_FILENAME))) {
+            return { kind: 'draft', directory: resolved };
+        }
+        // `12ui draft` claims its directory before it writes anything else; the
+        // finished record above is checked first so a settled draft is unchanged.
+        if (await exists(path.join(resolved, DRAFT_CLAIM_FILENAME))) {
+            return { kind: 'draft', directory: resolved, claiming: true };
+        }
+        // Last, because every other record is more specific: a directory a command
+        // wrote a journal into can still answer what that command is doing.
+        if (await exists(path.join(resolved, RUN_JOURNAL_FILENAME))) {
+            return { kind: 'workspace', directory: resolved };
+        }
+    }
+    return {
+        kind: 'unknown',
+        given: trimmed,
+        resolved,
+        ...(entry?.isDirectory() ? { directory: resolved } : {}),
+    };
+};
+/**
+ * The durable directory a target's record lives in, for the run journal. A
+ * hosted run has none — it is the service's, not this machine's.
+ */
+export const nextTargetWorkspace = (target) => {
+    switch (target.kind) {
+        case 'branch':
+        case 'draft':
+        case 'workspace':
+            return target.directory;
+        case 'unknown':
+            return target.directory;
+        default:
+            return undefined;
+    }
+};
+//# sourceMappingURL=next-target.js.map
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/next-wait-lease.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/redesign-page-candidates.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/redesign-page-ownership.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/redesign-plan.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/redesign-record-validation.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/redesign-workspace.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/reference-search-mode.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/review-discovery.js
+};
+const readDraftItems = async (root, record) => {
+    const draft = await readDraftRecord(path.join(root, DRAFT_RECORD_FILENAME));
+    if (!draft)
+        return { items: [] };
+    const items = [];
+    for (const candidate of draft.hosted.candidates) {
+        if (!candidate.outputPath)
+            continue;
+        const media = await fileMedia(root, candidate.outputPath);
+        if (!media)
+            continue;
+        items.push(attachStoredState({
+            id: itemId('drafts', candidate.id, media.path),
+            group: 'drafts',
+            title: `Candidate ${candidate.id}`,
+            detail: candidate.direction,
+            media,
+            editSource: {
+                kind: 'draft',
+                imagePath: media.path,
+                mediaType: imageMediaType(media.path),
+            },
+            editQuote: reviewEditQuote({ conversions: 1, edits: 1 }),
+        }, record));
+    }
+    return { label: draft.query, items };
+};
+const branchDirectoryOf = async (root) => {
+    if (await exists(path.join(root, BRANCH_COMPLETION_FILENAME)))
+        return root;
+    const child = path.join(root, DRAFT_BRANCH_DIRECTORY);
+    if (await exists(path.join(child, BRANCH_COMPLETION_FILENAME)))
+        return child;
+    return null;
+};
+const readBranchItems = async (root, record) => {
+    const branchDir = await branchDirectoryOf(root);
+    if (!branchDir)
+        return { items: [], used: new Set() };
+    const completion = await readBranchCompletion(path.join(branchDir, BRANCH_COMPLETION_FILENAME));
+    if (!completion)
+        return { items: [], branchDir, used: new Set() };
+    const plan = await readFile(path.join(branchDir, BRANCH_PLAN_FILENAME), 'utf8')
+        .then((text) => JSON.parse(text))
+        .catch(() => undefined);
+    const items = [];
+    const used = new Set();
+    const planById = new Map(plan?.pages.map((page) => [page.id, page]) ?? []);
+    const orderedPages = [...completion.pages].sort((left, right) => {
+        const leftIndex = plan?.pages.findIndex((page) => page.id === left.id) ?? -1;
+        const rightIndex = plan?.pages.findIndex((page) => page.id === right.id) ?? -1;
+        if (leftIndex >= 0 && rightIndex >= 0)
+  
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/review-edit-source.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/review-page.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/review-prototype-gap.js
+import { createHash, randomUUID } from 'node:crypto';
+import { mkdir, readFile, rename, rm, writeFile } from 'node:fs/promises';
+import path from 'node:path';
+import { BRANCH_COMPLETION_FILENAME, BRANCH_PLAN_FILENAME, readBranchCompletion } from './branch-run-record.js';
+import { waitForHostedDraftRun } from './hosted-draft-run.js';
+import { appendPrototypeGapSource } from './prototype-gap-source.js';
+import { PROTOTYPE_DIRECTORY, PROTOTYPE_MANIFEST_FILENAME, runPrototypePipeline } from './prototype-runner.js';
+import { preparePrototypeSourceOverlay } from './prototype-source.js';
+// New gap claims omit a profile and the service authoritatively selects the
+// Standard Draft profile. Historical receipts retain their recorded total.
+export const REVIEW_PROTOTYPE_GAP_DRAFT_USD = 0.03;
+export const REVIEW_PROTOTYPE_GAP_CONVERSION_USD = 0.45;
+export const REVIEW_PROTOTYPE_GAP_BASE_USD = (REVIEW_PROTOTYPE_GAP_DRAFT_USD + REVIEW_PROTOTYPE_GAP_CONVERSION_USD);
+export const REVIEW_PROTOTYPE_GAPS_DIRECTORY = 'prototype-gaps';
+const sha256 = (bytes) => (createHash('sha256').update(bytes).digest('hex'));
+const inside = (root, target) => {
+    const relative = path.relative(path.resolve(root), path.resolve(target));
+    return relative === '' || (!relative.startsWith('..') && !path.isAbsolute(relative));
+};
+const imageMediaType = (file) => {
+    const extension = path.extname(file).toLowerCase();
+    if (extension === '.jpg' || extension === '.jpeg')
+        return 'image/jpeg';
+    if (extension === '.webp')
+        return 'image/webp';
+    return 'image/png';
+};
+const settledConversion = async (operation, client) => (operation.status === 'succeeded'
+    ? operation
+    : client.waitForConversion(operation.id, {
+        expiresAt: operation.expires_at,
+        timeoutMs: 20 * 60_000,
+    }));
+const wr
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/review-run-roots.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/run-journal-commands.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/run-journal-unfinished.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/run-journal.js
+import { createHash } from 'node:crypto';
+import { closeSync, existsSync, openSync, writeSync } from 'node:fs';
+import { readFile } from 'node:fs/promises';
+import path from 'node:path';
+import { CLI_BOOLEAN_FLAGS } from './cli-arguments.js';
+import { isCliRefusal } from './cli-refusal.js';
+import { HostedDraftFailureError } from './hosted-draft-run.js';
+/**
+ * The CLI run journal — the durable record of what the CLI actually did.
+ *
+ * WHY THIS EXISTS. The product left a one-request shell transcript: `12ui draft`
+ * collapsed three commands into one, branch execution orchestrates several
+ * server-side stages, and a fused convert exports alongside itself. Every measurement pass since has
+ * made the same mistake in a new costume — the absence of a command in a shell
+ * transcript was read as the absence of work. It is not: the work moved into
+ * the CLI, and the shell stopped being able to see it. So the CLI writes down
+ * what it did, in the workspace the work belongs to, and that record — not a
+ * transcript, not narration — is what a reader scores.
+ *
+ * WHERE. `<workspace>/journal.jsonl`, one JSON object per line, where the
+ * workspace is the durable directory the command operates on: a draft run
+ * directory, a branch out-dir, a convert or export output directory. Commands
+ * with no workspace (`auth status`, `capabilities`, `create claim`, `mcp`) do
+ * not journal — see `run-journal-commands.ts`, which enumerates the whole
+ * surface and states a reason for every command that skips.
+ *
+ * ORDER AND DURABILITY.
+ * - Append-only. A line, once written, is never rewritten or removed.
+ * - Every append is ONE `write(2)` of a complete line under
+ *   {@link RUN_JOURNAL_MAX_LINE_BYTES} to a descriptor opened `O_APPEND`, so
+ *   concurrent CLI processes observing or resuming one workspace never
+ *   interleave 
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/slate-brand.js
+policy asked to keep its image's typefaces (`--retain font`): the brand's `font` fact. */
+export const draftBrandFont = (retain) => (isRecord(retain) && Array.isArray(retain.include) && retain.include.includes('typography'));
+/**
+ * Whether a brand's options set their headings in the brand image's typefaces: kept as `style` (its whole visual
+ * style), or asked for (`font`). A brand recorded before the font fact existed (no `font`) keeps its typefaces, as it
+ * always did, so a workspace opened before keeps drawing as it began.
+ */
+export const brandKeepsFont = (brand) => (brand.retain === 'style' || brand.font !== false);
+/**
+ * The brand a new local workspace takes from its draft record (`draft.json`, read as untrusted JSON), or null. A record
+ * that declares a brand whose kept file is missing, outside the run or no longer its bytes is refused by name rather
+ * than opened without the brand the person asked for.
+ */
+export const readDraftBrand = async (root, draft) => {
+    if (!isRecord(draft))
+        return null;
+    const retain = draftBrandRetain(draft.retain);
+    const source = isRecord(draft.redesignSource) ? draft.redesignSource : null;
+    if (!retain || !source || source.file === undefined)
+        return null;
+    const draftFile = path.join(root, 'draft.json');
+    const file = source.file;
+    const sha256 = source.sha256;
+    if (typeof file !== 'string' || !DRAFT_REFERENCE_FILE_PATTERN.test(file) || typeof sha256 !== 'string'
+        || !SHA256_PATTERN.test(sha256) || !file.startsWith(`reference/${sha256}.`)) {
+        throw new SlateStateInvalidError(draftFile, 'redesignSource.file is not the run\'s own reference/<sha256> image');
+    }
+    const read = await readWorkspaceFile(root, path.join(root, file));
+    if (read.state !== 'ok' || read.sha256 !== sha256) {
+        throw new SlateStateInvalidError(draftFile, `names the brand reference ${file}, which is missing or no longer its bytes`);
+    }
+    const { width, height } = await readImageDimensions(read.bytes);
+    return { file, sha256, retain, font: draftBrandFont(draft.retain), width, height };
+};
+/** The brand image's bytes for a draw or the screen, checked against the digest the works
+d.retain === 'style' || brand.font !== false);
+/**
+ * The brand a new local workspace takes from its draft record (`draft.json`, read as untrusted JSON), or null. A record
+ * that declares a brand whose kept file is missing, outside the run or no longer its bytes is refused by name rather
+ * than opened without the brand the person asked for.
+ */
+export const readDraftBrand = async (root, draft) => {
+    if (!isRecord(draft))
+        return null;
+    const retain = draftBrandRetain(draft.retain);
+    const source = isRecord(draft.redesignSource) ? draft.redesignSource : null;
+    if (!retain || !source || source.file === undefined)
+        return null;
+    const draftFile = path.join(root, 'draft.json');
+    const file = source.file;
+    const sha256 = source.sha256;
+    if (typeof file !== 'string' || !DRAFT_REFERENCE_FILE_PATTERN.test(file) || typeof sha256 !== 'string'
+        || !SHA256_PATTERN.test(sha256) || !file.startsWith(`reference/${sha256}.`)) {
+        throw new SlateStateInvalidError(draftFile, 'redesignSource.file is not the run\'s own reference/<sha256> image');
+    }
+    const read = await readWorkspaceFile(root, path.join(root, file));
+    if (read.state !== 'ok' || read.sha256 !== sha256) {
+        throw new SlateStateInvalidError(draftFile, `names the brand reference ${file}, which is missing or no longer its bytes`);
+    }
+    const { width, height } = await readImageDimensions(read.bytes);
+    return { file, sha256, retain, font: draftBrandFont(draft.retain), width, height };
+};
+/** The brand image's bytes for a draw or the screen, checked against the digest the workspace recorded. */
+export const readBrandBytes = async (root, brand) => {
+    const read = await readWorkspaceFile(root, path.join(root, brand.file));
+    if (read.state !== 'ok' || read.sha256 !== brand.sha256) {
+        throw new SlateError('file_changed', 'The brand reference image in this run is missing or changed.', { l10n: { code: 'file_changed' } });
+    }
+    return read.bytes;
+};
+/**
+ * The PNG the image model is given for a brand image (slate-brand-ground.ts, the hosted workspace's rule, byte-copied),
+ * or null when the original is sent. The image's own orientation (i
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/slate-brief-limit.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/slate-paths.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/slate-pick-continuation.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/slate-round-queries.js
+import path from 'node:path';
+import { readDraftRecord } from './draft-workspace.js';
+const rootCorpusQuery = async (root) => {
+    const record = await readDraftRecord(path.join(root, 'draft.json'));
+    if (typeof record !== 'object' || record === null)
+        return null;
+    const corpus = record.corpus;
+    if (typeof corpus !== 'object' || corpus === null)
+        return null;
+    const query = corpus.query;
+    return typeof query === 'string' && query.trim() ? query.trim() : null;
+};
+export const readRoundQueries = async (root, workspace) => {
+    const out = [];
+    for (const round of [...workspace.rounds].sort((a, b) => a.index - b.index)) {
+        let query = null;
+        if (round.referenceSource === 'root') {
+            query = await rootCorpusQuery(root);
+        }
+        else if (round.referenceSource === 'search') {
+            const op = workspace.ops.find((entry) => entry.params.kind === 'round' && entry.params.roundId === round.roundId);
+            query = op && op.params.kind === 'round' && op.params.concept.trim() ? op.params.concept.trim() : null;
+        }
+        if (query)
+            out.push({ roundIndex: round.index, query });
+    }
+    return out;
+};
+//# sourceMappingURL=slate-round-queries.js.map
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/slate-view-contract.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/slate-workspace-parse.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/slate-workspace-store.js
+ff, or a committed action). Every write
+ * goes through `mutateWorkspace`: workspace lock, strict re-read, apply,
+ * strict validation of the result, atomic replace.
+ */
+export const LEGACY_PICK_FILENAME = 'pick.json';
+/** Return this from a `mutateWorkspace` callback to leave the record (and its revision) untouched. */
+export class NoWrite {
+    value;
+    constructor(value) {
+        this.value = value;
+    }
+}
+const isRecord = (value) => (!!value && typeof value === 'object' && !Array.isArray(value));
+const text = (value) => (typeof value === 'string' && value ? value : null);
+const referenceAspect = (value) => (value === 'portrait' || value === 'square' ? value : 'landscape');
+/** What `draft.json` says about the root, read defensively: a fixture may hold only a few fields. */
+const readRootFacts = async (root) => {
+    const record = await readDraftRecord(path.join(root, 'draft.json'));
+    const draft = isRecord(record) ? record : {};
+    const aspect = draft.aspect === 'portrait' || draft.aspect === 'square' ? draft.aspect : 'landscape';
+    const hosted = isRecord(draft.hosted) ? draft.hosted : {};
+    const corpus = isRecord(draft.corpus) ? draft.corpus : {};
+    const candidates = Array.isArray(hosted.candidates) ? hosted.candidates : [];
+    const references = Array.isArray(corpus.references) ? corpus.references : [];
+    const referenceBySlot = new Map();
+    for (const entry of candidates) {
+        if (!isRecord(entry))
+            continue;
+        const slot = text(entry.slot);
+        const referenceId = text(entry.referenceId);
+        if (slot && referenceId && REFERENCE_ID_PATTERN.test(referenceId))
+            referenceBySlot.set(slot.toLowerCase(), referenceId);
+    }
+    const aspectByReference = new Map();
+    for (const entry of references) {
+        if (isRecord(entry) && typeof entry.id === 'string')
+            aspectByReference.set(entry.id, referenceAspect(entry.aspect));
+    }
+    return { concept: text(draft.query) ?? '', aspect, createdAt: text(draft.createdAt), referenceBySlot, aspectByReference, draft };
+};
+const ZERO_SHA = '0'.repeat(64);
+const rootVersion = async (candidate, createdAt) => {
+    const bytes = await readFile(ca
+PICK_FILENAME = 'pick.json';
+/** Return this from a `mutateWorkspace` callback to leave the record (and its revision) untouched. */
+export class NoWrite {
+    value;
+    constructor(value) {
+        this.value = value;
+    }
+}
+const isRecord = (value) => (!!value && typeof value === 'object' && !Array.isArray(value));
+const text = (value) => (typeof value === 'string' && value ? value : null);
+const referenceAspect = (value) => (value === 'portrait' || value === 'square' ? value : 'landscape');
+/** What `draft.json` says about the root, read defensively: a fixture may hold only a few fields. */
+const readRootFacts = async (root) => {
+    const record = await readDraftRecord(path.join(root, 'draft.json'));
+    const draft = isRecord(record) ? record : {};
+    const aspect = draft.aspect === 'portrait' || draft.aspect === 'square' ? draft.aspect : 'landscape';
+    const hosted = isRecord(draft.hosted) ? draft.hosted : {};
+    const corpus = isRecord(draft.corpus) ? draft.corpus : {};
+    const candidates = Array.isArray(hosted.candidates) ? hosted.candidates : [];
+    const references = Array.isArray(corpus.references) ? corpus.references : [];
+    const referenceBySlot = new Map();
+    for (const entry of candidates) {
+        if (!isRecord(entry))
+            continue;
+        const slot = text(entry.slot);
+        const referenceId = text(entry.referenceId);
+        if (slot && referenceId && REFERENCE_ID_PATTERN.test(referenceId))
+            referenceBySlot.set(slot.toLowerCase(), referenceId);
+    }
+    const aspectByReference = new Map();
+    for (const entry of references) {
+        if (isRecord(entry) && typeof entry.id === 'string')
+            aspectByReference.set(entry.id, referenceAspect(entry.aspect));
+    }
+    return { concept: text(draft.query) ?? '', aspect, createdAt: text(draft.createdAt), referenceBySlot, aspectByReference, draft };
+};
+const ZERO_SHA = '0'.repeat(64);
+const rootVersion = async (candidate, createdAt) => {
+    const bytes = await readFile(candidate.file).catch(() => null);
+    let width = 0;
+    let height = 0;
+    let sha256 = candidate.sha256 ?? ZERO_SHA;
+    if (bytes) {
+        try {
+            ({ width, height } = await r
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/spend-run-filter.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/workflow/continuation-plans.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/workflow/continuation.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/workflow/recipes-result-validation.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/workflow/recipes-schemas.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/workflow/recipes-validation.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/workflow/recipes.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/workspace-draw-brand.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/workspace-draw-messages.js
+
+FILE versions/0.2.130/node_modules/@12ui/design/dist/workspace-start.js
+
+FILE versions/0.2.130/node_modules/@modelcontextprotocol/sdk/dist/cjs/server/zod-json-schema-compat.js
+
+FILE versions/0.2.130/node_modules/@modelcontextprotocol/sdk/dist/cjs/spec.types.js
+
+FILE versions/0.2.130/node_modules/@modelcontextprotocol/sdk/dist/cjs/types.js
+
+FILE versions/0.2.130/node_modules/@modelcontextprotocol/sdk/dist/cjs/validation/cfworker-provider.js
+
+FILE versions/0.2.130/node_modules/@modelcontextprotocol/sdk/dist/esm/server/zod-json-schema-compat.js
+
+FILE versions/0.2.130/node_modules/@modelcontextprotocol/sdk/dist/esm/spec.types.js
+
+FILE versions/0.2.130/node_modules/@modelcontextprotocol/sdk/dist/esm/types.js
+
+FILE versions/0.2.130/node_modules/@modelcontextprotocol/sdk/dist/esm/validation/cfworker-provider.js
+
+FILE versions/0.2.130/node_modules/ajv/dist/2019.js
+
+FILE versions/0.2.130/node_modules/ajv/dist/2020.js
+
+FILE versions/0.2.130/node_modules/ajv/dist/ajv.js
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2019-09/meta/applicator.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2019-09/meta/content.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2019-09/meta/core.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2019-09/meta/format.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2019-09/meta/meta-data.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2019-09/meta/validation.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2019-09/schema.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2020-12/meta/applicator.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2020-12/meta/content.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2020-12/meta/core.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2020-12/meta/format-annotation.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2020-12/meta/meta-data.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2020-12/meta/unevaluated.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2020-12/meta/validation.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-2020-12/schema.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-draft-06.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-draft-07.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/refs/json-schema-secure.json
+
+FILE versions/0.2.130/node_modules/ajv/dist/vocabularies/applicator/index.js
+
+FILE versions/0.2.130/node_modules/ajv/dist/vocabularies/draft2020.js
+
+FILE versions/0.2.130/node_modules/ajv/dist/vocabularies/draft7.js
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2019-09/meta/applicator.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2019-09/meta/content.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2019-09/meta/core.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2019-09/meta/format.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2019-09/meta/meta-data.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2019-09/meta/validation.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2019-09/schema.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2020-12/meta/applicator.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2020-12/meta/content.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2020-12/meta/core.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2020-12/meta/format-annotation.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2020-12/meta/meta-data.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2020-12/meta/unevaluated.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2020-12/meta/validation.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-2020-12/schema.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-draft-06.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-draft-07.json
+
+FILE versions/0.2.130/node_modules/ajv/lib/refs/json-schema-secure.json
+
+FILE versions/0.2.130/node_modules/ajv-formats/dist/formats.js
+
+FILE versions/0.2.130/node_modules/cssom/lib/CSSGroupingRule.js
+
+FILE versions/0.2.130/node_modules/cssom/lib/CSSSupportsRule.js
+
+FILE versions/0.2.130/node_modules/express-rate-limit/dist/index.cjs
+
+FILE versions/0.2.130/node_modules/express-rate-limit/dist/index.mjs
+
+FILE versions/0.2.130/node_modules/json-schema-typed/draft_07.js
+
+FILE versions/0.2.130/node_modules/json-schema-typed/draft_2019_09.js
+
+FILE versions/0.2.130/node_modules/json-schema-typed/draft_2020_12.js
+
+FILE versions/0.2.130/node_modules/json-schema-typed/package.json
+
+FILE versions/0.2.130/node_modules/linkedom/worker.js
+
+FILE versions/0.2.130/node_modules/node-fetch/src/utils/referrer.js
+
+FILE versions/0.2.130/node_modules/openai/_vendor/zod-to-json-schema/zodToJsonSchema.js
+
+FILE versions/0.2.130/node_modules/openai/_vendor/zod-to-json-schema/zodToJsonSchema.mjs
+
+FILE versions/0.2.130/node_modules/openai/helpers/standard-schema.js
+
+FILE versions/0.2.130/node_modules/openai/helpers/standard-schema.mjs
+
+FILE versions/0.2.130/node_modules/openai/helpers/zod.js
+
+FILE versions/0.2.130/node_modules/openai/helpers/zod.mjs
+
+FILE versions/0.2.130/node_modules/openai/lib/jsonschema.js
+
+FILE versions/0.2.130/node_modules/openai/lib/jsonschema.mjs
+
+FILE versions/0.2.130/node_modules/playwright-core/lib/mcpBundleImpl.js
+
+FILE versions/0.2.130/node_modules/playwright-core/lib/zodBundleImpl.js
+
+FILE versions/0.2.130/node_modules/zod/v4/classic/from-json-schema.cjs
+
+FILE versions/0.2.130/node_modules/zod/v4/classic/from-json-schema.js
+
+FILE versions/0.2.130/node_modules/zod/v4/core/json-schema-generator.cjs
+
+FILE versions/0.2.130/node_modules/zod/v4/core/json-schema-generator.js
+
+FILE versions/0.2.130/node_modules/zod/v4/core/json-schema-processors.cjs
+
+FILE versions/0.2.130/node_modules/zod/v4/core/json-schema-processors.js
+
+FILE versions/0.2.130/node_modules/zod/v4/core/to-json-schema.cjs
+
+FILE versions/0.2.130/node_modules/zod/v4/core/to-json-schema.js
+
+FILE versions/0.2.130/node_modules/zod-to-json-schema/dist/cjs/zodToJsonSchema.js
+
+FILE versions/0.2.130/node_modules/zod-to-json-schema/dist/esm/zodToJsonSchema.js
