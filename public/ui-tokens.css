@@ -1,0 +1,27 @@
+:root{
+ --tt-green:#0B7A3E;--tt-green-deep:#075C31;--tt-yellow:#F2D11F;
+ --tt-bg:#F8F9F7;--tt-surface:#FFFFFF;--tt-surface-soft:#F2F5F2;--tt-border:#DFE5E1;--tt-border-strong:#BAC8BF;
+ --tt-text:#16251E;--tt-text-2:#586B60;--tt-text-3:#63736A;--tt-danger:#B52E29;--tt-warning:#856009;--tt-info:#235F88;
+ --tt-green-soft:#EAF4ED;--tt-yellow-soft:#FFF8DC;--tt-danger-soft:#FFF0ED;
+ --tt-font:Inter,-apple-system,BlinkMacSystemFont,"Segoe UI",sans-serif;
+ --tt-radius-sm:8px;--tt-radius-md:12px;--tt-radius-lg:16px;--tt-control-h:44px;
+ --tt-space-1:4px;--tt-space-2:8px;--tt-space-3:12px;--tt-space-4:16px;--tt-space-5:20px;--tt-space-6:24px;--tt-space-8:32px;--tt-space-10:40px;
+ --tt-shadow:0 2px 8px #16251e06;--tt-shadow-float:0 20px 64px #16251e26;
+ --tt-nav-width:212px;--tt-header-height:72px;--tt-motion:140ms cubic-bezier(.2,.8,.2,1);
+}
+*{box-sizing:border-box}
+html,body{margin:0;min-height:100%;background:var(--tt-bg);color:var(--tt-text);font:14px/1.5 var(--tt-font);font-feature-settings:"kern","liga","tnum";text-rendering:optimizeLegibility}
+button,input,select,textarea{font:inherit;color:inherit}
+button{cursor:pointer}
+button:disabled{cursor:not-allowed;opacity:.48}
+[hidden]{display:none!important}
+a{color:var(--tt-green-deep);text-underline-offset:3px}
+h1,h2,h3,h4,p{overflow-wrap:anywhere}
+h1,h2,h3,h4{line-height:1.2;letter-spacing:-.025em}
+h1{font-size:30px}h2{font-size:24px}h3{font-size:18px}
+button:focus-visible,input:focus-visible,select:focus-visible,textarea:focus-visible,a:focus-visible,summary:focus-visible,[tabindex]:focus-visible{outline:3px solid var(--tt-green);outline-offset:3px}
+::selection{background:#F2D11F66;color:var(--tt-text)}
+.tt-visually-hidden{position:absolute;width:1px;height:1px;padding:0;margin:-1px;overflow:hidden;clip-path:inset(50%);white-space:nowrap;border:0}
+.tt-pos-skip{position:fixed;top:12px;left:12px;z-index:2147483647;transform:translateY(-180%);padding:12px 18px;border-radius:8px;background:var(--tt-surface);color:var(--tt-text);box-shadow:var(--tt-shadow-float)}
+.tt-pos-skip:focus{transform:none}
+@media(prefers-reduced-motion:reduce){*,*::before,*::after{animation:none!important;transition:none!important;scroll-behavior:auto!important}}

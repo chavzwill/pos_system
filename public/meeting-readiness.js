@@ -6,7 +6,7 @@ const ENDPOINTS=[
  {name:'Accounting intelligence',url:'/api/accounting-intelligence/overview',critical:false,validate:d=>d&&d.sales&&d.margin&&d.receivables,describe:d=>`Sales, margin and receivables payloads verified · evaluation ${Number(d.evaluation_ms||0)} ms`},
  {name:'Technician management intelligence',url:'/api/technician-management-intelligence/overview?days=30',critical:false,validate:d=>d&&typeof d==='object'&&Array.isArray(d.alerts)&&d.summary&&typeof d.summary==='object',describe:d=>`${d.alerts.length} management attention item(s) · evidence payload verified`}
 ];
-const CORE_ASSETS=['/app-shell.js','/shell-deferred.js','/meeting-demo-shell.js','/shell-native-support.js','/guided-mode.js','/operations-attention-center.js'];
+const CORE_ASSETS=['/app-shell.js','/shell-deferred.js','/ui-presentation.js','/shell-native-support.js','/guided-mode.js','/operations-attention-center.js'];
 const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
 function ensureRoot(){let root=document.getElementById('tt-system-health-root');if(!root){root=document.createElement('div');root.id='tt-system-health-root';document.body.appendChild(root);}return root;}
 function statusLabel(c){return c.ok?'Healthy':c.protected?'Protected':c.skipped?'Not applicable':'Needs attention';}

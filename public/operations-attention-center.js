@@ -4,17 +4,17 @@ const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&
 const notice=(message,tone='info')=>{const ui=window.TotalToolsShellUI;if(ui?.toast)ui.toast(String(message||''),tone);else console.error(String(message||''))};
 const label=s=>String(s||'').replace(/_/g,' ').replace(/\b\w/g,c=>c.toUpperCase());
 const related={
- inventory:{css:'/inventory-intelligence.css',js:'/inventory-intelligence.js',global:'TotalToolsInventoryIntelligence',title:'Stock Planning & Replenishment'},
- purchasing:{css:'/purchasing-workspace.css',js:'/purchasing-workspace.js',global:'TotalToolsPurchasingWorkspace',title:'Purchasing Operations'},
- rental:{css:'/rentals-workspace.css',js:'/rentals-workspace.js',global:'TotalToolsRentalsWorkspace',title:'Rental Operations'},
- transfer:{css:'/transfers-workspace.css',js:'/transfers-workspace.js',global:'TotalToolsTransfersWorkspace',title:'Inter-Branch Transfers'},
- repair:{css:'/work-orders-workspace.css',js:'/work-orders-workspace.js',global:'TotalToolsWorkOrdersWorkspace',title:'Work Orders'},
- repair_timer:{css:'/work-orders-workspace.css',js:'/work-orders-workspace.js',global:'TotalToolsWorkOrdersWorkspace',title:'Work Orders'},
- drawer:{css:'/cash-drawer-workspace.css',js:'/cash-drawer-workspace.js',global:'TotalToolsCashDrawerWorkspace',title:'Cash Drawer & Cash Count'},
- quotation:{css:'/quotations-workspace.css',js:'/quotations-workspace.js',global:'TotalToolsQuotationsWorkspace',title:'Quotes & Estimates'},
- accounts_receivable:{css:'/accounts-receivable-workspace.css',js:'/accounts-receivable-workspace.js',global:'TotalToolsAccountsReceivableWorkspace',title:'Accounts Receivable'},
- finance:{css:'/accounting-intelligence.css',js:'/accounting-intelligence.js',global:'TotalToolsAccountingIntelligence',title:'Accounting Intelligence'},
- technician:{css:'/technician-compensation.css',js:'/technician-compensation.js',global:'TotalToolsTechnicianCompensation',title:'Technician Performance Intelligence'}
+ inventory:{css:'/ui-workspaces.css?v=20261017-design',js:'/inventory-intelligence.js',global:'TotalToolsInventoryIntelligence',title:'Stock Planning & Replenishment'},
+ purchasing:{css:'/ui-workspaces.css?v=20261017-design',js:'/purchasing-workspace.js',global:'TotalToolsPurchasingWorkspace',title:'Purchasing Operations'},
+ rental:{css:'/ui-workspaces.css?v=20261017-design',js:'/rentals-workspace.js',global:'TotalToolsRentalsWorkspace',title:'Rental Operations'},
+ transfer:{css:'/ui-workspaces.css?v=20261017-design',js:'/transfers-workspace.js',global:'TotalToolsTransfersWorkspace',title:'Inter-Branch Transfers'},
+ repair:{css:'/ui-workspaces.css?v=20261017-design',js:'/work-orders-workspace.js',global:'TotalToolsWorkOrdersWorkspace',title:'Work Orders'},
+ repair_timer:{css:'/ui-workspaces.css?v=20261017-design',js:'/work-orders-workspace.js',global:'TotalToolsWorkOrdersWorkspace',title:'Work Orders'},
+ drawer:{css:'/ui-workspaces.css?v=20261017-design',js:'/cash-drawer-workspace.js',global:'TotalToolsCashDrawerWorkspace',title:'Cash Drawer & Cash Count'},
+ quotation:{css:'/ui-workspaces.css?v=20261017-design',js:'/quotations-workspace.js',global:'TotalToolsQuotationsWorkspace',title:'Quotes & Estimates'},
+ accounts_receivable:{css:'/ui-workspaces.css?v=20261017-design',js:'/accounts-receivable-workspace.js',global:'TotalToolsAccountsReceivableWorkspace',title:'Accounts Receivable'},
+ finance:{css:'/ui-workspaces.css?v=20261017-design',js:'/accounting-intelligence.js',global:'TotalToolsAccountingIntelligence',title:'Accounting Intelligence'},
+ technician:{css:'/ui-workspaces.css?v=20261017-design',js:'/technician-compensation.js',global:'TotalToolsTechnicianCompensation',title:'Technician Performance Intelligence'}
 };
 async function get(url){const r=await fetch(url,{credentials:'same-origin',headers:{Accept:'application/json'}});const d=await r.json().catch(()=>({}));if(!r.ok)throw Object.assign(new Error(d.error||`Request failed (${r.status})`),{status:r.status});return d;}
 function loadCss(href){return new Promise(resolve=>{if([...document.styleSheets].some(x=>x.href?.includes(href)))return resolve();const l=document.createElement('link');l.rel='stylesheet';l.href=href+'?v=20260825-0610';l.onload=resolve;l.onerror=resolve;document.head.appendChild(l);});}

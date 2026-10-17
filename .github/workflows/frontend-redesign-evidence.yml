@@ -35,7 +35,7 @@ jobs:
           node scripts/ci-runtime-bootstrap.js
       - name: Check baseline shell and workspace responsiveness
         id: baseline
-        run: npx playwright test tests/shell-ui-verification.spec.js --workers=1
+        run: npx playwright test tests/shell-ui-verification.spec.js tests/guided-mode.spec.js tests/frontend-experience.spec.js --workers=1
       - name: Preserve audit and design artifacts
         if: always()
         uses: actions/upload-artifact@v4
