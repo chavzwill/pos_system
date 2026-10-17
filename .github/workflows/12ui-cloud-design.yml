@@ -1,0 +1,64 @@
+name: 12ui Cloud Design
+on:
+  push:
+    branches: [redesign/total-tools-frontend]
+    paths: ['.github/workflows/12ui-cloud-design.yml']
+  workflow_dispatch:
+permissions:
+  contents: read
+  pull-requests: write
+concurrency:
+  group: total-tools-12ui-design
+  cancel-in-progress: false
+jobs:
+  design:
+    runs-on: ubuntu-latest
+    timeout-minutes: 25
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install design CLI
+        run: npx -y @12ui/design cli install
+      - name: Connect design service and generate directions
+        shell: bash
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          mkdir -p ui-evidence/design
+          12ui --help > ui-evidence/design/cli-help.txt
+          12ui draft --help > ui-evidence/design/draft-help.txt
+          concept='Total Tools retail POS for professional tools, equipment rentals and repair service. Premium precise calm workspace, better than iOS craftsmanship. Neutral ivory canvas, graphite typography, exact brand green #0B7A3E and yellow #F2D11F used sparingly. Elegant neutral navigation replacing old green sidebar. Refined product search, transaction table, focused checkout summary, disciplined whitespace, consistent fine line icons, responsive at 390px and 1440px. Shared system for inventory purchasing receiving repairs dispatch customers accounting reports settings. Guide Me as a calm task companion. No generic dashboard, fake metrics or empty placeholder panels.'
+          for attempt in $(seq 1 30); do
+            set +e
+            12ui draft --concept "$concept" --candidates 4 > ui-evidence/design/latest.log 2>&1
+            result=$?
+            set -e
+            cat ui-evidence/design/latest.log
+            if [ "$result" -eq 0 ]; then
+              break
+            fi
+            if ! grep -q 'connect-cli' ui-evidence/design/latest.log; then
+              exit "$result"
+            fi
+            link=$(grep -oE 'https://12ui.com/connect-cli\?user_code=[A-Z0-9-]+' ui-evidence/design/latest.log | tail -1)
+            if [ -n "$link" ] && [ "$link" != "${previous_link:-}" ]; then
+              gh pr view 104 --json body --jq .body > "$RUNNER_TEMP/redesign-pr.md"
+              printf '\n\n12ui cloud connection pending: [Connect the active cloud runner](%s). This runner waits for authentication; no frontend redesign or deployment has occurred.\n' "$link" >> "$RUNNER_TEMP/redesign-pr.md"
+              gh pr edit 104 --body-file "$RUNNER_TEMP/redesign-pr.md"
+              previous_link="$link"
+            fi
+            sleep 30
+          done
+          if [ "$result" -ne 0 ]; then exit "$result"; fi
+          find . -path './.git' -prune -o -name '*.png' -print > ui-evidence/design/generated-images.txt
+      - name: Preserve non-secret design output
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: total-tools-12ui-design-${{ github.run_id }}
+          path: ui-evidence/design/
+          if-no-files-found: warn
+          retention-days: 14

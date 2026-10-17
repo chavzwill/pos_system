@@ -35,19 +35,7 @@ jobs:
           node scripts/ci-runtime-bootstrap.js
       - name: Check baseline shell and workspace responsiveness
         id: baseline
-        continue-on-error: true
         run: npx playwright test tests/shell-ui-verification.spec.js --workers=1
-      - name: Install design CLI in cloud runner
-        id: design_install
-        continue-on-error: true
-        run: npx -y @12ui/design cli install
-      - name: Generate visual directions
-        if: steps.design_install.outcome == 'success'
-        id: design_draft
-        continue-on-error: true
-        run: |
-          export PATH="$HOME/.local/bin:$HOME/.12ui/bin:$PATH"
-          12ui draft --concept "Total Tools professional retail POS, sales, rentals and repair operations. Premium precise workspace, better than iOS craftsmanship, neutral ivory canvas, crisp graphite type, exact brand green #0B7A3E and yellow #F2D11F used sparingly. Replace generic dashboard and old green sidebar with compact elegant neutral navigation, clear operational hierarchy, beautiful product search and transaction table, focused checkout summary, disciplined whitespace, consistent fine line icons, excellent 390px and 1440px layouts. One unified system across inventory, purchasing, receiving, repairs, dispatch, customers, accounting, reports and settings. Guide Me as a calm task companion. No fake metrics or empty attention dashboard panels." --candidates 4
       - name: Preserve audit and design artifacts
         if: always()
         uses: actions/upload-artifact@v4
@@ -56,6 +44,5 @@ jobs:
           path: |
             ui-evidence/
             test-results/
-            .12ui/
           if-no-files-found: warn
           retention-days: 14
