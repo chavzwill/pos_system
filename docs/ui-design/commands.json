@@ -76,5 +76,28 @@
       "--concept",
       "Extend the selected Total Tools POS design into a coherent operational application. Cover Sales checkout desktop and 390px phone, Inventory stock table and item detail, Purchasing orders and approvals, Receiving delivery form, Rentals issue and return, Repairs work order detail, Customers directory and credit context, Dispatch job board, Finance and Accounting ledger, Reports filters and results, Admin and Settings forms, plus Guide Me as a calm contextual task companion with a clear next action. Use the selected neutral shell, modern sans typography, fine line icons, disciplined spacing, crisp tables, purposeful cards, exact green #0B7A3E and yellow #F2D11F accents. No green sidebar, ornamental dashboard statistics, invented business functionality or generic empty panels. Keep consistent accessible focus, forms and dialogs. These are frontend design references; real certified APIs and business handlers will be retained in integration."
     ]
+  },
+  {
+    "id": "extend-core-operations",
+    "args": [
+      "branch",
+      "execute",
+      "--start",
+      "docs/ui-design/recovered/candidates/B.png",
+      "--scope",
+      "site",
+      "--convert",
+      "html",
+      "--prototype",
+      "--polish",
+      "--max-screens",
+      "8",
+      "--out-dir",
+      "docs/ui-design/operations-system",
+      "--idempotency-key",
+      "total-tools-operations-v1",
+      "--concept",
+      "Extend the selected Total Tools POS reference into eight operational states: Inventory stock table with detail, Purchasing orders and approval detail, Receiving delivery form, Rentals queue and agreement detail, Repairs work order detail, Customers directory and credit context, Dispatch jobs queue, and 390px phone Sales checkout. Keep the approved neutral navigation and typography, refined table spacing, focused white panels, fine line icons, restrained exact green #0B7A3E and yellow #F2D11F accents. Shared clear form and modal primitives. No green sidebar, generic dashboard or invented backend behavior. Preserve the selected Sales reference as the desktop anchor. All output is frontend reference for integration with existing certified handlers."
+    ]
   }
 ]
