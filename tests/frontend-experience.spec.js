@@ -23,7 +23,23 @@ async function login(page){
  await page.locator('#shell-login button').click();
  await expect(page.locator('.shell-app')).toBeVisible();
  await page.waitForFunction(()=>!!window.TotalToolsWorkspaceLoader?.open&&!!window.TotalToolsGuideMe?.open);
+ const auth=await page.request.post('/api/employees/reauth-self',{data:{purpose:'security_admin',password:process.env.POS_TEST_PASSWORD||'123456'}});expect(auth.status()).toBe(200);
 }
+
+async function fixtures(page,width){
+ expect(new URL(page.url()).hostname).toBe('localhost');
+ const branches=await (await page.request.get('/api/branches')).json(),branch=branches.find(b=>b.active!==0);
+ expect(branch).toBeTruthy();
+ const p=await page.request.post('/api/products',{data:{sku:'UI-'+width+'-'+Date.now(),name:'Cordless drill · UI verification',price:100,cost:60,tax_rate:0,stock_qty:0,min_stock:0,active:1,branch_id:branch.id,taxable:1}});
+ expect(p.status()).toBe(201);const product=await p.json();
+ const stock=await page.request.patch('/api/products/'+product.id+'/stock',{data:{branch_id:branch.id,adjustment:3,reason:'Isolated frontend layout verification'}});expect(stock.status()).toBe(200);
+ const suppliers=await(await page.request.get('/api/suppliers')).json(),supplier=suppliers.find(s=>s.active!==0);
+ expect(supplier).toBeTruthy();
+ const po=await page.request.post('/api/purchase-orders',{data:{supplier_id:supplier.id,branch_id:branch.id,ship_to_branch_id:branch.id,ship_to_name:branch.name,ship_to_address:branch.address||'1 UI Test Road',ship_to_city:branch.city||'Kingston',ship_to_state:branch.state||'Kingston',items:[{product_id:product.id,quantity_ordered:2,unit_cost:60}],notes:'Isolated UI receiving verification'}});
+ expect(po.status()).toBe(201);const order=await po.json();const approval=await page.request.patch('/api/purchase-orders/'+order.id+'/status',{data:{status:'approved'}});expect(approval.status()).toBe(200);
+ return{product,order};
+}
+
 for(const width of widths){
  test('shared shell and keyboard interactions at '+width+'px',async({page})=>{
   await page.setViewportSize({width,height:1000});await login(page);
@@ -50,15 +66,17 @@ for(const width of widths){
  test('operational workspaces fit and expose usable controls at '+width+'px',async({page})=>{
   test.setTimeout(180000);
   await page.setViewportSize({width,height:1000});await login(page);
+  const fixture=await fixtures(page,width);
   const errors=[];page.on('pageerror',e=>errors.push(e.message));
   for(const [key,title,options] of modules){
    await page.goto('/');await expect(page.locator('.shell-app')).toBeVisible();
    await page.waitForFunction(()=>!!window.TotalToolsWorkspaceLoader?.open);
-   await page.evaluate(async({key,title,options})=>window.TotalToolsWorkspaceLoader.open(key,title,options),{key,title,options});
+   await page.evaluate(async({key,title,options})=>window.TotalToolsWorkspaceLoader.open(key,title,options),{key,title,options:key==='receiving-workspace'?{poId:fixture.order.id}:options});
    const root=page.locator('[data-tt-workspace="'+key+'"]').last();await expect(root).toBeVisible();
+   if(key==='sales-workspace'){await root.locator('[data-product="'+fixture.product.id+'"]').click();await expect(root.locator('.tt-sales__line').first()).toBeVisible();}
    const bounds=await root.boundingBox();expect(bounds.x,title).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width,title).toBeLessThanOrEqual(width+1);
    expect(await page.evaluate(()=>document.documentElement.scrollWidth),title).toBeLessThanOrEqual(width+1);
-   const controls=await root.locator('button:visible,input:not([type=checkbox]):not([type=radio]):visible,select:visible,textarea:visible').evaluateAll(nodes=>nodes.filter(n=>!n.disabled).map(n=>{const r=n.getBoundingClientRect();return {name:n.getAttribute('aria-label')||n.textContent.trim()||n.getAttribute('placeholder')||n.name,height:r.height,font:parseFloat(getComputedStyle(n).fontSize)};}));
+   const controls=await root.locator('button:visible,input:not([type=checkbox]):not([type=radio]):visible,select:visible,textarea:visible').evaluateAll(nodes=>nodes.filter(n=>!n.disabled).map(n=>{const r=n.getBoundingClientRect();return {name:n.getAttribute('aria-label')||n.getAttribute('aria-labelledby')?.split(/\s+/).map(id=>document.getElementById(id)?.textContent||'').join(' ').trim()||[...(n.labels||[])].map(l=>l.textContent.trim()).join(' ')||n.textContent.trim()||n.getAttribute('placeholder'),height:r.height,font:parseFloat(getComputedStyle(n).fontSize)};}));
    expect(controls.filter(c=>!c.name),title+' unnamed controls').toEqual([]);
    if(width<=430)expect(controls.filter(c=>c.height>0&&c.height<43),title+' touch targets').toEqual([]);
    fs.mkdirSync('test-results/frontend-experience',{recursive:true});
