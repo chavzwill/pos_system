@@ -5,6 +5,7 @@ on:
     paths: ['.github/workflows/inspect-12ui-recovery.yml']
 permissions:
   contents: write
+  actions: read
 jobs:
   images:
     runs-on: ubuntu-latest
@@ -14,6 +15,12 @@ jobs:
         with:
           ref: redesign/total-tools-frontend
           fetch-depth: 0
+      - name: Recover anonymized production asset manifest
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          gh run download 39038888351 --name frontend-redesign-evidence-b8c4d2092b98c009b4d1087f5af8f40aece010cb --dir /tmp/ui-production-baseline
+          node -e "const fs=require('fs');const x=JSON.parse(fs.readFileSync('/tmp/ui-production-baseline/ui-evidence/production/manifest.json','utf8'));for(const o of x.observations)delete o.bodyText;fs.writeFileSync('docs/ui-design/evidence/production-assets.json',JSON.stringify(x,null,2));"
       - name: Prepare image inspection transport
         run: |
           node <<'NODE'
