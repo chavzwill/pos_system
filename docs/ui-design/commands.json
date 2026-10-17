@@ -1,0 +1,30 @@
+[
+  {
+    "id": "cli-help",
+    "args": [
+      "--help"
+    ]
+  },
+  {
+    "id": "draft-help",
+    "args": [
+      "draft",
+      "--help"
+    ]
+  },
+  {
+    "id": "next-help",
+    "args": [
+      "next",
+      "--help"
+    ]
+  },
+  {
+    "id": "branch-help",
+    "args": [
+      "branch",
+      "execute",
+      "--help"
+    ]
+  }
+]
