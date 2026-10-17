@@ -1,8 +1,6 @@
 {
-  "state": "authentication_waiting",
-  "outputBytes": 108,
-  "mentionsCode": true,
-  "mentionsAuthorize": false,
+  "state": "failed",
+  "reason": "Cloud design sign-in did not finish.",
   "sourceSha": "d992e021658c2eb4ae7e7a783d9cea883fbd27cd",
-  "updatedAt": "2026-10-17T20:53:50.422Z"
+  "updatedAt": "2026-10-17T21:08:23.142Z"
 }
