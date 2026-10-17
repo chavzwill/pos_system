@@ -26,5 +26,16 @@
       "execute",
       "--help"
     ]
+  },
+  {
+    "id": "recover-existing-candidates",
+    "args": [
+      "next",
+      "crt-78e6badbcf8088781274e0ea365aa35b74141629",
+      "--wait",
+      "--json",
+      "--timeout-ms",
+      "600000"
+    ]
   }
 ]
