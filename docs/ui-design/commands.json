@@ -37,5 +37,14 @@
       "--timeout-ms",
       "600000"
     ]
+  },
+  {
+    "id": "collect-approved-candidates",
+    "args": [
+      "next",
+      "crt-78e6badbcf8088781274e0ea365aa35b74141629",
+      "--wait",
+      "--json"
+    ]
   }
 ]
