@@ -1,6 +1,6 @@
 {
-  "state": "awaiting_authentication",
-  "verificationUrl": "https://12ui.com/connect-cli?user_code=SEYS-KCYD",
+  "state": "failed",
+  "reason": "Cloud design sign-in did not finish.",
   "sourceSha": "515df2f7d4a5848edd04c24de583925d9a839eaa",
-  "updatedAt": "2026-10-17T21:42:46.016Z"
+  "updatedAt": "2026-10-17T21:57:48.650Z"
 }
