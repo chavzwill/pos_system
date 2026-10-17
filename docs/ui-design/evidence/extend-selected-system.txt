@@ -1,0 +1,13 @@
+
+12ui branch engine: api (No Codex CLI was found: TWELVE_UI_CODEX_BIN and CODEX_CLI_PATH are not set, codex is not on PATH, and the ChatGPT app is not installed.)
+12ui engine: api (No Codex CLI was found: TWELVE_UI_CODEX_BIN and CODEX_CLI_PATH are not set, codex is not on PATH, and the ChatGPT app is not installed.)
+branch execute: scope site, converting pages to html
+  paid: one branch screen per planned slot, plus one package conversion per exported page; each complete app state is an exported page
+  done: screens in /home/runner/work/pos_system/pos_system/docs/ui-design/selected-system/branch/screens, pages in /home/runner/work/pos_system/pos_system/docs/ui-design/selected-system/branch/pages, prototype in /home/runner/work/pos_system/pos_system/docs/ui-design/selected-system/branch/prototype
+  expect: ~8m 12s (measured phase medians; a run whose page conversions all overlap generation finishes nearer 6m)
+  this command blocks until done; progress ticks at least every 15s
+[0s] claiming the run
+[0s] claiming planned screens — planning the screens (10-20s, buys no image)
+stopped: branch execute in 3s
+  next: 12ui branch resume /home/runner/work/pos_system/pos_system/docs/ui-design/selected-system/branch continues this run, replaying settled screens free
+maxScreens must be an integer from 1 to 8.
