@@ -1,4 +1,5 @@
 name: 12ui Implementation Alignment
+# Capture the CLI public sign-in URL without assuming a particular authorization path.
 on:
   push:
     branches: [redesign/total-tools-frontend]

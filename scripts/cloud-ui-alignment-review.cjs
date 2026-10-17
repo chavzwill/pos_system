@@ -9,8 +9,8 @@ async function authenticate(){
  status({state:'starting_authentication'});
  await new Promise((resolve,reject)=>{
   const child=spawn('12ui',['auth','login','--key-name','Total Tools UI alignment'],{stdio:['ignore','pipe','pipe']});let buffer='',published=false;
-  const consume=data=>{buffer+=data.toString();const clean=buffer.replace(/\x1b\[[0-9;]*m/g,'').replaceAll('\\/','/');const uri=clean.match(/https:\/\/login\.justevery\.com\/12ui\/authorize(?:\?[^\s"<>]+)?/),code=clean.match(/\b[A-Z0-9]{4}-[A-Z0-9]{4}\b/);if(uri&&code&&!published){published=true;const url='https://login.justevery.com/12ui/authorize?user_code='+code[0];status({state:'awaiting_authentication',verificationUrl:url});console.log('Cloud authentication link published to the evidence branch.');}};
-  const diagnostic=setTimeout(()=>{if(!published)status({state:'authentication_waiting',outputBytes:buffer.length,mentionsCode:/code/i.test(buffer),mentionsAuthorize:/authorize/i.test(buffer)});},30000);
+  const consume=data=>{buffer+=data.toString();const clean=buffer.replace(/\x1b\[[0-9;]*m/g,'').replaceAll('\\/','/');const uri=clean.match(/https:\/\/[^\s"<>]+/);if(uri&&!published){published=true;status({state:'awaiting_authentication',verificationUrl:uri[0]});console.log('Cloud authentication link published to the evidence branch.');}};
+  const diagnostic=setTimeout(()=>{if(!published)status({state:'authentication_waiting',outputBytes:buffer.length,mentionsCode:/code/i.test(buffer),mentionsAuthorize:/authorize/i.test(buffer),publicPrompt:buffer.replace(/(?:sk-|12ui_|tui_|eyJ)[A-Za-z0-9._-]+/g,'[redacted]').slice(0,500)});},30000);
   child.stdout.on('data',consume);child.stderr.on('data',consume);
   child.on('error',reject);child.on('close',code=>{clearTimeout(diagnostic);code===0?resolve():reject(Error('Cloud design sign-in did not finish.'))});
  });
