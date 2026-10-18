@@ -1,6 +1,8 @@
 {
-  "state": "reviewing_rendered_implementation",
-  "uiRun": 39133520686,
+  "state": "review_needs_retry",
+  "reason": "12ui visual review did not complete; output retained in the ephemeral runner.",
+  "authenticated": true,
+  "diagnostics": "docs/ui-review/717c3f4/12ui-alignment/initial-command.txt",
   "sourceSha": "717c3f4aab0149e566c24381e9173a58ef4714e3",
-  "updatedAt": "2026-10-18T13:57:05.803Z"
+  "updatedAt": "2026-10-18T13:57:09.395Z"
 }
