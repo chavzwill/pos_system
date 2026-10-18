@@ -5,5 +5,22 @@
       "improve",
       "--help"
     ]
+  },
+  {
+    "id": "reference-alignment",
+    "args": [
+      "improve",
+      "/tmp/tt-final-ui-source/test-results/frontend-experience/point-of-sale-1440.png",
+      "--scope",
+      "page",
+      "--target",
+      "docs/ui-design/selected-reference.png",
+      "--repo",
+      "/home/runner/work/pos_system/pos_system",
+      "--to",
+      "plan",
+      "--out-dir",
+      "/tmp/tt-12ui-reference-alignment"
+    ]
   }
 ]
