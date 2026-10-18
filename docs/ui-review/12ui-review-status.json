@@ -1,5 +1,6 @@
 {
-  "state": "starting_authentication",
+  "state": "awaiting_authentication",
+  "verificationUrl": "https://12ui.com/connect-cli?user_code=GZVM-97F7",
   "sourceSha": "4ffc42420d347e75952ea7832958f234acf3e297",
-  "updatedAt": "2026-10-18T12:54:09.276Z"
+  "updatedAt": "2026-10-18T12:54:13.168Z"
 }
