@@ -1,6 +1,5 @@
 {
-  "state": "failed",
-  "reason": "Cloud design sign-in did not finish.",
+  "state": "starting_authentication",
   "sourceSha": "4ffc42420d347e75952ea7832958f234acf3e297",
-  "updatedAt": "2026-10-18T13:09:15.300Z"
+  "updatedAt": "2026-10-18T13:18:09.471Z"
 }
