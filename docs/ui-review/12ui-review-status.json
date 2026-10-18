@@ -1,5 +1,6 @@
 {
-  "state": "starting_authentication",
+  "state": "awaiting_authentication",
+  "verificationUrl": "https://12ui.com/connect-cli?user_code=PXPE-CQMB",
   "sourceSha": "4ffc42420d347e75952ea7832958f234acf3e297",
-  "updatedAt": "2026-10-18T01:10:07.817Z"
+  "updatedAt": "2026-10-18T01:10:11.321Z"
 }
