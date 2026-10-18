@@ -1,0 +1,96 @@
+
+Usage:
+  12ui improve <url|image.png|jpg|webp> [--scope page|site,default-page] [--target <image.png|layerdoc.json>] [--direction <text>] [--candidates <2-16,default-4>] [--corpus-mode direct|balanced|adventurer,default-balanced] [--retain <set,default-assets,content>] [--pick <A-P,required-before-convert>] [--convert-model fast|standard|pro,default-standard] [--responsive-quality standard|pro,default-standard] [--convert-stall-seconds <seconds,default-no-progress-bound>] [--viewport <WxH,default-1440x900>] [--full-page] [--bootstrap '<url>|<click-selector>|<wait-url>'] [--allow-redirect] [--repo <source-repo>] [--plan-source-convert] [--pages <2-8,default-5>] [--page <url>] [--page-concurrency <1-10,default-3>] [--reference-order current-first|root-first,default-current-first] [--recheck] [--fresh] [--redraw] [--from capture|draft|pick|branch|convert|plan|site] [--to capture|draft|pick|branch|convert|plan|site] [--out-dir <directory>] [--dry-run]
+  12ui improve <url> --repo <source-repo> --apply [--target <png|jpeg|webp>] [--direction <text>] [--pick <A-P>] [--from capture|draft|pick] [--to capture|draft|pick] [--out-dir <directory-outside-repo>]
+
+Improve an interface with local source edits or a hosted implementation kit.
+
+Behavior:
+  - --apply supports page scope only and capture/draft/pick source stages; branch/site/convert/plan
+    options belong to hosted kits. --apply with a URL and --repo captures the current interface and
+    edits the actual project locally. --target supplies an approved image; without a target, draft
+    candidates and an explicit pick precede application. Omit --apply for the existing hosted kit
+    workflow.
+  - Hosted page scope runs five stages in order: local capture, hosted draft candidates, explicit
+    pick, fused LayerDoc and responsive HTML conversion, then a local implementation plan.
+  - The pick is explicit and has no default. With no --pick and no pick already recorded, the run
+    stops after the draw, prints where the candidates are and the exact command that continues
+    (--from pick --pick <slot>), and buys no conversion: converting a candidate nobody chose spends
+    money on a guess that cannot be cancelled. --target supplies the design instead and skips draft
+    and pick.
+  - --retain says what to hold from the live page, in the four-facet vocabulary: layout, content,
+    assets, style. It defaults to assets,content — keep the product's brand and words, rework its
+    layout and visual system. Add layout to hold the geometry, add style to work inside the existing
+    visual language, drop assets to let the brand be replaced. The /improve page exposes the same
+    four as Keep layout, Keep copy, Keep brand, and Keep style. At least one of the four must be
+    left free to change: keeping all four asks for the page back unchanged and is refused before
+    anything is bought.
+  - Whatever is retained, no setting licenses inventing a product fact: with content held the page
+    says the same things; with content freed the words may be rewritten but every claim, number,
+    offer, and control must still be present and true.
+  - The draft stage searches references under the same policy as `12ui draft`. Improve always
+    conditions that search on its own capture of the page, and the corpus refuses a hedge query
+    carrying an image, so it searches balanced; --corpus-mode direct|adventurer chooses another. The
+    mode is recorded in improve.json when you name it, so a resume searches what the run searched. A
+    resume must repeat the recorded mode or drop the flag: naming a different one is refused before
+    anything is bought, because the references were retrieved under the recorded mode and a
+    different mode is a different run — start it with a fresh --out-dir. A resume after the draft
+    settled reuses its existing reference retrieval.
+  - URL input uses one Playwright context for repeated --bootstrap actions, screenshot capture, and
+    selector-verified DOM extraction. Image input normalizes the source locally.
+  - --bootstrap takes ONE quoted pipe-separated triple, not three alternatives:
+    '<url>|<click-selector>|<wait-url>'. Any field may be empty and the flag repeats, so --bootstrap
+    '|button[data-test=sign-in]|**/dashboard' clicks and then waits. A value with no pipe is read as
+    a click selector unless it starts with http:// or https://. A magic-link triple carries a live
+    session token, so improve.json records only a redacted form of it (query values and fragment
+    replaced) plus a sha256; the live value is never written to disk, and a resume that has to
+    capture again asks for --bootstrap once more.
+  - The kit keeps every candidate, winner, target, plan, assets, and improve.json replay record.
+    Repeating a settled stage reuses it; --from pick --pick <slot> invalidates only the old target
+    and plan.
+  - --responsive-quality selects standard or pro responsive export. If that export fails, is absent,
+    or reaches the improve deadline after LayerDoc materialization, improve continues to plan with a
+    warning and derives fixed HTML free when possible.
+  - --convert-stall-seconds is a no-progress bound for every hosted convert wait, including the free
+    fixed-layout derivation (default: 960s standard and pro, 300s fast; refused below one typical
+    wall). A newly polled live stage or active lane resets it, so healthy tall work stays attached
+    to its original purchase and no second conversion is dispatched. A true no-progress stall with
+    no LayerDoc writes plan/STALL.md and exits non-zero with free re-attachment commands. With a
+    LayerDoc, improve derives fixed HTML for the plan and plan/STALL.md gives the free resume
+    command that later collects responsive winner.html without changing that plan basis. Stopping
+    the wait does not stop the conversion: there is no cancel, so an open run keeps billing.
+  - --fresh re-buys ONE conversion of the same settled winner under a new idempotency key: it
+    records the abandoned conversion identity and reuses capture, draft and pick untouched. --redraw
+    is the one that buys new candidates — it discards draft, pick, convert and plan, moves the old
+    draw to candidates.previous, records any conversion it drops, and runs the draft stage again; it
+    is also the one path allowed to change --direction, --candidates or --retain against the record.
+    A temporarily unavailable stage retries once after 30 seconds.
+  - --target brings your own design image or LayerDoc, skips draft and pick, converts an image when
+    needed, and aligns the plan to the captured URL DOM.
+
+Whole-site polish:
+  - --scope site captures 2–8 same-origin pages including the root, then runs capture, draft, pick,
+    branch, convert, plan, and site. The accepted root is the visual system; each current non-root
+    page is edited against it.
+  - Root and page conversions share one resilience policy: an unavailable responsive export never
+    discards its LayerDoc or blocks that page plan, and the site kit records fixed-layout or
+    LayerDoc-only delivery honestly.
+  - --pages caps free one-hop discovery including the root (default 5); repeat --page to supply
+    explicit same-origin pages instead. --page-concurrency defaults to 3, and --reference-order
+    defaults to current-first.
+  - The site roll-up writes site-plan/tokens.css, shared-shell.md, pages.md, and APPLY.md. It
+    deduplicates tokens and shared shell changes so the implementation plan applies them once before
+    per-page residue.
+  - Apply APPLY.md, then run `12ui improve <url> --scope site --out-dir <kit> --recheck`. It
+    captures the root and every page once in one browser context, writes numbered recheck evidence,
+    and replans only against kept targets without replaying settled stages. Without --apply, the
+    command never applies code.
+
+Planning:
+  - URL plans require at least 60% plausible DOM-side coverage; a blocked gate writes GATE.md while
+    target HTML and LayerDoc remain authoritative sidecars.
+  - Image plans are target-only by default. --plan-source-convert buys one source LayerDoc
+    conversion for an unanchored LayerDoc comparison.
+  - --repo adds evidence-ranked src/ TSX, JSX, and CSS file hints to a URL plan. Without --apply,
+    the command never applies code.
+  - --dry-run prints exact catalog price ceilings for every stage and makes no network request.
