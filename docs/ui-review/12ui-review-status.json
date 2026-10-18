@@ -1,6 +1,6 @@
 {
-  "state": "reviewing_rendered_implementation",
-  "uiRun": 39085449223,
+  "state": "failed",
+  "reason": "12ui visual review did not complete; output retained in the ephemeral runner.",
   "sourceSha": "4ffc42420d347e75952ea7832958f234acf3e297",
-  "updatedAt": "2026-10-18T13:18:44.033Z"
+  "updatedAt": "2026-10-18T13:18:45.920Z"
 }
