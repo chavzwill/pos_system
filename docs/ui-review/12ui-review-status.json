@@ -1,6 +1,5 @@
 {
-  "state": "awaiting_authentication",
-  "verificationUrl": "https://12ui.com/connect-cli?user_code=MTE2-Z9RU",
+  "state": "authenticated_waiting_for_ui_checks",
   "sourceSha": "4ffc42420d347e75952ea7832958f234acf3e297",
-  "updatedAt": "2026-10-18T13:18:12.840Z"
+  "updatedAt": "2026-10-18T13:18:40.503Z"
 }
