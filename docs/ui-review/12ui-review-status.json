@@ -1,6 +1,5 @@
 {
-  "state": "failed",
-  "reason": "12ui visual review did not complete; output retained in the ephemeral runner.",
-  "sourceSha": "4ffc42420d347e75952ea7832958f234acf3e297",
-  "updatedAt": "2026-10-18T13:18:45.920Z"
+  "state": "starting_authentication",
+  "sourceSha": "717c3f4aab0149e566c24381e9173a58ef4714e3",
+  "updatedAt": "2026-10-18T13:55:57.692Z"
 }
