@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const VERSION='20260914-purchasing-approval-1';
+const VERSION='20261017-design';
 const loaded=new Set();
 const nativeFetch=window.fetch.bind(window);
 let profileResponsePromise=null,scheduled=false;

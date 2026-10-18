@@ -1,5 +1,5 @@
 name: 12ui Implementation Alignment
-# Capture the CLI public sign-in URL without assuming a particular authorization path.
+# Final review follows the mobile Guide Me docking and cache-version fixes.
 on:
   push:
     branches: [redesign/total-tools-frontend]

@@ -1,6 +1,6 @@
 (()=>{'use strict';
 const errorNotice=message=>window.TotalToolsShellUI?.toast?window.TotalToolsShellUI.toast(String(message||''),'error'):console.error(String(message||''));
-const VERSION='20260825-0542';
+const VERSION='20261017-design';
 let profile=null,profilePromise=null;
 const opsAttention={key:'operations-attention',title:'Operational Attention Center',desc:'One evidence-backed management queue across inventory, purchasing, rentals, repairs, finance, cash controls and people risk.',anyPermission:['dashboard','reports','inventory','purchasing','work_orders','transactions','accounts'],css:'/ui-workspaces.css',js:'/operations-attention-center.js',global:'TotalToolsOperationsAttentionCenter'};
 const techPerformance={key:'technician-performance',title:'Technician Performance Intelligence',desc:'Evidence-backed quality, efficiency, timeliness, rework, documentation and incentive-review intelligence.',anyPermission:['work_orders','reports','employees_salaries'],css:'/ui-workspaces.css',js:'/technician-compensation.js',global:'TotalToolsTechnicianCompensation'};

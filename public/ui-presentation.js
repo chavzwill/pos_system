@@ -9,7 +9,7 @@ function normalizeWorkspace(root){
  const panel=heading.closest('section,article')||root;
  panel.dataset.ttPanel='';
  for(let node=panel;node&&node!==root;node=node.parentElement){node.dataset.ttFrame='';if(node.getAttribute('role')==='dialog'){node.removeAttribute('role');node.removeAttribute('aria-modal');}}
- const header=heading.closest('header,[class*="__top"]');if(header&&root.contains(header))header.dataset.ttHeading='';
+ const header=heading.closest('header')||heading.closest('.tt-wo__top');if(header&&root.contains(header))header.dataset.ttHeading='';
 }
 function labelControls(root){
  root.querySelectorAll('input,select,textarea').forEach(n=>{if(!n.labels?.length&&!n.hasAttribute('aria-label')&&!n.hasAttribute('aria-labelledby'))n.setAttribute('aria-label',n.placeholder||String(n.name||'').replace(/_/g,' ')||'Select option');});
@@ -38,6 +38,7 @@ async function mount(key,title,api,options={}){
  if(active&&active.key!==key){active.api.close?.();active.root.remove();active=null;}
  const before=new Set(document.body.children);
  try{
+  await window.TotalToolsShellUI?.activate?.(key);
   await api.open(key==='receiving-workspace'?(options?.poId||null):options);
   let root=active?.key===key?active.root:null;
   if(!root)root=[...document.body.children].filter(n=>!before.has(n)&&n instanceof HTMLElement&&!['SCRIPT','STYLE','LINK'].includes(n.tagName)&&!['tt-guided-mode','shell-toast-host'].includes(n.id)).find(n=>n.querySelector('h2,h3,header,form')||n.matches('[id^=tt-],.wow-overlay,.arw-overlay,.cm-overlay,.iaw-layer'));
