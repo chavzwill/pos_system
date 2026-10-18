@@ -1,5 +1,5 @@
 name: 12ui Implementation Alignment
-# Final review follows the mobile Guide Me docking and cache-version fixes.
+# Retain authenticated review diagnostics and permit retries in the same cloud session.
 on:
   push:
     branches: [redesign/total-tools-frontend]
@@ -13,7 +13,7 @@ concurrency:
 jobs:
   review:
     runs-on: ubuntu-latest
-    timeout-minutes: 40
+    timeout-minutes: 60
     env:
       GH_TOKEN: ${{ github.token }}
     steps:
@@ -29,3 +29,11 @@ jobs:
         run: |
           export PATH="$HOME/.local/bin:$PATH"
           node scripts/cloud-ui-alignment-review.cjs
+      - name: Retain review diagnostics and generated references
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: twelve-ui-alignment-${{ github.run_id }}
+          path: /tmp/tt-12ui-final-review/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -2971,3 +2971,11 @@ body .tt-reauth__card{padding:28px;border:1px solid var(--tt-border);border-radi
 .tt-op-reports__quick-card em,.tt-op-reports__card em{font-style:normal;color:var(--tt-green-deep);font-size:13px}.tt-op-reports__group{border:1px solid var(--tt-border);border-radius:12px}.tt-op-reports__group summary{padding:16px;min-height:72px}
 .tt-op-reports__cards{padding:0 16px 16px;gap:0}.tt-op-reports__card{min-height:88px;height:auto;padding:16px;text-align:left;border:0;border-bottom:1px solid var(--tt-border);border-radius:0;gap:20px}.tt-op-reports__card>span{display:grid;gap:4px;min-width:0}.tt-op-reports__card:last-child{border-bottom:0}
 @media(max-width:430px){.tt-op-reports__quick-card{padding:16px;grid-template-columns:32px minmax(0,1fr) auto;gap:12px}.tt-op-reports__quick-mark{width:32px;height:32px}.tt-op-reports__cards{padding:0 4px 4px}}
+
+/* Keep task navigation visible while the instruction card scrolls. */
+.tt-guide .tt-guide__head{flex:none}.tt-guide .tt-guide__head h2{font-size:20px}
+.tt-guide:has(.tt-guide__step) .tt-guide__body{display:flex;flex-direction:column;gap:12px;overflow:hidden}
+.tt-guide:has(.tt-guide__step) .tt-guide__step{flex:1 1 auto;min-height:0;overflow:auto;overscroll-behavior:contain}
+.tt-guide:has(.tt-guide__step) .tt-guide__actions{flex:none;margin:0;padding:12px 0 0;gap:8px;display:grid;grid-template-columns:minmax(0,1fr) auto}
+.tt-guide__actions>div{display:flex;align-items:center;gap:8px}.tt-guide__actions>button{text-align:left}.tt-guide__actions>div>button{padding:0 12px}
+@media(max-width:768px){.tt-guide .tt-guide__head{padding:14px 16px}.tt-guide:has(.tt-guide__step) .tt-guide__body{padding:12px 16px;gap:10px}.tt-guide:has(.tt-guide__step) .tt-guide__step{padding:14px}.tt-guide__actions button{font-size:12px;line-height:1.4}.tt-guide__actions>div>button{padding:0 10px}}

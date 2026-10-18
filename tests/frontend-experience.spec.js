@@ -114,7 +114,7 @@ for(const width of widths){
   await expect(page.locator('.tt-guide__step-count')).toContainText('Step 2',{timeout:15000});
   fs.mkdirSync('test-results/frontend-experience',{recursive:true});await page.screenshot({path:'test-results/frontend-experience/guide-me-inventory-'+width+'.png',fullPage:true});
   const search=inventory.locator('#tt-inv-search');await search.click();await search.fill('Baseball');await expect(search).toHaveValue('Baseball');
-  const coach=page.locator('#tt-guided-mode .tt-guide');const box=await coach.boundingBox();expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width+1);
+  const coach=page.locator('#tt-guided-mode .tt-guide');const box=await coach.boundingBox();expect(box.x).toBeGreaterThanOrEqual(0);expect(box.x+box.width).toBeLessThanOrEqual(width+1);const actions=await coach.locator('.tt-guide__actions').boundingBox();expect(actions.y).toBeGreaterThanOrEqual(box.y);expect(actions.y+actions.height).toBeLessThanOrEqual(box.y+box.height+1);
   expect(await page.evaluate(()=>document.documentElement.scrollWidth)).toBeLessThanOrEqual(width+1);
   fs.mkdirSync('test-results/frontend-experience',{recursive:true});await page.screenshot({path:'test-results/frontend-experience/guide-me-inventory-'+width+'.png',fullPage:true});
  });

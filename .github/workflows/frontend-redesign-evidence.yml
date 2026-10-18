@@ -29,6 +29,7 @@ jobs:
       - run: npm ci
       - run: npx playwright install --with-deps chromium
       - name: Capture actual production assets and seven viewport baselines
+        if: github.event_name == 'workflow_dispatch'
         run: node scripts/audit-production-frontend.js
       - name: Initialize isolated fixture database
         run: |
@@ -83,6 +84,7 @@ jobs:
               im=Image.open(p).convert('RGB')
               stream=BytesIO()
               im.save(stream,format='JPEG',quality=86,optimize=True)
+              im.save(os.path.join(out,name+'.jpg'),format='JPEG',quality=86,optimize=True)
               data=base64.b64encode(stream.getvalue()).decode()
               parts=[]
               for n,i in enumerate(range(0,len(data),100000)):
