@@ -1,5 +1,6 @@
 {
-  "state": "starting_authentication",
+  "state": "awaiting_authentication",
+  "verificationUrl": "https://12ui.com/connect-cli?user_code=NQTP-AMGS",
   "sourceSha": "717c3f4aab0149e566c24381e9173a58ef4714e3",
-  "updatedAt": "2026-10-18T13:55:57.692Z"
+  "updatedAt": "2026-10-18T13:56:01.736Z"
 }
