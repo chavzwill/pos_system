@@ -1,7 +1,9 @@
 {
-  "state": "review_retry_running",
+  "state": "review_retry_complete",
   "command": "alignment-help",
+  "exitCode": 0,
   "authenticated": true,
+  "output": "docs/ui-review/717c3f4/12ui-alignment/alignment-help.txt",
   "sourceSha": "717c3f4aab0149e566c24381e9173a58ef4714e3",
-  "updatedAt": "2026-10-18T13:59:47.197Z"
+  "updatedAt": "2026-10-18T13:59:50.698Z"
 }
