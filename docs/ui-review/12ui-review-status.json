@@ -1,7 +1,9 @@
 {
-  "state": "review_retry_running",
+  "state": "review_retry_complete",
   "command": "reference-alignment",
+  "exitCode": 1,
   "authenticated": true,
+  "output": "docs/ui-review/717c3f4/12ui-alignment/reference-alignment.txt",
   "sourceSha": "717c3f4aab0149e566c24381e9173a58ef4714e3",
-  "updatedAt": "2026-10-18T14:00:12.897Z"
+  "updatedAt": "2026-10-18T14:00:16.227Z"
 }
