@@ -2979,3 +2979,134 @@ body .tt-reauth__card{padding:28px;border:1px solid var(--tt-border);border-radi
 .tt-guide:has(.tt-guide__step) .tt-guide__actions{flex:none;margin:0;padding:12px 0 0;gap:8px;display:grid;grid-template-columns:minmax(0,1fr) auto}
 .tt-guide__actions>div{display:flex;align-items:center;gap:8px}.tt-guide__actions>button{text-align:left}.tt-guide__actions>div>button{padding:0 12px}
 @media(max-width:768px){.tt-guide .tt-guide__head{padding:14px 16px}.tt-guide:has(.tt-guide__step) .tt-guide__body{padding:12px 16px;gap:10px}.tt-guide:has(.tt-guide__step) .tt-guide__step{padding:14px}.tt-guide__actions button{font-size:12px;line-height:1.4}.tt-guide__actions>div>button{padding:0 10px}}
+
+
+/* Authoritative workspace responsiveness — 2026-10-21 */
+/* The extracted workspace stylesheet still contains legacy full-page rules.
+   Once mounted in the modern shell, the shell owns page geometry and scrolling. */
+body:has(#shell-root.shell-app){display:block!important;width:100%!important;max-width:100%!important;height:100dvh!important;min-height:100dvh!important;overflow:hidden!important}
+#shell-root.shell-app{width:100%;max-width:100vw;min-width:0}
+.shell-main,.shell-content{min-width:0;max-width:100%}
+[data-tt-workspace]{
+ position:relative!important;inset:auto!important;
+ display:block;box-sizing:border-box;
+ width:100%!important;max-width:100%!important;
+ height:auto!important;min-height:calc(100dvh - var(--tt-header-height));
+ overflow:visible!important;min-width:0!important
+}
+[data-tt-workspace],[data-tt-workspace] *{box-sizing:border-box}
+[data-tt-workspace]>*,
+[data-tt-workspace] [data-tt-frame],
+[data-tt-workspace] [data-tt-panel],
+[data-tt-workspace] :is(main,section,article,aside,header,footer,form,fieldset){min-width:0;max-width:100%}
+[data-tt-workspace] :is(input:not([type=checkbox]):not([type=radio]),select,textarea){max-width:100%}
+[data-tt-workspace] :is(.tablewrap,[class*="table-wrap"],[class*="tablewrap"],[class$="__table"],[class$="-table"]){max-width:100%;overflow-x:auto;-webkit-overflow-scrolling:touch;overscroll-behavior-inline:contain}
+[data-tt-workspace] :is(.tablewrap,[class*="table-wrap"],[class*="tablewrap"]) table{width:max-content;min-width:100%;max-width:none}
+[data-tt-workspace] :is([class*="__head"],[class*="__header"],[data-tt-heading])>*,
+[data-tt-workspace] :is([class*="__toolbar"],[class*="__filters"],[class*="__actions"])>*{min-width:0}
+[data-tt-workspace] :is(.tt-crm-row,.tt-wo-row,.tt-li-job,.tt-li-transfer){max-width:100%}
+
+@media(max-width:1023px){
+ [data-tt-workspace] :is([class*="__head"],[class*="__header"],[data-tt-heading],[class$="-panel"]>header,[class$="__panel"]>header,.tt-wo__top){
+  flex-wrap:wrap;align-items:flex-start
+ }
+ [data-tt-workspace] :is([class*="__toolbar"],[class*="__filters"],[class*="__actions"],[class*="__tabs"],.tt-li-queue-actions){
+  max-width:100%
+ }
+ [data-tt-workspace] :is([class*="__metrics"],[class*="__stats"],[class*="__summary"],.tt-ledger-kpis,.tt-li-stats){
+  min-width:0
+ }
+}
+
+@media(max-width:900px){
+ [data-tt-workspace] :is(
+  .tt-cc__body,.tt-crm__body,.tt-held__body,.tt-inv__body,.tt-lw__body,.tt-oac__layout,
+  .tt-promo__content,.tt-qi__grid,.tt-purch__body,.tt-rent__body,.tt-repair-comms__body,
+  .tt-repair-ops__body,.tt-sales__body,.suppliers-layout,.tt-coach__layout,.tt-tech-score__layout,
+  .tt-tmi__layout,.tt-tr__body,.tt-wo__layout,.tt-wo__grid,.tt-fleet__body,.cm-layout,.arw-detail
+ ){
+  grid-template-columns:minmax(0,1fr)!important
+ }
+ [data-tt-workspace] :is(
+  .tt-admin__metrics,.cdw-metrics,.tt-cc__facts,.catalog-admin-metrics,.cm-metrics,
+  .tt-crm__metrics,.tt-crm__dash-metrics,.denom-metrics,.tt-held__metrics,.tt-inv__metrics,
+  .tt-lw__metrics,.tt-op-reports__summary,.tt-promo__metrics,.tt-purch__metrics,
+  .tt-quotes__metrics,.tt-quotes__detail-metrics,.tt-rent__metrics,.tt-rn__metrics,.tt-tr__metrics
+ ){
+  grid-template-columns:repeat(2,minmax(0,1fr))!important
+ }
+ [data-tt-workspace] :is(.tt-inv__toolbar,.tt-cc__toolbar,.catalog-admin-toolbar){
+  grid-template-columns:minmax(0,1fr) auto!important
+ }
+}
+
+@media(max-width:640px){
+ [data-tt-workspace]{min-height:calc(100dvh - var(--tt-header-height));font-size:14px}
+ [data-tt-workspace] :is([class*="__head"],[class*="__header"],[data-tt-heading],[class$="-panel"]>header,[class$="__panel"]>header,.tt-wo__top){
+  gap:10px
+ }
+ [data-tt-workspace] :is([class*="__head"],[class*="__header"],[data-tt-heading]) :is(h1,h2,h3){
+  max-width:100%;overflow-wrap:anywhere
+ }
+ [data-tt-workspace] :is([class*="__toolbar"],[class*="__filters"],.tt-li-queue-actions){
+  display:flex!important;flex-wrap:wrap!important;align-items:stretch!important;gap:10px!important
+ }
+ [data-tt-workspace] :is([class*="__toolbar"],[class*="__filters"],.tt-li-queue-actions)>:is(label,input,select){
+  flex:1 1 100%!important;width:100%!important;max-width:100%!important
+ }
+ [data-tt-workspace] :is([class*="__toolbar"],[class*="__filters"],.tt-li-queue-actions)>button{
+  flex:1 1 auto;min-height:44px
+ }
+ [data-tt-workspace] :is([class*="__tabs"]){
+  display:flex!important;flex-wrap:nowrap!important;max-width:100%!important;overflow-x:auto!important;
+  -webkit-overflow-scrolling:touch;scroll-snap-type:x proximity;overscroll-behavior-inline:contain
+ }
+ [data-tt-workspace] :is([class*="__tabs"])>button{flex:0 0 auto;min-height:44px;scroll-snap-align:start}
+ [data-tt-workspace] :is(
+  .tt-admin__grid,.tt-admin__form-grid,.catalog-admin-form,.tt-cat__grid,.tt-crm__facts,
+  .tt-cp-formgrid,.denom-grid,.tt-promo-form__grid,.tt-purch__facts,.tt-rent__facts,
+  .tt-comms-form__grid,.tt-settings__grid,.tt-tech-pay__form-grid,.tt-tr__facts,.tt-wo__facts
+ ){
+  grid-template-columns:minmax(0,1fr)!important
+ }
+ [data-tt-workspace] :is(.tt-inv__toolbar,.tt-cc__toolbar,.catalog-admin-toolbar,.tt-wo__filters){
+  grid-template-columns:minmax(0,1fr)!important
+ }
+ [data-tt-workspace] :is(.tt-cc__item,.catalog-admin-category,.tt-cp-card,.denom-row,.arw-row){
+  grid-template-columns:minmax(0,1fr)!important
+ }
+ [data-tt-workspace] :is([role="dialog"],[class*="__modal"],[class$="-modal"]){
+  max-width:100vw!important
+ }
+ [data-tt-workspace] :is([role="dialog"],[class*="__modal"],[class$="-modal"])>:is(section,article,form,div){
+  max-width:calc(100vw - 20px)
+ }
+ [data-tt-workspace] .tt-sales__products{max-height:42dvh}
+ [data-tt-workspace] :is(.tt-sales__line,.tt-sales__product){min-width:0}
+ [data-tt-workspace] :is(.tt-sales__actions,.tt-cp-modal footer,.denom-form-actions,.catalog-admin-form-actions){
+  grid-template-columns:minmax(0,1fr)!important
+ }
+ [data-tt-workspace] :is(.tt-crm-row,.tt-wo-row){align-items:flex-start;flex-wrap:wrap}
+ [data-tt-workspace] .tt-crm-row em{white-space:normal}
+}
+
+@media(max-width:480px){
+ [data-tt-workspace] :is(
+  .tt-admin__metrics,.cdw-metrics,.tt-cc__facts,.catalog-admin-metrics,.cm-metrics,
+  .tt-crm__metrics,.tt-crm__dash-metrics,.denom-metrics,.tt-held__metrics,.tt-inv__metrics,
+  .tt-lw__metrics,.tt-op-reports__summary,.tt-promo__metrics,.tt-purch__metrics,
+  .tt-quotes__metrics,.tt-quotes__detail-metrics,.tt-rent__metrics,.tt-rn__metrics,.tt-tr__metrics
+ ){
+  grid-template-columns:minmax(0,1fr)!important
+ }
+ [data-tt-workspace] :is(button,input,select,textarea){min-height:44px}
+ [data-tt-workspace] :is([class*="__actions"],footer){flex-wrap:wrap}
+ [data-tt-workspace] :is([class*="__actions"],footer)>button{max-width:100%}
+ [data-tt-workspace] :is(.tt-li-section-head,.tt-sales__split-head){align-items:flex-start;flex-direction:column}
+ .tt-guide{right:6px;left:6px;bottom:calc(6px + env(safe-area-inset-bottom,0px));max-height:60dvh}
+}
+
+@media(max-width:360px){
+ [data-tt-workspace] :is([class*="__body"],[class*="__content"],.tt-li-body){padding-left:12px!important;padding-right:12px!important}
+ [data-tt-workspace] :is([class*="__head"],[class*="__header"],[data-tt-heading],[class$="-panel"]>header,[class$="__panel"]>header,.tt-wo__top){padding-left:12px!important;padding-right:12px!important}
+}
