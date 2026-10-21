@@ -7,7 +7,7 @@ const presentation=()=>read('public/ui-tokens.css')+read('public/ui-workspaces.c
 const workspacePresentation=()=>read('public/ui-workspaces.css');
 const revisedPresentationChecks={
 
- 'workspace hardening registry cannot hide shell modules or lose tile intent':()=>assetKeys(shellJs).length>0&&assetKeys(shellJs).every(k=>assetKeys(loaderHardeningJs).includes(k))&&loaderHardeningJs.includes("'suppliers-workspace':")&&loaderHardeningJs.includes("'warehouse-operations':")&&loaderHardeningJs.includes("options={...options,tab:'pr'}")&&loaderHardeningJs.includes("options={...options,tab:'po'}")&&loaderHardeningJs.includes("options={...options,tab:'branches'}")&&loaderHardeningJs.includes("window.TotalToolsShellUI?.toast")&&!loaderHardeningJs.includes('catch(err=>alert('),
+ 'workspace hardening registry cannot hide shell modules or lose tile intent':()=>assetKeys(shellJs).length>0&&assetKeys(shellJs).every(k=>assetKeys(loaderHardeningJs).includes(k))&&loaderHardeningJs.includes("'suppliers-workspace':")&&loaderHardeningJs.includes("'warehouse-operations':")&&loaderHardeningJs.includes('function purchasingIntent')&&loaderHardeningJs.includes("tab:'pr'")&&loaderHardeningJs.includes("tab:'po'")&&loaderHardeningJs.includes("create:'pr'")&&loaderHardeningJs.includes("create:'po'")&&loaderHardeningJs.includes("options={...options,tab:'branches'}")&&loaderHardeningJs.includes("window.TotalToolsShellUI?.toast")&&!loaderHardeningJs.includes('catch(err=>alert('),
  'rental fleet dialogs match the canonical interaction law':()=>rentalFleetJs.includes('aria-labelledby="tt-fleet-modal-title"')&&rentalFleetJs.includes('role="alert" aria-live="polite"')&&rentalFleetJs.includes("if(e.key==='Tab')")&&rentalFleetJs.includes("previous.focus({preventScroll:true})")&&workspacePresentation().includes('.tt-fleet__modal')&&presentation().includes('font-size:16px'),
  'warehouse is first-class in the simplified shell and quick command':()=>shellJs.includes("['Warehouse','Prepare shipments, find storage locations and manage warehouse flow.','warehouse-operations']")&&shellJs.includes("'warehouse-operations':")&&shellJs.includes("'warehouse-operations':'warehouse'")&&shellJs.includes("if(key==='warehouse-operations')return'Open warehouse'"),
  'all four html surfaces have an authoritative v2 path':()=>shellHtml.includes('/ui-tokens.css')&&server.includes("versioned('/ui-workspaces.css')")&&manual.includes('/ui-tokens.css')&&preview.includes('/ui-tokens.css'),
@@ -451,10 +451,13 @@ check('active secondary workspaces contain no staff microtype at 10px or below',
 check('workspace hardening registry cannot hide shell modules or lose tile intent',
   assetKeys(shellJs).length>0 &&
   assetKeys(shellJs).every(k=>assetKeys(loaderHardeningJs).includes(k)) &&
-  loaderHardeningJs.includes("'suppliers-workspace':['/suppliers-workspace.css'") &&
-  loaderHardeningJs.includes("'warehouse-operations':['/warehouse-operations-workspace.css'") &&
-  loaderHardeningJs.includes("options={...options,tab:'pr'}") &&
-  loaderHardeningJs.includes("options={...options,tab:'po'}") &&
+  loaderHardeningJs.includes("'suppliers-workspace':") &&
+  loaderHardeningJs.includes("'warehouse-operations':") &&
+  loaderHardeningJs.includes('function purchasingIntent') &&
+  loaderHardeningJs.includes("tab:'pr'") &&
+  loaderHardeningJs.includes("tab:'po'") &&
+  loaderHardeningJs.includes("create:'pr'") &&
+  loaderHardeningJs.includes("create:'po'") &&
   loaderHardeningJs.includes("options={...options,tab:'branches'}") &&
   loaderHardeningJs.includes("window.TotalToolsShellUI?.toast") &&
   !loaderHardeningJs.includes('catch(err=>alert(')
