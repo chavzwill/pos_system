@@ -8,27 +8,18 @@
       "maxDuration": 30
     }
   },
-  "routes": [
+  "rewrites": [
     {
-      "src": "^/$",
-      "dest": "/app-shell.html",
-      "headers": {
-        "cache-control": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400"
-      }
+      "source": "/",
+      "destination": "/app-shell.html"
     },
     {
-      "src": "^/index\\.html$",
-      "dest": "/app-shell.html",
-      "headers": {
-        "cache-control": "public, max-age=0, s-maxage=300, stale-while-revalidate=86400"
-      }
+      "source": "/index.html",
+      "destination": "/app-shell.html"
     },
     {
-      "handle": "filesystem"
-    },
-    {
-      "src": "/(.*)",
-      "dest": "/server.js"
+      "source": "/(.*)",
+      "destination": "/server.js"
     }
   ]
 }
