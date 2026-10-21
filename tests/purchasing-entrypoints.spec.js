@@ -18,6 +18,22 @@ async function openPurchasingDomain(page){
   await expect(purchasing).toHaveClass(/is-active/);
 }
 
+
+async function assertComposerInViewport(page,title){
+  const composer=page.locator('.tt-purch__composer');
+  await expect(composer).toBeVisible({timeout:5000});
+  await expect(page.locator('#tt-purch-compose-title')).toHaveText(title);
+  const box=await composer.boundingBox();
+  expect(box).not.toBeNull();
+  const viewport=page.viewportSize();
+  expect(viewport).not.toBeNull();
+  expect(box.x).toBeGreaterThanOrEqual(-1);
+  expect(box.y).toBeGreaterThanOrEqual(-1);
+  expect(box.x+box.width).toBeLessThanOrEqual(viewport.width+1);
+  expect(box.y).toBeLessThan(viewport.height);
+  expect(await composer.evaluate(el=>getComputedStyle(el).position)).toBe('fixed');
+}
+
 async function cardAction(page,title){
   const button=page.locator(`[data-open="purchasing-workspace"][data-title="${title}"]`).first();
   await expect(button).toBeVisible();
@@ -50,8 +66,7 @@ test.describe('Purchasing shell entry points',()=>{
     await expect(page.locator('#tt-purchasing-workspace [data-tab="pr"]')).toHaveClass(/is-active/);
     await expect(page.locator('#tt-purch-new-pr')).toBeVisible();
     await page.locator('#tt-purch-new-pr').click();
-    await expect(page.locator('.tt-purch__composer')).toBeVisible();
-    await expect(page.locator('#tt-purch-compose-title')).toHaveText('Create Purchase Request');
+    await assertComposerInViewport(page,'Create Purchase Request');
   });
 
   test('Purchase Orders card opens orders and New Purchase Order opens composer',async({page})=>{
@@ -61,8 +76,7 @@ test.describe('Purchasing shell entry points',()=>{
     await expect(page.locator('#tt-purchasing-workspace [data-tab="po"]')).toHaveClass(/is-active/);
     await expect(page.locator('#tt-purch-new-po')).toBeVisible();
     await page.locator('#tt-purch-new-po').click();
-    await expect(page.locator('.tt-purch__composer')).toBeVisible();
-    await expect(page.locator('#tt-purch-compose-title')).toHaveText('Create Purchase Order');
+    await assertComposerInViewport(page,'Create Purchase Order');
   });
 
   test('Guide Me exact-action script is loaded with the current workflow cache key',async({page})=>{
