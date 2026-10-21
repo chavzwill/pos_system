@@ -22,7 +22,7 @@ check('mobile tables have horizontal containment',work.includes('overflow-x:auto
 check('very small phones receive dedicated 360px rules',shell.includes('@media(max-width:360px)')&&work.includes('@media(max-width:360px)'));
 check('shell assets use responsive cache version',html.includes(VERSION)&&app.includes(VERSION));
 check('workspace loader uses responsive cache version',loader.includes(VERSION));
-check('deferred shell uses responsive cache version',deferred.includes(VERSION));
+check('deferred shell uses current workflow cache version',deferred.includes('20261021-workflow-fix1')&&html.includes('/shell-deferred.js?v=20261021-workflow-fix1'));
 
 for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} Responsive layout: ${c.name}`);
 if(checks.some(c=>!c.pass))process.exit(1);
