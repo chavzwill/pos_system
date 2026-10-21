@@ -14,7 +14,7 @@ async function login(page){
 
 async function openGuidedTask(page,taskId){
   await page.evaluate(id=>window.TotalToolsGuideMe.openTask(id),taskId);
-  await expect(page.locator('#tt-guided-mode')).toBeVisible();
+  await expect(page.locator('#tt-guided-mode .tt-guide')).toBeVisible();
   await expect(page.locator('#tt-purchasing-workspace')).toBeVisible({timeout:10000});
   await expect(page.locator('.tt-guide__step-count')).toHaveText(/Step 2 of /,{timeout:10000});
   await expect(page.locator('.tt-guide__exact-action button')).toBeVisible({timeout:10000});
