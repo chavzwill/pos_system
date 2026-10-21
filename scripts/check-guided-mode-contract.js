@@ -21,6 +21,7 @@ const checks=[];
 function check(name,pass,detail=''){checks.push({name,pass:!!pass,detail});}
 check('workspace loader precedes deferred guide',shell.indexOf('/workspace-loader-hardening.js')>=0&&shell.indexOf('/workspace-loader-hardening.js')<shell.indexOf('/shell-deferred.js'));
 check('deferred guide scripts are ordered',deferred.includes('s.async=false')&&deferred.indexOf("'/guided-mode.js'")<deferred.indexOf("'/guided-mode-orchestrator.js'")&&deferred.indexOf("'/purchase-order-document-context.js'")<deferred.indexOf("'/guided-mode-completion.js'")&&deferred.indexOf("'/guided-mode-exact-action.js'")<deferred.indexOf("'/guided-mode-exact-fallback.js'")&&deferred.indexOf("'/guided-mode-exact-fallback.js'")<deferred.indexOf("'/guided-mode-integrity.js'"));
+check('Guide Me deferred assets use fresh workflow cache key',shell.includes('/shell-deferred.js?v=20261021-workflow-fix1')&&deferred.includes("const VERSION='20261021-workflow-fix1'"));
 check('single shell loader API',loader.includes('window.TotalToolsShellOpen=openFeature')&&loader.includes('window.TotalToolsWorkspaceLoader'));
 check('workspace loader does not own guide Next',!loader.includes('#tt-guided-mode [data-guide-next]'));
 check('orchestrator uses hardened loader directly',orchestrator.includes('window.TotalToolsShellOpen'));
