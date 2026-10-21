@@ -11,6 +11,8 @@ const TASK_CONTEXT={
  'Manage product brands':{domain:'inventory',feature:'catalog-admin-workspace',selector:'.catalog-admin-overlay'},
  'Review duplicate catalog products':{domain:'inventory',feature:'catalog-admin-workspace',selector:'.catalog-admin-overlay'},
  'Run a stock or cycle count':{domain:'inventory'},
+ 'Create Purchase Request':{domain:'purchasing',feature:'purchasing-workspace',selector:'#tt-purchasing-workspace',tab:'pr',create:'pr'},
+ 'Create Purchase Order':{domain:'purchasing',feature:'purchasing-workspace',selector:'#tt-purchasing-workspace',tab:'po',create:'po'},
  'Create or approve a purchase request':{domain:'purchasing',feature:'purchasing-workspace',selector:'#tt-purchasing-workspace',tab:'pr'},
  'Create, edit, copy, cancel or receive a PO':{domain:'purchasing',feature:'purchasing-workspace',selector:'#tt-purchasing-workspace',tab:'po'},
  'Create, dispatch or receive a branch transfer':{domain:'inventory',feature:'transfers-workspace',selector:'#tt-transfers-workspace'},
@@ -31,7 +33,7 @@ function step(){const m=(guideRoot()?.querySelector('.tt-guide__step-count')?.te
 function announce(text){let n=document.getElementById('tt-guide-live');if(!n){n=document.createElement('div');n.id='tt-guide-live';n.setAttribute('role','status');n.setAttribute('aria-live','polite');n.style.cssText='position:fixed;left:-9999px;width:1px;height:1px;overflow:hidden';document.body.appendChild(n);}n.textContent=text;}
 function clickDomain(domain){if(!domain)return true;const b=[...document.querySelectorAll('.shell-nav [data-domain]')].find(x=>x.dataset.domain===domain);if(!b)return false;if(!b.classList.contains('is-active'))b.click();return true;}
 function ready(ctx){if(!ctx?.feature)return true;const el=document.querySelector(ctx.selector||'');if(!visible(el))return false;const global=API[ctx.feature];return !global||typeof window[global]?.open==='function';}
-async function openWorkspace(ctx,taskTitle){if(!ctx?.feature)return true;if(ready(ctx))return true;if(typeof window.TotalToolsShellOpen!=='function')throw new Error('Workspace loader is not ready.');await window.TotalToolsShellOpen(ctx.feature,taskTitle);for(let i=0;i<30;i++){if(ready(ctx))return true;await sleep(80);}throw new Error('The required workspace did not become ready.');}
+async function openWorkspace(ctx,taskTitle){if(!ctx?.feature)return true;if(ready(ctx)&&!ctx.create)return true;if(typeof window.TotalToolsShellOpen!=='function')throw new Error('Workspace loader is not ready.');await window.TotalToolsShellOpen(ctx.feature,taskTitle,{tab:ctx.tab,create:ctx.create});for(let i=0;i<30;i++){if(ready(ctx))return true;await sleep(80);}throw new Error('The required workspace did not become ready.');}
 async function selectPurchasingTab(tab){if(!tab)return true;for(let i=0;i<25;i++){const r=document.getElementById('tt-purchasing-workspace');const b=r?.querySelector(`[data-tab="${tab}"]`);if(b&&visible(b)){if(!b.classList.contains('is-active'))b.click();return true;}await sleep(80);}throw new Error(`Purchasing ${tab==='po'?'Purchase Orders':'Purchase Requests'} tab is unavailable.`);}
 function nextButton(){return guideRoot()?.querySelector('[data-guide-next]')||null;}
 function setNext(label,disabled=false){const b=nextButton();if(!b)return;b.textContent=label;b.disabled=disabled;if(disabled)b.setAttribute('aria-disabled','true');else b.removeAttribute('aria-disabled');}
