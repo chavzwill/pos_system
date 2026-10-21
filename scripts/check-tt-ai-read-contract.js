@@ -20,6 +20,8 @@ const checks=[
   ['read-tool module performs no SQL mutation',!/\b(?:INSERT|UPDATE|DELETE|REPLACE|ALTER|DROP|CREATE)\b/i.test(tools.replace(/CREATE TABLE IF NOT EXISTS/g,''))],
   ['cross-branch reads require existing authority',tools.includes("multi_branch_access")&&tools.includes('TT_AI_BRANCH_FORBIDDEN')],
   ['product reads are branch scoped',tools.includes('LEFT JOIN branch_inventory bi ON bi.product_id=p.id AND bi.branch_id=?')],
+  ['missing staff branch cannot grant arbitrary branch access',tools.includes("requested !== defaultBranch && !can")&&!tools.includes("defaultBranch && requested !== defaultBranch")],
+  ['no global stock or fabricated zero when branch stock missing',!tools.includes('global_stock_qty')&&tools.includes('bi.stock_qty AS stock_qty')&&!tools.includes('COALESCE(bi.stock_qty,0) AS stock_qty')],
   ['cost visibility is permission gated',tools.includes("can(employee?.permissions, 'purchasing')")&&tools.includes("can(employee?.permissions, 'reports_financial')")],
   ['rental asset registry is capability guarded',tools.includes("tableExists('rental_assets')")&&tools.includes("tableExists('inventory_serials')")],
   ['exact assets can be searched by serial or asset number',tools.includes('a.asset_number LIKE ?')&&tools.includes('s.serial_number LIKE ?')],

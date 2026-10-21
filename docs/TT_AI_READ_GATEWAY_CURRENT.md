@@ -39,3 +39,10 @@ node scripts/check-tt-ai-assertion-contract.js
 ```
 
 Readiness and end-to-end live-stock tests still require a real session, authorized POS data, a running TT AI service and the signing key pair. The prior Ask TT AI interface and Knowledge Review workspace remain on draft PR #97 and must be adapted to the current shell separately; **this patch is a backend gateway, not a finished employee UI**.
+
+## Branch-data correctness hardening
+
+- Staff without a default branch cannot select an arbitrary branch just because the request named one. Only existing `multi_branch_access` permits selecting another branch.
+- Product read results include **only the requested, permissioned branch's stock**. They never expose `products.stock_qty` company-wide totals.
+- If a product has no row in `branch_inventory`, `stock_qty` remains `null` (unknown), not a fabricated zero.
+- Run `node scripts/check-tt-ai-read-runtime.js` for mocked runtime permission, stock and cost assertions, in addition to the source contract and signature checks. These do not substitute for a real POS database integration test.
