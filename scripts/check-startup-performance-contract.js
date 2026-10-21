@@ -11,13 +11,11 @@ const checks=[];
 const check=(name,pass)=>checks.push({name,pass:!!pass});
 
 check('Vercel root is served from the static fast shell',
-  Array.isArray(vercel.routes) &&
-  vercel.routes.some(r=>r.src==='^/$'&&r.dest==='/app-shell.html'));
-check('Vercel filesystem is checked before Express fallback',
-  Array.isArray(vercel.routes) &&
-  vercel.routes.findIndex(r=>r.handle==='filesystem')>=0 &&
-  vercel.routes.findIndex(r=>r.handle==='filesystem') <
-    vercel.routes.findIndex(r=>r.dest==='/server.js'));
+  Array.isArray(vercel.rewrites) &&
+  vercel.rewrites.some(r=>r.source==='/'&&r.destination==='/app-shell.html'));
+check('Vercel retains Express catch-all after static shell rewrites',
+  Array.isArray(vercel.rewrites) &&
+  vercel.rewrites.some(r=>r.source==='/(.*)'&&r.destination==='/server.js'));
 check('static shell has shared redesigned assets',
   shell.includes('/ui-tokens.css?v=20261017-design') &&
   shell.includes('/app-shell.js?v=20261017-design'));
