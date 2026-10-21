@@ -24,9 +24,49 @@ const db = new Proxy(_rawDb, {
 });
 
 let initPromise = null;
+const POS_SCHEMA_VERSION = '2026-10-21-fast-boot-v1';
+
+async function _remoteSchemaVersionIsCurrent() {
+  if (!process.env.TURSO_DATABASE_URL) return false;
+  try {
+    const { rows } = await db.execute({
+      sql: 'SELECT value FROM settings WHERE key = ? LIMIT 1',
+      args: ['pos_schema_version'],
+    });
+    return String(rows?.[0]?.value || '') === POS_SCHEMA_VERSION;
+  } catch (_) {
+    return false;
+  }
+}
+
+async function _writeRemoteSchemaVersion() {
+  if (!process.env.TURSO_DATABASE_URL) return;
+  await db.execute({
+    sql: `INSERT INTO settings (key,value,description)
+          VALUES (?,?,?)
+          ON CONFLICT(key) DO UPDATE SET
+            value=excluded.value,
+            description=excluded.description`,
+    args: [
+      'pos_schema_version',
+      POS_SCHEMA_VERSION,
+      'POS schema/bootstrap version used to avoid repeating full initialization on serverless cold starts',
+    ],
+  });
+}
+
+async function _ensureReady() {
+  // Turso is durable across Vercel function instances. Once a deployment has
+  // completed the full idempotent bootstrap for this schema version, future
+  // cold starts need only one tiny version read instead of replaying every
+  // CREATE/ALTER/seed/index statement before the first authenticated request.
+  if (await _remoteSchemaVersionIsCurrent()) return;
+  await _init();
+  await _writeRemoteSchemaVersion();
+}
 
 async function ensureReady() {
-  if (!initPromise) initPromise = _init().catch(e => { initPromise = null; throw e; });
+  if (!initPromise) initPromise = _ensureReady().catch(e => { initPromise = null; throw e; });
   return initPromise;
 }
 
