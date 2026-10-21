@@ -1,0 +1,29 @@
+'use strict';
+const fs=require('fs');
+const path=require('path');
+const read=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');
+const shell=read('public/app-shell.css');
+const work=read('public/ui-workspaces.css');
+const html=read('public/app-shell.html');
+const app=read('public/app-shell.js');
+const loader=read('public/workspace-loader-hardening.js');
+const deferred=read('public/shell-deferred.js');
+const VERSION='20261021-responsive';
+const checks=[];
+const check=(name,pass)=>checks.push({name,pass:!!pass});
+
+check('shell responsive hardening marker exists',shell.includes('Responsive shell hardening — 2026-10-21'));
+check('workspace responsive authority marker exists',work.includes('Authoritative workspace responsiveness — 2026-10-21'));
+check('modern shell neutralizes legacy body flex geometry',work.includes('body:has(#shell-root.shell-app)')&&work.includes('display:block!important'));
+check('mounted workspace root is forced into shell flow',work.includes('[data-tt-workspace]{')&&work.includes('position:relative!important')&&work.includes('max-width:100%!important'));
+check('wide operational split panes collapse for narrow screens',work.includes('.tt-purch__body')&&work.includes('.tt-rent__body')&&work.includes('.tt-wo__layout')&&work.includes('@media(max-width:900px)'));
+check('mobile filters and toolbars can wrap to the viewport',work.includes('@media(max-width:640px)')&&work.includes('flex-wrap:wrap!important'));
+check('mobile tables have horizontal containment',work.includes('overflow-x:auto')&&work.includes('-webkit-overflow-scrolling:touch'));
+check('very small phones receive dedicated 360px rules',shell.includes('@media(max-width:360px)')&&work.includes('@media(max-width:360px)'));
+check('shell assets use responsive cache version',html.includes(VERSION)&&app.includes(VERSION));
+check('workspace loader uses responsive cache version',loader.includes(VERSION));
+check('deferred shell uses responsive cache version',deferred.includes(VERSION));
+
+for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} Responsive layout: ${c.name}`);
+if(checks.some(c=>!c.pass))process.exit(1);
+console.log(`Responsive layout contract OK (${checks.length} checks).`);

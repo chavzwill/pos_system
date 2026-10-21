@@ -87,3 +87,59 @@
 @media(max-width:1023px){:root{--tt-nav-width:0px;--tt-header-height:64px}.shell-app{grid-template-columns:minmax(0,1fr)}.shell-main{grid-column:1}.shell-global-header{gap:12px;padding:0 16px}.shell-mobile-menu{display:grid;place-items:center;flex:none}.shell-brand{min-width:0}.shell-brand strong{font-size:18px}.shell-brand small{display:none}.shell-brand .shell-mark{width:34px;height:34px}.shell-sidebar{position:fixed;left:0;top:var(--tt-header-height);bottom:0;width:248px;z-index:50;transform:translateX(-102%);transition:transform var(--tt-motion);box-shadow:12px 0 40px #16251e19}.menu-open .shell-sidebar{transform:none}.menu-open .shell-main::before{content:"";position:fixed;inset:var(--tt-header-height) 0 0;z-index:40;background:#16251e55}.shell-header-actions{gap:8px}.shell-command-button{margin-left:auto;flex:none;width:44px;padding:0;justify-content:center}.shell-command-button .shell-search-label,.shell-command-button kbd{display:none}.shell-topbar__profile{display:none}}
 @media(max-width:768px){.shell-content{padding:20px 16px}.shell-page-head{gap:16px;margin-bottom:20px}.shell-page-head h1{font-size:26px}.shell-page-head__branch{display:none}.shell-choice-grid,.shell-more__grid{grid-template-columns:1fr}.shell-focus{padding:18px}.shell-choice{grid-template-columns:1fr auto;padding:16px}.shell-choice p{font-size:13px}.shell-quiet-section{padding:18px}.shell-quiet-head{align-items:flex-start}.shell-quiet-head>span{display:none}.shell-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:20px}.shell-kpis article+article{padding-left:0;border-left:0}.shell-resume__list{grid-template-columns:1fr}.shell-login{grid-template-columns:1fr}.shell-login__brand{padding:28px;border-right:0;border-bottom:1px solid var(--tt-border)}.shell-login__brand h1{font-size:32px;margin:24px 0 14px;max-width:440px}.shell-login__brand p{font-size:14px;margin:0}.shell-login__brand>small{display:none}.shell-login__panel{padding:32px 24px}.shell-command,.shell-input-dialog{padding:20px 12px;align-items:start}.shell-command__panel,.shell-input-dialog__panel{max-height:calc(100dvh - 40px)}.shell-command__panel>header,.shell-input-dialog__panel>header{padding:20px}.shell-input-dialog__fields{padding:20px}.shell-command__search{padding:12px 20px}}
 @media(max-width:430px){.shell-global-header{padding:0 12px;gap:8px}.shell-brand .shell-mark{display:none}.shell-brand strong{font-size:17px}.shell-header-actions{gap:4px}#shell-guide{gap:5px;padding:0 6px;font-size:13px}.shell-choice{grid-template-columns:1fr;gap:14px}.shell-choice__action{justify-self:stretch}.shell-page-head p{line-height:1.6}.shell-more em{display:none}.shell-login__brand h1{font-size:29px}}
+
+
+/* Responsive shell hardening — 2026-10-21 */
+html,body,#shell-root{width:100%;max-width:100%;min-width:0}
+body{overflow-x:hidden}
+#shell-root.shell-app{width:100%;max-width:100vw;min-width:0}
+.shell-global-header>*{min-width:0}
+.shell-main,.shell-content,.shell-page-head,.shell-focus,.shell-quiet-section,.shell-more,.shell-resume{max-width:100%;min-width:0}
+.shell-choice>div,.shell-attention-list article>div,.shell-resume__item>span{min-width:0}
+.shell-choice h3,.shell-choice p,.shell-attention-list strong,.shell-attention-list p,.shell-resume__item strong,.shell-resume__item small{overflow-wrap:anywhere}
+@media(max-width:1023px){
+ .shell-sidebar{width:min(288px,calc(100vw - 48px));padding-bottom:calc(16px + env(safe-area-inset-bottom,0px))}
+ .shell-main{width:100%;max-width:100vw}
+ .shell-content{width:100%}
+}
+@media(max-width:768px){
+ .shell-global-header{padding-left:max(12px,env(safe-area-inset-left,0px));padding-right:max(12px,env(safe-area-inset-right,0px))}
+ .shell-content{padding:18px max(14px,env(safe-area-inset-left,0px)) calc(28px + env(safe-area-inset-bottom,0px)) max(14px,env(safe-area-inset-right,0px))}
+ .shell-page-head{flex-direction:column;align-items:stretch}
+ .shell-choice{min-width:0}
+ .shell-attention-list article{align-items:flex-start;flex-wrap:wrap}
+ .shell-attention-list article>div:nth-child(2){flex:1 1 180px}
+ .shell-text-action{margin-left:0;flex:0 0 auto}
+ .shell-command,.shell-input-dialog{padding:max(12px,env(safe-area-inset-top,0px)) max(10px,env(safe-area-inset-right,0px)) max(12px,env(safe-area-inset-bottom,0px)) max(10px,env(safe-area-inset-left,0px))}
+ .shell-command__panel,.shell-input-dialog__panel{width:100%;max-width:640px;max-height:calc(100dvh - max(24px,env(safe-area-inset-top,0px) + env(safe-area-inset-bottom,0px)))}
+ .shell-toast-host{left:16px;right:16px;bottom:calc(16px + env(safe-area-inset-bottom,0px));max-width:none}
+ .shell-login{min-height:100dvh}
+ .shell-login__brand{padding:24px max(20px,env(safe-area-inset-right,0px)) 22px max(20px,env(safe-area-inset-left,0px))}
+ .shell-login__panel{padding:28px max(20px,env(safe-area-inset-right,0px)) calc(28px + env(safe-area-inset-bottom,0px)) max(20px,env(safe-area-inset-left,0px))}
+}
+@media(max-width:480px){
+ .shell-global-header{gap:6px}
+ .shell-mobile-menu,.shell-command-button{width:42px;height:42px}
+ .shell-brand{flex:0 1 auto;min-width:0;gap:8px}
+ .shell-brand>span:last-child{min-width:0}
+ .shell-brand strong{font-size:16px;white-space:nowrap}
+ .shell-header-actions{gap:2px}
+ #shell-guide{width:42px;min-width:42px;height:42px;padding:0}
+ #shell-guide span{display:none}
+ .shell-focus,.shell-quiet-section{padding:16px}
+ .shell-choice{padding:15px}
+ .shell-kpis{grid-template-columns:repeat(2,minmax(0,1fr));gap:14px}
+ .shell-kpis strong{font-size:22px}
+ .shell-attention-list article{display:grid;grid-template-columns:auto minmax(0,1fr);gap:10px 12px}
+ .shell-text-action{grid-column:1/-1;width:100%;margin:0}
+ .shell-command__panel>header,.shell-input-dialog__panel>header,.shell-input-dialog__fields{padding:16px}
+ .shell-input-dialog__panel footer{padding:14px 16px;flex-direction:column-reverse}
+ .shell-input-dialog__panel footer button{width:100%}
+ .shell-login__brand h1{font-size:clamp(27px,9vw,32px)}
+}
+@media(max-width:360px){
+ .shell-brand .shell-mark{display:grid;width:34px;height:34px}
+ .shell-brand>span:last-child{display:none}
+ .shell-header-actions{margin-left:0}
+ .shell-kpis{grid-template-columns:1fr}
+}
