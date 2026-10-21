@@ -19,11 +19,9 @@ async function openPurchasingDomain(page){
 }
 
 async function cardAction(page,title){
-  const card=page.locator('.shell-choice,.shell-more button').filter({hasText:title}).first();
-  await expect(card).toBeVisible();
-  const button=card.locator('button[data-open]').count()
-    ? card.locator('button[data-open]').first()
-    : card;
+  const button=page.locator(`[data-open="purchasing-workspace"][data-title="${title}"]`).first();
+  await expect(button).toBeVisible();
+  await expect(button).toHaveAttribute('data-title',title);
   await button.click();
   await expect(page.locator('#tt-purchasing-workspace')).toBeVisible({timeout:10000});
 }
