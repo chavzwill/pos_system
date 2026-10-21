@@ -20,9 +20,9 @@ check('wide operational split panes collapse for narrow screens',work.includes('
 check('mobile filters and toolbars can wrap to the viewport',work.includes('@media(max-width:640px)')&&work.includes('flex-wrap:wrap!important'));
 check('mobile tables have horizontal containment',work.includes('overflow-x:auto')&&work.includes('-webkit-overflow-scrolling:touch'));
 check('very small phones receive dedicated 360px rules',shell.includes('@media(max-width:360px)')&&work.includes('@media(max-width:360px)'));
-check('shell styles retain responsive cache version',html.includes('/app-shell.css?v='+VERSION)&&html.includes('/ui-workspaces.css?v='+VERSION));
-check('shell workflow scripts use current direct-create cache version',html.includes('/app-shell.js?v=20261021-workflow-fix2')&&html.includes('/workspace-loader-hardening.js?v=20261021-workflow-fix2'));
-check('workspace loader uses current direct-create cache version',loader.includes('20261021-workflow-fix2'));
+check('shell and workspace styles use current cache versions',html.includes('/app-shell.css?v=20261021-responsive')&&html.includes('/ui-workspaces.css?v='+VERSION));
+check('shell workflow loaders use composer-fix cache version',html.includes('/app-shell.js?v='+VERSION)&&html.includes('/workspace-loader-hardening.js?v='+VERSION));
+check('workspace loader uses composer-fix cache version',loader.includes(VERSION));
 check('deferred shell uses current workflow cache version',deferred.includes('20261021-workflow-fix2')&&html.includes('/shell-deferred.js?v=20261021-workflow-fix2'));
 
 for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} Responsive layout: ${c.name}`);
