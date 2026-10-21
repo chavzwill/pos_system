@@ -13,9 +13,9 @@ const check=(name,pass)=>checks.push({name,pass:!!pass});
 check('Vercel root is served from the static fast shell',
   Array.isArray(vercel.rewrites) &&
   vercel.rewrites.some(r=>r.source==='/'&&r.destination==='/app-shell.html'));
-check('Vercel retains Express catch-all after static shell rewrites',
+check('Vercel leaves API routing to the detected Express framework',
   Array.isArray(vercel.rewrites) &&
-  vercel.rewrites.some(r=>r.source==='/(.*)'&&r.destination==='/server.js'));
+  !vercel.rewrites.some(r=>String(r.destination||'').includes('server.js')));
 check('static shell has shared redesigned assets',
   shell.includes('/ui-tokens.css?v=20261017-design') &&
   shell.includes('/app-shell.js?v=20261017-design'));
