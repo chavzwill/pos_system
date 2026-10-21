@@ -21,6 +21,22 @@ async function openGuidedTask(page,taskId){
 }
 
 test.describe('Guide Me purchasing workflow launchers',()=>{
+  test('direct Create Purchase Request task opens the composer without a second launch click',async({page})=>{
+    await login(page);
+    await page.evaluate(()=>window.TotalToolsGuideMe.openTask('pr-create'));
+    await expect(page.locator('#tt-purchasing-workspace')).toBeVisible({timeout:10000});
+    await expect(page.locator('.tt-purch__composer')).toBeVisible({timeout:10000});
+    await expect(page.locator('#tt-purch-compose-title')).toHaveText('Create Purchase Request');
+  });
+
+  test('direct Create Purchase Order task opens the composer without a second launch click',async({page})=>{
+    await login(page);
+    await page.evaluate(()=>window.TotalToolsGuideMe.openTask('po-create'));
+    await expect(page.locator('#tt-purchasing-workspace')).toBeVisible({timeout:10000});
+    await expect(page.locator('.tt-purch__composer')).toBeVisible({timeout:10000});
+    await expect(page.locator('#tt-purch-compose-title')).toHaveText('Create Purchase Order');
+  });
+
   test('Create Purchase Request action opens the request composer',async({page})=>{
     await login(page);
     await openGuidedTask(page,'pr');

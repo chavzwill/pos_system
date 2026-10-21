@@ -21,7 +21,7 @@ const checks=[];
 function check(name,pass,detail=''){checks.push({name,pass:!!pass,detail});}
 check('workspace loader precedes deferred guide',shell.indexOf('/workspace-loader-hardening.js')>=0&&shell.indexOf('/workspace-loader-hardening.js')<shell.indexOf('/shell-deferred.js'));
 check('deferred guide scripts are ordered',deferred.includes('s.async=false')&&deferred.indexOf("'/guided-mode.js'")<deferred.indexOf("'/guided-mode-orchestrator.js'")&&deferred.indexOf("'/purchase-order-document-context.js'")<deferred.indexOf("'/guided-mode-completion.js'")&&deferred.indexOf("'/guided-mode-exact-action.js'")<deferred.indexOf("'/guided-mode-exact-fallback.js'")&&deferred.indexOf("'/guided-mode-exact-fallback.js'")<deferred.indexOf("'/guided-mode-integrity.js'"));
-check('Guide Me deferred assets use fresh workflow cache key',shell.includes('/shell-deferred.js?v=20261021-workflow-fix1')&&deferred.includes("const VERSION='20261021-workflow-fix1'"));
+check('Guide Me deferred assets use fresh workflow cache key',shell.includes('/shell-deferred.js?v=20261021-workflow-fix2')&&deferred.includes("const VERSION='20261021-workflow-fix2'"));
 check('single shell loader API',loader.includes('window.TotalToolsShellOpen=openFeature')&&loader.includes('window.TotalToolsWorkspaceLoader'));
 check('workspace loader does not own guide Next',!loader.includes('#tt-guided-mode [data-guide-next]'));
 check('orchestrator uses hardened loader directly',orchestrator.includes('window.TotalToolsShellOpen'));
@@ -57,6 +57,9 @@ check('legacy inventory intelligence task is absent',![guide,orchestrator,comple
 check('disabled controls retain visible text',read('public/ui-tokens.css').includes('button:disabled{cursor:not-allowed;opacity:.48}'));
 check('quote workspace selector matches implementation',orchestrator.includes("selector:'#tt-quotes'"));
 check('purchasing tab contexts are distinct',orchestrator.includes("tab:'pr'")&&orchestrator.includes("tab:'po'"));
+check('direct create purchasing tasks exist',guide.includes("id:'pr-create'")&&guide.includes("title:'Create Purchase Request'")&&guide.includes("id:'po-create'")&&guide.includes("title:'Create Purchase Order'"));
+check('direct create contexts carry composer intent',orchestrator.includes("create:'pr'")&&orchestrator.includes("create:'po'")&&orchestrator.includes("{tab:ctx.tab,create:ctx.create}"));
+check('direct purchase composer task names are guided',exact.includes("'Create Purchase Order'")&&exact.includes("'Create Purchase Request'"));
 check('intended step-one navigation is not adversarially blocked',adversarial.includes('stepNumber()===1'));
 check('integrity recognizes transfer workspace',integrity.includes("'#tt-transfers-workspace'"));
 check('integrity recognizes reports workspace',integrity.includes("'#tt-operational-reports'"));

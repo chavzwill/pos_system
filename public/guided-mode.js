@@ -64,6 +64,16 @@
       { find:['new count','start count','cycle count'], text:'Start a count for the correct branch/location and scope.' },
       { find:['commit','finalize','complete count'], text:'Enter physical quantities, review variances and commit through the count workflow so the variance remains auditable.' }
     ]},
+    { id:'pr-create', title:'Create Purchase Request', keywords:['create purchase request','new purchase request','request purchase','new pr'], steps:[
+      { find:['create purchase request','new purchase request'], text:'Open the Create Purchase Request form.' },
+      { find:['item','sku','quantity'], text:'Add the required items and quantities, then capture the real business reason and required date.' },
+      { find:['create purchase request','submit'], text:'Review the request details and create the purchase request. Approval remains a separate controlled step.' }
+    ]},
+    { id:'po-create', title:'Create Purchase Order', keywords:['create purchase order','new purchase order','new po'], steps:[
+      { find:['create purchase order','new purchase order'], text:'Open the Create Purchase Order form.' },
+      { find:['supplier','item','sku','quantity'], text:'Choose the supplier, add the ordered items and quantities, and confirm delivery details.' },
+      { find:['create purchase order','submit'], text:'Review supplier, branch, delivery, items, quantities and costs before creating the purchase order.' }
+    ]},
     { id:'pr', title:'Create or approve a purchase request', keywords:['purchase request','pr','request purchase','replenish'], steps:[
       { find:['purchase requests','purchasing'], text:'Open Purchase Requests.' },
       { find:['new purchase request','create request'], text:'Create the request with the correct branch, products, quantities and business reason.' },
