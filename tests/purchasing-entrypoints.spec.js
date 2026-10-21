@@ -1,0 +1,60 @@
+import { test, expect } from '@playwright/test';
+
+async function login(page){
+  await page.goto('/app-shell.html?workflow-entrypoint-test=1');
+  const login=page.locator('#shell-login');
+  if(await login.count()){
+    await login.locator('input[name="username"]').fill(process.env.POS_TEST_USER||'admin');
+    await login.locator('input[name="password"]').fill(process.env.POS_TEST_PASSWORD||'123456');
+    await login.locator('button[type="submit"],button').first().click();
+  }
+  await expect(page.locator('.shell-app')).toBeVisible({timeout:10000});
+}
+
+async function openPurchasingDomain(page){
+  const purchasing=page.locator('.shell-nav [data-domain="purchasing"]');
+  await expect(purchasing).toBeVisible();
+  await purchasing.click();
+  await expect(purchasing).toHaveClass(/is-active/);
+}
+
+async function cardAction(page,title){
+  const card=page.locator('.shell-choice,.shell-more button').filter({hasText:title}).first();
+  await expect(card).toBeVisible();
+  const button=card.locator('button[data-open]').count()
+    ? card.locator('button[data-open]').first()
+    : card;
+  await button.click();
+  await expect(page.locator('#tt-purchasing-workspace')).toBeVisible({timeout:10000});
+}
+
+test.describe('Purchasing shell entry points',()=>{
+  test('Purchase Requests card opens requests and New Purchase Request opens composer',async({page})=>{
+    await login(page);
+    await openPurchasingDomain(page);
+    await cardAction(page,'Purchase Requests');
+    await expect(page.locator('#tt-purchasing-workspace [data-tab="pr"]')).toHaveClass(/is-active/);
+    await expect(page.locator('#tt-purch-new-pr')).toBeVisible();
+    await page.locator('#tt-purch-new-pr').click();
+    await expect(page.locator('.tt-purch__composer')).toBeVisible();
+    await expect(page.locator('#tt-purch-compose-title')).toHaveText('Create Purchase Request');
+  });
+
+  test('Purchase Orders card opens orders and New Purchase Order opens composer',async({page})=>{
+    await login(page);
+    await openPurchasingDomain(page);
+    await cardAction(page,'Purchase Orders');
+    await expect(page.locator('#tt-purchasing-workspace [data-tab="po"]')).toHaveClass(/is-active/);
+    await expect(page.locator('#tt-purch-new-po')).toBeVisible();
+    await page.locator('#tt-purch-new-po').click();
+    await expect(page.locator('.tt-purch__composer')).toBeVisible();
+    await expect(page.locator('#tt-purch-compose-title')).toHaveText('Create Purchase Order');
+  });
+
+  test('Guide Me exact-action script is loaded with the current workflow cache key',async({page})=>{
+    await login(page);
+    await page.waitForFunction(()=>!!window.TotalToolsGuideMe?.openTask,{timeout:10000});
+    const urls=await page.evaluate(()=>performance.getEntriesByType('resource').map(e=>e.name));
+    expect(urls.some(url=>url.includes('/guided-mode-exact-action.js?v=20261021-workflow-fix1'))).toBeTruthy();
+  });
+});
