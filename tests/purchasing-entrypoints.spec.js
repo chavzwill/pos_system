@@ -29,6 +29,22 @@ async function cardAction(page,title){
 }
 
 test.describe('Purchasing shell entry points',()=>{
+  test('Create Purchase Request card opens the request composer directly',async({page})=>{
+    await login(page);
+    await openPurchasingDomain(page);
+    await cardAction(page,'Create Purchase Request');
+    await expect(page.locator('.tt-purch__composer')).toBeVisible({timeout:5000});
+    await expect(page.locator('#tt-purch-compose-title')).toHaveText('Create Purchase Request');
+  });
+
+  test('Create Purchase Order card opens the order composer directly',async({page})=>{
+    await login(page);
+    await openPurchasingDomain(page);
+    await cardAction(page,'Create Purchase Order');
+    await expect(page.locator('.tt-purch__composer')).toBeVisible({timeout:5000});
+    await expect(page.locator('#tt-purch-compose-title')).toHaveText('Create Purchase Order');
+  });
+
   test('Purchase Requests card opens requests and New Purchase Request opens composer',async({page})=>{
     await login(page);
     await openPurchasingDomain(page);
@@ -55,6 +71,6 @@ test.describe('Purchasing shell entry points',()=>{
     await login(page);
     await page.waitForFunction(()=>!!window.TotalToolsGuideMe?.openTask,{timeout:10000});
     const urls=await page.evaluate(()=>performance.getEntriesByType('resource').map(e=>e.name));
-    expect(urls.some(url=>url.includes('/guided-mode-exact-action.js?v=20261021-workflow-fix1'))).toBeTruthy();
+    expect(urls.some(url=>url.includes('/guided-mode-exact-action.js?v=20261021-workflow-fix2'))).toBeTruthy();
   });
 });
