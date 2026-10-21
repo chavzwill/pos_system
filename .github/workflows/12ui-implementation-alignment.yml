@@ -1,0 +1,39 @@
+name: 12ui Implementation Alignment
+# Retain authenticated review diagnostics and permit retries in the same cloud session.
+on:
+  push:
+    branches: [redesign/total-tools-frontend]
+    paths: ['.github/workflows/12ui-implementation-alignment.yml']
+permissions:
+  contents: write
+  actions: read
+concurrency:
+  group: total-tools-final-design-review
+  cancel-in-progress: true
+jobs:
+  review:
+    runs-on: ubuntu-latest
+    timeout-minutes: 60
+    env:
+      GH_TOKEN: ${{ github.token }}
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Install design CLI
+        run: npx -y @12ui/design cli install
+      - name: Authenticate and review the tested implementation
+        run: |
+          export PATH="$HOME/.local/bin:$PATH"
+          node scripts/cloud-ui-alignment-review.cjs
+      - name: Retain review diagnostics and generated references
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: twelve-ui-alignment-${{ github.run_id }}
+          path: /tmp/tt-12ui-final-review/
+          if-no-files-found: ignore
+          retention-days: 14

@@ -1,0 +1,101 @@
+name: Frontend Redesign Evidence
+on:
+  push:
+    branches: [redesign/total-tools-frontend]
+  workflow_dispatch:
+permissions:
+  contents: write
+concurrency:
+  group: frontend-redesign-evidence
+  cancel-in-progress: true
+jobs:
+  audit:
+    runs-on: ubuntu-latest
+    timeout-minutes: 20
+    env:
+      POS_TEST_USER: admin
+      POS_TEST_PASSWORD: '123456'
+      TURSO_DATABASE_URL: ''
+      TURSO_AUTH_TOKEN: ''
+      CI: '1'
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          fetch-depth: 0
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+      - run: npm ci
+      - run: npx playwright install --with-deps chromium
+      - name: Capture actual production assets and seven viewport baselines
+        if: github.event_name == 'workflow_dispatch'
+        run: node scripts/audit-production-frontend.js
+      - name: Initialize isolated fixture database
+        run: |
+          key="$(node -e "process.stdout.write(require('crypto').randomBytes(32).toString('base64'))")"
+          printf 'POS_SETTINGS_ENCRYPTION_KEY=%s\n' "$key" >> "$GITHUB_ENV"
+          node scripts/ci-runtime-bootstrap.js
+      - name: Check all source contracts and report every mismatch
+        run: |
+          node <<'JS'
+          const {spawnSync}=require('node:child_process');
+          const checks=Object.entries(require('./package.json').scripts).filter(([name,command])=>name.startsWith('check:')&&/^node scripts\/check-[a-z0-9-]+\.js$/.test(command));
+          let failed=0;
+          for(const [name,command] of checks){const r=spawnSync(process.execPath,[command.slice(5)],{encoding:'utf8'});console.log(name+': '+(r.status===0?'PASS':'FAIL'));if(r.status!==0){failed++;console.log(r.stdout,r.stderr);}}
+          console.log('Source contracts:',checks.length,'executed;',failed,'failed');if(failed)process.exit(1);
+          JS
+      - name: Check baseline shell and workspace responsiveness
+        if: ${{ !cancelled() }}
+        id: baseline
+        run: npx playwright test tests/shell-ui-verification.spec.js tests/guided-mode.spec.js tests/frontend-experience.spec.js --workers=1
+      - name: Preserve audit and design artifacts
+        if: always()
+        uses: actions/upload-artifact@v4
+        with:
+          name: frontend-redesign-evidence-${{ github.sha }}
+          path: |
+            ui-evidence/
+            test-results/
+          if-no-files-found: warn
+          retention-days: 14
+      - name: Publish rendered inspection copies on the evidence branch
+        if: always()
+        env:
+          SOURCE_SHA: ${{ github.sha }}
+        run: |
+          mkdir -p /tmp/ui-review-source
+          cp test-results/frontend-experience/*.png /tmp/ui-review-source/ || true
+          python3 -m pip install --quiet Pillow
+          git fetch origin evidence/total-tools-ui
+          git switch -c publish-ui-evidence origin/evidence/total-tools-ui
+          python3 <<'PY'
+          import os,base64,json,hashlib
+          from PIL import Image
+          from io import BytesIO
+          names=[p[:-4] for p in os.listdir('/tmp/ui-review-source') if p.endswith('.png')]
+          src='/tmp/ui-review-source'
+          out='docs/ui-review/'+os.environ['SOURCE_SHA'][:7]+'/image-transport'
+          os.makedirs(out,exist_ok=True)
+          index={}
+          for name in names:
+              p=os.path.join(src,name+'.png')
+              if not os.path.exists(p): continue
+              im=Image.open(p).convert('RGB')
+              stream=BytesIO()
+              im.save(stream,format='JPEG',quality=86,optimize=True)
+              im.save(os.path.join(out,name+'.jpg'),format='JPEG',quality=86,optimize=True)
+              data=base64.b64encode(stream.getvalue()).decode()
+              parts=[]
+              for n,i in enumerate(range(0,len(data),100000)):
+                  fn=name+'-'+str(n)+'.txt'
+                  open(os.path.join(out,fn),'w').write(data[i:i+100000])
+                  parts.append(fn)
+              index[name]={'parts':parts,'original_sha256':hashlib.sha256(open(p,'rb').read()).hexdigest(),'dimensions':im.size}
+          json.dump(index,open(os.path.join(out,'index.json'),'w'))
+          PY
+          git config user.name "Total Tools UI Evidence"
+          git config user.email "ui-evidence@users.noreply.github.com"
+          git add docs/ui-review
+          git commit -m "docs(ui): retain rendered UI inspection evidence [skip ci]"
+          git push origin HEAD:evidence/total-tools-ui

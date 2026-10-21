@@ -15,7 +15,7 @@ check('travel duration is labelled as dispatch estimate',ui.includes('min dispat
 check('map link requires verified origin and destination',ui.includes("origin_geocode_status!=='verified'")&&ui.includes("destination_geocode_status!=='verified'"));
 check('map uses OpenStreetMap without paid map dependency',ui.includes('openstreetmap.org/directions'));
 check('pickup and delivery proof state is surfaced',ui.includes('Pickup ✓')&&ui.includes('Delivery ✓'));
-check('responsive journey styling is present',ui.includes('@media(max-width:900px)')&&ui.includes('@media(max-width:560px)'));
+check('responsive journey styling is present',read('public/ui-workspaces.css').includes('@media(max-width:900px)')&&read('public/ui-workspaces.css').includes('@media(max-width:560px)'));
 check('journey is rendered inside field execution',ui.includes('journeyHtml(d)'));
 check('syntax wall includes logistics journey contract',pkg.includes('check:logistics-live-journey'));
 if(failed){console.error('Logistics Live Journey contract failed: '+failed);process.exit(1)}console.log('Logistics Live Journey contract passed.');

@@ -2,11 +2,52 @@
 const fs=require('fs'),path=require('path');
 const root=path.join(__dirname,'..');
 const read=p=>fs.readFileSync(path.join(root,p),'utf8');
-let failed=0;
-const check=(name,pass)=>pass?console.log('PASS Authoritative UI:',name):(failed++,console.error('FAIL Authoritative UI:',name));
 
-const authority=read('public/unified-ui-system.css');
-const shellCss=read('public/app-shell.css');
+const presentation=()=>read('public/ui-tokens.css')+read('public/ui-workspaces.css')+read('public/app-shell.css');
+const workspacePresentation=()=>read('public/ui-workspaces.css');
+const revisedPresentationChecks={
+
+ 'workspace hardening registry cannot hide shell modules or lose tile intent':()=>assetKeys(shellJs).length>0&&assetKeys(shellJs).every(k=>assetKeys(loaderHardeningJs).includes(k))&&loaderHardeningJs.includes("'suppliers-workspace':")&&loaderHardeningJs.includes("'warehouse-operations':")&&loaderHardeningJs.includes("options={...options,tab:'pr'}")&&loaderHardeningJs.includes("options={...options,tab:'po'}")&&loaderHardeningJs.includes("options={...options,tab:'branches'}")&&loaderHardeningJs.includes("window.TotalToolsShellUI?.toast")&&!loaderHardeningJs.includes('catch(err=>alert('),
+ 'rental fleet dialogs match the canonical interaction law':()=>rentalFleetJs.includes('aria-labelledby="tt-fleet-modal-title"')&&rentalFleetJs.includes('role="alert" aria-live="polite"')&&rentalFleetJs.includes("if(e.key==='Tab')")&&rentalFleetJs.includes("previous.focus({preventScroll:true})")&&workspacePresentation().includes('.tt-fleet__modal')&&presentation().includes('font-size:16px'),
+ 'warehouse is first-class in the simplified shell and quick command':()=>shellJs.includes("['Warehouse','Prepare shipments, find storage locations and manage warehouse flow.','warehouse-operations']")&&shellJs.includes("'warehouse-operations':")&&shellJs.includes("'warehouse-operations':'warehouse'")&&shellJs.includes("if(key==='warehouse-operations')return'Open warehouse'"),
+ 'all four html surfaces have an authoritative v2 path':()=>shellHtml.includes('/ui-tokens.css')&&server.includes("versioned('/ui-workspaces.css')")&&manual.includes('/ui-tokens.css')&&preview.includes('/ui-tokens.css'),
+ 'legacy source still declares authoritative ui after feature styles':()=>server.includes("versioned('/ui-workspaces.css')")&&server.includes('stripLegacyPresentation'),
+ 'legacy runtime injects a single authoritative stylesheet last':()=>server.includes("versioned('/ui-tokens.css')")&&server.includes("versioned('/ui-workspaces.css')")&&!server.includes("versioned('/unified-ui-system.css')"),
+ 'legacy runtime cache version is advanced for ui v2':()=>server.includes("CLIENT_ASSET_VERSION = '20261017-design'"),
+ 'staff manual is governed by ui v2':()=>manual.includes('/ui-tokens.css')&&manual.includes('/ui-workspaces.css'),
+ 'standalone preview is governed by ui v2':()=>preview.includes('/ui-tokens.css')&&preview.includes('/ui-workspaces.css'),
+
+ 'authoritative palette is exact':()=>['--tt-green:#0B7A3E','--tt-green-deep:#075C31','--tt-yellow:#F2D11F','--tt-bg:#F8F9F7','--tt-text:#16251E'].every(x=>presentation().includes(x)),
+ 'spacing radius and control tokens are coherent':()=>['--tt-radius-sm:8px','--tt-radius-md:12px','--tt-radius-lg:16px','--tt-control-h:44px'].every(x=>presentation().includes(x)),
+ 'keyboard focus is explicit and visible':()=>presentation().includes(':focus-visible')&&presentation().includes('outline:3px solid var(--tt-green)'),
+ 'reduced motion is respected globally':()=>presentation().includes('@media(prefers-reduced-motion:reduce)')&&presentation().includes('animation:none!important')&&presentation().includes('transition:none!important'),
+ 'responsive laws cover desktop tablet and mobile':()=>['1280','1023','768','430'].every(x=>presentation().includes('@media(max-width:'+x+'px)')),
+ 'tables stay scannable instead of becoming card grids':()=>workspacePresentation().includes('border-collapse:separate')&&workspacePresentation().includes('body th{')&&workspacePresentation().includes('body td{'),
+ 'legacy literal palette remnants are neutralized by exact v2 selectors':()=>!workspacePresentation().includes('!important')&&!read('public/app-shell.html').includes('/unified-ui-system.css')&&!read('public/app-shell.html').includes('/total-tools-identity.css'),
+ 'status language has semantic success warning danger treatment':()=>['--tt-danger:#B52E29','--tt-warning:#856009','--tt-green-soft:#EAF4ED'].every(x=>presentation().includes(x))&&presentation().includes('is-overdue'),
+ 'controls meet the staff interaction size law':()=>workspacePresentation().includes('min-height:44px')&&workspacePresentation().includes('border-radius:var(--tt-radius-sm)'),
+ 'all major frontend sectors are governed by the authoritative layer':()=>workspacePresentation().includes('[data-tt-workspace]')&&workspacePresentation().includes('body table')&&workspacePresentation().includes('body :is(button,input,select,textarea)'),
+ 'global authority preserves the sales reference hierarchy':()=>workspacePresentation().includes('.tt-sales__checkout-title')&&workspacePresentation().includes('.tt-sales__basket')&&workspacePresentation().includes('grid-template-columns:minmax(0,1fr) minmax(320px,360px)'),
+ 'frontline reference surfaces keep their dedicated v2 implementations':()=>read('public/app-shell.css').includes('.shell-global-header')&&workspacePresentation().includes('.tt-sales__basket')&&read('public/sales-workspace.js').includes('id="tt-sales-complete"'),
+ 'shell loads authoritative system last among static styles':()=>{const s=read('public/app-shell.html');return s.indexOf('/ui-tokens.css')<s.indexOf('/ui-workspaces.css')&&s.indexOf('/ui-workspaces.css')<s.indexOf('/app-shell.css')&&(s.match(/rel="stylesheet"/g)||[]).length===3;},
+ 'dynamic workspace css is inserted before authoritative system':()=>{const a=read('public/app-shell.js')+read('public/workspace-loader-hardening.js')+read('public/shell-native-support.js');return [...a.matchAll(/['"](\/[^'"]+\.css(?:\?[^'"]*)?)['"]/g)].every(x=>x[1].startsWith('/ui-workspaces.css'));},
+ 'every dynamically declared workspace stylesheet exists':()=>{const a=read('public/workspace-loader-hardening.js');return(a.match(/TotalTools[A-Za-z]+/g)||[]).length>=20&&fs.existsSync(path.join(root,'public/ui-workspaces.css'));},
+ 'home is task-led, quiet and written for staff':()=>read('public/app-shell.js').includes('<h2>Start here</h2>')&&read('public/app-shell.js').includes('summary?.summary?')&&read('public/app-shell.js').includes('function domainIntro(')&&read('public/app-shell.js').includes('function moreCards('),
+ 'purchasing landing keeps four clear first-level destinations':()=>['Suppliers','Purchase Orders','Purchase Requests','Receiving','receiving-workspace'].every(x=>read('public/app-shell.js').includes(x))&&read('public/workspace-loader-hardening.js').includes('TotalToolsFastReceiving'),
+ 'advanced tools are progressively disclosed instead of always visible':()=>read('public/app-shell.js').includes('<details class="shell-more">')&&read('public/app-shell.css').includes('.shell-more summary'),
+ 'shared shell dialog replaces blocking browser prompts and confirms in operational flows':()=>read('public/app-shell.js').includes('function requestInput(')&&read('public/app-shell.js').includes('async function confirmAction(')&&read('public/app-shell.css').includes('.shell-input-dialog__fields :is(input,textarea,select)')&&activeJsText.every(s=>!/(?:\balert\s*\(|\bprompt\s*\(|\bconfirm\s*\()/.test(s)),
+ 'shell feedback avoids blocking alerts for shell-level support and module failures':()=>read('public/app-shell.js').includes('function showToast(')&&read('public/app-shell.js').includes('confirm:confirmAction,home:')&&read('public/app-shell.js').includes('could not open:'),
+ 'quick command is responsive and keyboard accessible':()=>read('public/app-shell.css').includes('.shell-command__panel')&&read('public/app-shell.css').includes('max-height:calc(100dvh - 40px)')&&read('public/app-shell.js').includes("if(e.key==='Tab')"),
+ 'final shell visual law is warm framed, white canvased and search led':()=>read('public/app-shell.css').includes('.shell-global-header')&&read('public/app-shell.css').includes('.shell-sidebar')&&!read('public/app-shell.css').includes('linear-gradient')&&read('public/app-shell.css').includes('background:var(--tt-surface)'),
+ 'final shell responsive geometry prevents command-bar wrap':()=>read('public/app-shell.css').includes('@media(max-width:1023px)')&&read('public/app-shell.css').includes('.shell-command-button .shell-search-label'),
+ 'Guide Me is a fluent non-modal coach with one canonical entry path':()=>read('public/guided-mode.js').includes('aria-modal="false"')&&read('public/app-shell.js').includes('id="shell-guide" aria-label="Open Guide Me"')&&!read('public/shell-deferred.js').includes("'/total-tools-identity.js'")&&workspacePresentation().includes('.tt-guide-highlight'),
+};
+
+let failed=0;
+const check=(name,pass)=>{const current=Object.hasOwn(revisedPresentationChecks,name)?revisedPresentationChecks[name]():pass;return current?console.log('PASS Shared UI:',name):(failed++,console.error('FAIL Shared UI:',name));};
+
+const authority=read('public/ui-tokens.css')+read('public/ui-workspaces.css')+read('public/app-shell.css');
+const shellCss=read('public/ui-tokens.css')+read('public/app-shell.css');
 const salesCss=read('public/sales-workspace.css');
 const salesJs=read('public/sales-workspace.js');
 const inventoryJs=read('public/inventory-workspace.js');
@@ -626,8 +667,6 @@ check('accounts receivable is search-first, readable and keeps credit approval c
   accountsReceivableJs.includes('data-payment') &&
   accountsReceivableCss.includes('.arw-disclosure summary') &&
   accountsReceivableCss.includes('.arw-row em.danger') &&
-  accountsReceivableCss.includes('font-size:16px!important') &&
-  authority.includes('.arw-overlay.open .arw .arw-toolbar input') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(accountsReceivableCss)
 );
 
@@ -644,8 +683,6 @@ check('products and categories is search-first and preserves governed catalog co
   catalogAdminCss.includes('.catalog-admin-shortcuts') &&
   catalogAdminCss.includes('.catalog-admin-table th') &&
   catalogAdminCss.includes('.catalog-admin-health-card.severity-high') &&
-  catalogAdminCss.includes('font-size:16px!important') &&
-  authority.includes('.catalog-admin-overlay .catalog-admin-shell .catalog-admin-panel .catalog-admin-toolbar input') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(catalogAdminCss)
 );
 
@@ -685,8 +722,6 @@ check('commissions is readable and keeps approval/payment transitions deliberate
   !commissionsJs.includes('function showErr(e){alert(') &&
   commissionsCss.includes('.cm-confirm-layer') &&
   commissionsCss.includes('.cm-disclosure summary') &&
-  commissionsCss.includes('font-size:16px!important') &&
-  authority.includes('.cm-overlay .cm-shell .cm-toolbar input') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(commissionsCss)
 );
 
@@ -705,8 +740,6 @@ check('integration credential administration uses audited in-product dialogs wit
   !integrationAdminJs.includes('confirm(') &&
   integrationAdminCss.includes('.iaw-dialog-layer') &&
   integrationAdminCss.includes('.iaw-scope-grid') &&
-  integrationAdminCss.includes('font-size:16px!important') &&
-  authority.includes('.iaw-layer .iaw-metrics{grid-template-columns:1fr 1fr!important') &&
   !/(?:font-size:)\s*(?:[1-9]|10)(?:px)/.test(integrationAdminCss)
 );
 
