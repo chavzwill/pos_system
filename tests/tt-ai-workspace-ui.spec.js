@@ -16,6 +16,12 @@ function runWorkspace(contextReply) {
   const note={textContent:''};
   const form={};
   const thread={innerHTML:'',scrollHeight:100,scrollTop:0};
+  const launcher={handlers:{},addEventListener(event,callback){this.handlers[event]=callback}};
+  const topbar={insertAdjacentHTML(position,html){
+    assert.equal(position,'beforeend');
+    assert.match(html,/tt-ai-launcher/);
+    nodes.set('tt-ai-launcher',launcher);
+  }};
   const element=()=>{
     const item={id:'',innerHTML:'',className:'',remove(){nodes.delete(this.id)},
       querySelectorAll:()=>[],
@@ -31,7 +37,7 @@ function runWorkspace(contextReply) {
       'tt-ai-input':input,'tt-ai-send':send,
       'tt-ai-composer-note':note,'tt-ai-thread':thread,
     }[id]||nodes.get(id)||null),
-    querySelector:()=>null,
+    querySelector:selector=>selector==='.shell-topbar'?topbar:null,
     addEventListener:()=>{},
   };
   const window={};
@@ -55,7 +61,7 @@ function runWorkspace(contextReply) {
     window,document,fetch,MutationObserver:class{observe(){}},
     Intl,Date,console,Set,Map,Number,
   },{filename:'tt-ai-workspace.js'});
-  return {window,requests,nodes,input,send,note,thread,setContext:v=>{current=v}};
+  return {window,requests,nodes,input,send,note,thread,launcher,setContext:v=>{current=v}};
 }
 
 test('failed employee context means no false readiness or active question submit',async()=>{
@@ -89,4 +95,17 @@ test('connected staff can ask through only TT AI read gateway and reopen clears 
   assert.equal(app.input.disabled,true);
   assert.doesNotMatch(app.thread.innerHTML,/Generator stock 2/);
   assert.equal(app.requests.length,3);
+});
+
+test('authenticated shell topbar launcher opens the read-only workspace',async()=>{
+  const app=runWorkspace({
+    employee_id:42,branch_id:'2',
+    capabilities:{query:true,products:true},
+    runtime:{configured:true,service_reachable:true,retail_purchasing:{}},
+  });
+  assert.equal(typeof app.launcher.handlers.click,'function');
+  await app.launcher.handlers.click();
+  assert.ok(app.nodes.has('tt-ai-workspace'));
+  assert.match(app.nodes.get('tt-ai-workspace').innerHTML,/Read only/);
+  assert.deepEqual(app.requests.map(x=>x.url),['/api/tt-ai/context']);
 });
