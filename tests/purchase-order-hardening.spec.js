@@ -42,10 +42,19 @@ test.describe('Purchase order lifecycle hardening', () => {
       ship_to_city: branch.city || 'Kingston',
       ship_to_state: branch.state || 'Kingston',
       items: [{ product_id: product.id, quantity_ordered: 2, unit_cost: unitCost }],
+      approval_purpose: 'Replenish goods required for scheduled customer orders',
+      requested_for: 'Retail customers / Kingston branch',
       notes: 'Automated lifecycle integrity test',
     });
     expect(created.status).toBe(201);
     const po = created.body;
+    expect(po.approval_purpose).toBe('Replenish goods required for scheduled customer orders');
+    expect(po.requested_for).toBe('Retail customers / Kingston branch');
+    expect(po.notes).toContain('Reason for purchase: Replenish goods required for scheduled customer orders');
+    const retrieved = await api(cookie, 'GET', `/api/purchase-orders/${po.id}`);
+    expect(retrieved.status).toBe(200);
+    expect(retrieved.body.requested_for).toBe('Retail customers / Kingston branch');
+    expect(retrieved.body.additional_notes).toContain('Automated lifecycle integrity test');
     const item = po.items[0];
 
     const beforeApproval = await api(cookie, 'PATCH', `/api/purchase-orders/${po.id}/receive`, { items: [{ item_id: item.id, quantity_received: 1 }] });

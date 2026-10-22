@@ -8,6 +8,7 @@ const fs = require('fs');
 const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
 const { requirePermission, can } = require('../lib/permissions');
 const { nextNumber } = require('../lib/nextNumber');
+const { buildApprovalNotes, withApprovalBrief } = require('../lib/purchase-order-approval-notes');
 
 router.use(requirePermission('purchasing'));
 
@@ -38,7 +39,7 @@ router.get('/', async (req, res) => {
     sql += ' ORDER BY po.created_at DESC LIMIT ?';
     params.push(parseInt(limit));
     const { rows } = await db.execute({ sql, args: params });
-    res.json(rows);
+    res.json(rows.map(withApprovalBrief));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -48,13 +49,13 @@ router.get('/:id', async (req, res) => {
     if (!po) return res.status(404).json({ error: 'Not found' });
     const { rows: items } = await db.execute({ sql: 'SELECT * FROM purchase_order_items WHERE po_id = ?', args: [req.params.id] });
     po.items = items;
-    res.json(po);
+    res.json(withApprovalBrief(po));
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 router.post('/', async (req, res) => {
   try {
-    const { supplier_id, branch_id, employee_id, items, notes, expected_date, source_quote_import_id } = req.body;
+    const { supplier_id, branch_id, employee_id, items, notes, approval_purpose, requested_for, expected_date, source_quote_import_id } = req.body;
     if (!items || items.length === 0) return res.status(400).json({ error: 'No items in PO' });
 
     let sourceQuote = null;
@@ -68,6 +69,7 @@ router.post('/', async (req, res) => {
       sourceQuote = quote;
     }
 
+    const storedNotes = buildApprovalNotes({ approval_purpose, requested_for, notes });
     const po_number = await nextNumber(db, 'purchase_orders', 'po_number', 'PO-', 6);
 
     let subtotal = 0;
@@ -86,7 +88,7 @@ router.post('/', async (req, res) => {
     const tx = await db.transaction('write');
     let committed = false;
     try {
-      const result = await tx.execute({ sql: 'INSERT INTO purchase_orders (po_number,supplier_id,branch_id,employee_id,subtotal,total,notes,expected_date) VALUES (?,?,?,?,?,?,?,?)', args: [po_number, supplier_id||null, branch_id||null, employee_id||null, subtotal, subtotal, notes||null, expected_date||null] });
+      const result = await tx.execute({ sql: 'INSERT INTO purchase_orders (po_number,supplier_id,branch_id,employee_id,subtotal,total,notes,expected_date) VALUES (?,?,?,?,?,?,?,?)', args: [po_number, supplier_id||null, branch_id||null, employee_id||null, subtotal, subtotal, storedNotes, expected_date||null] });
       const poId = Number(result.lastInsertRowid);
       for (const item of processedItems) {
         await tx.execute({ sql: 'INSERT INTO purchase_order_items (po_id,product_id,product_name,sku,quantity_ordered,unit_cost,total) VALUES (?,?,?,?,?,?,?)', args: [poId, item.product_id, item.product_name, item.sku, item.quantity_ordered, item.unit_cost, item.total] });
@@ -101,7 +103,7 @@ router.post('/', async (req, res) => {
       const { rows: [po] } = await db.execute({ sql: `SELECT po.*, s.name as supplier_name FROM purchase_orders po LEFT JOIN suppliers s ON po.supplier_id = s.id WHERE po.id = ?`, args: [poId] });
       const { rows: poItems } = await db.execute({ sql: 'SELECT * FROM purchase_order_items WHERE po_id = ?', args: [poId] });
       po.items = poItems;
-      res.status(201).json(po);
+      res.status(201).json(withApprovalBrief(po));
     } catch(e) {
       // Once committed, the PO is saved — rolling back a closed transaction
       // throws and would crash the process (unhandled rejection), so only

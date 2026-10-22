@@ -5,3 +5,80 @@
 @media(max-width:900px){#tt-purchasing-workspace .tt-purch__toolbar select,#tt-purchasing-workspace .tt-purch__item input,#tt-purchasing-workspace .tt-purch__convert select,#tt-purchasing-workspace .tt-purch__convert input,#tt-purchasing-workspace .tt-purch__composer input,#tt-purchasing-workspace .tt-purch__composer select,#tt-purchasing-workspace .tt-purch__composer textarea,.tt-purch-dialog textarea{font-size:16px!important}.tt-purch__panel{inset:0;border-radius:0}.tt-purch__head{min-height:68px;padding:12px 14px}.tt-purch__head h2{font-size:22px}.tt-purch__head p,.tt-purch__shortcuts{display:none}.tt-purch__toolbar{align-items:stretch;padding:8px 10px}.tt-purch__toolbar-primary,.tt-purch__toolbar-secondary{width:100%}.tt-purch__toolbar-primary button{flex:1}.tt-purch__toolbar-secondary select{flex:1}.tt-purch__metrics{grid-template-columns:repeat(2,minmax(0,1fr));padding:8px 10px 3px}.tt-purch__body{display:block;padding:7px 10px 10px;overflow:auto}.tt-purch__tabs{position:static;top:auto;z-index:auto}.tt-purch.has-selection .tt-purch__list{display:none}.tt-purch:not(.has-selection) .tt-purch__detail{display:none}.tt-purch.has-selection .tt-purch__detail{display:block}.tt-purch__queue-back{display:inline-flex;align-items:center}.tt-purch__list,.tt-purch__detail{overflow:visible}.tt-purch__row{grid-template-columns:1fr 92px}.tt-purch__row>*:nth-child(2){display:none}.tt-purch__facts{grid-template-columns:repeat(2,minmax(0,1fr))}.tt-purch__item{grid-template-columns:1fr 60px 78px}.tt-purch__item>*:last-child{display:none}.tt-purch__convert{grid-template-columns:1fr}.tt-purch__composer{inset:0;width:auto;border-radius:0}.tt-purch__compose-grid{grid-template-columns:1fr}.tt-purch__compose-line{grid-template-columns:minmax(0,1fr) 72px 102px 42px}.tt-purch__composer form{padding:13px}.tt-purch__composer>header{padding:14px 13px}}
 @media(max-width:560px){.tt-purch__toolbar-primary{display:grid;grid-template-columns:1fr 1fr}.tt-purch__compose-line{grid-template-columns:minmax(0,1fr) 72px}.tt-purch__compose-line label:nth-child(3){grid-column:1/-1}.tt-purch__remove-line{grid-column:2;grid-row:2}.tt-purch__metrics strong{font-size:18px}}
 @media(prefers-reduced-motion:reduce){.tt-purch *,.tt-purch-dialog *{animation:none!important;transition:none!important}}
+
+
+/* PO decision context: purpose + beneficiary accompany approval — 2026-10-22 */
+#tt-purchasing-workspace .tt-purch__approval-fields{
+ margin:16px 0 0;padding:16px;border:1px solid #C9E1D2;
+ border-radius:14px;background:#F4FAF6;min-width:0;
+}
+#tt-purchasing-workspace .tt-purch__approval-fields legend{
+ padding:0 6px;color:#195E3C;font-weight:800;font-size:15px;
+}
+#tt-purchasing-workspace .tt-purch__approval-fields legend span{
+ display:inline;color:#5F7368;font-size:11px;font-weight:500;
+}
+#tt-purchasing-workspace .tt-purch__approval-fields>p{
+ margin:0 0 12px;color:#576C60;font-size:13px;line-height:1.55;
+}
+#tt-purchasing-workspace .tt-purch__approval-fields label{
+ display:grid;gap:7px;margin:10px 0;font-size:13px;line-height:1.45;
+}
+#tt-purchasing-workspace .tt-purch__approval-fields :is(input,textarea){
+ width:100%;min-width:0;max-width:100%;font-size:16px;line-height:1.4;
+}
+#tt-purchasing-workspace .tt-purch__required{color:#9D3F34;font-weight:800}
+#tt-purchasing-workspace .tt-purch__compose-notes{
+ display:grid;gap:8px;margin-top:14px;
+}
+#tt-purchasing-workspace .tt-purch__approval-brief{
+ margin:16px 0;padding:16px;border:1px solid #C9E1D2;
+ border-left:4px solid #148450;border-radius:12px;background:#F4FAF6;min-width:0;
+}
+#tt-purchasing-workspace .tt-purch__approval-brief-head{
+ display:flex;align-items:baseline;justify-content:space-between;flex-wrap:wrap;gap:8px;margin-bottom:12px;
+}
+#tt-purchasing-workspace .tt-purch__approval-brief-head span{
+ color:#1D633F;font-size:14px;font-weight:850;
+}
+#tt-purchasing-workspace .tt-purch__approval-brief-head strong{
+ color:#587363;font-size:11px;font-weight:600;
+}
+#tt-purchasing-workspace .tt-purch__approval-brief dl{
+ margin:0;display:grid;grid-template-columns:minmax(0,1fr) minmax(0,1fr);gap:12px;
+}
+#tt-purchasing-workspace .tt-purch__approval-brief dl>div{
+ min-width:0;padding:12px;border:1px solid #D7E8DC;border-radius:10px;background:white;
+}
+#tt-purchasing-workspace .tt-purch__approval-brief dt{
+ color:#5A7062;font-size:11px;letter-spacing:.02em;margin-bottom:6px;font-weight:700;
+}
+#tt-purchasing-workspace .tt-purch__approval-brief dd{
+ margin:0;color:#183D29;font-size:14px;font-weight:650;line-height:1.5;
+ overflow-wrap:anywhere;white-space:pre-wrap;
+}
+#tt-purchasing-workspace .tt-purch__approval-brief--legacy{background:#FFF9ED;border-color:#E8D9B5;border-left-color:#C38B37}
+#tt-purchasing-workspace .tt-purch__approval-brief--legacy p,
+#tt-purchasing-workspace .tt-purch__approval-extra p{
+ font-size:13px;line-height:1.6;white-space:pre-wrap;overflow-wrap:anywhere;
+ margin:8px 0 0;color:#42594B;
+}
+#tt-purchasing-workspace .tt-purch__approval-extra{
+ margin-top:10px;padding:10px 12px;border-top:1px solid #D7E8DC;
+}
+#tt-purchasing-workspace .tt-purch__approval-extra strong{font-size:12px}
+#tt-purchasing-workspace .tt-purch__convert{
+ min-width:0;align-items:end;
+}
+#tt-purchasing-workspace .tt-purch__convert label{
+ display:grid;min-width:0;gap:6px;
+}
+#tt-purchasing-workspace .tt-purch__convert :is(input,textarea){
+ width:100%;min-width:0;font-size:16px;box-sizing:border-box;
+}
+#tt-purchasing-workspace #tt-purch-convert-purpose{min-height:80px;resize:vertical}
+@media(max-width:900px){
+ #tt-purchasing-workspace .tt-purch__approval-brief dl{grid-template-columns:minmax(0,1fr)}
+ #tt-purchasing-workspace .tt-purch__approval-fields{margin-top:14px;padding:14px}
+ #tt-purchasing-workspace .tt-purch__convert{grid-template-columns:minmax(0,1fr)!important}
+}
