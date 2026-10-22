@@ -85,9 +85,9 @@ async function main(){
   assert.equal(fs.existsSync(impossible+'.manifest.json'),false);
   console.log('PASS: read-only consistent snapshot, schema/views/triggers/indexes, PK/FK, BLOB, sequence, pagination, checksum, no-overwrite, fail-closed and manifest');
  }finally{
-  await restored?.close().catch(()=>{});
-  await source?.close().catch(()=>{});
-  await invalid?.close().catch(()=>{});
+  if(restored)await Promise.resolve().then(()=>restored.close()).catch(()=>{});
+  if(source)await Promise.resolve().then(()=>source.close()).catch(()=>{});
+  if(invalid)await Promise.resolve().then(()=>invalid.close()).catch(()=>{});
   await fsp.rm(work,{recursive:true,force:true});
  }
 }
