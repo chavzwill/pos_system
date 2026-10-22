@@ -27,6 +27,8 @@ assert.match(ui,/tt-purch-convert-purpose/);
 assert.match(ui,/tt-purch-convert-for/);
 assert.match(ui,/approvalBrief\(x\)}<section class="tt-purch__items"/);
 assert.match(po,/storedNotes = buildApprovalNotes/);
+assert.match(po,/e\.code==='PO_APPROVAL_NOTES_INVALID'\?400:500/);
+assert.match(pr,/e\.code==='PO_APPROVAL_NOTES_INVALID'\?400:500/);
 assert.match(po,/res\.json\(withApprovalBrief\(po\)\)/);
 assert.match(pr,/source_notes: pr\.notes/);
 assert.match(css,/\.tt-purch__approval-brief dl/);
