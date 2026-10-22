@@ -31,7 +31,7 @@ async function main(){
   await source.execute({sql:'INSERT INTO proof(id,payload) VALUES (?,?)',args:[1,new Uint8Array([0,127,128,255])]});
   await source.execute({sql:'INSERT INTO suppliers(name) VALUES (?)',args:['Deleted history']});
   await source.execute({sql:'DELETE FROM suppliers WHERE name=?',args:['Deleted history']});
-  const sourceSequences=(await source.execute('SELECT name,seq FROM sqlite_sequence WHERE name="suppliers"')).rows;
+  const sourceSequences=(await source.execute({sql:'SELECT name,seq FROM sqlite_sequence WHERE name=?',args:['suppliers']})).rows;
   const output=path.join(work,'snapshot.db');
   const info=await snapshotLibsql({source,output,chunkSize:2,sourceKind:'synthetic-test'});
   assert.equal(info.total_rows,9);
