@@ -34,6 +34,13 @@ test.describe('Purchase order lifecycle hardening', () => {
     expect(supplier).toBeTruthy(); expect(branch).toBeTruthy(); expect(product).toBeTruthy();
 
     const unitCost = Number(product.cost) || 1;
+    const missingBeneficiary = await api(cookie, 'POST', '/api/purchase-orders', {
+      supplier_id: supplier.id, branch_id: branch.id,
+      items: [{ product_id: product.id, quantity_ordered: 1, unit_cost: unitCost }],
+      approval_purpose: 'Replace damaged equipment',
+    });
+    expect(missingBeneficiary.status).toBe(400);
+    expect(missingBeneficiary.body.error).toMatch(/who or what/i);
     const created = await api(cookie, 'POST', '/api/purchase-orders', {
       supplier_id: supplier.id, branch_id: branch.id,
       ship_to_branch_id: branch.id,

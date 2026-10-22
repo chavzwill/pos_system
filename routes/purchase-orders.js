@@ -111,7 +111,7 @@ router.post('/', async (req, res) => {
       if (!committed) await tx.rollback();
       res.status(committed ? 500 : 400).json({ error: e.message });
     }
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(e.code==='PO_APPROVAL_NOTES_INVALID'?400:500).json({ error: e.message }); }
 });
 
 // Update PO status (send, cancel) — approving specifically requires
