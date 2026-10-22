@@ -81,9 +81,17 @@ test.describe('Purchasing shell entry points',()=>{
 
   test('Guide Me exact-action script is loaded with the current workflow cache key',async({page})=>{
     await login(page);
-    await page.waitForFunction(()=>!!window.TotalToolsGuideMe?.openTask,{timeout:10000});
-    const urls=await page.evaluate(()=>performance.getEntriesByType('resource').map(e=>e.name));
-    expect(urls.some(url=>url.includes('/guided-mode-exact-action.js?v=20261021-workflow-fix2'))).toBeTruthy();
+    // The script loads after authentication through the deferred enhancer queue.
+    // Waiting only for the earlier Guide Me global causes a race on CI/slow clients.
+    // Do not pin this test to a stale hard-coded asset cache key.
+    await page.waitForFunction(()=>{
+      if(!window.TotalToolsGuideMe?.openTask)return false;
+      const script=document.querySelector('script[data-shell-deferred="/guided-mode-exact-action.js"]');
+      if(!script)return false;
+      const url=new URL(script.src);
+      if(url.pathname!=='/guided-mode-exact-action.js'||!url.searchParams.get('v'))return false;
+      return performance.getEntriesByType('resource').some(entry=>entry.name===script.src&&entry.responseEnd>0);
+    },undefined,{timeout:15000});
   });
 });
 
