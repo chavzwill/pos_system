@@ -74,7 +74,8 @@ router.post('/', async (req, res) => {
     const processedItems = [];
     for (const item of items) {
       const product = item.product_id ? (await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [item.product_id] })).rows[0] : null;
-      const unit_cost = parseFloat(item.unit_cost || (product ? product.cost : 0));
+      // Preserve an explicit zero negotiated unit cost instead of replacing it with catalog cost.
+      const unit_cost = parseFloat(item.unit_cost ?? (product ? product.cost : 0));
       const qty = parseInt(item.quantity_ordered || item.quantity || 1);
       const total = parseFloat((unit_cost * qty).toFixed(2));
       subtotal += total;

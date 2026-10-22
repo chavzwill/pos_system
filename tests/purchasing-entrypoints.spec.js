@@ -86,3 +86,52 @@ test.describe('Purchasing shell entry points',()=>{
     expect(urls.some(url=>url.includes('/guided-mode-exact-action.js?v=20261021-workflow-fix2'))).toBeTruthy();
   });
 });
+
+
+test('A PO accepts an existing catalog item before choosing a supplier',async({page})=>{
+  await login(page);
+  await openPurchasingDomain(page);
+  await cardAction(page,'Purchase Orders');
+  await page.locator('#tt-purch-new-po').click();
+  await assertComposerInViewport(page,'Create Purchase Order');
+  await expect(page.locator('.tt-purch__catalog-hint')).toContainText('No product-to-supplier link is required');
+  await page.route('**/api/predictive-lookup?**',async route=>{
+    const url=new URL(route.request().url());
+    if(url.searchParams.get('domain')!=='product')return route.continue();
+    await route.fulfill({status:200,contentType:'application/json',body:JSON.stringify({
+      domain:'product',
+      results:[{entity_type:'product',entity_id:424242,primary_label:'Independent catalog item',secondary_label:'ANY-ITEM',context:{sku:'ANY-ITEM',cost:55}}],
+      exact_match:null,ambiguous_exact:false
+    })});
+  });
+  const product=page.locator('[data-line="0"] [data-line-field="product_name"]');
+  await product.fill('Independent catalog');
+  await expect(page.locator('.tt-predictive-option')).toBeVisible({timeout:5000});
+  await page.locator('.tt-predictive-option').first().click();
+  await expect(product).toHaveAttribute('data-product-id','424242');
+  await expect(page.locator('[data-line="0"] [data-line-status]')).toContainText('supplier link not required');
+  await expect(page.locator('#tt-purch-compose-supplier')).toHaveValue('');
+});
+
+test('The PO composer fits tablet, mobile, and narrow phone widths',async({page})=>{
+  await login(page);
+  await openPurchasingDomain(page);
+  await cardAction(page,'Purchase Orders');
+  await page.locator('#tt-purch-new-po').click();
+  await page.locator('[data-add-line]').click();
+  for(const width of [768,390,320]){
+    await page.setViewportSize({width,height:720});
+    await assertComposerInViewport(page,'Create Purchase Order');
+    const result=await page.locator('.tt-purch__composer').evaluate(el=>({
+      width:el.clientWidth,scrollWidth:el.scrollWidth,
+      inputs:[...el.querySelectorAll('[data-line-field]')].map(input=>({
+        left:input.getBoundingClientRect().left,right:input.getBoundingClientRect().right
+      }))
+    }));
+    expect(result.scrollWidth).toBeLessThanOrEqual(result.width+2);
+    for(const bounds of result.inputs){
+      expect(bounds.left).toBeGreaterThanOrEqual(-1);
+      expect(bounds.right).toBeLessThanOrEqual(width+1);
+    }
+  }
+});
