@@ -6,6 +6,7 @@ const path=require('path');
 const fs=require('fs');
 const {db}=require('../database');
 const {cloudUpload,cloudDestroy}=require('../lib/cloudinary');
+const {requireDurableProvider}=require('../lib/mediaDurability');
 const {requireAuth,requireAnyPermission}=require('../lib/permissions');
 
 const upload=multer({
@@ -99,9 +100,9 @@ router.post('/:id/logo',requireAnyPermission('settings','inventory'),logoUpload,
   try{
     const {rows:[brand]}=await db.execute({sql:'SELECT id,logo_path FROM brands WHERE id=?',args:[req.params.id]});
     if(!brand)return send(res,404,'Brand not found.','BRAND_NOT_FOUND');
-    if(brand.logo_path?.startsWith('https://'))await cloudDestroy(brand.logo_path);
-    else if(brand.logo_path){const old=path.join(__dirname,'..',brand.logo_path);if(fs.existsSync(old))fs.unlinkSync(old);}
+    // Preserve the old logo until a replacement is safely available.
     const result=await cloudUpload(req.file.buffer,{folder:'pos-system/brands',public_id:`brand-${req.params.id}`,overwrite:true,resource_type:'image'});
+    requireDurableProvider(result);
     let logoPath=result?.secure_url||null;
     if(!logoPath){
       const dir=path.join(__dirname,'../uploads/brands');fs.mkdirSync(dir,{recursive:true});
@@ -109,7 +110,13 @@ router.post('/:id/logo',requireAnyPermission('settings','inventory'),logoUpload,
       const filename=`brand-${req.params.id}-${Date.now()}${ext}`;fs.writeFileSync(path.join(dir,filename),req.file.buffer);logoPath=`/uploads/brands/${filename}`;
     }
     await db.execute({sql:'UPDATE brands SET logo_path=? WHERE id=?',args:[logoPath,req.params.id]});
+    // Cloudinary uses a stable brand public_id and overwrites it, so deleting
+    // the former cloud URL now could delete the newly uploaded asset.
+    if(brand.logo_path && !brand.logo_path.startsWith('https://') && brand.logo_path!==logoPath){
+      try{const old=path.join(__dirname,'..',brand.logo_path);if(fs.existsSync(old))fs.unlinkSync(old);}
+      catch(error){console.error('brand_logo_previous_file_cleanup_failed',{code:error?.code||'unknown'});}
+    }
     res.json({logo_path:logoPath});
-  }catch(e){console.error('brand_logo_error',{message:e?.message||'unknown'});send(res,500,'Unable to save this brand logo right now.','BRAND_LOGO_UNAVAILABLE');}
+  }catch(e){console.error('brand_logo_error',{code:e?.code||'unknown'});send(res,Number(e?.status)||500,Number(e?.status)===503?'Durable media storage is unavailable. The existing logo was preserved.':'Unable to save this brand logo right now.',e?.code||'BRAND_LOGO_UNAVAILABLE');}
 });
 module.exports=router;

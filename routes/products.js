@@ -6,6 +6,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
+const { requireDurableProvider } = require('../lib/mediaDurability');
 const { requireAuth, requirePermission, can } = require('../lib/permissions');
 const { archiveProduct, assertProductNotConsolidated, resolveCanonicalProduct } = require('../lib/catalog-integrity');
 const { validateMemoryUpload, imageMulterFilter } = require('../lib/uploadSecurity');
@@ -82,6 +83,7 @@ const upload = multer({
 async function storeProductImage(product,file,validation){
   const skuSlug=sanitizeSkuForFilename(product.sku);
   const result=await cloudUpload(file.buffer,{folder:'pos-system/products',public_id:skuSlug,overwrite:true,resource_type:'image'});
+  requireDurableProvider(result);
   let imagePath;
   if(result){
     imagePath=result.secure_url;
@@ -93,19 +95,24 @@ async function storeProductImage(product,file,validation){
     fs.writeFileSync(path.join(dir,filename),file.buffer);
     imagePath=`/uploads/products/${filename}`;
   }
+  // The prior catalog pointer remains authoritative until a verified
+  // replacement has been stored and the database update has succeeded.
+  await db.execute({sql:'UPDATE products SET image_path=? WHERE id=?',args:[imagePath,product.id]});
   if(product.image_path&&product.image_path!==imagePath){
-    if(product.image_path.startsWith('https://')){
-      // Cloudinary overwrite is keyed by the canonical SKU public_id. Do not
-      // destroy the prior URL after a successful overwrite because versioned
-      // URLs can differ while still pointing at the same underlying asset.
-      if(!result)await cloudDestroy(product.image_path).catch(()=>{});
-    }else{
-      const old=path.join(__dirname,'..',product.image_path);
-      const next=imagePath.startsWith('/uploads/')?path.join(__dirname,'..',imagePath):null;
-      if(fs.existsSync(old)&&(!next||path.resolve(old)!==path.resolve(next)))fs.unlinkSync(old);
+    try{
+      if(product.image_path.startsWith('https://')){
+        // Overwrites reuse the canonical SKU public_id. Never delete the new
+        // cloud asset by destroying its previous, versioned URL.
+        if(!result)await cloudDestroy(product.image_path);
+      }else{
+        const old=path.join(__dirname,'..',product.image_path);
+        const next=imagePath.startsWith('/uploads/')?path.join(__dirname,'..',imagePath):null;
+        if(fs.existsSync(old)&&(!next||path.resolve(old)!==path.resolve(next)))fs.unlinkSync(old);
+      }
+    }catch(cleanupError){
+      console.error('product_previous_image_cleanup_failed',{code:cleanupError?.code||'unknown'});
     }
   }
-  await db.execute({sql:'UPDATE products SET image_path=? WHERE id=?',args:[imagePath,product.id]});
   return imagePath;
 }
 
@@ -742,7 +749,7 @@ router.post('/images/bulk', requirePermission('inventory_media_bulk'), upload.ar
     res.json(result);
   }catch(e){
     console.error('product_media_bulk_error',{message:e?.message||'unknown'});
-    res.status(500).json({error:'Unable to process the product image batch right now.',code:'PRODUCT_MEDIA_BULK_FAILED'});
+    res.status(Number(e?.status)||500).json({error:'Unable to process the product image batch right now.',code:e?.code||'PRODUCT_MEDIA_BULK_FAILED'});
   }
 });
 
