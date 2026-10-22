@@ -42,7 +42,7 @@ async function main(){
   const mode=(await fsp.stat(output)).mode&0o777;
   assert.equal(mode&0o077,0,'snapshot file has permissive Unix access');
   restored=createClient({url:'file:'+output});
-  const sequences=(await restored.execute('SELECT name,seq FROM sqlite_sequence WHERE name="suppliers"')).rows;
+  const sequences=(await restored.execute({sql:'SELECT name,seq FROM sqlite_sequence WHERE name=?',args:['suppliers']})).rows;
   assert.equal(Number(sequences[0].seq),Number(sourceSequences[0].seq));
   assert.equal((await restored.execute('SELECT total FROM valid_order_totals WHERE supplier_id=2')).rows.length,1);
   assert.equal((await restored.execute('SELECT key FROM "special names"')).rows[0].key,'k1');
