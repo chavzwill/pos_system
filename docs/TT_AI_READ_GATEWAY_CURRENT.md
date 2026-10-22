@@ -46,3 +46,15 @@ Readiness and end-to-end live-stock tests still require a real session, authoriz
 - Product read results include **only the requested, permissioned branch's stock**. They never expose `products.stock_qty` company-wide totals.
 - If a product has no row in `branch_inventory`, `stock_qty` remains `null` (unknown), not a fabricated zero.
 - Run `node scripts/check-tt-ai-read-runtime.js` for mocked runtime permission, stock and cost assertions, in addition to the source contract and signature checks. These do not substitute for a real POS database integration test.
+
+## Two-phase query security contract
+
+The staff gateway now requires the remote response to echo the signed request ID, rejects all unapproved read tools and any plan seeking a different branch than the employee's signed branch, refuses empty plans, and requires the second response to end in `complete`.
+
+Local regression entrypoint:
+
+```sh
+node --test tests/tt-ai-query-bridge.spec.js
+```
+
+This test creates an ephemeral Ed25519 key pair and a mocked TT AI HTTP response; no production key, network endpoint, database or paid runtime is needed. It exercises both query phases, correlation, fresh signing nonce, cross-branch rejection, unknown/mutating tool rejection and bad completion responses. It does **not** replace a real TT AI service-to-POS integration test.

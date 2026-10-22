@@ -28,6 +28,11 @@ const checks=[
   ['asset reads remain branch scoped',tools.includes('WHERE a.branch_id=? AND (CAST(a.id AS TEXT)=? OR a.asset_number=? OR s.serial_number=?)')],
   ['maintenance cost is redacted without financial authority',tools.includes('const { direct_cost, ...safe } = item')],
   ['AI plan is capped before execution',client.includes('MAX_PLAN_STEPS')&&client.includes('TT_AI_PLAN_TOO_LARGE')],
+  ['AI plan rejects unapproved tools before POS reads',client.includes('ALLOWED_READ_TOOLS')&&client.includes("TT_AI_SOURCE_NOT_ALLOWED")],
+  ['AI plan cannot request another branch',client.includes('TT_AI_PLAN_BRANCH_MISMATCH')&&client.includes('employee.default_branch_id')],
+  ['AI replies must correlate to the signed request',client.includes('assertReply')&&client.includes('reply.request_id !== String(requestId)')],
+  ['second round must complete',client.includes("requestId, 'complete'")],
+
   ['AI may request only POS evidence in this slice',client.includes("step.source !== 'pos'")&&client.includes('TT_AI_SOURCE_NOT_ALLOWED')],
   ['assertion stays server-side',client.includes('createTTAIStaffAssertion')&&!route.includes('signed.token')],
   ['POS owns asymmetric signing key and no shared secret remains',signer.includes('process.env.TT_AI_SIGNING_PRIVATE_KEY')&&!signer.includes('TT_AI_SHARED_SECRET')&&!client.includes('TT_AI_SHARED_SECRET')],
