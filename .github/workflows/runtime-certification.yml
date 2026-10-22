@@ -71,6 +71,9 @@ jobs:
       - name: Install dependencies
         run: npm ci
 
+      - name: Certify database backup and isolated restore integrity
+        run: node scripts/certify-libsql-snapshot.js
+
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=moderate
 
