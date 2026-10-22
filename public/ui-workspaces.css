@@ -3203,3 +3203,55 @@ body:has(#shell-root.shell-app){display:block!important;width:100%!important;max
  [data-tt-workspace] .tt-purch__composer>header{padding-left:10px;padding-right:10px}
  [data-tt-workspace] .tt-purch__metrics{grid-template-columns:minmax(0,1fr)!important}
 }
+
+
+/* Copy-to-new purchasing documents and line-item duplication — 2026-10-22 */
+[data-tt-workspace] .tt-purch__copy-document{
+ display:flex;flex-wrap:wrap;align-items:center;gap:10px 14px;
+ margin:16px 0;padding:12px 14px;border:1px solid var(--tt-border);
+ border-radius:12px;background:var(--tt-surface,#fff);
+}
+[data-tt-workspace] .tt-purch__copy-document button{
+ display:inline-flex;align-items:center;justify-content:center;
+ flex:none;min-height:44px;padding:10px 16px;
+ border:1px solid var(--tt-green,#177749);border-radius:10px;
+ color:var(--tt-green,#177749);background:var(--tt-green-soft,#eef8f0);
+ font-weight:750;font-size:13px;cursor:pointer;
+}
+[data-tt-workspace] .tt-purch__copy-document>span{
+ color:var(--tt-text-2,#53645b);font-size:12px;line-height:1.45;flex:1 1 210px;
+}
+[data-tt-workspace] .tt-purch__copy-notice{
+ display:grid;gap:5px;padding:14px 16px;margin:0 0 16px;
+ border:1px solid #BDD9C8;border-left:4px solid #16824D;
+ border-radius:12px;background:#F0F8F3;color:#1E5037;
+}
+[data-tt-workspace] .tt-purch__copy-notice strong{font-size:14px;line-height:1.4}
+[data-tt-workspace] .tt-purch__copy-notice span{font-size:12px;line-height:1.55}
+[data-tt-workspace] .tt-purch__compose-line{
+ grid-template-columns:minmax(0,1fr) minmax(72px,82px) minmax(90px,118px) 50px 44px!important;
+}
+[data-tt-workspace] .tt-purch__compose-line>.tt-purch__duplicate-line{
+ min-width:0;width:50px;min-height:44px!important;padding:0 2px!important;
+ border:1px solid #C5DCD1;border-radius:10px;background:#F5FAF7;
+ color:#1B6946;font-weight:700;font-size:12px;cursor:pointer;
+}
+[data-tt-workspace] .tt-purch__compose-line>.tt-purch__remove-line{
+ grid-column:auto;grid-row:auto;
+}
+@media(max-width:600px){
+ [data-tt-workspace] .tt-purch__compose-line{
+  grid-template-columns:minmax(0,1fr) minmax(0,1fr) 48px 44px!important;
+ }
+ [data-tt-workspace] .tt-purch__compose-line>label:first-child{grid-column:1/-1!important;grid-row:1!important}
+ [data-tt-workspace] .tt-purch__compose-line>label:nth-child(2){grid-column:1!important;grid-row:2!important}
+ [data-tt-workspace] .tt-purch__compose-line>label:nth-child(3){grid-column:2!important;grid-row:2!important}
+ [data-tt-workspace] .tt-purch__compose-line>.tt-purch__duplicate-line{
+  grid-column:3!important;grid-row:2!important;width:48px!important;align-self:end
+ }
+ [data-tt-workspace] .tt-purch__compose-line>.tt-purch__remove-line{
+  grid-column:4!important;grid-row:2!important;align-self:end
+ }
+ [data-tt-workspace] .tt-purch__copy-document{padding:12px;gap:10px}
+ [data-tt-workspace] .tt-purch__copy-document button{width:100%}
+}
