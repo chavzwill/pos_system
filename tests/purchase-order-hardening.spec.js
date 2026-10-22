@@ -37,6 +37,9 @@ test.describe('Purchase order lifecycle hardening', () => {
     const missingBeneficiary = await api(cookie, 'POST', '/api/purchase-orders', {
       supplier_id: supplier.id, branch_id: branch.id,
       items: [{ product_id: product.id, quantity_ordered: 1, unit_cost: unitCost }],
+      ship_to_branch_id: branch.id,
+      ship_to_name: branch.name,
+      ship_to_address: branch.address || '1 Runtime Test Road',
       approval_purpose: 'Replace damaged equipment',
     });
     expect(missingBeneficiary.status).toBe(400);
