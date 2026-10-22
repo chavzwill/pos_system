@@ -74,6 +74,9 @@ jobs:
       - name: Certify database backup and isolated restore integrity
         run: node scripts/certify-libsql-snapshot.js
 
+      - name: Certify upload evidence backup and isolated restore integrity
+        run: node scripts/certify-upload-recovery.js
+
       - name: Audit production dependencies
         run: npm audit --omit=dev --audit-level=moderate
 
