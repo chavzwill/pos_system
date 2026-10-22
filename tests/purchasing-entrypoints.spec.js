@@ -135,3 +135,25 @@ test('The PO composer fits tablet, mobile, and narrow phone widths',async({page}
     }
   }
 });
+
+
+test('Required PO approval justification survives line edits and fits a phone',async({page})=>{
+  await login(page);
+  await openPurchasingDomain(page);
+  await cardAction(page,'Purchase Orders');
+  await page.locator('#tt-purch-new-po').click();
+  const form=page.locator('#tt-purch-compose-form');
+  const reason=form.locator('[name="approval_purpose"]');
+  const recipient=form.locator('[name="requested_for"]');
+  await expect(reason).toHaveAttribute('required','');
+  await expect(recipient).toHaveAttribute('required','');
+  await reason.fill('Replace broken saws for this week’s confirmed customer jobs');
+  await recipient.fill('Workshop team / service customers');
+  await form.locator('[data-add-line]').click();
+  await expect(form.locator('[name="approval_purpose"]')).toHaveValue('Replace broken saws for this week’s confirmed customer jobs');
+  await expect(form.locator('[name="requested_for"]')).toHaveValue('Workshop team / service customers');
+  await page.setViewportSize({width:390,height:740});
+  const bounds=await form.locator('.tt-purch__approval-fields').evaluate(el=>({x:el.getBoundingClientRect().x,right:el.getBoundingClientRect().right}));
+  expect(bounds.x).toBeGreaterThanOrEqual(-1);
+  expect(bounds.right).toBeLessThanOrEqual(391);
+});

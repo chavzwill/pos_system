@@ -1,4 +1,5 @@
 const express = require('express');
+const { buildApprovalNotes } = require('../lib/purchase-order-approval-notes');
 const router = express.Router();
 const { db } = require('../database');
 const { requirePermission } = require('../lib/permissions');
@@ -205,11 +206,12 @@ router.patch('/:id/status', async (req, res) => {
 // Convert approved PR to a Purchase Order
 router.post('/:id/convert', async (req, res) => {
   try {
-    const { supplier_id, expected_date, notes: poNotes } = req.body;
+    const { supplier_id, expected_date, notes: poNotes, approval_purpose, requested_for } = req.body;
     const { rows: [pr] } = await db.execute({ sql: 'SELECT * FROM purchase_requests WHERE id = ?', args: [req.params.id] });
     if (!pr) return res.status(404).json({ error: 'Not found' });
     if (pr.status === 'converted') return res.status(400).json({ error: 'PR already converted to a PO' });
     if (pr.status !== 'approved') return res.status(400).json({ error: 'Only approved PRs can be converted to a PO' });
+    const storedNotes = buildApprovalNotes({ approval_purpose, requested_for, notes: poNotes, source_notes: pr.notes });
 
     const { rows: prItems } = await db.execute({ sql: 'SELECT * FROM purchase_request_items WHERE pr_id = ?', args: [pr.id] });
     if (!prItems.length) return res.status(400).json({ error: 'PR has no items' });
@@ -224,7 +226,7 @@ router.post('/:id/convert', async (req, res) => {
 
       const poResult = await tx.execute({
         sql: 'INSERT INTO purchase_orders (po_number, supplier_id, branch_id, employee_id, subtotal, total, notes, expected_date) VALUES (?,?,?,?,?,?,?,?)',
-        args: [po_number, supplier_id || null, pr.branch_id, pr.employee_id, subtotal, subtotal, poNotes || pr.notes, expected_date || pr.required_date || null]
+        args: [po_number, supplier_id || null, pr.branch_id, pr.employee_id, subtotal, subtotal, storedNotes, expected_date || pr.required_date || null]
       });
       const poId = Number(poResult.lastInsertRowid);
 
@@ -252,7 +254,7 @@ router.post('/:id/convert', async (req, res) => {
       if (!committed) await tx.rollback();
       res.status(committed ? 500 : 400).json({ error: e.message });
     }
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(e.code==='PO_APPROVAL_NOTES_INVALID'?400:500).json({ error: e.message }); }
 });
 
 module.exports = router;
