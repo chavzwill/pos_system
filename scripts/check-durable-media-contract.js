@@ -1,0 +1,45 @@
+'use strict';
+const assert=require('node:assert/strict');
+const fs=require('node:fs');
+const path=require('node:path');
+const {durableProviderRequired,requireDurableProvider,durableMediaError}=require('../lib/mediaDurability');
+const get=p=>fs.readFileSync(path.join(__dirname,'..',p),'utf8');
+assert.equal(durableProviderRequired({VERCEL:'1'}),true);
+assert.equal(durableProviderRequired({VERCEL:'production'}),true);
+assert.equal(durableProviderRequired({POS_REQUIRE_DURABLE_MEDIA:'1'}),true);
+assert.equal(durableProviderRequired({VERCEL:'',POS_REQUIRE_DURABLE_MEDIA:'0'}),false);
+assert.equal(durableProviderRequired({}),false);
+assert.equal(requireDurableProvider({secure_url:'https://example.invalid/image.png'},{env:{VERCEL:'1'}}).secure_url,'https://example.invalid/image.png');
+assert.equal(requireDurableProvider(null,{env:{}}),null);
+for(const kind of ['media','private']){
+ assert.throws(()=>requireDurableProvider(null,{kind,env:{VERCEL:'1'}}),error=>{
+  assert.equal(error.status,503);
+  assert.equal(error.code,kind==='private'?'PRIVATE_STORAGE_UNAVAILABLE':'DURABLE_MEDIA_STORAGE_UNAVAILABLE');
+  return true;
+ });
+}
+assert.equal(durableMediaError().status,503);
+const products=get('routes/products.js');
+const customers=get('routes/customers.js');
+const brands=get('routes/brands.js');
+const settings=get('routes/settings.js');
+const po=get('routes/purchase-orders.js');
+const rentals=get('routes/rentals.js');
+assert.match(products,/requireDurableProvider\(result\)/);
+assert.match(products,/res\.status\(Number\(e\?\.status\)\|\|500\)/);
+assert.match(products,/await db\.execute\(\{sql:'UPDATE products SET image_path=\? WHERE id=\?'/);
+assert.match(customers,/requireDurableProvider\(result,\{kind:'private'\}\)/);
+const customerStart=customers.indexOf("router.post('/:id/id-scan'");
+const customerUpdate=customers.indexOf("UPDATE customers SET rental_id_scan_path = ?",customerStart);
+const customerCleanup=customers.indexOf("if(existing?.rental_id_scan_path && existing.rental_id_scan_path!==scanPath)",customerStart);
+assert(customerStart>0 && customerUpdate>customerStart && customerCleanup>customerUpdate,'Existing customer ID evidence must be retained until the new DB pointer is durable');
+const brandUpload=brands.indexOf("const result=await cloudUpload",brands.indexOf("router.post('/:id/logo'"));
+const brandUpdate=brands.indexOf("UPDATE brands SET logo_path=?",brandUpload);
+const brandCleanup=brands.indexOf("brand_logo_previous_file_cleanup_failed",brandUpdate);
+assert(brandUpload>0 && brandUpdate>brandUpload && brandCleanup>brandUpdate,'Brand logo should update the row before cleaning up the predecessor');
+assert.match(brands,/requireDurableProvider\(result\)/);
+assert.match(settings,/requireDurableProvider\(result\)/);
+assert(settings.indexOf("if (!existing.value.startsWith('https://'))")>settings.indexOf("UPDATE settings SET value",0)||settings.includes("const old = path.join(__dirname, '..', existing.value)"));
+assert.match(po,/PRIVATE_STORAGE_UNAVAILABLE/);
+assert.match(rentals,/PRIVATE_STORAGE_UNAVAILABLE/);
+console.log('PASS durable media: fail closed in serverless, allow permanent provider/self-hosted path, retain old image/document until replacement, preserve private PO and rental guards');
