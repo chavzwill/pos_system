@@ -157,3 +157,86 @@ test('Required PO approval justification survives line edits and fits a phone',a
   expect(bounds.x).toBeGreaterThanOrEqual(-1);
   expect(bounds.right).toBeLessThanOrEqual(391);
 });
+
+
+test('Copy an approved PO into a fresh editable order without writing or copying approval status',async({page})=>{
+  await login(page);
+  await openPurchasingDomain(page);
+  const old={
+    id:480,po_number:'PO-00480',status:'approved',supplier_id:17,supplier_name:'Existing Supplier',
+    branch_name:'Test Branch',expected_date:'2026-01-01',total:160,
+    approval_purpose:'Restock tools',requested_for:'Maintenance team',additional_notes:'Inspect on arrival',
+    items:[
+      {id:91,product_id:54,product_name:'Drill',sku:'D-54',quantity_ordered:2,quantity_received:2,unit_cost:50},
+      {id:92,product_id:null,product_name:'One-time repair part',sku:'',quantity_ordered:3,quantity_received:1,unit_cost:20}
+    ]
+  };
+  const writes=[];
+  await page.route('**/api/purchase-orders**',route=>{
+    const url=new URL(route.request().url());
+    if(route.request().method()!=='GET'){writes.push(route.request().method());return route.continue();}
+    if(url.pathname==='/api/purchase-orders')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([old])});
+    if(url.pathname==='/api/purchase-orders/480')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(old)});
+    return route.continue();
+  });
+  await cardAction(page,'Purchase Orders');
+  await page.locator('#tt-purchasing-workspace [data-id="480"]').click();
+  await expect(page.locator('[data-copy-document]')).toBeVisible();
+  await page.locator('[data-copy-document]').click();
+  const form=page.locator('#tt-purch-compose-form');
+  await expect(form).toBeVisible();
+  await expect(form.locator('.tt-purch__copy-notice')).toContainText('PO-00480');
+  await expect(form.locator('#tt-purch-compose-supplier')).toHaveValue('Existing Supplier');
+  await expect(form.locator('[name="date"]')).toHaveValue('');
+  await expect(form.locator('[name="approval_purpose"]')).toHaveValue('Restock tools');
+  await expect(form.locator('[name="requested_for"]')).toHaveValue('Maintenance team');
+  await expect(form.locator('[name="notes"]')).toHaveValue('Inspect on arrival');
+  await expect(form.locator('[data-line]')).toHaveCount(2);
+  await expect(form.locator('[data-line="0"] [data-line-field="quantity"]')).toHaveValue('2');
+  await expect(form.locator('[data-line="1"] [data-line-field="quantity"]')).toHaveValue('3');
+  await expect(form.locator('[data-line="0"] [data-line-field="unit_cost"]')).toHaveValue('50');
+  await form.locator('[data-line="0"] [data-duplicate-line]').click();
+  await expect(form.locator('[data-line]')).toHaveCount(3);
+  await expect(form.locator('[data-line="1"] [data-line-field="product_name"]')).toHaveValue('Drill');
+  await expect(form.locator('[data-line="1"] [data-line-field="quantity"]')).toHaveValue('2');
+  await form.locator('[data-line="1"] [data-line-field="quantity"]').fill('9');
+  await expect(form.locator('[data-line="0"] [data-line-field="quantity"]')).toHaveValue('2');
+  expect(writes).toEqual([]);
+  for(const width of [390,320]){
+    await page.setViewportSize({width,height:740});
+    const box=await form.locator('[data-line="1"] [data-duplicate-line]').boundingBox();
+    expect(box).not.toBeNull();
+    expect(box.x).toBeGreaterThanOrEqual(0);
+    expect(box.x+box.width).toBeLessThanOrEqual(width+1);
+  }
+});
+
+test('Copy an approved Purchase Request as a new unsubmitted request',async({page})=>{
+  await login(page);
+  await openPurchasingDomain(page);
+  const original={
+    id:777,pr_number:'PR-00777',status:'approved',supplier_id:23,supplier_name:'Preferred Supplier',
+    department:'Workshop',request_type:'internal_use',notes:'Maintenance of equipment',required_date:'2026-01-01',
+    items:[{id:66,product_id:120,product_name:'Workshop gloves',sku:'G-120',quantity:5,unit_cost:25,item_type:'internal'}]
+  };
+  await page.route('**/api/purchase-requests**',route=>{
+    const url=new URL(route.request().url());
+    if(route.request().method()!=='GET')return route.continue();
+    if(url.pathname==='/api/purchase-requests')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify([original])});
+    if(url.pathname==='/api/purchase-requests/777')return route.fulfill({status:200,contentType:'application/json',body:JSON.stringify(original)});
+    return route.continue();
+  });
+  await cardAction(page,'Purchase Requests');
+  await page.locator('#tt-purchasing-workspace [data-id="777"]').click();
+  await expect(page.locator('[data-copy-document]')).toBeVisible();
+  await page.locator('[data-copy-document]').click();
+  const form=page.locator('#tt-purch-compose-form');
+  await expect(form.locator('.tt-purch__copy-notice')).toContainText('PR-00777');
+  await expect(form.locator('#tt-purch-compose-supplier')).toHaveValue('Preferred Supplier');
+  await expect(form.locator('[name="department"]')).toHaveValue('Workshop');
+  await expect(form.locator('[name="request_type"]')).toHaveValue('internal_use');
+  await expect(form.locator('[name="date"]')).toHaveValue('');
+  await expect(form.locator('[data-line="0"] [data-line-field="quantity"]')).toHaveValue('5');
+  await expect(form.locator('[name="notes"]')).toHaveValue('Maintenance of equipment');
+  await expect(form.locator('button[type="submit"]')).toHaveText('Create Purchase Request');
+});
