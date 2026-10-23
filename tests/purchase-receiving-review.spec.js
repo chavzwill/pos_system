@@ -81,7 +81,7 @@ test('receiving-review launcher is accessible from purchasing and mobile dialog 
  }
  await expect(page.locator('.shell-app')).toBeVisible();
  await page.locator('.shell-nav [data-domain=purchasing]').click();
- const feature=page.locator('#shell-root [data-open=purchasing-workspace]').first();
+ const feature=page.locator('#shell-root [data-open="purchasing-workspace"][data-title="Purchase Orders"]').first();
  await expect(feature).toBeVisible();await feature.click();
  const launcher=page.locator('#tt-purchasing-workspace .tt-rr-launch');
  await expect(launcher).toBeVisible();await launcher.click();
