@@ -82,15 +82,14 @@ router.post('/', requirePermission('pos'), async (req, res, next) => {
     if (!held) return res.status(404).json({ error: 'Source held sale was not found' });
 
     const { rows: [link] } = await db.execute({ sql: 'SELECT * FROM held_sale_recall_links WHERE held_transaction_id=?', args: [heldId] });
-    if (link) {
-      const { rows: [completed] } = await db.execute({ sql: `SELECT * FROM transactions WHERE id=? AND status='completed'`, args: [link.completed_transaction_id] });
-      if (!completed) return res.status(409).json({ error: 'Held-sale recall evidence points to a missing completed transaction' });
-      completed.recall_replayed = true;
-      completed.source_hold_id = heldId;
-      return res.json(completed);
-    }
+    if(link){
+      // Let the normal idempotency layer validate the entire normalized request,
+      // including delivery content, instead of returning a sale for any retry body.
+      const key=String(req.get('Idempotency-Key')||req.get('X-Idempotency-Key')||req.body?.idempotency_key||req.body?.operation_key||'');
+      const {rows:[op]}=await db.execute({sql:'SELECT operation_key FROM retail_sale_operations WHERE transaction_id=?',args:[link.completed_transaction_id]});
+      if(!op||op.operation_key!==key)return res.status(409).json({error:'Held sale is already completed; retry only the original sale operation'});
+    }else if(held.status!=='hold')return res.status(409).json({error:'Source held sale is no longer open for recall'});
 
-    if (held.status !== 'hold') return res.status(409).json({ error: 'Source held sale is no longer open for recall' });
     if (req.body.branch_id && String(req.body.branch_id) !== String(held.branch_id || '')) {
       return res.status(409).json({ error: 'A recalled sale must be completed in the same branch as its hold' });
     }
@@ -101,36 +100,7 @@ router.post('/', requirePermission('pos'), async (req, res, next) => {
     req.body.branch_id = held.branch_id;
     req.body.sales_agent_id = held.employee_id;
 
-    const originalJson = res.json.bind(res);
-    res.json = function(payload) {
-      if (res.statusCode >= 200 && res.statusCode < 300 && payload?.id && payload?.transaction_number) {
-        Promise.resolve().then(async () => {
-          const handoffTx = await db.transaction('write');
-          let committed = false;
-          try {
-            await handoffTx.execute({
-              sql: `INSERT OR IGNORE INTO held_sale_recall_links(held_transaction_id,held_transaction_number,completed_transaction_id,completed_transaction_number) VALUES(?,?,?,?)`,
-              args: [heldId, held.transaction_number || null, payload.id, payload.transaction_number || null],
-            });
-            const closed = await handoffTx.execute({ sql: `UPDATE transactions SET status='converted' WHERE id=? AND status='hold'`, args: [heldId] });
-            if (Number(closed.rowsAffected || 0) !== 1) throw new Error('HELD_ORDER_CLOSE_CONFLICT');
-            await handoffTx.commit(); committed = true;
-          } catch (error) {
-            if (!committed) await handoffTx.rollback();
-            throw error;
-          }
-          payload.source_hold_id = heldId;
-          payload.sales_agent_id = held.employee_id;
-          originalJson(payload);
-        }).catch(error => {
-          console.error('Held-sale recall link preservation failed:', error);
-          if (!res.headersSent) res.status(500);
-          originalJson({ error: 'The sale was created but recall evidence could not be preserved. Do not retry until the transaction is reviewed.', completed_transaction_id: payload.id, completed_transaction_number: payload.transaction_number });
-        });
-        return res;
-      }
-      return originalJson(payload);
-    };
+    // Link and hold closure commit atomically with the new sale in persistTicket.
     next();
   } catch (e) { res.status(400).json({ error: e.message }); }
 });

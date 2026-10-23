@@ -42,7 +42,7 @@ async function agedBalance(customerId,days){
     LEFT JOIN (SELECT transaction_id,SUM(amount) adjusted FROM customer_account_adjustments WHERE adjustment_type='credit_note' GROUP BY transaction_id) ca ON ca.transaction_id=t.id
     WHERE t.customer_id=? AND t.status='completed' AND t.payment_method='credit' AND julianday('now')-julianday(t.created_at)>?`,args:[customerId,days]});return r2(row?.aged||0);
 }
-function projectedCharge(body){const items=Array.isArray(body?.items)?body.items:[];let sub=0,tax=0;for(const x of items){const q=Number(x.quantity||0),p=Number(x.uom_base_unit_price??x.unit_price??0),tr=Number(x.tax_rate||0);if(q>0&&p>=0){const v=q*p;sub+=v;if(!body.tax_exempt)tax+=v*tr/100;}}return r2(sub+tax-Number(body.discount_amount||0)-Number(body.store_credit_applied||0)-Number(body.cash_back_applied||0));}
+function projectedCharge(body){const items=Array.isArray(body?.items)?body.items:[];let sub=0,tax=0;for(const x of items){const q=Number(x.quantity||0),p=Number(x.uom_base_unit_price??x.unit_price??0),tr=Number(x.tax_rate||0);if(q>0&&p>=0){const v=q*p;sub+=v;if(!body.tax_exempt)tax+=v*tr/100;}}const extras=require('../lib/retail-ticket').extraTotals(body.retail_ticket?.extras,body.tax_exempt);return r2(sub+tax+extras.subtotal+extras.tax-Number(body.discount_amount||0)-Number(body.store_credit_applied||0)-Number(body.cash_back_applied||0));}
 async function authorize(req,details){
   const pin=String(req.body?.credit_override_pin||'').trim(),reason=String(req.body?.credit_override_reason||'').trim();
   if(!pin)throw Object.assign(new Error('Management authorization is required before extending this customer additional credit.'),{status:409,details});

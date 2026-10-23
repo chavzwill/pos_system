@@ -3445,3 +3445,8 @@ body:has(#shell-root.shell-app){display:block!important;width:100%!important;max
 .tt-fr__pricing-reason{grid-column:1/-1}.tt-fr__pricing-fields input:disabled{background:#f1f5f2;color:#58715e}
 .tt-fr__pricing summary:focus-visible,.tt-fr__pricing input:focus-visible,.tt-fr__pricing textarea:focus-visible{outline:2px solid #286a46;outline-offset:3px}
 @media(max-width:680px){.tt-fr__pricing-fields{grid-template-columns:minmax(0,1fr)}}
+
+/* Keep the discount type readable in narrow checkout columns. */
+body .tt-sales__totals .tt-sales__discount{grid-template-columns:minmax(0,1fr)!important;gap:10px}
+body .tt-sales__discount label,body .tt-sales__discount button{width:100%;min-width:0}
+body .tt-sales__discount select{max-width:none}

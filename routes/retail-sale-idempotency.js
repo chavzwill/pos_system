@@ -39,7 +39,7 @@ async function loadCompleted(row){
   if(!row.transaction_id)return null;
   const {rows:[tx]}=await db.execute({sql:'SELECT * FROM transactions WHERE id=?',args:[row.transaction_id]});
   if(!tx)return null;
-  const {rows:items}=await db.execute({sql:'SELECT * FROM transaction_items WHERE transaction_id=? ORDER BY id',args:[row.transaction_id]});
+  const {rows:items}=await db.execute({sql:'SELECT * FROM transaction_items WHERE transaction_id=? ORDER BY COALESCE(display_order,id),id',args:[row.transaction_id]});
   const {rows:payments}=await db.execute({sql:'SELECT * FROM transaction_payments WHERE transaction_id=? ORDER BY id',args:[row.transaction_id]});
   return {...tx,items,payments};
 }

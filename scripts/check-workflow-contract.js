@@ -99,7 +99,7 @@ check('Held orders persist sales-agent attribution',transactions.includes('emplo
 check('Cashier recall does not delete held order before payment',!legacyUi.includes("await this.api('DELETE', `/transactions/${id}/hold`)"));
 check('Cashier checkout carries exact held-order identity',legacyUi.includes('source_hold_id: this._activeHeldOrderId || null'));
 check('Recall restores authoritative customer branch and sales agent',recall.includes('req.body.customer_id = held.customer_id')&&recall.includes('req.body.branch_id = held.branch_id')&&recall.includes('req.body.sales_agent_id = held.employee_id'));
-check('Held order closes only after completed-sale linkage',recall.includes("UPDATE transactions SET status='converted' WHERE id=? AND status='hold'")&&recall.includes('held_sale_recall_links'));
+check('Held order closes only after completed-sale linkage',read('lib/retail-ticket.js').includes("UPDATE transactions SET status='converted' WHERE id=? AND status='hold'")&&read('lib/retail-ticket.js').includes('held_sale_recall_links')&&transactions.includes('await persistTicket(tx, req, txId)'));
 check('Completed transaction preserves cashier and sales agent separately',transactions.includes('employee_id,sales_agent_id,branch_id,drawer_session_id'));
 check('Sales commission follows sales agent not cashier',transactions.includes('calcCommission(savedTx.sales_agent_id || savedTx.employee_id'));
 check('Cashier order queue is POS-authorized while hold remains sales permission',legacyUi.includes("this.can('pos') ? `<button class=\"pos-grid-btn hold\" onclick=\"App.recallOrder()\">Customer Orders")&&legacyUi.includes("this.can('pos_hold') ? `<button class=\"pos-grid-btn hold\" onclick=\"App.holdOrder()\">Hold"));

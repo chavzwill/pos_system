@@ -55,7 +55,7 @@ async function evaluateCode(req){
   if(pc.usage_limit!=null&&Number(pc.times_used||0)>=Number(pc.usage_limit))throw Object.assign(new Error('Promotion code usage limit has been reached.'),{status:409});
   const items=Array.isArray(b.items)?b.items:[];let subtotal=r2(items.reduce((s,x)=>s+lineValue(x),0));
   if(Number(pc.min_purchase||0)>0&&subtotal+0.001<Number(pc.min_purchase))throw Object.assign(new Error(`Promotion requires a minimum purchase of ${Number(pc.min_purchase).toFixed(2)}.`),{status:409});
-  let eligible=subtotal;
+  let eligible=subtotal,eligibleIndices=items.map((_,i)=>i);
   if(['specific','categories','items'].includes(String(pc.applies_to))){
     const {rows:scope}=await db.execute({sql:'SELECT item_type,item_id FROM promotion_items WHERE promotion_id=?',args:[pc.promotion_id]});
     const productIds=new Set(scope.filter(x=>x.item_type==='product').map(x=>Number(x.item_id)));
@@ -64,13 +64,14 @@ async function evaluateCode(req){
     const pids=[...new Set(items.map(x=>Number(x.product_id)).filter(Boolean))];
     if(pids.length){const marks=pids.map(()=>'?').join(',');const {rows:products}=await db.execute({sql:`SELECT id,category_id FROM products WHERE id IN (${marks})`,args:pids});for(const p of products)productCategory.set(Number(p.id),Number(p.category_id)||null);}
     eligible=r2(items.reduce((s,x)=>{const pid=Number(x.product_id),cat=productCategory.get(pid);return s+((productIds.has(pid)||categoryIds.has(cat))?lineValue(x):0);},0));
+    eligibleIndices=items.map((x,i)=>productIds.has(Number(x.product_id))||categoryIds.has(productCategory.get(Number(x.product_id)))?i:null).filter(i=>i!==null);
     if(eligible<=0)throw Object.assign(new Error('No items in this transaction qualify for the promotion code.'),{status:409});
   }
   const authoritative=pc.type==='percentage'?r2(eligible*Number(pc.value||0)/100):r2(Math.min(Number(pc.value||0),eligible));
   const client=r2(b.discount_amount||0);
   if(Math.abs(client-authoritative)>0.01)throw Object.assign(new Error(`Promotion discount does not match the authoritative promotion value. Expected ${authoritative.toFixed(2)}.`),{status:409});
   b.discount_amount=authoritative;b.promotion_code=String(pc.code);b.promotion_name=pc.promo_name;
-  return {promotionId:Number(pc.promotion_id),codeId:Number(pc.id),code:String(pc.code),name:pc.promo_name,eligible,authoritative,client};
+  return {eligibleIndices,promotionId:Number(pc.promotion_id),codeId:Number(pc.id),code:String(pc.code),name:pc.promo_name,eligible,authoritative,client};
 }
 async function claimUsage(req,ev){
   if(!ev)return null;
