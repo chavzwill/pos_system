@@ -20,7 +20,7 @@ const checks=[
  ['Duplicate line uses new editable object',ui.includes('state.composer.items.splice(index+1,0,copiedLine(line))')],
  ['Copy and remove buttons remain separate direct children',ui.includes('data-duplicate-line=')&&ui.includes('data-remove-line=')],
  ['Narrow mobile copy buttons remain within row',css.includes('.tt-purch__compose-line>.tt-purch__duplicate-line')&&css.includes('grid-template-columns:minmax(0,1fr) minmax(0,1fr) 48px 44px!important')],
- ['Cache version coordinated with shell',html.includes('/ui-workspaces.css?v=20261022-purch-copy1')&&loader.includes("const VERSION='20261022-purch-copy1'")]
+ ['Cache version coordinated with shell',(()=>{const match=loader.match(/const VERSION='([^']+)'/);return !!match&&html.includes('/ui-workspaces.css?v='+match[1])&&read('public/app-shell.js').includes('?v='+match[1]);})()]
 ];
 for(const [name,pass] of checks)console.log((pass?'PASS':'FAIL')+' Purchasing copy: '+name);
 if(checks.some(([,pass])=>!pass))process.exit(1);
