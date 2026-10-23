@@ -3256,6 +3256,58 @@ body:has(#shell-root.shell-app){display:block!important;width:100%!important;max
  [data-tt-workspace] .tt-purch__copy-document button{width:100%}
 }
 
+
+/* Purchasing · receiving reconciliation / backorder and retail price reviews. */
+.tt-rr,.tt-rr *{box-sizing:border-box}
+.tt-rr{position:fixed;inset:0;z-index:10060;font-family:Inter,Manrope,system-ui,sans-serif;color:#20352a}
+.tt-rr__shade{position:absolute;inset:0;background:rgba(8,22,15,.57);backdrop-filter:blur(4px)}
+.tt-rr__panel{position:absolute;inset:12px;max-width:1160px;margin:auto;border-radius:20px;background:#f6f9f7;display:flex;flex-direction:column;overflow:hidden;box-shadow:0 26px 90px #07190f44;min-width:0}
+.tt-rr__head{display:flex;align-items:center;justify-content:space-between;gap:14px;padding:22px 26px;background:white;border-bottom:1px solid #dce8df}
+.tt-rr__eyebrow{color:#178349;font-size:12px;font-weight:750;letter-spacing:.06em}
+.tt-rr__head h2{font-size:25px;letter-spacing:-.035em;line-height:1.2;margin:5px 0}
+.tt-rr__head p{color:#6a7b6e;font-size:13px;margin:0;line-height:1.55}
+.tt-rr button{border:1px solid #176e40;background:#197846;color:white;padding:10px 14px;min-height:42px;border-radius:10px;font-size:13px;font-weight:720;cursor:pointer}
+.tt-rr button.secondary{background:white;color:#1e754b;border-color:#bddecb}
+.tt-rr__head>button{width:42px;min-width:42px;border:1px solid #d5e5da;background:#f3f8f4;color:#3e6250;font-size:24px}
+.tt-rr__search{display:flex;align-items:end;gap:12px;padding:13px 26px;border-bottom:1px solid #e0e9e2;background:white}
+.tt-rr label{font-size:12px;color:#43584b;font-weight:680;display:grid;gap:7px;min-width:0}
+.tt-rr__search label{flex:1}
+.tt-rr input,.tt-rr textarea{width:100%;border-radius:9px;border:1px solid #c9dbce;background:white;color:#1c3325;padding:10px 12px;min-height:44px;font-size:16px;line-height:1.35;min-width:0}
+.tt-rr textarea{min-height:72px;resize:vertical}
+.tt-rr button:focus-visible,.tt-rr input:focus-visible,.tt-rr textarea:focus-visible{outline:3px solid #54b981;outline-offset:2px}
+.tt-rr__content{padding:24px 26px 32px;overflow:auto;overscroll-behavior:contain;flex:1;min-height:0}
+.tt-rr__summary{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:10px}
+.tt-rr__summary>div{background:white;border:1px solid #dfeae2;border-radius:13px;padding:15px;display:grid;gap:6px;min-width:0}
+.tt-rr__summary strong{font-size:20px;letter-spacing:-.02em;overflow-wrap:anywhere}
+.tt-rr__summary span{color:#6c7d70;font-size:12px;line-height:1.35}
+.tt-rr__section-title{margin:25px 0 12px}
+.tt-rr__section-title h3{font-size:17px;margin:0 0 5px}
+.tt-rr__section-title p{font-size:12px;color:#657968;margin:0}
+.tt-rr__line{padding:16px;margin-top:12px;background:white;border:1px solid #dfe8e1;border-radius:14px;display:grid;gap:14px}
+.tt-rr__linehead{display:flex;align-items:start;justify-content:space-between;gap:12px}
+.tt-rr__linehead>div{display:grid;gap:5px}
+.tt-rr__linehead strong{font-size:15px}
+.tt-rr__linehead span{color:#607766;font-size:12px}
+.tt-rr__linehead b{font-size:13px;text-align:right}
+.tt-rr__backorder{display:grid;gap:4px;padding:12px;background:#fff8ed;border:1px solid #f5dbab;border-radius:9px;color:#754c1b;font-size:12px}
+.tt-rr__resolved{color:#297951;font-size:12px;margin:0}
+.tt-rr__followup,.tt-rr__price{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:11px;padding-top:12px;border-top:1px solid #e4ebe5}
+.tt-rr__wide,.tt-rr__price>div:first-child{grid-column:1/-1}
+.tt-rr__price>div:first-child{display:grid;gap:4px;font-size:13px}
+.tt-rr__price>div:first-child span{color:#5c7163;font-size:12px}
+.tt-rr__followup button,.tt-rr__price button{justify-self:start}
+.tt-rr__event,.tt-rr__proposal{display:flex;justify-content:space-between;flex-wrap:wrap;gap:10px;background:white;border:1px solid #dfeae2;border-radius:12px;padding:14px;margin:9px 0}
+.tt-rr__event strong,.tt-rr__proposal strong{font-size:12px;color:#257348;text-transform:capitalize}
+.tt-rr__event span,.tt-rr__proposal span{font-size:13px}
+.tt-rr__event small,.tt-rr__proposal small{color:#607665;font-size:12px}
+.tt-rr__proposal>div{display:grid;gap:5px;min-width:0}
+.tt-rr__proposal form{display:grid;gap:10px;flex:1 1 320px}
+.tt-rr__proposal form>div{display:flex;gap:8px;flex-wrap:wrap}
+.tt-rr__empty{padding:24px;border:1px dashed #d4e5d9;border-radius:10px;background:white;color:#65796b;font-size:13px}
+.tt-rr__message{min-height:42px;margin:0;padding:12px 26px;border-top:1px solid #e1ebe3;color:#245d3c;font-size:12px}
+.tt-rr__message.is-error{color:#b33235}
+@media(max-width:680px){.tt-rr__panel{inset:0;border-radius:0;max-height:100dvh}.tt-rr__head{padding:14px 15px}.tt-rr__head h2{font-size:21px}.tt-rr__search{padding:11px 14px}.tt-rr__content{padding:14px}.tt-rr__summary{grid-template-columns:repeat(2,minmax(0,1fr))}.tt-rr__summary strong{font-size:16px}.tt-rr__line{padding:13px}.tt-rr__followup,.tt-rr__price{grid-template-columns:1fr}.tt-rr__wide,.tt-rr__price>div:first-child{grid-column:1}.tt-rr__linehead{flex-wrap:wrap}.tt-rr__message{padding:12px 14px}}
+
 /* POS consumables workspace uses the authoritative stylesheet load order */
 .tt-consumables,.tt-consumables *{box-sizing:border-box}
 .tt-consumables{position:fixed;inset:0;z-index:10050;color:#1b2823;font-family:Inter,Manrope,system-ui,-apple-system,sans-serif}
