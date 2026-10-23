@@ -140,21 +140,23 @@ async function evaluateInvoice(req){
   }
   return {supplierId,poId,normalized,subtotal,matchStatus,poValue,receivedValue,priorBilled:prior,remainingReceived,variance,overrideReason:null,overrideBy:null};
 }
-async function persistMatch(invoiceId,ev){
+async function persistMatch(invoiceId,ev,executor=db){
   if(!invoiceId||!ev)return;
-  await db.execute({sql:`INSERT INTO supplier_invoice_match_controls(supplier_invoice_id,supplier_id,purchase_order_id,normalized_invoice_number,match_status,po_merchandise_value,received_merchandise_value,prior_billed_merchandise_value,invoice_merchandise_value,remaining_received_value_before_invoice,merchandise_variance,override_reason,override_by_employee_id)
+  await executor.execute({sql:`INSERT INTO supplier_invoice_match_controls(supplier_invoice_id,supplier_id,purchase_order_id,normalized_invoice_number,match_status,po_merchandise_value,received_merchandise_value,prior_billed_merchandise_value,invoice_merchandise_value,remaining_received_value_before_invoice,merchandise_variance,override_reason,override_by_employee_id)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[invoiceId,ev.supplierId,ev.poId,ev.normalized,ev.matchStatus,ev.poValue,ev.receivedValue,ev.priorBilled,ev.subtotal,ev.remainingReceived,ev.variance,ev.overrideReason,ev.overrideBy]});
-  await db.execute({sql:'INSERT INTO supplier_invoice_match_events(supplier_invoice_id,event_type,employee_id,details) VALUES(?,?,?,?)',args:[invoiceId,ev.matchStatus==='matched'?'three_way_matched':ev.matchStatus,ev.overrideBy||null,JSON.stringify({po_merchandise_value:ev.poValue,received_merchandise_value:ev.receivedValue,prior_billed:ev.priorBilled,invoice_merchandise_value:ev.subtotal,variance:ev.variance,override_reason:ev.overrideReason})]});
+  await executor.execute({sql:'INSERT INTO supplier_invoice_match_events(supplier_invoice_id,event_type,employee_id,details) VALUES(?,?,?,?)',args:[invoiceId,ev.matchStatus==='matched'?'three_way_matched':ev.matchStatus,ev.overrideBy||null,JSON.stringify({po_merchandise_value:ev.poValue,received_merchandise_value:ev.receivedValue,prior_billed:ev.priorBilled,invoice_merchandise_value:ev.subtotal,variance:ev.variance,override_reason:ev.overrideReason})]});
 }
 
 router.post('/invoices',async(req,res,next)=>{
   let ev;try{ev=await evaluateInvoice(req);}catch(e){return res.status(e.status||500).json({error:e.message});}
   if(!ev)return next();
   let claimToken;try{claimToken=await claimIdentity(ev.supplierId,ev.normalized);}catch(e){return res.status(e.status||409).json({error:e.message});}
+  req.supplierInvoiceEvaluation=ev;
+  req.supplierInvoiceClaimToken=claimToken;
   delete req.body.match_override_reason;
   const originalJson=res.json.bind(res);let handled=false;
   res.json=function(payload){
-    if(handled)return originalJson(payload);handled=true;
+    if(handled||req.invoiceMatchFinalized)return originalJson(payload);handled=true;
     if(res.statusCode>=200&&res.statusCode<300&&payload?.id){
       return linkIdentityClaim(ev.supplierId,ev.normalized,claimToken,payload.id)
         .then(()=>persistMatch(payload.id,ev))
@@ -204,3 +206,12 @@ router.post('/invoice-matches/:invoiceId/review',async(req,res)=>{
 module.exports=router;
 module.exports.ensureSchema=ensureSchema;
 module.exports.normalizeInvoiceNumber=normalizeInvoiceNumber;
+
+// Captured invoices finalize all posting evidence inside the AP transaction.
+module.exports.finalizeCapturedMatch=async function(tx,req,invoiceId,evidence){
+ const ev={...req.supplierInvoiceEvaluation,...evidence};
+ const result=await tx.execute({sql:`UPDATE supplier_invoice_identity_claims SET supplier_invoice_id=?,linked_at=CURRENT_TIMESTAMP WHERE supplier_id=? AND normalized_invoice_number=? AND claim_token=? AND supplier_invoice_id IS NULL`,args:[invoiceId,ev.supplierId,ev.normalized,req.supplierInvoiceClaimToken]});
+ if(Number(result.rowsAffected)!==1)throw new Error('Supplier invoice identity changed before posting');
+ await persistMatch(invoiceId,ev,tx);
+ return ev;
+};

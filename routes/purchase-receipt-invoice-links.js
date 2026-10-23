@@ -41,6 +41,7 @@ async function ensureSchema(){
   await ensureSupplierLedgerBase();
   await ensurePurchaseReceiptBaseSchema();
   await ensureInvoiceMatchControls();
+  await require('../lib/supplier-invoice-capture').ensureSchema();
   await db.batch([
    sql("CREATE TABLE IF NOT EXISTS supplier_invoice_receipt_allocations(id INTEGER PRIMARY KEY AUTOINCREMENT,supplier_invoice_id INTEGER NOT NULL REFERENCES supplier_invoices(id),purchase_order_id INTEGER NOT NULL REFERENCES purchase_orders(id),purchase_receipt_item_id INTEGER NOT NULL REFERENCES purchase_receipt_items(id),quantity_invoiced REAL NOT NULL CHECK(quantity_invoiced>0),invoice_unit_cost_cents INTEGER NOT NULL CHECK(invoice_unit_cost_cents>=0),invoice_line_cents INTEGER NOT NULL CHECK(invoice_line_cents>=0),linked_by_employee_id INTEGER REFERENCES employees(id),created_at DATETIME NOT NULL DEFAULT CURRENT_TIMESTAMP,UNIQUE(supplier_invoice_id,purchase_receipt_item_id))"),
    sql('CREATE INDEX IF NOT EXISTS idx_supplier_invoice_receipt_allocations_line ON supplier_invoice_receipt_allocations(purchase_receipt_item_id)'),
@@ -62,7 +63,7 @@ async function getPo(executor,req,poId){
  return po;
 }
 async function receipts(executor,poId){
- const {rows}=await executor.execute(sql("SELECT pr.id receipt_id,pr.receipt_number,pr.received_at,pri.id receipt_item_id,pri.po_item_id,pri.product_id,pri.product_name,pri.sku,pri.quantity_received,pri.unit_cost,COALESCE((SELECT SUM(a.quantity_invoiced) FROM supplier_invoice_receipt_allocations a WHERE a.purchase_receipt_item_id=pri.id),0) allocated_qty FROM purchase_receipts pr JOIN purchase_receipt_items pri ON pri.receipt_id=pr.id WHERE pr.po_id=? ORDER BY pr.id DESC,pri.id",[poId]));
+ const {rows}=await executor.execute(sql("SELECT pr.id receipt_id,pr.receipt_number,pr.received_at,pri.id receipt_item_id,pri.po_item_id,pri.product_id,pri.product_name,pri.sku,pri.quantity_received,pri.unit_cost,COALESCE((SELECT SUM(a.quantity_invoiced) FROM supplier_invoice_receipt_allocations a WHERE a.purchase_receipt_item_id=pri.id),0)+COALESCE((SELECT SUM(ca.quantity_invoiced) FROM captured_supplier_invoice_receipts ca JOIN captured_supplier_invoices cd ON cd.id=ca.captured_invoice_id WHERE ca.purchase_receipt_item_id=pri.id AND cd.status='captured'),0) allocated_qty FROM purchase_receipts pr JOIN purchase_receipt_items pri ON pri.receipt_id=pr.id WHERE pr.po_id=? ORDER BY pr.id DESC,pri.id",[poId]));
  return rows.map(x=>({...x,remaining_qty:Math.max(0,Number((Number(x.quantity_received)-Number(x.allocated_qty)).toFixed(6)))}));
 }
 async function invoiceChoices(executor,po,allowUnassigned){
@@ -74,7 +75,8 @@ router.get('/orders/:poId',requireAnyPermission('purchasing','purchasing_receive
   const po=await getPo(db,req,id(req.params.poId,'PO'));
   const [invoiceRows,receivedRows]=await Promise.all([invoiceChoices(db,po,can(req.employee?.permissions,'reports_financial')),receipts(db,po.id)]);
   const {rows:links}=await db.execute(sql("SELECT a.id,a.supplier_invoice_id,a.purchase_receipt_item_id,a.quantity_invoiced,a.invoice_unit_cost_cents,a.invoice_line_cents,a.created_at FROM supplier_invoice_receipt_allocations a WHERE a.purchase_order_id=? ORDER BY a.id DESC LIMIT 400",[po.id]));
-  res.json({po,invoices:invoiceRows,receipt_items:receivedRows,links,scope:'posted_supplier_invoices_only'});
+  const captured=await require('../lib/supplier-invoice-capture').list(db,req,po.id);
+  res.json({po,invoices:invoiceRows,receipt_items:receivedRows,links,captured_invoices:captured.invoices,captured_links:captured.links,can_post:can(req.employee?.permissions,'reports_financial'),can_capture:can(req.employee?.permissions,'reports_financial')||can(req.employee?.permissions,'purchasing_receive'),scope:'captured_and_posted_supplier_invoices'});
  }catch(e){report(res,e);}
 });
 router.post('/orders/:poId/invoices/:invoiceId/allocate',requireAnyPermission('purchasing_receive','reports_financial'),async(req,res)=>{
@@ -110,8 +112,7 @@ router.post('/orders/:poId/invoices/:invoiceId/allocate',requireAnyPermission('p
   for(const line of entries){
    const {rows:[receipt]}=await tx.execute(sql('SELECT pri.id,pri.quantity_received,pri.unit_cost,pr.po_id,pr.branch_id,pr.supplier_id FROM purchase_receipt_items pri JOIN purchase_receipts pr ON pr.id=pri.receipt_id WHERE pri.id=?',[line.receiptItemId]));
    if(!receipt||Number(receipt.po_id)!==po.id||Number(receipt.branch_id)!==Number(po.branch_id)||(receipt.supplier_id&&Number(receipt.supplier_id)!==Number(po.supplier_id)))throw failure(409,'INVALID_RECEIPT','The selected receipt line does not belong to this PO and supplier');
-   const {rows:[assigned]}=await tx.execute(sql('SELECT COALESCE(SUM(quantity_invoiced),0) allocated FROM supplier_invoice_receipt_allocations WHERE purchase_receipt_item_id=?',[line.receiptItemId]));
-   if(Number(assigned.allocated)+line.quantity>Number(receipt.quantity_received)+0.000001)throw failure(409,'RECEIPT_ALREADY_BILLED','Total invoiced quantity cannot exceed accepted received quantity');
+   if(await require('../lib/supplier-invoice-capture').allocatedQuantity(tx,line.receiptItemId)+line.quantity>Number(receipt.quantity_received)+0.000001)throw failure(409,'RECEIPT_ALREADY_BILLED','Total invoiced quantity cannot exceed accepted received quantity');
    const amount=Math.round(line.quantity*line.unitCents);
    if(!Number.isSafeInteger(amount)||amount<0)throw failure(400,'INVOICE_COST_OVERFLOW','Calculated invoice line amount is invalid');
    await tx.execute(sql('INSERT INTO supplier_invoice_receipt_allocations(supplier_invoice_id,purchase_order_id,purchase_receipt_item_id,quantity_invoiced,invoice_unit_cost_cents,invoice_line_cents,linked_by_employee_id) VALUES(?,?,?,?,?,?,?)',[invoiceId,po.id,line.receiptItemId,line.quantity,line.unitCents,amount,req.employee?.id||null]));

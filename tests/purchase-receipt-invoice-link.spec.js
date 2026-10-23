@@ -90,3 +90,38 @@ test('receiving review exposes invoice link interface without mobile horizontal 
   expect(box).not.toBeNull();expect(box.x+box.width).toBeLessThanOrEqual(width+1);
  }
 });
+test('capture screen matches received goods before Finance posts AP, at desktop and phone widths',async({page},testInfo)=>{
+ const cookie=await login();
+ const [suppliers,branches,products]=await Promise.all([api(cookie,'GET','/api/suppliers'),api(cookie,'GET','/api/branches'),api(cookie,'GET','/api/products')]);
+ const supplier=suppliers.body.find(x=>x.active!==0),branch=branches.body.find(x=>x.active!==0),product=products.body.find(x=>x.active!==0&&!x.is_service&&!x.is_rental);
+ const create=await api(cookie,'POST','/api/purchase-orders',{
+  supplier_id:supplier.id,branch_id:branch.id,ship_to_branch_id:branch.id,ship_to_name:branch.name,ship_to_address:branch.address||'1 Test Street',ship_to_city:branch.city||'Kingston',ship_to_state:branch.state||'Kingston',
+  approval_purpose:'Pre-posting supplier invoice workflow verification',requested_for:'Receiving and Finance',items:[{product_id:product.id,product_name:product.name,quantity_ordered:2,unit_cost:10}]
+ });
+ expect(create.status,JSON.stringify(create.body)).toBe(201);const poId=create.body.id;
+ expect((await api(cookie,'PATCH','/api/purchase-orders/'+poId+'/status',{status:'approved'})).status).toBe(200);
+ expect((await api(cookie,'PATCH','/api/purchase-orders/'+poId+'/receive',{items:[{item_id:create.body.items[0].id,quantity_received:2}]},key())).status).toBe(200);
+ const [name,...value]=cookie.split('=');await page.context().addCookies([{name,value:value.join('='),url:BASE}]);
+ await page.goto('/app-shell.html');await page.waitForFunction(()=>!!window.TotalToolsInvoiceReceiptMatching);
+ await page.evaluate(id=>window.TotalToolsInvoiceReceiptMatching.open(id),poId);
+ const panel=page.locator('.tt-ir__panel');await expect(panel.locator('#tt-ir-capture')).toBeAttached();
+ await panel.getByText('Capture a supplier invoice',{exact:true}).click();
+ const form=panel.locator('#tt-ir-capture'),invoiceNumber='UI-CAPTURE-'+Date.now();
+ await form.getByLabel('Invoice number',{exact:true}).fill(invoiceNumber);await form.getByLabel('Invoice date',{exact:true}).fill('2026-10-23');await form.getByLabel('Merchandise subtotal (JMD)',{exact:true}).fill('20');
+ for(const width of [1280,768,390,320]){
+  await page.setViewportSize({width,height:850});
+  const bounds=await panel.boundingBox();expect(bounds.x).toBeGreaterThanOrEqual(0);expect(bounds.x+bounds.width).toBeLessThanOrEqual(width+1);
+  const overflow=await panel.locator('.tt-ir__body').evaluate(el=>el.scrollWidth-el.clientWidth);expect(overflow).toBeLessThanOrEqual(1);
+ }
+ await form.getByRole('button',{name:'Save captured invoice',exact:true}).click();
+ await expect(panel.locator('.tt-ir__status')).toHaveText('Invoice captured. Stock and Accounts Payable are unchanged.');
+ await expect(panel.getByRole('heading',{name:'Captured — not posted to Accounts Payable'})).toBeVisible();
+ const captures=await api(cookie,'GET','/api/supplier-ledger/captured-invoices?purchase_order_id='+poId);expect(captures.body.invoices).toHaveLength(1);expect(captures.body.invoices[0].supplier_invoice_id).toBeNull();
+ await panel.locator('input[name=qty]').fill('2');await panel.getByRole('button',{name:'Link invoice to received goods',exact:true}).click();
+ await expect(panel.locator('.tt-ir__status')).toHaveText('Delivery evidence saved. Invoice remains captured and unposted.');
+ for(const width of [1280,390]){await page.setViewportSize({width,height:850});await panel.screenshot({path:testInfo.outputPath('captured-invoice-'+width+'.png')});}
+ await panel.getByRole('button',{name:'Post invoice to Accounts Payable',exact:true}).click();
+ await expect(panel.locator('.tt-ir__status')).toHaveText('Invoice posted to Accounts Payable. Delivery evidence matches.');
+ const invoices=await api(cookie,'GET','/api/supplier-ledger/invoices?status=all&supplier_id='+supplier.id);expect(invoices.body.filter(x=>x.invoice_number===invoiceNumber)).toHaveLength(1);
+ await expect(panel.getByRole('button',{name:'Post invoice to Accounts Payable',exact:true})).toHaveCount(0);
+});

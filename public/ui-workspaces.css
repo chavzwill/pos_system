@@ -3423,3 +3423,25 @@ body:has(#shell-root.shell-app){display:block!important;width:100%!important;max
 .tt-ir__empty{background:white;border:1px dashed #b7d6c4;padding:21px;border-radius:10px;color:#567263;font-size:13px;line-height:1.55}
 .tt-ir-launch{white-space:nowrap}
 @media(max-width:680px){.tt-ir__panel{inset:0;border-radius:0;max-height:100dvh}.tt-ir__header{padding:14px 16px}.tt-ir__header h2{font-size:20px}.tt-ir__body{padding:14px}.tt-ir__summary{grid-template-columns:repeat(2,minmax(0,1fr))}.tt-ir__invoice{grid-template-columns:1fr}.tt-ir__invoice>span{grid-column:1}.tt-ir__footer button{width:100%}.tt-ir__linked{align-items:start;flex-wrap:wrap}}
+
+/* Supplier invoice capture uses the existing receiving panel and form language. */
+.tt-ir__capture{border-block:1px solid #d9e5dd;padding:16px 0;margin:0 0 20px}
+.tt-ir summary{cursor:pointer;font-weight:750;padding:10px 0;min-height:44px}
+.tt-ir__fields{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:14px;margin:16px 0}
+.tt-ir__capture label,.tt-ir__posting label{display:grid;gap:7px;font-size:13px;font-weight:650;min-width:0;color:#355943}
+.tt-ir__capture input,.tt-ir__capture select,.tt-ir__capture textarea,.tt-ir__posting input{width:100%;min-width:0;box-sizing:border-box;min-height:44px;padding:10px 12px;border:1px solid #b7cdbf;border-radius:8px;background:#fff;color:#173d28;font:inherit}
+.tt-ir__posting{border-top:1px solid #d9e5dd;padding-top:14px;margin-top:22px}
+.tt-ir__posting form{display:grid;gap:12px;margin:12px 0}.tt-ir__posting button{justify-self:start;min-height:44px}
+.tt-ir input:focus-visible,.tt-ir select:focus-visible,.tt-ir textarea:focus-visible,.tt-ir summary:focus-visible{outline:2px solid #286a46;outline-offset:3px}
+@media(max-width:900px){.tt-ir__fields{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:680px){.tt-ir__fields{grid-template-columns:minmax(0,1fr)}.tt-ir__posting button{width:100%;white-space:normal}}
+
+.tt-fr__pricing{grid-column:1/-1;border-top:1px solid var(--tt-border,#d9e5dd);padding-top:8px;min-width:0}
+.tt-fr__pricing summary{cursor:pointer;min-height:44px;display:list-item;align-content:center;font-weight:700;padding:10px 0}
+.tt-fr__pricing p,.tt-fr__pricing small{font-size:12px;line-height:1.5;color:var(--tt-text-muted,#58715e)}
+.tt-fr__pricing-fields{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:14px;margin:12px 0}
+.tt-fr__pricing-fields label{display:grid;gap:7px;font-size:13px;font-weight:650;min-width:0}
+.tt-fr__pricing-fields input,.tt-fr__pricing-fields textarea{box-sizing:border-box;width:100%;min-width:0;min-height:44px;padding:10px 12px;border:1px solid var(--tt-border,#b7cdbf);border-radius:8px;background:#fff;color:#173d28;font:inherit}
+.tt-fr__pricing-reason{grid-column:1/-1}.tt-fr__pricing-fields input:disabled{background:#f1f5f2;color:#58715e}
+.tt-fr__pricing summary:focus-visible,.tt-fr__pricing input:focus-visible,.tt-fr__pricing textarea:focus-visible{outline:2px solid #286a46;outline-offset:3px}
+@media(max-width:680px){.tt-fr__pricing-fields{grid-template-columns:minmax(0,1fr)}}
