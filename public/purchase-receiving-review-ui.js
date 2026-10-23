@@ -1,0 +1,52 @@
+(()=>{'use strict';
+const API='/api/purchase-orders/receiving-controls/review';
+let root=null,record=null,profile=null,busy=false,currentId='';
+const esc=s=>String(s??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c]));
+const cash=v=>new Intl.NumberFormat('en-JM',{style:'currency',currency:'JMD'}).format(Number(v||0));
+const safeDate=v=>v?esc(String(v).slice(0,10)):'';
+const perm=k=>!!(profile?.permissions?.[k]||profile?.permissions?.[k.split('_')[0]]);
+async function api(path,opts={}){const response=await fetch(API+path,{credentials:'same-origin',headers:{'Content-Type':'application/json',...(opts.headers||{})},...opts});const payload=await response.json().catch(()=>({}));if(!response.ok)throw new Error(payload.error||'Unable to load receiving review');return payload}
+const toast=(v,type='info')=>window.TotalToolsShellUI?.toast?.(v,type)||console.log(v);
+const selectedPo=()=>document.querySelector('#tt-purchasing-workspace .tt-purch__row.is-selected[data-id]')?.dataset.id||'';
+function close(){root?.remove();root=null;record=null;currentId=''}
+function shell(){root=document.createElement('div');root.className='tt-rr';root.innerHTML='<div class="tt-rr__shade" data-close></div><section class="tt-rr__panel" role="dialog" aria-modal="true" aria-labelledby="tt-rr-title"><header class="tt-rr__head"><div><span class="tt-rr__eyebrow">Purchasing · receiving control</span><h2 id="tt-rr-title">Receiving review</h2><p>Resolve supplier differences, keep open backorders and submit retail price changes for approval.</p></div><button type="button" data-close aria-label="Close review">×</button></header><div class="tt-rr__search"><label>Purchase order number / ID<input id="tt-rr-po" inputmode="numeric" placeholder="Select a PO or enter its record ID"></label><button id="tt-rr-load">Open order</button></div><div class="tt-rr__content" id="tt-rr-content"><p class="tt-rr__empty">Select a purchase order to inspect outstanding quantities, discrepancies and selling-price proposals.</p></div><p class="tt-rr__message" role="status" id="tt-rr-message"></p></section>';document.body.appendChild(root);root.querySelectorAll('[data-close]').forEach(x=>x.onclick=close);root.querySelector('#tt-rr-load').onclick=()=>load(root.querySelector('#tt-rr-po').value);root.querySelector('#tt-rr-po').onkeydown=e=>{if(e.key==='Enter'){e.preventDefault();load(e.currentTarget.value)}};root.querySelector('.tt-rr__panel').onkeydown=e=>{if(e.key==='Escape')close()};}
+function message(s,failed=false){if(!root)return;const el=root.querySelector('#tt-rr-message');el.textContent=s;el.classList.toggle('is-error',failed)}
+function detail(){
+ if(!record)return'';
+ const data=record,order=data.po,lines=data.lines||[],pending=(data.price_proposals||[]).filter(x=>x.status==='pending');
+ const heading='<div class="tt-rr__summary"><div><strong>'+esc(order.po_number)+'</strong><span>'+esc(order.status)+' · '+esc(String(order.expected_date||'No due date'))+'</span></div><div><strong>'+Number(data.backordered_units||0)+'</strong><span>open units on backorder</span></div><div><strong>'+data.discrepancies.length+'</strong><span>recorded discrepancies</span></div><div><strong>'+pending.length+'</strong><span>awaiting retail approval</span></div></div>';
+ const cards=lines.map(x=>{
+  const open=Number(x.backorder_qty||0),canBackorder=open>0&&['approved','partial'].includes(order.status);
+  const canPrice=Number(x.quantity_received||0)>0&&x.product_id!=null;
+  return '<article class="tt-rr__line" data-review-line="'+x.line_id+'"><div class="tt-rr__linehead"><div><strong>'+esc(x.product_name||'Item')+'</strong><span>'+esc(x.sku||'Unlinked')+'</span></div><div><b>'+Number(x.quantity_ordered||0)+' ordered</b><span>'+Number(x.quantity_received||0)+' received · '+open+' outstanding</span></div></div>'
+  +(open?'<div class="tt-rr__backorder"><strong>Backorder remains open</strong><span>Only an approved close-short decision removes this outstanding quantity. '+(x.supplier_eta?'Supplier ETA: '+safeDate(x.supplier_eta):'No supplier ETA recorded')+'</span></div>':'<p class="tt-rr__resolved">No outstanding supplier quantity</p>')
+  +(canBackorder?'<form class="tt-rr__followup" data-backorder="'+x.line_id+'"><label>Updated supplier ETA<input type="date" name="expected_date" value="'+safeDate(x.supplier_eta)+'"></label><label>Supplier reference<input name="supplier_reference" maxlength="120" value="'+esc(x.supplier_reference||'')+'" placeholder="Reference / acknowledgement"></label><label class="tt-rr__wide">Supplier discrepancy / follow-up note<textarea name="supplier_response" maxlength="1000" required placeholder="Explain shortage, delayed delivery, supplier confirmation or expected replacement">'+esc(x.supplier_response||'')+'</textarea></label><button type="submit">Record supplier follow-up</button></form>':'')
+  +(canPrice?'<form class="tt-rr__price" data-price="'+x.line_id+'"><div><strong>Retail price review</strong><span>Current retail '+cash(x.current_retail_price)+' · ordered unit cost '+cash(x.unit_cost)+'. No selling price changes until approval.</span></div><label>Proposed retail price (JMD)<input name="proposed_price" type="number" step="0.01" min="0.01" value="'+esc(x.current_retail_price)+'" required></label><label class="tt-rr__wide">Why change the retail price?<textarea name="reason" required maxlength="1000" placeholder="Supplier cost change, margin review, competitor pricing or other justification"></textarea></label><button type="submit">Request price approval</button></form>':'')
+  +'</article>';
+ }).join('');
+ const discrepancies=(data.discrepancies||[]).map(d=>'<div class="tt-rr__event"><strong>'+esc(d.exception_type)+'</strong><span>'+esc(d.reason)+'</span><small>PO line #'+esc(d.po_item_id)+' · variance '+esc(d.variance_quantity)+' · '+esc(d.created_at)+'</small></div>').join('');
+ const pricing=(data.price_proposals||[]).map(p=>'<div class="tt-rr__proposal"><div><strong>'+esc(p.status.toUpperCase())+' · Product #'+esc(p.product_id)+'</strong><span>'+cash(p.previous_price_cents/100)+' → '+cash(p.proposed_price_cents/100)+'</span><small>'+esc(p.reason)+'</small></div>'
+ +(p.status==='pending'&&perm('purchasing_approve')&&perm('inventory_edit')?'<form data-decision="'+p.id+'"><label>Decision reason<textarea name="reason" required maxlength="1000" placeholder="Explain the decision"></textarea></label><div><button type="submit" name="decision" value="approve">Approve retail price</button><button type="submit" class="secondary" name="decision" value="reject">Reject</button></div></form>':'')+'</div>').join('');
+ return heading+'<div class="tt-rr__section-title"><h3>Line-by-line reconciliation</h3><p>Remaining items stay open; shortages, inspection or incorrect goods must have evidence.</p></div>'+cards+'<div class="tt-rr__section-title"><h3>Discrepancy history</h3></div>'+(discrepancies||'<p class="tt-rr__empty">No recorded exception entries. Use Fast Receive to record approved shortages, overages and incoming quality holds.</p>')+'<div class="tt-rr__section-title"><h3>Retail price decisions</h3></div>'+(pricing||'<p class="tt-rr__empty">No retail price proposals on this order.</p>');
+}
+async function load(id){
+ const n=Number(id);if(!Number.isSafeInteger(n)||n<=0)return message('Enter a valid purchase order record ID.',true);
+ currentId=String(n);message('Loading receiving evidence…');
+ try{record=await api('/orders/'+n);if(root){root.querySelector('#tt-rr-po').value=String(n);render();message('Ready for review. No inventory or retail price has been changed.')}}catch(e){message(e.message,true)}
+}
+function render(){
+ if(!root)return;
+ root.querySelector('#tt-rr-content').innerHTML=detail();
+ root.querySelectorAll('form[data-backorder]').forEach(form=>form.onsubmit=async e=>{e.preventDefault();const id=form.dataset.backorder,fd=new FormData(form);try{await api('/orders/'+currentId+'/backorders/'+id,{method:'POST',body:JSON.stringify(Object.fromEntries(fd))});toast('Supplier follow-up recorded','success');await load(currentId)}catch(err){message(err.message,true)}});
+ root.querySelectorAll('form[data-price]').forEach(form=>form.onsubmit=async e=>{e.preventDefault();const fd=new FormData(form);try{await api('/orders/'+currentId+'/price-proposals',{method:'POST',body:JSON.stringify({item_id:Number(form.dataset.price),proposed_price:fd.get('proposed_price'),reason:fd.get('reason')})});toast('Price proposal saved for separate approval','success');await load(currentId)}catch(err){message(err.message,true)}});
+ root.querySelectorAll('form[data-decision]').forEach(form=>{let selected='';form.querySelectorAll('button[name=decision]').forEach(b=>b.addEventListener('click',()=>selected=b.value));form.onsubmit=async e=>{e.preventDefault();const fd=new FormData(form);try{await api('/price-proposals/'+form.dataset.decision+'/decision',{method:'POST',body:JSON.stringify({decision:selected||'reject',reason:fd.get('reason')})});toast('Retail price review '+(selected==='approve'?'approved':'rejected'),'success');await load(currentId)}catch(err){message(err.message,true)}}});
+}
+async function open(id){close();shell();if(!profile)profile=await fetch('/api/workspace-profile/me',{credentials:'same-origin'}).then(r=>r.json()).catch(()=>null);const choice=id||selectedPo();if(choice)await load(choice);else root.querySelector('#tt-rr-po')?.focus()}
+function launch(){
+ const bar=document.querySelector('#tt-purchasing-workspace .tt-purch__toolbar-primary');if(!bar||bar.querySelector('.tt-rr-launch'))return;
+ const b=document.createElement('button');b.type='button';b.className='tt-rr-launch secondary';b.textContent='Receiving exceptions & pricing';b.addEventListener('click',()=>open(selectedPo()));bar.appendChild(b);
+}
+window.TotalToolsReceivingReview={open,close};
+if(document.readyState==='loading')document.addEventListener('DOMContentLoaded',()=>{new MutationObserver(launch).observe(document.body,{childList:true,subtree:true});launch()},{once:true});
+else{new MutationObserver(launch).observe(document.body,{childList:true,subtree:true});launch()}
+})();
