@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const VERSION='20261023-invoice-capture2';
+const VERSION='20261023-receiving-prices3';
 const loaded=new Set();
 const nativeFetch=window.fetch.bind(window);
 let profileResponsePromise=null,scheduled=false;
