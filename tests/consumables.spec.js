@@ -105,6 +105,8 @@ test('consumables workspace opens at narrow mobile widths',async({page})=>{
  await expect(page.locator('.shell-app')).toBeVisible();
  await page.locator('.shell-nav [data-domain=purchasing]').click();
  const btn=page.locator('#shell-root [data-open=consumables-workspace]').first();
+ // Advanced purchasing tools live behind the progressive-disclosure section.
+ if(!await btn.isVisible())await page.locator('.shell-more summary').click();
  await expect(btn).toBeVisible();
  await btn.click();
  await expect(page.locator('#tt-consumables .ttc-panel')).toBeVisible();

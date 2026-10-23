@@ -3262,7 +3262,7 @@ body:has(#shell-root.shell-app){display:block!important;width:100%!important;max
 .ttc-shade{position:absolute;inset:0;background:rgba(10,25,20,.48);backdrop-filter:blur(4px)}
 .ttc-panel{position:absolute;inset:16px 22px;max-width:1460px;margin:auto;background:#f6f8f6;border:1px solid #dce7df;border-radius:24px;display:flex;flex-direction:column;min-width:0;overflow:hidden;box-shadow:0 35px 90px rgba(0,25,14,.3)}
 .ttc-header{display:flex;align-items:center;justify-content:space-between;gap:22px;padding:24px 30px;background:white;border-bottom:1px solid #e4ebe5}
-.ttc-kicker{font-size:10px;font-weight:750;letter-spacing:.12em;color:#25714e}
+.ttc-kicker{font-size:12px;font-weight:750;letter-spacing:.12em;color:#25714e}
 .ttc-header h2{font-size:26px;line-height:1.15;letter-spacing:-.035em;margin:7px 0;font-weight:800;color:#1d3024}
 .ttc-header p{font-size:13px;color:#66756b;margin:0;line-height:1.5}
 .tt-consumables button,.tt-consumables input,.tt-consumables textarea,.tt-consumables select{font:inherit}
@@ -3291,15 +3291,15 @@ body:has(#shell-root.shell-app){display:block!important;width:100%!important;max
 .ttc-record strong,.ttc-record b{font-size:14px;font-weight:760}
 .ttc-record small{font-size:12px;color:#718076;white-space:nowrap;overflow:hidden;text-overflow:ellipsis}
 .ttc-detail{background:white;margin-top:16px;border:1px solid #d9e6de;border-radius:15px;padding:20px}
-.ttc-state{background:#eaf3ec;color:#137541;border-radius:30px;padding:5px 10px;font-size:11px;vertical-align:middle;letter-spacing:0}
+.ttc-state{background:#eaf3ec;color:#137541;border-radius:30px;padding:5px 10px;font-size:12px;vertical-align:middle;letter-spacing:0}
 .ttc-brief{display:grid;grid-template-columns:repeat(3,minmax(0,1fr));gap:10px;margin-bottom:16px}
 .ttc-brief p{margin:0;padding:12px;background:#f5faf6;border-radius:10px;color:#4c6656;font-size:12px;line-height:1.5;overflow-wrap:anywhere}
-.ttc-brief strong{display:block;color:#1b5438;font-size:11px;margin-bottom:4px}
+.ttc-brief strong{display:block;color:#1b5438;font-size:12px;margin-bottom:4px}
 .ttc-table-wrap{border:1px solid #e2e9e3;border-radius:12px;overflow:auto;background:white}
 .ttc-table-wrap table{border-collapse:collapse;width:100%;min-width:620px;text-align:left}
-.ttc-table-wrap th{font-weight:750;color:#5e7767;background:#f7faf7;font-size:11px;letter-spacing:.02em;white-space:nowrap}
+.ttc-table-wrap th{font-weight:750;color:#5e7767;background:#f7faf7;font-size:12px;letter-spacing:.02em;white-space:nowrap}
 .ttc-table-wrap td{font-size:12px;color:#2b3e31}
-.ttc-table-wrap td small{display:block;color:#7c8c80;font-size:11px}
+.ttc-table-wrap td small{display:block;color:#7c8c80;font-size:12px}
 .ttc-table-wrap th,.ttc-table-wrap td{padding:13px 15px;border-bottom:1px solid #ebf0ed}
 .ttc-foot{margin:16px 0 0}
 .ttc-subtitle{font-size:13px;color:#5d7465;margin:0 0 17px;line-height:1.55}
