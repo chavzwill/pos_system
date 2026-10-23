@@ -4,7 +4,7 @@ function json(url){return nativeFetch(url,{credentials:'same-origin'}).then(asyn
 function products(){if(!productsPromise)productsPromise=json('/api/products?active=true').then(x=>Array.isArray(x)?x:[]).catch(e=>{productsPromise=null;throw e;});return productsPromise;}
 function key(i){return Number(i)}
 function resolveProduct(list,typed){typed=String(typed||'').trim().toLowerCase();return list.find(p=>String(p.sku||'').toLowerCase()===typed||String(p.name||'').toLowerCase()===typed||`${p.name} · ${p.sku}`.toLowerCase()===typed)||null;}
-function money(v){return new Intl.NumberFormat(undefined,{style:'currency',currency:'JMD',maximumFractionDigits:2}).format(Number(v||0));}
+function money(v){return new Intl.NumberFormat(undefined,{style:'currency',currency:document.querySelector('#tt-purch-currency')?.value||'JMD',currencyDisplay:'code',maximumFractionDigits:2}).format(Number(v||0));}
 async function enhanceLine(row){const index=Number(row.dataset.line),input=row.querySelector('[data-line-field="product_name"]'),qty=row.querySelector('[data-line-field="quantity"]'),cost=row.querySelector('[data-line-field="unit_cost"]');if(!input||!qty||!cost)return;
   let list;try{list=await products();}catch(_){return;}const product=resolveProduct(list,input.value);const previous=Number(row.dataset.uomProductId||0);if(!product||!product.id){if(previous){row.querySelector('.tt-purch-uom')?.remove();selected.delete(key(index));delete row.dataset.uomProductId;}return;}if(previous===Number(product.id)&&row.querySelector('.tt-purch-uom'))return;
   row.querySelector('.tt-purch-uom')?.remove();selected.delete(key(index));row.dataset.uomProductId=String(product.id);

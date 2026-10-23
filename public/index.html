@@ -11959,11 +11959,13 @@ const App = {
   },
 
   async showPOForm() {
-    const [suppliers, products] = await Promise.all([
+    const [suppliers, products, currencyOptions] = await Promise.all([
       this.api('GET', '/suppliers'),
       this.api('GET', '/products'),
+      this.api('GET', '/purchase-orders/currency-options'),
     ]);
     const branches = this.currentUser.branches || [];
+    this._poCurrencyOptions=currencyOptions;this._poLastRate=1;
     this.showModal(`
       <div class="modal" style="max-width:720px">
         <div class="modal-header"><span class="modal-title">New Purchase Order</span><button class="modal-close">✕</button></div>
@@ -11986,6 +11988,7 @@ const App = {
             <div class="form-group"><label>Expected Date</label><input id="po-date" type="date"></div>
             <div class="form-group"><label>Notes</label><input id="po-notes"></div>
           </div>
+          <fieldset class="tt-purch__fx-fields"><legend>Order currency</legend><label>Supplier currency<select id="po-currency" onchange="App.onPOCurrencyChange(true)">${currencyOptions.options.map(r=>`<option value="${this.escapeAttr(r.currency)}" ${r.currency===currencyOptions.base_currency?'selected':''}>${this.escapeAttr(r.currency)}${r.currency===currencyOptions.base_currency?' · local currency':r.available?'':' · rate required'}</option>`).join('')}</select></label><label>Rate option<select id="po-fx-mode" onchange="App.onPOCurrencyChange(false)"><option value="managed">Use saved rate</option>${currencyOptions.can_set_order_rate?'<option value="manual">One-order rate</option>':''}</select></label><label id="po-fx-rate-label">Exchange rate · 1 supplier unit to ${currencyOptions.base_currency}<input id="po-fx-rate" type="number" min="0.00000001" step="0.00000001" value="1" readonly oninput="App.calcPOTotal()"></label><label>Rate source / reference<input id="po-fx-source" maxlength="500" readonly value="base_currency"></label><p id="po-fx-hint">Quoted costs use the selected supplier currency. Receiving and accounting use ${currencyOptions.base_currency}.</p></fieldset>
           <div style="margin-bottom:10px">
             <div class="card-header"><span class="card-title">Items</span>
               <div style="display:flex;gap:8px">
@@ -11996,7 +11999,7 @@ const App = {
             <div id="po-items-status" style="font-size:12px;color:var(--text-muted);padding:4px 0 8px">Select a supplier above to see their products.</div>
             <div id="po-items"></div>
           </div>
-          <div style="text-align:right;font-size:15px;font-weight:700">Total: <span id="po-total">$0.00</span></div>
+          <div style="text-align:right;font-size:15px;font-weight:700">Supplier total: <span id="po-total">0.00</span><div>Local value: <span id="po-base-total">0.00</span></div></div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
@@ -12147,10 +12150,14 @@ const App = {
     const sel = document.getElementById(`poi-prod-${idx}`);
     const opt = sel.options[sel.selectedIndex];
     const cost = opt.dataset.cost;
-    document.getElementById(`poi-cost-${idx}`).value = cost || '';
+    document.getElementById(`poi-cost-${idx}`).value = Number((Number(cost||0)/(Number(document.getElementById('po-fx-rate')?.value)||1)).toFixed(6));
     this.calcPOTotal();
   },
 
+  onPOCurrencyChange(convertCosts) {
+    const currency=document.getElementById('po-currency').value,mode=document.getElementById('po-fx-mode').value,meta=this._poCurrencyOptions,saved=meta.options.find(r=>r.currency===currency),input=document.getElementById('po-fx-rate'),source=document.getElementById('po-fx-source');
+    const oldRate=Number(input.value||0),rate=currency===meta.base_currency?1:Number(saved?.rate_to_base||0);input.readOnly=currency===meta.base_currency||mode!=='manual';input.value=rate||'';source.readOnly=input.readOnly;source.value=input.readOnly?(saved?.source_reference||''):' ';if(convertCosts){document.querySelectorAll('[id^="poi-cost-"]').forEach(el=>el.value=rate>0?Number((Number(el.value||0)*Number(oldRate||1)/rate).toFixed(6)):0);}this._poLastRate=rate;this.calcPOTotal();
+  },
   calcPOTotal() {
     let total = 0;
     document.querySelectorAll('[id^="poi-qty-"]').forEach(qEl => {
@@ -12160,7 +12167,9 @@ const App = {
       total += qty * cost;
     });
     const el = document.getElementById('po-total');
-    if (el) el.textContent = this.fmt(total);
+    const currency=document.getElementById('po-currency')?.value||this._poCurrencyOptions?.base_currency||'JMD',base=this._poCurrencyOptions?.base_currency||'JMD',rate=Number(document.getElementById('po-fx-rate')?.value||0);
+    if(el)el.textContent=new Intl.NumberFormat(undefined,{style:'currency',currency,currencyDisplay:'code'}).format(total);
+    const local=document.getElementById('po-base-total');if(local)local.textContent=rate>0?new Intl.NumberFormat(undefined,{style:'currency',currency:base,currencyDisplay:'code'}).format(total*rate):'Exchange rate required';
   },
 
   async savePO() {
@@ -12181,7 +12190,9 @@ const App = {
     if (!supplier_id) { this.alert('Please select a supplier', 'error'); return; }
     if (!items.length) { this.alert('Add at least one item', 'error'); return; }
     try {
-      await this.api('POST', '/purchase-orders', { supplier_id, branch_id: branch_id||null, notes, expected_date: expected_date||null, items });
+      const currency=document.getElementById('po-currency').value,mode=document.getElementById('po-fx-mode').value,rate=Number(document.getElementById('po-fx-rate').value),saved=this._poCurrencyOptions.options.find(r=>r.currency===currency);
+      if(!(rate>0))throw new Error('A valid exchange rate is required');
+      await this.api('POST', '/purchase-orders', { currency,fx_mode:mode,fx_date:this._poCurrencyOptions.as_of,fx_rate_to_base:rate,fx_rate_id:mode==='managed'?saved?.rate_id:undefined,fx_source_reference:document.getElementById('po-fx-source').value,supplier_id, branch_id: branch_id||null, notes, expected_date: expected_date||null, items });
       this.closeModal();
       this.alert('Purchase order created');
       this.renderPurchasing();
@@ -12193,6 +12204,7 @@ const App = {
       this.api('GET', `/purchase-orders/${id}`),
       this.api('GET', `/purchase-orders/${id}/attachments`),
     ]);
+    const poMoney=n=>new Intl.NumberFormat(undefined,{style:'currency',currency:po.base_currency||'JMD',currencyDisplay:'code'}).format(Number(n||0));
     const statusColor = { draft:'badge-warning', sent:'badge-info', approved:'badge-teal', partial:'badge-purple', received:'badge-success', cancelled:'badge-danger' };
     const docTypeLabel = { purchase_request:'Purchase Request', supplier_quotation:'Supplier Quotation', other:'Other' };
     const fileIcon = mime => {
@@ -12212,7 +12224,7 @@ const App = {
             <button class="modal-close">✕</button>
           </div>
         </div>
-        <div class="modal-body">
+        <div class="modal-body">${po.currency?`<div class="tt-purch__fx-preview"><strong>Supplier total: ${new Intl.NumberFormat(undefined,{style:'currency',currency:po.currency,currencyDisplay:'code'}).format(po.currency_total)}</strong><span>Local value: ${poMoney(po.total)} · 1 ${this.escapeAttr(po.currency)} = ${po.fx_rate_to_base} ${this.escapeAttr(po.base_currency)}</span></div>`:''}
           <div class="two-col" style="margin-bottom:14px;font-size:13px">
             <div><strong>Supplier:</strong> ${po.supplier_name||'-'}<br><strong>Contact:</strong> ${po.supplier_contact||'-'}<br><strong>Email:</strong> ${po.supplier_email||'-'}</div>
             <div><strong>Branch:</strong> ${po.branch_name||'-'}<br><strong>Created:</strong> ${this.fmtDate(po.created_at)}<br><strong>Expected:</strong> ${po.expected_date ? this.fmtDate(po.expected_date) : '-'}</div>
@@ -12227,13 +12239,13 @@ const App = {
                   <td>${i.quantity_ordered}</td>
                   <td><span class="${i.quantity_received>=i.quantity_ordered?'color-success':'color-warning'}">${i.quantity_received||0}</span></td>
                   <td>${i.quantity_damaged>0 ? `<span class="color-danger">${i.quantity_damaged}</span>` : '-'}</td>
-                  <td>${this.fmt(i.unit_cost)}</td>
-                  <td class="fw-600">${this.fmt(i.total)}</td>
+                  <td>${poMoney(i.unit_cost)}</td>
+                  <td class="fw-600">${poMoney(i.total)}</td>
                 </tr>`).join('')}
               </tbody>
             </table>
           </div>
-          <div style="text-align:right;margin-top:10px;font-size:15px;font-weight:700">Total: ${this.fmt(po.total)}</div>
+          <div style="text-align:right;margin-top:10px;font-size:15px;font-weight:700">Total: ${poMoney(po.total)}</div>
 
           <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:14px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
