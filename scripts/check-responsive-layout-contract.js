@@ -23,7 +23,7 @@ check('very small phones receive dedicated 360px rules',shell.includes('@media(m
 check('shell and workspace styles use current cache versions',html.includes('/app-shell.css?v=20261021-responsive')&&html.includes('/ui-workspaces.css?v='+VERSION));
 check('shell workflow loaders use PO responsive cache version',html.includes('/app-shell.js?v='+VERSION)&&html.includes('/workspace-loader-hardening.js?v='+VERSION));
 check('workspace loader uses PO responsive cache version',loader.includes(VERSION));
-check('deferred shell uses current workflow cache version',deferred.includes('20261023-consumables-receiving2')&&html.includes('/shell-deferred.js?v=20261023-consumables-receiving2'));
+check('deferred shell uses current workflow cache version',(()=>{const m=deferred.match(/const VERSION='([^']+)'/);return !!m&&html.includes('/shell-deferred.js?v='+m[1]);})());
 
 for(const c of checks)console.log(`${c.pass?'PASS':'FAIL'} Responsive layout: ${c.name}`);
 if(checks.some(c=>!c.pass))process.exit(1);
