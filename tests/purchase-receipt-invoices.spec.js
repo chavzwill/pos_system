@@ -59,6 +59,8 @@ test('supplier invoice link button is shown in receiving review',async({page})=>
  await page.locator('.shell-nav [data-domain=purchasing]').click();
  const purchasing=page.locator('#shell-root [data-open=purchasing-workspace]').first();
  await expect(purchasing).toBeVisible();await purchasing.click();
+ const composer=page.locator('#tt-purchasing-workspace .tt-purch__composer');
+ if(await composer.count())await composer.locator('[data-compose-close]').first().click();
  const review=page.locator('#tt-purchasing-workspace .tt-rr-launch');
  await expect(review).toBeVisible();await review.click();
  await expect(page.locator('#tt-rr-invoice-links')).toBeVisible();
