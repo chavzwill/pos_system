@@ -9,6 +9,8 @@ const {moveStockStatus}=require('../lib/inventory-stock-status');
 router.use(async(req,res,next)=>{try{await ensurePurchaseReceivingControls();next();}catch(e){res.status(500).json({error:'Receiving-control initialization failed',detail:e.message});}});
 router.use('/fast-receiving',require('./purchase-fast-receiving-assistant'));
 router.use('/review',require('./purchase-receiving-review'));
+router.use('/invoice-receipts',require('./purchase-receipt-invoice-links'));
+
 
 router.get('/products/:productId',requirePermission('purchasing'),async(req,res)=>{
   try{res.json(await getReceivingControl(db,Number(req.params.productId)));}catch(e){res.status(500).json({error:e.message});}
