@@ -103,7 +103,7 @@ const assets={
 'inventory-workspace':['/ui-workspaces.css','/inventory-workspace.js','TotalToolsInventoryWorkspace'],
 'warehouse-operations':['/ui-workspaces.css','/warehouse-operations-workspace.js','TotalToolsWarehouseOperations'],
 'purchasing-workspace':['/ui-workspaces.css','/purchasing-workspace.js','TotalToolsPurchasingWorkspace'],
-'consumables-workspace':['/consumables-workspace.css','/consumables-workspace.js','TotalToolsConsumablesWorkspace'],
+'consumables-workspace':['/ui-workspaces.css','/consumables-workspace.js','TotalToolsConsumablesWorkspace'],
 'suppliers-workspace':['/ui-workspaces.css','/suppliers-workspace.js','TotalToolsSuppliersWorkspace'],
 'rentals-workspace':['/ui-workspaces.css','/rentals-workspace.js','TotalToolsRentalsWorkspace'],
 'repair-operations':['/ui-workspaces.css','/repair-operations.js','TotalToolsRepairOperations'],
