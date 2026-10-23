@@ -79,6 +79,7 @@ router.post('/:id/return',requirePermission('transactions_returns'),async(req,re
       if(!Number.isInteger(qty)||qty<=0)return res.status(400).json({error:'Return quantities must be positive whole numbers'});
       const line=txItems.find(x=>Number(x.id)===Number(item.transaction_item_id));
       if(!line)return res.status(400).json({error:`Item ${item.transaction_item_id} not found in transaction`});
+      if(line.line_type && line.line_type!=='product')return res.status(409).json({error:'Delivery charges and comments cannot be returned as inventory; request a Finance adjustment'});
       const priorLine=returnedMap.get(Number(line.id))||{qty:0,gross:0,tax:0};
       const max=Number(line.quantity||0)-priorLine.qty;
       if(qty-max>0.0001)return res.status(409).json({error:`Invalid quantity for "${line.product_name}". Max returnable: ${max}`});
@@ -103,7 +104,11 @@ router.post('/:id/return',requirePermission('transactions_returns'),async(req,re
     const remainingDiscount=money(Math.max(0,Number(tx.discount_amount||0)-Number(prior.discount_allocated||0)));
     const remainingCashback=money(Math.max(0,Number(tx.cash_back_applied||0)-Number(prior.cashback_allocated||0)));
     const remainingStoreCredit=money(Math.max(0,Number(tx.store_credit_applied||0)-Number(prior.store_credit_restored||0)));
-    const discountAllocated=finalReturn?remainingDiscount:money(remainingDiscount*share);
+    const {rows:discountSnapshots}=await db.execute({sql:'SELECT * FROM retail_line_discount_snapshots WHERE transaction_id=?',args:[transactionId]});
+    const snapshots=new Map(discountSnapshots.map(x=>[Number(x.transaction_item_id),x]));
+    const hasExact=selected.every(s=>snapshots.has(Number(s.line.id)));
+    const exactDiscount=selected.reduce((sum,s)=>{const ev=snapshots.get(Number(s.line.id));if(!ev)return sum;const before=returnedMap.get(Number(s.line.id))?.qty||0;return sum+Math.round(Number(ev.total_discount_cents)*(before+s.qty)/Number(ev.quantity))-Math.round(Number(ev.total_discount_cents)*before/Number(ev.quantity));},0)/100;
+    const discountAllocated=hasExact?money(Math.min(remainingDiscount,exactDiscount)):(finalReturn?remainingDiscount:money(remainingDiscount*share));
     const cashbackAllocated=finalReturn?remainingCashback:money(remainingCashback*share);
     const netMerchandise=money(Math.max(0,gross-discountAllocated-cashbackAllocated));
     const entitlement=money(netMerchandise+tax);
@@ -118,6 +123,7 @@ router.post('/:id/return',requirePermission('transactions_returns'),async(req,re
       const rr=await txn.execute({sql:`INSERT INTO returns(return_number,original_transaction_id,customer_id,employee_id,branch_id,resolution,subtotal,tax_amount,total,notes)
         VALUES(?,?,?,?,?,?,?,?,?,?)`,args:[returnNumber,transactionId,tx.customer_id||null,actor,tx.branch_id||null,resolution,netMerchandise,tax,entitlement,req.body?.notes||null]});
       const returnId=Number(rr.lastInsertRowid);
+      await require('./retail-return-authorization').recordReturnAuthorization(txn, req, returnId);
       await txn.execute({sql:`INSERT INTO retail_return_allocations(return_id,original_transaction_id,gross_merchandise,tax_reversed,order_discount_allocated,cashback_allocated,store_credit_restored,customer_entitlement_total,external_refund_total)
         VALUES(?,?,?,?,?,?,?,?,?)`,args:[returnId,transactionId,gross,tax,discountAllocated,cashbackAllocated,storeCreditRestored,entitlement,resolution==='refund'?externalRefund:0]});
 

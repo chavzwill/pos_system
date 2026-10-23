@@ -18,7 +18,14 @@ async function normalize(req){
     const serverBundlePrice=line._bundle_server_price===true?Number(line.uom_base_unit_price):null;
     if(line._bundle_server_price!==undefined&&line._bundle_server_price!==true)throw new Error('Invalid internal bundle price marker');
     if(line._bundle_server_price===true&&(!Number.isFinite(serverBundlePrice)||serverBundlePrice<0))throw new Error('Server-authoritative bundle allocation price is invalid');
-    const economics=line._bundle_server_price===true?{entered_unit_price:Number((serverBundlePrice*Number(resolved.factor_to_base||1)).toFixed(6)),base_unit_price:serverBundlePrice,pricing_mode:'virtual_bundle_allocation'}:resolveSellEconomics(product.price,resolved);
+    let economics=line._bundle_server_price===true?{entered_unit_price:Number((serverBundlePrice*Number(resolved.factor_to_base||1)).toFixed(6)),base_unit_price:serverBundlePrice,pricing_mode:'virtual_bundle_allocation'}:resolveSellEconomics(product.price,resolved);
+    if(line.variation_id){
+      const {rows:[v]}=await db.execute({sql:'SELECT price,price_modifier FROM product_variations WHERE id=? AND product_id=?',args:[line.variation_id,productId]});
+      if(!v)throw new Error('Variation is unavailable for this product');
+      const price=v.price!=null?Number(v.price):Number(product.price||0)+Number(v.price_modifier||0);
+      if(!Number.isFinite(price)||price<0)throw new Error('Variation selling price is invalid');
+      economics={entered_unit_price:price,base_unit_price:price,pricing_mode:'variation'};
+    }
     evidence.push({productId,enteredQuantity,resolved,baseQuantity,enteredUnitPrice:economics.entered_unit_price,baseUnitPrice:economics.base_unit_price,line});
     line.entered_quantity=enteredQuantity;line.entered_uom=resolved.uom_code;line.uom_factor_to_base=Number(resolved.factor_to_base);line.base_uom=resolved.profile.base_uom;
     line.uom_entered_unit_price=economics.entered_unit_price;line.uom_base_unit_price=economics.base_unit_price;line.uom_pricing_mode=economics.pricing_mode;
@@ -28,7 +35,7 @@ async function normalize(req){
 }
 async function saveEvidence(req,payload,sourceType){
   if(!payload?.id||!req.uomEvidence?.length)return;
-  const savedItems=Array.isArray(payload.items)?payload.items:[];
+  const savedItems=Array.isArray(payload.items)?payload.items.filter(x=>x.product_id):[];
   const tx=await db.transaction('write');let committed=false;
   try{
     for(let i=0;i<req.uomEvidence.length;i++){
@@ -56,6 +63,7 @@ router.post('/hold',requirePermission('pos_hold'),guard('held_transaction'));
 // margin and credit checks see the authoritative discount; sale-time cost capture then
 // freezes the historical inventory-cost evidence used by accounting and profitability.
 router.use(require('./retail-promotion-protection'));
+router.use(require('./retail-ticket-pricing'));
 router.use(require('./retail-margin-protection'));
 router.use(require('./retail-cost-snapshot'));
 router.use(require('./retail-tax-exemption-protection'));

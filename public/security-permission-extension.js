@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const EXPLICIT_ONLY=new Set(['customers_sensitive','settings_integrations']);
+const EXPLICIT_ONLY=new Set(['returns_authorize','customers_sensitive','settings_integrations']);
 function extendPermissionTree(){
   const app=window.App;
   if(!app||!Array.isArray(app._permissionTree))return false;

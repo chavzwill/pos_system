@@ -124,7 +124,9 @@
     "check:consumables": "node scripts/check-consumables-contract.js",
     "check:invoice-receipts": "node scripts/check-invoice-receipt-contract.js",
     "test:invoice-capture": "node --test tests/invoice-capture-runtime.test.cjs",
-    "test:receiving-prices": "playwright test tests/purchase-receipt-pricing.spec.js"
+    "test:receiving-prices": "playwright test tests/purchase-receipt-pricing.spec.js",
+    "check:retail-ticket-runtime": "node --test tests/retail-ticket-pricing.test.cjs",
+    "check:retail-return-authorization-runtime": "node scripts/check-retail-return-authorization-runtime.js"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",

@@ -94,6 +94,8 @@ router.post('/', requirePermission('pos'), async (req,res,next) => {
       authoritativeSubtotal += lineTotal;
       authoritativeTax += lineTax;
     }
+    const extras = require('../lib/retail-ticket').extraTotals(req.retailTicketExtras, body.tax_exempt);
+    authoritativeSubtotal += extras.subtotal; authoritativeTax += extras.tax;
     authoritativeSubtotal = Number(authoritativeSubtotal.toFixed(2));
     authoritativeTax = Number(authoritativeTax.toFixed(2));
     if (discount > authoritativeSubtotal + authoritativeTax) return res.status(400).json({error:'Discount cannot exceed the sale value'});

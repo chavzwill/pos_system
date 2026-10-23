@@ -117,7 +117,7 @@ test.describe('Gate 1 return concurrency invariants', () => {
       session = response.body;
 
       const sale = await api(cashier.cookie, '/api/transactions', {
-        method: 'POST',
+        method: 'POST',headers:{'Idempotency-Key':`return-race-sale-${suffix}`},
         body: JSON.stringify({
           branch_id: branch.id,
           drawer_session_id: session.id,
@@ -139,7 +139,7 @@ test.describe('Gate 1 return concurrency invariants', () => {
       const returnBody = JSON.stringify({
         resolution: 'refund',
         items: [{ transaction_item_id: transactionItemId, quantity: 1 }],
-        notes: 'Gate 1 simultaneous double-return attack',
+        notes: 'Gate 1 simultaneous double-return attack',return_authorizer_id:admin.body.id,return_authorizer_password:ADMIN_PASSWORD,
       });
       const [first, second] = await Promise.all([
         api(cashier.cookie, `/api/transactions/${transactionId}/return`, { method: 'POST', body: returnBody }),

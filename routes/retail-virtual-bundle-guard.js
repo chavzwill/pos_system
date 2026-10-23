@@ -102,7 +102,7 @@ async function expand(req){
       const row=componentRows[i],qty=Number(row.plan.quantity||0);const weight=totalWeight>0?(row.weight>0?row.weight:Number(qty))/totalWeight:1/componentRows.length;
       const lineTotal=i===componentRows.length-1?Number((bundleLineTotal-allocated).toFixed(2)):Number((bundleLineTotal*weight).toFixed(2));allocated=Number((allocated+lineTotal).toFixed(2));
       const unitPrice=qty>0?Number((lineTotal/qty).toFixed(6)):0;const identity=identityFor(original,row.product.id);
-      const generated={product_id:row.product.id,product_name:row.product.name,sku:row.product.sku||'',quantity:qty,unit_price:unitPrice,uom_base_unit_price:unitPrice,tax_rate:Number(parent.tax_rate||0),discount:0,...identity,_bundle_server_price:true,_bundle_group_index:groups.length,_bundle_parent_product_id:productId,_bundle_composition_id:composition.id};
+      const generated={product_id:row.product.id,product_name:row.product.name,sku:row.product.sku||'',quantity:qty,unit_price:unitPrice,uom_base_unit_price:unitPrice,tax_rate:Number(parent.tax_rate||0),discount:0,line_discount_percent:Number(original.line_discount_percent||0),display_order:original.display_order,...identity,_bundle_server_price:true,_bundle_group_index:groups.length,_bundle_parent_product_id:productId,_bundle_composition_id:composition.id};
       group.component_entries.push({expanded_index:expanded.length,component_product_id:row.product.id,component_quantity:qty,allocated_unit_price:unitPrice,allocated_line_total:lineTotal});
       expanded.push(generated);
     }
@@ -113,7 +113,7 @@ async function expand(req){
 
 async function persistBundleEvidence(req,payload){
   const context=req.virtualBundleContext;if(!context?.groups?.length||!payload?.id)return;
-  const {rows:saved}=await db.execute({sql:'SELECT * FROM transaction_items WHERE transaction_id=? ORDER BY id',args:[payload.id]});
+  const {rows:saved}=await db.execute({sql:'SELECT * FROM transaction_items WHERE transaction_id=? AND product_id IS NOT NULL ORDER BY id',args:[payload.id]});
   if(saved.length!==context.expanded_count)throw new Error(`Saved transaction item count ${saved.length} does not match expanded bundle plan ${context.expanded_count}`);
   const tx=await db.transaction('write');let committed=false;
   try{
