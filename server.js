@@ -211,6 +211,7 @@ app.use('/api/erp-intelligence', require('./routes/erp-intelligence'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/branches', require('./routes/branches'));
 app.use('/api/suppliers', require('./routes/suppliers'));
+app.use('/api/consumables', require('./routes/consumables'));
 app.use('/api/purchase-orders', require('./routes/purchase-order-document-context'));
 app.use('/api/purchase-orders', require('./routes/purchase-receive-operation-guard'));
 app.use('/api/purchase-orders', require('./routes/purchase-receipt-traceability'));
