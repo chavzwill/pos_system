@@ -19,7 +19,7 @@ const gates=[
  ['Unit costs, invoice subtotal and delivered amounts are reconciled',router.includes('invoice_line_cents')&&router.includes('receipt_unit_cost_variance')&&router.includes('expected=cash(invoice.subtotal)')],
  ['Never writes inventory, retail prices or supplier payable amount',!router.includes('UPDATE products SET')&&!router.includes('UPDATE branch_inventory')&&!router.includes('UPDATE supplier_invoices SET subtotal')&&!router.includes('INSERT INTO supplier_invoices')],
  ['Permissions and branch boundary protect matching',router.includes("requireAnyPermission('purchasing_receive','reports_financial')")&&router.includes('assertBranch(req,po)')],
- ['UI only uses existing posted supplier invoices',ui.includes('Posted supplier invoice')&&ui.includes('receipt_item_id')&&ui.includes('invoice_unit_cost')],
+ ['UI distinguishes captured documents from posted AP invoices',ui.includes('Captured — not posted')&&ui.includes('Posted to AP')&&ui.includes('captured_invoice_id')&&ui.includes('receipt_item_id')&&ui.includes('invoice_unit_cost')],
  ['Review UI exposes a link action',ui.includes('tt-ir-launch')&&ui.includes('Link supplier invoice')],
  ['Invoice records are explicitly not mistaken for uploaded PDFs',ui.includes('private, durable storage')],
  ['New script loads through the authenticated deferred shell',deferred.includes("'/purchase-invoice-receipt-ui.js'")],

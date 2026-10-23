@@ -159,7 +159,13 @@ router.post('/invoices', requireAnyPermission('purchasing_approve','reports_fina
         VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[supplierId,poId,branchId,String(b.invoice_number).trim(),b.invoice_date,b.due_date||null,subtotal,tax,freight,duty,otherLanded,taxTreatment,total,b.notes||null,actor(req)]});
       const id=Number(r.lastInsertRowid);
       await tx.execute({sql:`INSERT INTO supplier_ledger_events(supplier_id,event_type,entity_type,entity_id,amount,details,actor_employee_id) VALUES(?,?,?,?,?,?,?)`,args:[supplierId,'invoice_posted','supplier_invoice',id,total,`Supplier invoice ${String(b.invoice_number).trim()} posted; merchandise ${subtotal.toFixed(2)}, tax ${tax.toFixed(2)}, landed costs ${(freight+duty+otherLanded).toFixed(2)}`,actor(req)]});
-      await tx.commit(); const {rows:[row]}=await db.execute({sql:'SELECT * FROM supplier_invoices WHERE id=?',args:[id]}); res.status(201).json(row);
+      const evidence=await require('../lib/supplier-invoice-capture').finishPosting(tx,req,id);
+      let match;
+      if(evidence)match=await require('./supplier-invoice-loss-prevention').finalizeCapturedMatch(tx,req,id,evidence);
+      await tx.commit();
+      if(evidence)req.invoiceMatchFinalized=true;
+      const {rows:[row]}=await db.execute({sql:'SELECT * FROM supplier_invoices WHERE id=?',args:[id]});
+      res.status(201).json({...row,...(match?{invoice_match_status:match.matchStatus,invoice_match_variance:match.variance,invoice_identity:'durable',captured_invoice_id:req.invoiceCaptureId}:{})});
     }catch(e){await tx.rollback();throw e;}
   }catch(e){res.status(400).json({error:e.message});}
 });
