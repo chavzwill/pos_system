@@ -215,13 +215,18 @@ router.post('/:id/convert', async (req, res) => {
 
     const { rows: prItems } = await db.execute({ sql: 'SELECT * FROM purchase_request_items WHERE pr_id = ?', args: [pr.id] });
     if (!prItems.length) return res.status(400).json({ error: 'PR has no items' });
+    const approvedCurrency=String(pr.currency||await require('../lib/procurement-fx').getBaseCurrency(db)).toUpperCase();
+    if(req.body.currency&&String(req.body.currency).toUpperCase()!==approvedCurrency)return res.status(409).json({error:'PO conversion must preserve the approved purchase-request currency'});
+    req.body.currency=approvedCurrency;
+    const currencyContext=await require('../lib/purchase-order-currency').resolveCurrency(req,prItems.map(i=>({...i,quantity_ordered:i.quantity})));
+    const convertedItems=currencyContext.items.map(i=>({...i,total:Number((i.quantity*i.unit_cost).toFixed(2))}));
 
     const tx = await db.transaction('write');
     let committed = false;
     try {
       const po_number = await nextNumber(tx, 'purchase_orders', 'po_number', 'PO-', 6);
       let subtotal = 0;
-      prItems.forEach(item => { subtotal += item.total || 0; });
+      convertedItems.forEach(item => { subtotal += item.total || 0; });
       subtotal = parseFloat(subtotal.toFixed(2));
 
       const poResult = await tx.execute({
@@ -230,7 +235,7 @@ router.post('/:id/convert', async (req, res) => {
       });
       const poId = Number(poResult.lastInsertRowid);
 
-      for (const item of prItems) {
+      for (const item of convertedItems) {
         // Internal-use items are added to PO but without a product link (won't update stock on receive)
         const productId = item.item_type === 'internal' ? null : item.product_id;
         await tx.execute({
@@ -239,6 +244,7 @@ router.post('/:id/convert', async (req, res) => {
         });
       }
 
+      await require('../lib/purchase-order-currency').persistCurrency(tx,req,poId,currencyContext);
       await tx.execute({ sql: 'UPDATE purchase_requests SET status = ?, converted_to_po_id = ? WHERE id = ?', args: ['converted', poId, pr.id] });
       await tx.commit();
       committed = true;
@@ -254,7 +260,7 @@ router.post('/:id/convert', async (req, res) => {
       if (!committed) await tx.rollback();
       res.status(committed ? 500 : 400).json({ error: e.message });
     }
-  } catch(e) { res.status(e.code==='PO_APPROVAL_NOTES_INVALID'?400:500).json({ error: e.message }); }
+  } catch(e) { res.status(e.status||(e.code==='PO_APPROVAL_NOTES_INVALID'?400:500)).json({ error: e.message }); }
 });
 
 module.exports = router;

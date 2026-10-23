@@ -3450,3 +3450,9 @@ body:has(#shell-root.shell-app){display:block!important;width:100%!important;max
 body .tt-sales__totals .tt-sales__discount{grid-template-columns:minmax(0,1fr)!important;gap:10px}
 body .tt-sales__discount label,body .tt-sales__discount button{width:100%;min-width:0}
 body .tt-sales__discount select{max-width:none}
+
+/* Procurement currency choices use the existing purchasing form layout. */
+.tt-purch__fx-fields{grid-column:1/-1;display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:12px;padding:16px;border:1px solid var(--tt-border,#dce5df);border-radius:12px;min-width:0}
+.tt-purch__fx-fields legend{padding:0 6px;font-weight:700}.tt-purch__fx-fields label{display:grid;gap:7px;min-width:0}.tt-purch__fx-fields input,.tt-purch__fx-fields select{width:100%;min-width:0;min-height:44px}.tt-purch__fx-fields p{grid-column:1/-1;margin:0;font-size:13px;line-height:1.5;color:var(--tt-text-2,#58665e)}
+.tt-purch__fx-preview{display:grid;gap:7px;padding:16px;margin:12px 0;border:1px solid var(--tt-border,#dce5df);border-radius:12px;overflow-wrap:anywhere}.tt-purch__fx-preview small{color:var(--tt-text-2,#58665e)}
+@media(max-width:600px){.tt-purch__fx-fields{grid-template-columns:minmax(0,1fr)}}
