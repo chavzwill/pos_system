@@ -1,6 +1,7 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
+const {createWithSku}=require('../lib/product-sku');
 const { syncBinQty } = require('../lib/binSync');
 const multer = require('multer');
 const path = require('path');
@@ -577,15 +578,17 @@ router.get('/:id', requireAuth, async (req, res) => {
 // permission required is chosen per-request based on the product's own type
 // (see requireProductPermission above), not any-of-the-three statically.
 router.post('/', (req, res, next) => requireProductPermission(!!req.body.is_rental, !!req.body.is_service)(req, res, next), async (req, res) => {
-  const { sku, barcode, name, description, category_id, brand_id, price, cost, tax_rate, stock_qty, min_stock, active, branch_id, supplier_id, is_service, unit, online_available, web_allotment, is_rental, rental_rate_type, rental_rate, rental_deposit, rental_late_fee_rate, replacement_value, rental_classification, rental_weekly_rate, rental_monthly_rate, rental_hourly_rate, is_accessory, is_layaway_eligible, model_number, size, taxable } = req.body;
-  if (!sku || !name) return res.status(400).json({ error: 'SKU and name are required' });
+  const { sku: suppliedSku, barcode, name, description, category_id, brand_id, price, cost, tax_rate, stock_qty, min_stock, active, branch_id, supplier_id, is_service, unit, online_available, web_allotment, is_rental, rental_rate_type, rental_rate, rental_deposit, rental_late_fee_rate, replacement_value, rental_classification, rental_weekly_rate, rental_monthly_rate, rental_hourly_rate, is_accessory, is_layaway_eligible, model_number, size, taxable } = req.body;
+  let sku=String(suppliedSku??'').trim();
+  const automatic=req.body.auto_generate_sku===true;
+  if ((!sku&&!automatic) || !name) return res.status(400).json({ error: 'SKU and name are required' });
   try {
     const svc = is_service ? 1 : 0;
     const rnt = is_rental ? 1 : 0;
     const acc = is_accessory ? 1 : 0;
     const lay = is_layaway_eligible ? 1 : 0;
     const tax = taxable === undefined ? 1 : (taxable ? 1 : 0);
-    const result = await db.execute({ sql: `INSERT INTO products (sku,barcode,name,description,category_id,brand_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,is_service,unit,online_available,web_allotment,is_rental,rental_rate_type,rental_rate,rental_deposit,rental_late_fee_rate,replacement_value,rental_classification,rental_weekly_rate,rental_monthly_rate,rental_hourly_rate,is_accessory,is_layaway_eligible,model_number,size,taxable) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [sku, barcode||null, name, description||null, category_id||null, brand_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : (stock_qty||0), svc ? 0 : (min_stock||5), active??1, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax] });
+    const result = await createWithSku(db,sku,automatic,async assigned=>{sku=assigned;return db.execute({ sql: `INSERT INTO products (sku,barcode,name,description,category_id,brand_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,is_service,unit,online_available,web_allotment,is_rental,rental_rate_type,rental_rate,rental_deposit,rental_late_fee_rate,replacement_value,rental_classification,rental_weekly_rate,rental_monthly_rate,rental_hourly_rate,is_accessory,is_layaway_eligible,model_number,size,taxable) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [sku, barcode||null, name, description||null, category_id||null, brand_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : (stock_qty||0), svc ? 0 : (min_stock||5), active??1, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax] });});
     const productId = Number(result.lastInsertRowid);
     if (!svc && branch_id && (parseInt(stock_qty) || 0) > 0) {
       await db.execute({ sql: 'INSERT OR IGNORE INTO branch_inventory (product_id, branch_id, stock_qty, min_stock) VALUES (?, ?, ?, ?)', args: [productId, branch_id, parseInt(stock_qty) || 0, parseInt(min_stock) || 5] });
@@ -593,7 +596,7 @@ router.post('/', (req, res, next) => requireProductPermission(!!req.body.is_rent
     const { rows: [prod] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [productId] });
     res.status(201).json(prod);
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    res.status(Number(e.status)||400).json({ error: /UNIQUE constraint failed: products\.sku/.test(e.message)?'This SKU / item number already exists.':e.message });
   }
 });
 

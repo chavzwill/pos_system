@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const VERSION='20261024-receiving2';
+const VERSION='20261024-sku1';
 const loaded=new Set();
 const nativeFetch=window.fetch.bind(window);
 let profileResponsePromise=null,scheduled=false;
