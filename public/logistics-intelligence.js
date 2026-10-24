@@ -54,7 +54,7 @@ render=function(){
    card.classList.toggle('is-overdue',!!overdue);card.classList.toggle('is-expanded',String(job.id)===String(selectedJob));
    card.querySelectorAll('.tt-li-route span').forEach((span,i)=>{span.dataset.routeLabel=i===0?'Pickup':'Drop-off'});
    const timing=document.createElement('p');timing.className='tt-dispatch-deadline';timing.textContent=(overdue?'Overdue · ':'')+deadline(job);card.appendChild(timing);
-   const button=document.createElement('button');button.type='button';button.className='tt-dispatch-open';button.textContent='Job controls';button.setAttribute('aria-expanded',String(card.classList.contains('is-expanded')));
+   const button=document.createElement('button');button.type='button';button.dataset.id=String(job.id);button.className='tt-dispatch-open';button.textContent='Job controls';button.setAttribute('aria-expanded',String(card.classList.contains('is-expanded')));
    button.onclick=()=>{const open=!card.classList.contains('is-expanded');host.querySelectorAll('.tt-li-job.is-expanded').forEach(c=>{c.classList.remove('is-expanded');c.querySelector('.tt-dispatch-open')?.setAttribute('aria-expanded','false')});card.classList.toggle('is-expanded',open);button.setAttribute('aria-expanded',String(open));selectedJob=open?job.id:null;};
    card.appendChild(button);target.appendChild(card);
   }
@@ -68,7 +68,22 @@ render=function(){
  aside.querySelector('button').onclick=()=>{if(window.TotalToolsRoutePlanner?.open)window.TotalToolsRoutePlanner.open();else notice('Open Route Planning from the dispatch workspace.','info')};
  if(!can('dispatch_plan'))aside.querySelector('button').remove();
  host.querySelector('.tt-li-body').appendChild(aside);
- const note=document.createElement('p');note.className='tt-dispatch-history-note';note.textContent='This board shows open work. Completed deliveries leave the active queue; delivery evidence remains on the source record.';list.after(note);
+ const history=document.createElement('section');history.className='tt-dispatch-history';history.innerHTML='<button type="button" class="secondary" data-delivered-toggle aria-expanded="false">Delivered history</button><div data-delivered-content hidden></div>';list.after(history);
+ history.querySelector('[data-delivered-toggle]').onclick=async e=>{const content=history.querySelector('[data-delivered-content]'),button=e.currentTarget;const expanded=button.getAttribute('aria-expanded')==='true';button.setAttribute('aria-expanded',String(!expanded));content.hidden=expanded;if(!expanded&&!content.dataset.loaded)await loadDelivered(content,null,false);};
+ window.dispatchEvent(new Event('tt-dispatch-refreshed'));
 };
-window.TotalToolsLogisticsIntelligence={open,close,refresh,openRecord:(id)=>{selectedJob=id;return open({recordId:id})}};
+async function loadDelivered(content,cursor,append){
+ const toggle=content.parentElement.querySelector('[data-delivered-toggle]');toggle.disabled=true;
+ try{const data=await api('/delivered'+(cursor?'?before='+encodeURIComponent(cursor):''));if(!document.body.contains(content))return;
+  if(!append)content.replaceChildren();content.querySelector('[data-history-more]')?.remove();
+  for(const job of data.jobs){const row=document.createElement('article');row.className='tt-dispatch-delivered';row.innerHTML=`<div><strong>${esc(job.job_number)}</strong><span>${esc(job.origin_label)} → ${esc(job.destination_label)}</span><small>${esc(job.driver_name||'Driver not recorded')} · ${esc(job.vehicle_label||'Vehicle not recorded')}</small></div><div><strong>${job.completed_at?esc(new Date(/^\d{4}-\d{2}-\d{2} \d{2}:/.test(job.completed_at)?job.completed_at.replace(' ','T')+'Z':job.completed_at).toLocaleString()):'Completion time not recorded'}</strong><span>${Number(job.delivery_proof_count)>0?'Delivery evidence recorded':'Delivery evidence not recorded'}</span><button type="button" data-review-delivery>Review delivery evidence</button><div data-delivery-evidence hidden></div></div>`;
+   row.querySelector('[data-review-delivery]').onclick=async e=>{const button=e.currentTarget,details=row.querySelector('[data-delivery-evidence]');button.disabled=true;try{const evidence=await api('/jobs/'+encodeURIComponent(job.id)+'/execution');details.hidden=false;details.innerHTML=(evidence.proofs||[]).filter(p=>p.proof_type==='delivery').map(p=>`<p><strong>${esc(p.recipient_name||p.signature_name||'Recipient not recorded')}</strong><br>${esc(p.evidence_reference||'No reference recorded')}</p>`).join('')||'<p>No delivery evidence recorded.</p>';}catch(error){notice(error.message,'error');}finally{button.disabled=false;}};
+   content.appendChild(row);}
+  if(!data.jobs.length&&!append)content.textContent='No completed deliveries recorded.';
+  if(data.next_cursor){const more=document.createElement('button');more.type='button';more.dataset.historyMore='';more.textContent='Load older deliveries';more.onclick=()=>loadDelivered(content,data.next_cursor,true);content.appendChild(more);}
+  content.dataset.loaded='true';
+ }catch(e){notice(e.message,'error');if(!append)content.textContent='Delivery history could not load. Close and reopen to retry.';}
+ finally{toggle.disabled=false;}
+}
+window.TotalToolsLogisticsIntelligence={open,close,refresh,capabilities:()=>({plan:can('dispatch_plan')||can('dispatch_admin'),execute:can('dispatch_execute')||can('dispatch_plan')||can('dispatch_admin'),admin:can('dispatch_admin')}),openRecord:(id)=>{selectedJob=id;return open({recordId:id})}};
 })();
