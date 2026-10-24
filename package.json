@@ -126,7 +126,8 @@
     "test:invoice-capture": "node --test tests/invoice-capture-runtime.test.cjs",
     "test:receiving-prices": "playwright test tests/purchase-receipt-pricing.spec.js",
     "check:retail-ticket-runtime": "node --test tests/retail-ticket-pricing.test.cjs",
-    "check:retail-return-authorization-runtime": "node scripts/check-retail-return-authorization-runtime.js"
+    "check:retail-return-authorization-runtime": "node scripts/check-retail-return-authorization-runtime.js",
+    "test:purchasing-lifecycle": "node scripts/certify-purchasing-lifecycle.cjs"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
