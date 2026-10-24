@@ -35,6 +35,7 @@ for(const width of [1440,768,390])test('dispatch lanes, controls and search at '
  await page.getByRole('button',{name:'Review delivery evidence',exact:true}).click();await expect(page.locator('[data-delivery-evidence]')).toContainText('Test Recipient');await expect(page.locator('[data-delivery-evidence]')).toContainText('POD-020');
  await page.screenshot({path:test.info().outputPath('dispatch-'+width+'.png'),fullPage:true});
  expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await page.evaluate(()=>window.TotalToolsLogisticsIntelligence.openRecord(3));await expect(page.locator('.tt-li-job.is-expanded')).toHaveAttribute('data-job','3');
 });
 for(const planning of [true,false])test('field controls respect planning authority: '+planning,async({page})=>{
  let assigned=false;

@@ -85,5 +85,7 @@ async function loadDelivered(content,cursor,append){
  }catch(e){notice(e.message,'error');if(!append)content.textContent='Delivery history could not load. Close and reopen to retry.';}
  finally{toggle.disabled=false;}
 }
-window.TotalToolsLogisticsIntelligence={open,close,refresh,capabilities:()=>({plan:can('dispatch_plan')||can('dispatch_admin'),execute:can('dispatch_execute')||can('dispatch_plan')||can('dispatch_admin'),admin:can('dispatch_admin')}),openRecord:(id)=>{selectedJob=id;return open({recordId:id})}};
+const openDispatch=open;
+open=function(opts={}){selectedJob=opts.recordId??null;return openDispatch(opts);};
+window.TotalToolsLogisticsIntelligence={open,close,refresh,capabilities:()=>({plan:can('dispatch_plan')||can('dispatch_admin'),execute:can('dispatch_execute')||can('dispatch_plan')||can('dispatch_admin'),admin:can('dispatch_admin')}),openRecord:(id)=>open({recordId:id})};
 })();
