@@ -3500,3 +3500,43 @@ body .tt-sales__discount select{max-width:none}
 .tt-dispatch-delivered span,.tt-dispatch-delivered small{color:#526459}
 .tt-dispatch-board .tt-li-job.is-expanded [data-field-execution]>div{flex-wrap:wrap}
 @media(max-width:600px){.tt-dispatch-delivered{grid-template-columns:minmax(0,1fr)}.tt-dispatch-board .tt-li-job.is-expanded{top:100px;right:12px;bottom:12px;width:calc(100vw - 24px)}.tt-dispatch-board .tt-li-job.is-expanded [data-field-execution]>div{display:flex!important;flex-direction:column;align-items:stretch}.tt-dispatch-board .tt-li-job.is-expanded select{width:100%;min-width:0}}
+/* PO authoring uses the available workspace, with a persistent action bar. */
+#tt-purchasing-workspace>.tt-po-editor{inset:16px!important;left:16px!important;right:16px!important;width:auto!important;max-width:none!important;display:flex;flex-direction:column;overflow:hidden!important;border-radius:12px!important}
+#tt-purchasing-workspace .tt-po-editor>header{position:static;flex:none;padding:20px 28px;border-bottom:1px solid var(--tt-border);align-items:center}
+#tt-purchasing-workspace .tt-po-editor>header h3{font-size:24px;line-height:1.3;margin:4px 0}
+#tt-purchasing-workspace .tt-po-editor>header>button{width:44px;height:44px;flex:none;align-self:center}
+.tt-po-editor__nav{display:flex;flex:none;gap:6px;padding:10px 28px;border-bottom:1px solid var(--tt-border);background:var(--tt-surface-soft,#f3f6f4);overflow-x:auto}
+.tt-po-editor__nav button{min-height:44px;padding:8px 16px;white-space:nowrap;color:var(--tt-text);background:transparent;border:1px solid transparent;border-radius:6px;font-size:14px}
+.tt-po-editor__nav button:hover,.tt-po-editor__nav button:focus-visible{background:white;border-color:var(--tt-border)}
+#tt-purchasing-workspace .tt-po-editor>#tt-purch-compose-form{flex:1;min-height:0;overflow:auto;display:grid;grid-template-columns:minmax(0,1fr) 300px;gap:24px;align-content:start;align-items:start;padding:24px 28px;scroll-padding-top:20px;background:#f6f8f6}
+#tt-purchasing-workspace .tt-po-editor form>.tt-purch__compose-grid{grid-column:1;grid-row:1;background:white;border:1px solid var(--tt-border);border-radius:8px;padding:20px}
+#tt-purchasing-workspace .tt-po-editor form>.tt-purch__compose-lines{grid-column:1;grid-row:2;background:white;border:1px solid var(--tt-border);border-radius:8px;padding:20px}
+#tt-purchasing-workspace .tt-po-editor form>.tt-purch__approval-fields{grid-column:1;grid-row:3;background:white;margin:0;border-radius:8px;padding:20px}
+#tt-purchasing-workspace .tt-po-editor form>.tt-purch__compose-notes{grid-column:1;grid-row:4;padding:0}
+#tt-purchasing-workspace .tt-po-editor form>#tt-po-document-context{grid-column:1;grid-row:5;margin:0;min-width:0}
+#tt-purchasing-workspace .tt-po-editor form>.tt-purch__copy-notice{grid-column:1/-1}
+#tt-purchasing-workspace .tt-po-editor form>#tt-purch-fx-preview{grid-column:2;grid-row:1/span 5;position:sticky;top:0;margin:0;background:white;border-radius:8px;box-shadow:none;padding:20px}
+#tt-purchasing-workspace .tt-po-editor #tt-purch-fx-preview strong{font-size:20px;font-variant-numeric:tabular-nums;line-height:1.5}
+#tt-purchasing-workspace .tt-po-editor #tt-purch-fx-preview span{font-size:15px;line-height:1.6}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__fx-fields{grid-column:1/-1;border-radius:6px;margin:0}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-line{grid-template-columns:minmax(0,1fr) 80px 130px 58px 44px!important;border:0;border-top:1px solid var(--tt-border);border-radius:0;padding:18px 0;margin:0;gap:12px}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-line:has(.tt-purch-uom){grid-template-columns:minmax(0,1fr) 80px 120px 58px 44px!important}
+#tt-purchasing-workspace .tt-po-editor .tt-purch-uom{grid-column:1/-1}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-lines-head{padding-bottom:14px}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-lines-head span,#tt-purchasing-workspace .tt-po-editor .tt-purch__catalog-hint{font-size:13px;line-height:1.5;font-weight:400}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__catalog-hint{padding:10px 0;border:0;background:transparent}
+#tt-purchasing-workspace .tt-po-editor>.tt-po-editor__footer{flex:none;display:flex;gap:12px;align-items:center;padding:16px 28px;background:white;border-top:1px solid var(--tt-border);margin:0;min-height:78px}
+#tt-purchasing-workspace .tt-po-editor__footer #tt-purch-compose-error{flex:1;margin:0;min-height:0;font-size:14px;color:#a73723}
+#tt-purchasing-workspace .tt-po-editor__footer>button{width:auto;min-height:46px;margin:0}
+@media(max-width:1100px){#tt-purchasing-workspace .tt-po-editor>#tt-purch-compose-form{grid-template-columns:minmax(0,1fr)}#tt-purchasing-workspace .tt-po-editor form>#tt-purch-fx-preview{grid-column:1;grid-row:6;position:static}#tt-purchasing-workspace .tt-po-editor>.tt-po-editor__footer{display:flex}}
+@media(max-width:600px){#tt-purchasing-workspace>.tt-po-editor{inset:0!important;left:0!important;right:0!important;border-radius:0!important}#tt-purchasing-workspace .tt-po-editor>header{padding:14px 16px}#tt-purchasing-workspace .tt-po-editor>header h3{font-size:21px}.tt-po-editor__nav{padding:8px 12px;gap:0}.tt-po-editor__nav button{padding:8px 12px}#tt-purchasing-workspace .tt-po-editor>#tt-purch-compose-form{padding:16px 12px;gap:16px}#tt-purchasing-workspace .tt-po-editor form>.tt-purch__compose-grid,#tt-purchasing-workspace .tt-po-editor form>.tt-purch__compose-lines,#tt-purchasing-workspace .tt-po-editor form>.tt-purch__approval-fields{padding:14px}#tt-purchasing-workspace .tt-po-editor>.tt-po-editor__footer{flex-wrap:wrap;padding:12px 16px calc(12px + env(safe-area-inset-bottom));gap:8px}#tt-purchasing-workspace .tt-po-editor__footer #tt-purch-compose-error:not(:empty){flex-basis:100%}#tt-purchasing-workspace .tt-po-editor__footer>button{flex:1;min-width:0}#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-line{grid-template-columns:minmax(0,1fr) minmax(0,1fr) 48px 44px!important}#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-line>label:first-child{grid-column:1/-1!important}#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-line>label:nth-child(2){grid-column:1!important;grid-row:2!important}#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-line>label:nth-child(3){grid-column:2!important;grid-row:2!important}#tt-purchasing-workspace .tt-po-editor .tt-purch__duplicate-line{grid-column:3!important;grid-row:2!important}#tt-purchasing-workspace .tt-po-editor .tt-purch__remove-line{grid-column:4!important;grid-row:2!important}#tt-purchasing-workspace .tt-po-editor .tt-po-doc-grid,#tt-purchasing-workspace .tt-po-editor .tt-po-address-grid{grid-template-columns:minmax(0,1fr)}}
+.tt-po-editor__total{font-size:15px;font-weight:650;font-variant-numeric:tabular-nums;margin-right:auto}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__approval-fields legend{font-size:15px;font-weight:650;line-height:1.5}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__approval-fields legend span{display:block;font-size:12px;font-weight:400;color:var(--tt-text-2)}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__approval-fields label{display:block;font-size:14px;font-weight:550;margin-top:14px}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__approval-fields label span{display:inline}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__approval-fields input,#tt-purchasing-workspace .tt-po-editor .tt-purch__approval-fields textarea{display:block;margin-top:8px;width:100%;font-weight:400}
+@media(max-width:600px){#tt-purchasing-workspace .tt-po-editor>header p{display:none}.tt-po-editor__total{flex-basis:100%;font-size:14px;padding-bottom:4px}}
+#tt-purchasing-workspace .tt-po-editor .tt-po-doc-card{min-width:0;background:white;padding:20px;border:1px solid var(--tt-border);border-radius:8px}
+#tt-purchasing-workspace .tt-po-editor #tt-po-document-context>.tt-po-doc-head{display:none}
+#tt-purchasing-workspace .tt-po-editor :is(.tt-purch__compose-grid,.tt-po-doc-card) input,#tt-purchasing-workspace .tt-po-editor :is(.tt-purch__compose-grid,.tt-po-doc-card) select{min-width:0;max-width:100%;width:100%}
