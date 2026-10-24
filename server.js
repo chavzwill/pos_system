@@ -129,6 +129,10 @@ app.get('/legacy-pos-app.js', (req,res)=>{ try{res.set('Cache-Control','public, 
 app.get('/', sendFastShell);
 app.get('/index.html', sendFastShell);
 app.get('/legacy', sendEnhancedIndex);
+app.get('/sw.js', (req,res)=>{
+  res.set('Cache-Control','no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(publicDir, 'sw.js'));
+});
 app.use(express.static(publicDir, { index:false, etag:true, maxAge:'1h', setHeaders:(res,filePath)=>{ if (/\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico)$/i.test(filePath)) res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400'); else res.set('Cache-Control','no-cache, must-revalidate'); } }));
 app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.error('POS database initialization failed:',e&&(e.stack||e.message||e));res.status(500).json({error:'Database initialization failed',request_id:req.requestId});}});
 
