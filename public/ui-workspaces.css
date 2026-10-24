@@ -63,7 +63,7 @@
 .tt-ledger .eyebrow{display:block}
 .tt-ledger__toolbar{display:flex;gap:var(--tt-space-3);align-items:end;flex-wrap:wrap}
 .tt-ledger__toolbar label{display:grid;gap:var(--tt-space-3)}
-.tt-ledger__body{overflow:auto;display:grid;gap:var(--tt-space-3)}
+.tt-ledger__body{overflow:auto;display:grid;grid-auto-rows:max-content;gap:var(--tt-space-3)}
 .tt-ledger-kpis{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:var(--tt-space-3)}
 .tt-ledger-kpis article{min-height:82px}
 .tt-ledger-kpis small{display:block}
