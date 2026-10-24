@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const VERSION='20261023-po-currency1';
+const VERSION='20261024-dispatch-board1';
 const loaded=new Set();
 const nativeFetch=window.fetch.bind(window);
 let profileResponsePromise=null,scheduled=false;
