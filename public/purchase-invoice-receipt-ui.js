@@ -45,7 +45,7 @@ function invoiceDetail(){
  const inv=info.invoices.find(x=>String(x.id)===String(selectedInvoice));
  const linked=inv?info.links.filter(x=>String(x.supplier_invoice_id)===String(inv.id)):[];
  const parts=info.receipt_items.filter(x=>Number(x.remaining_qty)>0);
- const receiptRows=parts.map(x=>'<tr><td><strong>'+esc(x.receipt_number)+'</strong><small>'+esc(String(x.received_at||'').slice(0,16))+'</small></td>'
+ const receiptRows=parts.map(x=>'<tr data-delivery="'+esc(x.receipt_id)+'" data-search="'+esc([x.receipt_number,x.product_name,x.sku].join(' ').toLowerCase())+'"><td><strong>'+esc(x.receipt_number)+'</strong><small>'+esc(String(x.received_at||'').slice(0,16))+'</small></td>'
  +'<td>'+esc(x.product_name||x.sku||'Item')+'<small>'+esc(x.sku||'')+'</small></td><td>'+esc(x.remaining_qty)+' of '+esc(x.quantity_received)+'</td>'
  +'<td><input type="number" min="0" step="any" max="'+esc(x.remaining_qty)+'" name="qty" data-item="'+x.receipt_item_id+'" value="0" aria-label="Billed quantity for '+esc(x.sku||x.product_name||'item')+'"></td>'
  +'<td><input type="number" min="0" step="0.01" name="cost" data-item="'+x.receipt_item_id+'" value="'+esc(Number(x.unit_cost).toFixed(2))+'" aria-label="Invoiced unit cost for '+esc(x.sku||x.product_name||'item')+'"></td></tr>').join('');
@@ -56,8 +56,8 @@ function invoiceDetail(){
  return '<div class="tt-ir__summary"><div><span>Purchase order</span><strong>'+esc(info.po.po_number)+'</strong></div><div><span>Receipts recorded</span><strong>'+new Set(info.receipt_items.map(x=>x.receipt_id)).size+'</strong></div><div><span>Invoices to reconcile</span><strong>'+info.invoices.length+'</strong></div></div>'
  +captureForm()+'<label class="tt-ir__choose">Supplier invoice<select id="tt-ir-invoice">'+options(info.invoices,selectedInvoice)+'</select></label>'
  +(inv?'<div class="tt-ir__invoice"><span>Invoice '+esc(inv.invoice_number)+' · current match: <strong>'+esc(inv.match_status)+'</strong></span><div><span>Invoice merchandise</span><strong>'+money(inv.subtotal)+'</strong></div><div><span>Previously linked</span><strong>'+money(Number(inv.allocated_cents)/100)+'</strong></div><div><span>Unmatched amount</span><strong>'+money(Number(inv.unmatched_subtotal_cents)/100)+'</strong></div></div>'
- +'<p class="tt-ir__hint">Enter only the units this invoice bills for. The same invoice can cover multiple receipts. A partial or cost-different match remains under review and is not automatically payment-cleared.</p>'
- +(parts.length?'<form id="tt-ir-match"><div class="tt-ir__tablewrap"><table><thead><tr><th>Goods receipt</th><th>Item</th><th>Unbilled quantity</th><th>Invoiced qty</th><th>Invoice unit cost (JMD)</th></tr></thead><tbody>'+receiptRows+'</tbody></table></div><div class="tt-ir__footer"><span id="tt-ir-preview">No receipt lines selected</span><button type="submit">Link invoice to received goods</button></div></form>':'<p class="tt-ir__empty">No unbilled receipt quantities remain. Confirm existing allocations or contact finance if corrections are needed.</p>')
+ +'<p class="tt-ir__boundary">'+esc(inv.capture_id?'Captured invoice · no payable posted':'Posted invoice · already in Accounts Payable')+'</p><p class="tt-ir__hint">Enter only the units this invoice bills for. The same invoice can cover multiple receipts. A partial or cost-different match remains under review and is not automatically payment-cleared.</p>'
+ +(parts.length?'<form id="tt-ir-match"><div class="tt-ir__filters"><label>Delivery<select id="tt-ir-delivery"><option value="">All deliveries</option>'+[...new Map(parts.map(x=>[String(x.receipt_id),x.receipt_number])).entries()].map(([id,name])=>'<option value="'+esc(id)+'">'+esc(name)+'</option>').join('')+'</select></label><label>Find received item<input id="tt-ir-find" type="search" placeholder="Item, SKU or receipt number"></label></div><p id="tt-ir-filter-count" class="tt-ir__hint" role="status"></p><div class="tt-ir__tablewrap"><table><thead><tr><th>Goods receipt</th><th>Item</th><th>Unbilled quantity</th><th>Invoiced qty</th><th>Invoice unit cost (JMD)</th></tr></thead><tbody>'+receiptRows+'</tbody></table></div><div class="tt-ir__footer"><span id="tt-ir-preview">No receipt lines selected</span><button type="submit">Link invoice to received goods</button></div></form>':'<p class="tt-ir__empty">No unbilled receipt quantities remain. Confirm existing allocations or contact finance if corrections are needed.</p>')
  +(linkedRows?'<h3>Already linked evidence</h3><div class="tt-ir__linkedlist">'+linkedRows+'</div>':'')
  +postingActions(inv)+'<p class="tt-ir__hint">If quantities or costs do not match, the discrepancy must be reviewed in Accounts Payable before payment. These links never change retail stock or selling prices.</p>'
  :'<p class="tt-ir__empty">'+(info.invoices.length?'Choose an invoice to link to delivered items.':'No supplier invoices found for this PO. Capture the invoice above, then match its delivery lines. Finance posting is a separate action.')+'</p>')
@@ -76,7 +76,9 @@ function updatePreview(){
  const inv=info.invoices.find(x=>String(x.id)===String(selectedInvoice));
  const current=Number(inv?.allocated_cents||0);
  const label=selected.length?selected.length+' receipt lines · '+money(sum/100)+' now · '+money((sum+current)/100)+' total matched':'No receipt lines selected';
- overlay.querySelector('#tt-ir-preview').textContent=label;
+ const remaining=Number(inv?.unmatched_subtotal_cents||0)-sum;
+ const preview=overlay.querySelector('#tt-ir-preview');preview.textContent=label+(selected.length?' · '+(remaining<0?'Exceeds unmatched merchandise by '+money(-remaining/100):'Remaining merchandise '+money(remaining/100)):'');preview.classList.toggle('is-variance',remaining<0);
+ form.querySelector('button[type=submit]').disabled=!selected.length;
 }
 function render(){
  if(!overlay)return;
@@ -85,6 +87,8 @@ function render(){
  overlay.querySelector('#tt-ir-invoice')?.addEventListener('change',e=>{selectedInvoice=e.target.value;retry=null;render()});
  const form=overlay.querySelector('#tt-ir-match');
  if(form){
+  const filter=()=>{const receipt=form.querySelector('#tt-ir-delivery').value,q=form.querySelector('#tt-ir-find').value.trim().toLowerCase();let count=0;form.querySelectorAll('tr[data-delivery]').forEach(row=>{row.hidden=!!((receipt&&row.dataset.delivery!==receipt)||(q&&!row.dataset.search.includes(q)));if(!row.hidden)count++;});form.querySelector('#tt-ir-filter-count').textContent=count+' received lines shown. Selections in other deliveries are retained.';};
+  form.querySelector('#tt-ir-delivery').addEventListener('change',filter);form.querySelector('#tt-ir-find').addEventListener('input',filter);filter();
   form.addEventListener('input',()=>{retry=null;updatePreview()});
   form.addEventListener('submit',async e=>{
    e.preventDefault();
