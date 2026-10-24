@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const VERSION='20261023-po-currency1';
+const VERSION='20261024-dispatch-board1';
 const assets={
 'receiving-workspace':['/ui-workspaces.css','/purchase-fast-receiving.js','TotalToolsFastReceiving'],
 'sales-workspace':['/ui-workspaces.css','/sales-workspace.js','TotalToolsSalesWorkspace'],

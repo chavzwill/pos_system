@@ -23,5 +23,52 @@ async function refresh(){const b=shell().querySelector('#tt-li-refresh');if(b){b
 async function fromTransfer(id){try{await api('/from-transfer/'+id,{method:'POST',body:'{}'});await refresh();notice('Dispatch job created from transfer.','success')}catch(e){notice(e.message,'error')}}
 function bindClose(){shell().querySelectorAll('[data-close]').forEach(x=>x.addEventListener('click',close));}
 function bind(){bindShortcuts();shell().querySelector('#tt-li-refresh')?.addEventListener('click',refresh);const input=shell().querySelector('#tt-li-search');let timer;input?.addEventListener('input',()=>{clearTimeout(timer);state.query=input.value;timer=setTimeout(()=>{render();focusSearch()},120)});shell().querySelectorAll('[data-transfer]').forEach(x=>x.addEventListener('click',()=>fromTransfer(x.dataset.transfer)));}
-window.TotalToolsLogisticsIntelligence={open,close,refresh,openRecord:(id)=>open({recordId:id})};
+// Keep the established queue bindings and field-execution integrations.
+// Lanes are views of authoritative job state; moving a card never posts a status.
+const renderQueue=render;
+let selectedJob=null;
+function laneFor(j){
+ if(j.execution_stage==='failed'||j.status==='delayed')return 'exceptions';
+ if(j.status==='completed'||j.execution_stage==='completed')return 'delivered';
+ if(j.status==='in_transit'||['in_transit','at_destination'].includes(j.execution_stage))return 'transit';
+ if(j.assignee_employee_id||j.driver_employee_id)return 'assigned';
+ if(j.scheduled_for||j.status==='scheduled'||j.status==='ready')return 'scheduled';
+ return 'unassigned';
+}
+function deadline(j){const value=j.promised_at||j.scheduled_for;if(!value)return 'No time set';const date=new Date(value);if(!Number.isFinite(date.getTime()))return 'Check delivery time';return `${j.promised_at?'Due':'Scheduled'} ${date.toLocaleString(undefined,{month:'short',day:'numeric',hour:'2-digit',minute:'2-digit'})}`;}
+render=function(){
+ renderQueue();
+ const host=root(),list=host.querySelector('.tt-li-list');if(!list)return;
+ host.classList.add('tt-dispatch-board');
+ const jobs=filteredJobs(),lanes=[['unassigned','Unassigned'],['scheduled','Scheduled'],['assigned','Assigned'],['transit','In transit'],['exceptions','Exceptions']];
+ const cards=[...list.children];
+ list.classList.add('tt-dispatch-lanes');list.setAttribute('aria-label','Dispatch jobs by stage');
+ list.replaceChildren();
+ for(const [key,title]of lanes){
+  const column=document.createElement('section');column.className='tt-dispatch-lane';column.dataset.lane=key;
+  const matching=jobs.filter(j=>laneFor(j)===key);
+  column.innerHTML=`<header><h4>${title}</h4><span>${matching.length}</span></header><div class="tt-dispatch-lane__jobs"></div>`;
+  const target=column.lastElementChild;
+  for(const job of matching){const card=cards.find(c=>c.dataset.job===String(job.id));if(!card)continue;
+   const overdue=job.promised_at&&new Date(job.promised_at).getTime()<Date.now();
+   card.classList.toggle('is-overdue',!!overdue);card.classList.toggle('is-expanded',String(job.id)===String(selectedJob));
+   card.querySelectorAll('.tt-li-route span').forEach((span,i)=>{span.dataset.routeLabel=i===0?'Pickup':'Drop-off'});
+   const timing=document.createElement('p');timing.className='tt-dispatch-deadline';timing.textContent=(overdue?'Overdue · ':'')+deadline(job);card.appendChild(timing);
+   const button=document.createElement('button');button.type='button';button.className='tt-dispatch-open';button.textContent='Job controls';button.setAttribute('aria-expanded',String(card.classList.contains('is-expanded')));
+   button.onclick=()=>{const open=!card.classList.contains('is-expanded');host.querySelectorAll('.tt-li-job.is-expanded').forEach(c=>{c.classList.remove('is-expanded');c.querySelector('.tt-dispatch-open')?.setAttribute('aria-expanded','false')});card.classList.toggle('is-expanded',open);button.setAttribute('aria-expanded',String(open));selectedJob=open?job.id:null;};
+   card.appendChild(button);target.appendChild(card);
+  }
+  if(!matching.length)target.innerHTML='<p class="tt-dispatch-clear">No jobs in this lane</p>';
+  list.appendChild(column);
+ }
+ host.onkeydown=e=>{if(e.key==='Escape'&&selectedJob!=null){const card=host.querySelector('.tt-li-job.is-expanded');card?.classList.remove('is-expanded');const button=card?.querySelector('.tt-dispatch-open');button?.setAttribute('aria-expanded','false');button?.focus();selectedJob=null;e.preventDefault();}};
+ const workload=new Map();for(const j of state.data?.jobs||[]){const id=j.driver_employee_id||j.assignee_employee_id;if(!id)continue;const entry=workload.get(String(id))||{name:j.assignee_name||'Assigned driver',count:0};entry.count++;workload.set(String(id),entry);}
+ const aside=document.createElement('section');aside.className='tt-dispatch-team';aside.setAttribute('aria-label','Assigned driver workload');
+ aside.innerHTML=`<h3>Driver workload</h3><p>Open jobs by recorded assignment. Shift availability is checked during planning.</p>${[...workload.values()].map(d=>`<div><strong>${esc(d.name)}</strong><span>${d.count} open job${d.count===1?'':'s'}</span></div>`).join('')||'<p>No drivers assigned to open jobs.</p>'}<button type="button" class="secondary" data-dispatch-plan>Routes &amp; driver planning</button>`;
+ aside.querySelector('button').onclick=()=>{if(window.TotalToolsRoutePlanner?.open)window.TotalToolsRoutePlanner.open();else notice('Open Route Planning from the dispatch workspace.','info')};
+ if(!can('dispatch_plan'))aside.querySelector('button').remove();
+ host.querySelector('.tt-li-body').appendChild(aside);
+ const note=document.createElement('p');note.className='tt-dispatch-history-note';note.textContent='This board shows open work. Completed deliveries leave the active queue; delivery evidence remains on the source record.';list.after(note);
+};
+window.TotalToolsLogisticsIntelligence={open,close,refresh,openRecord:(id)=>{selectedJob=id;return open({recordId:id})}};
 })();

@@ -8,7 +8,7 @@ const html=read('public/app-shell.html');
 const app=read('public/app-shell.js');
 const loader=read('public/workspace-loader-hardening.js');
 const deferred=read('public/shell-deferred.js');
-const VERSION='20261023-po-currency1';
+const VERSION='20261024-dispatch-board1';
 const checks=[];
 const check=(name,pass)=>checks.push({name,pass:!!pass});
 
