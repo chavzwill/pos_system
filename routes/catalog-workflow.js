@@ -1,6 +1,7 @@
 const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
+const {createWithSku}=require('../lib/product-sku');
 const {can}=require('../lib/permissions');
 
 const CONTEXT_PERMISSIONS={
@@ -52,11 +53,11 @@ router.post('/items',guard,async(req,res)=>{
   try{
     const b=req.body||{};const name=String(b.name||'').trim();let sku=String(b.sku||'').trim();const barcode=String(b.barcode||'').trim()||null;
     if(!name)return res.status(400).json({error:'Item name is required'});
-    if(!sku)sku=`NEW-${Date.now().toString(36).toUpperCase()}`;
+    const automatic=b.auto_generate_sku===true||(!sku&&b.auto_generate_sku===undefined);
     const price=Math.max(0,num(b.price));const cost=Math.max(0,num(b.cost));const tax=Math.max(0,num(b.tax_rate,8.5));const minStock=Math.max(0,Math.floor(num(b.min_stock,0)));const opening=Math.max(0,Math.floor(num(b.opening_qty,0)));const branchId=b.branch_id||null;
     const tx=await db.transaction('write');let committed=false;
     try{
-      const r=await tx.execute({sql:`INSERT INTO products(sku,barcode,name,description,category_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,unit) VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?)`,args:[sku,barcode,name,b.description||null,b.category_id||null,price,cost,tax,opening,minStock,b.supplier_id||null,b.unit||'each']});
+      const r=await createWithSku(tx,sku,automatic,async assigned=>{sku=assigned;return tx.execute({sql:`INSERT INTO products(sku,barcode,name,description,category_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,unit) VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?)`,args:[sku,barcode,name,b.description||null,b.category_id||null,price,cost,tax,opening,minStock,b.supplier_id||null,b.unit||'each']});});
       const productId=Number(r.lastInsertRowid);
       if(branchId){await tx.execute({sql:`INSERT INTO branch_inventory(product_id,branch_id,stock_qty,min_stock,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(product_id,branch_id) DO UPDATE SET stock_qty=excluded.stock_qty,min_stock=excluded.min_stock,updated_at=CURRENT_TIMESTAMP`,args:[productId,branchId,opening,minStock]});}
       if(opening>0)await tx.execute({sql:`INSERT INTO stock_movements(product_id,branch_id,quantity_change,type,reference,reason) VALUES(?,?,?,'opening_balance',?,?)`,args:[productId,branchId,opening,`CAT-${productId}`,`Opening quantity created through ${req.catalogContext} catalog workflow`]});
@@ -64,7 +65,7 @@ router.post('/items',guard,async(req,res)=>{
       await tx.commit();committed=true;
       const {rows:[product]}=await db.execute({sql:'SELECT * FROM products WHERE id=?',args:[productId]});res.status(201).json(product);
     }catch(e){if(!committed)await tx.rollback();if(String(e.message).includes('UNIQUE'))return res.status(409).json({error:'SKU or barcode already exists'});throw e;}
-  }catch(e){res.status(500).json({error:e.message});}
+  }catch(e){res.status(Number(e.status)||500).json({error:e.message});}
 });
 
 router.post('/purchase-orders/:poId/items',guard,async(req,res)=>{

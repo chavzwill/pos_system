@@ -297,8 +297,8 @@
 .catalog-admin-health-top{display:flex;gap:var(--tt-space-3);align-items:center;flex-wrap:wrap}
 .catalog-admin-health-top span{min-height:44px;display:inline-flex;align-items:center}
 .catalog-admin-health-card .catalog-admin-actions{justify-content:flex-start}
-.catalog-admin-modal{position:fixed;inset:0;z-index:10030;display:grid}
-.catalog-admin-card{width:min(860px,100%);max-height:calc(100dvh - 36px);overflow:auto}
+.catalog-admin-modal{position:fixed;inset:0;z-index:10030;display:grid;place-items:center;padding:18px;background:rgb(16 35 24 / .42)}
+.catalog-admin-card{width:min(860px,100%);max-height:calc(100dvh - 36px);overflow:auto;padding:24px;background:var(--tt-surface);border:1px solid var(--tt-border);border-radius:var(--tt-radius-md)}
 .catalog-admin-form{display:grid;grid-template-columns:repeat(2,minmax(0,1fr));gap:var(--tt-space-3)}
 .catalog-admin-form label{display:grid;gap:var(--tt-space-3)}
 .catalog-admin-form .full{grid-column:1/-1}
