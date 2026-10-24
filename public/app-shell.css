@@ -143,3 +143,24 @@ body{overflow-x:hidden}
  .shell-header-actions{margin-left:0}
  .shell-kpis{grid-template-columns:1fr}
 }
+
+/* Installable app controls and connection state. */
+:root{--tt-connection-height:44px}
+#tt-app-connection{min-height:44px;padding:10px 20px;padding-top:max(10px,env(safe-area-inset-top));background:var(--tt-yellow-soft,#FFF4CE);color:var(--tt-text,#17251D);font:600 14px/24px var(--tt-font,system-ui);text-align:center}
+#tt-app-connection[hidden],#tt-app-dialog [hidden]{display:none}
+body.tt-app-offline .shell-app{height:calc(100dvh - var(--tt-connection-height,44px))}
+#tt-app-dialog{width:min(480px,calc(100vw - 32px));max-height:calc(100dvh - 32px);padding:28px;border:1px solid var(--tt-border,#D8E0DB);border-radius:12px;color:var(--tt-text,#17251D);background:var(--tt-surface,#FFF);font:15px/1.6 var(--tt-font,system-ui);overflow:auto}
+#tt-app-dialog::backdrop{background:rgb(12 29 19 / .4)}
+#tt-app-dialog header{display:flex;align-items:center;justify-content:space-between;gap:16px}
+#tt-app-dialog header button{min-width:44px;font-size:25px;border:0;background:transparent}
+#tt-app-dialog h2{font-size:24px;line-height:1.25;margin:24px 0 8px}
+#tt-app-dialog p{color:var(--tt-text-2,#4B5F53);margin:12px 0}
+#tt-app-dialog ul{padding-left:20px}#tt-app-dialog li+li{margin-top:12px}
+#tt-app-dialog button{min-height:44px;padding:8px 14px;border:1px solid var(--tt-border,#D8E0DB);border-radius:8px;background:var(--tt-surface,#FFF);color:inherit;font:600 14px var(--tt-font,system-ui);cursor:pointer}
+#tt-app-dialog [data-install]{width:100%;background:var(--tt-green,#0B7A3E);border-color:var(--tt-green,#0B7A3E);color:#FFF}
+#tt-app-dialog button:focus-visible{outline:3px solid var(--tt-green,#0B7A3E);outline-offset:3px}
+#tt-app-dialog button:disabled{opacity:.6;cursor:wait}
+#tt-app-dialog .tt-app-update{margin-top:24px;padding-top:12px;border-top:1px solid var(--tt-border,#D8E0DB)}
+#tt-app-dialog .tt-app-note{font-size:13px;margin-bottom:0}
+@media(display-mode:standalone){.shell-global-header{padding-top:env(safe-area-inset-top)}.shell-sidebar{padding-bottom:max(16px,env(safe-area-inset-bottom))}.shell-main{padding-bottom:env(safe-area-inset-bottom)}}
+@media(max-width:600px){#tt-app-connection{text-align:left;font-size:13px;padding-inline:16px}#tt-app-dialog{padding:20px}}
