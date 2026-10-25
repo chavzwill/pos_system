@@ -170,6 +170,7 @@ app.use('/api/department-approvals', require('./routes/department-approval-admin
 app.use('/api/workspace-profile', require('./routes/workspace-profile'));
 app.use('/api/purchasing-drafts', require('./routes/purchasing-drafts'));
 app.use('/api/purchasing-exceptions', require('./routes/purchasing-exceptions'));
+app.use('/api/purchasing-control', require('./routes/purchasing-control'));
 app.use('/api/supplier-returns', require('./routes/supplier-return-replacements'));
 app.use('/api/supplier-returns', require('./routes/supplier-returns'));
 app.use('/api/employee-workspace-intelligence', require('./routes/employee-workspace-intelligence'));
