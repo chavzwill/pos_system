@@ -1,4 +1,5 @@
 const {test,expect}=require('@playwright/test');
+const fs=require('node:fs');
 const BASE=process.env.POS_CERT_BASE_URL;
 test('partial deliveries and captured invoices reconcile independently through AP and payment',async()=>{
  test.skip(!process.env.POS_ISOLATED_CERTIFICATION,'Use the isolated purchasing certification runner');
@@ -15,13 +16,22 @@ test('partial deliveries and captured invoices reconcile independently through A
  const receiver=await login('receiver'),receiveApi=(m,p,b,k)=>call(receiver,m,p,b,k);
  const po=must(await api('POST','/api/purchase-orders',{supplier_id:supplier.id,branch_id:branch.id,ship_to_branch_id:branch.id,ship_to_name:branch.name,ship_to_address:'1 Test Road',ship_to_city:'Kingston',ship_to_state:'Kingston',approval_purpose:'Isolated purchasing certification',requested_for:'Test branch',items:[{product_id:product.id,quantity_ordered:5,unit_cost:10}]}));
  const order='/api/purchase-orders/'+po.id,line=po.items[0].id,receipts=[];
+ const profile=must(await api('GET','/api/workspace-profile/me'),200),owner=profile.employee.id+':'+profile.employee.default_branch_id;
+ const draft=async(method,key,value,revision)=>{const r=await fetch(BASE+'/api/purchasing-drafts'+(key?'/'+key:''),{method,headers:{Cookie:admin,'Content-Type':'application/json','X-TT-Draft-Owner':owner},body:method==='GET'?undefined:JSON.stringify({value,revision})});return{status:r.status,body:await r.json()}};
+ const checkpoint=async(key,value)=>{const loaded=must(await draft('GET'),200).drafts.find(x=>x.key===key);return must(await draft('PUT',key,value,loaded?.revision||0),200).revision;};
+ const recover=async key=>must(await draft('GET'),200).drafts.find(x=>x.key===key);
+ const clearDraft=async(key,revision)=>must(await draft('DELETE',key,null,revision),200);
+ const recoveredOperations=[];
  expect((await receiveApi('PATCH',order+'/status',{status:'approved'})).status).toBe(403);
  expect((await api('PATCH',order+'/receive',{items:[{item_id:line,quantity_received:1}]},'unapproved-receive')).status).toBe(400);
  must(await api('PATCH',order+'/status',{status:'approved'}),200);
  for(const [index,qty] of [2,3].entries()){
   const body={items:[{item_id:line,quantity_received:qty,receipt_unit_cost:'12',pricing_reason:'Verified supplier delivery cost'}]},key='lifecycle-delivery-'+index;
+  const draftKey='receiving-'+po.id,rev=await checkpoint(draftKey,{uncertain:true,operation:{key,payload:JSON.stringify(body)}});
   const receipt=must(await api('PATCH',order+'/receive',body,key),200);receipts.push(receipt.receipt_id);
+  const saved=await recover(draftKey);expect(saved.value.uncertain).toBe(true);const replayed=must(await api('PATCH',order+'/receive',JSON.parse(saved.value.operation.payload),saved.value.operation.key),200);expect(replayed.receipt_id).toBe(receipt.receipt_id);await clearDraft(draftKey,rev);recoveredOperations.push('receipt-'+index);
   expect(receipt.status).toBe(index?'received':'partial');
+  const exceptions=must(await api('GET','/api/purchasing-exceptions?q='+encodeURIComponent(po.po_number)),200);expect(exceptions.rows.find(x=>Number(x.po_id)===po.id).unbilled_lines).toBe(index?2:1);
   expect(must(await api('PATCH',order+'/receive',body,key),200).receipt_id).toBe(receipt.receipt_id);
  }
  const stock=async()=>Number(must(await api('GET','/api/products/'+product.id+'?branch_id='+branch.id),200).branch_stock_qty);
@@ -32,10 +42,14 @@ test('partial deliveries and captured invoices reconcile independently through A
  const details=must(await api('GET',evidence),200);expect(details.receipt_items).toHaveLength(2);details.receipt_items.sort((a,b)=>Number(a.receipt_item_id)-Number(b.receipt_item_id));
  const invoices=[];
  for(const [index,subtotal] of [24,36].entries()){
-  const captured=must(await receiveApi('POST','/api/supplier-ledger/captured-invoices',{purchase_order_id:po.id,invoice_number:'ISOLATED-'+index,invoice_date:date,subtotal,total:subtotal},'lifecycle-capture-'+index));
+  const captureBody={purchase_order_id:po.id,invoice_number:'ISOLATED-'+index,invoice_date:date,subtotal,total:subtotal},captureKey='lifecycle-capture-'+index,draftKey='invoice-'+po.id;
+  let rev=await checkpoint(draftKey,{unknown:true,pendingKind:'capture',capturePayload:captureBody,captureRetry:captureKey});
+  const captured=must(await receiveApi('POST','/api/supplier-ledger/captured-invoices',captureBody,captureKey));
+  let recovered=(await recover(draftKey)).value;const captureReplay=must(await receiveApi('POST','/api/supplier-ledger/captured-invoices',recovered.capturePayload,recovered.captureRetry),200);expect(captureReplay.id).toBe(captured.id);expect(await stock()).toBe(5);await clearDraft(draftKey,rev);recoveredOperations.push('capture-'+index);
   expect(must(await api('GET','/api/supplier-ledger/invoices?status=all&supplier_id='+supplier.id),200)).toHaveLength(index);
   const quantities=index?[1,2]:[1,1],lines=details.receipt_items.map((x,i)=>({receipt_item_id:x.receipt_item_id,quantity_invoiced:String(quantities[i]),invoice_unit_cost:'12.00'}));
-  must(await receiveApi('POST','/api/supplier-ledger/captured-invoices/'+captured.id+'/allocate',{lines},'lifecycle-allocation-'+index));
+  const allocationEndpoint='/api/supplier-ledger/captured-invoices/'+captured.id+'/allocate',allocationKey='lifecycle-allocation-'+index;rev=await checkpoint(draftKey,{unknown:true,pendingKind:'allocate',allocationOperation:{endpoint:allocationEndpoint,key:allocationKey,body:JSON.stringify({lines})}});
+  must(await receiveApi('POST',allocationEndpoint,{lines},allocationKey));recovered=(await recover(draftKey)).value.allocationOperation;must(await receiveApi('POST',recovered.endpoint,JSON.parse(recovered.body),recovered.key),200);await clearDraft(draftKey,rev);recoveredOperations.push('allocation-'+index);
   expect((await receiveApi('POST','/api/supplier-ledger/invoices',{captured_invoice_id:captured.id})).status).toBe(403);
   if(index)expect((await api('POST','/api/supplier-ledger/invoices',{captured_invoice_id:captured.id})).status).toBe(400);
   const posted=must(await api('POST','/api/supplier-ledger/invoices',{captured_invoice_id:captured.id,...(index?{match_override_reason:'Verified receipt costs increased from PO cost to twelve per unit'}:{})}));invoices.push(posted.id);
@@ -59,4 +73,8 @@ test('partial deliveries and captured invoices reconcile independently through A
  const paymentJournal=must(await api('GET','/api/accounting-ledger/journals/'+paymentJournals[0].id),200);expect(Number(paymentJournal.totals.difference)).toBe(0);
  expect(Number(paymentJournal.lines.find(x=>x.account_code==='2000').debit)).toBe(60);expect(Number(paymentJournal.lines.find(x=>x.account_code==='1010').credit)).toBe(60);
  expect(ap+Number(paymentJournal.lines.find(x=>x.account_code==='2000').debit)).toBe(0);expect(await stock()).toBe(5);
+ expect((await draft('GET')).body.drafts.every(x=>x.value===null)).toBe(true);
+ const clearedQueue=must(await api('GET','/api/purchasing-exceptions?q='+encodeURIComponent(po.po_number)),200);expect(clearedQueue.rows).toHaveLength(0);
+ const report={scenario:'partial deliveries, cost adjustment, many-to-many invoice matching and saved-operation recovery',production_data_used:false,po_id:po.id,receipt_ids:receipts,invoice_ids:invoices,payment_id:paid.id,recovered_operations:recoveredOperations,final_stock:await stock(),inventory_value:inventory,receiving_clearing_net:clearing,invoice_ap_credit:-ap,payment_ap_debit:Number(paymentJournal.lines.find(x=>x.account_code==='2000').debit),final_ap_net:0,retail_price:Number(productAfter.price),original_po_unit_cost:10,receipt_unit_cost:12,all_tested_journals_balanced:true,exceptions_queue_clear:true};
+ if(process.env.POS_CERT_EVIDENCE_DIR)fs.writeFileSync(require('node:path').join(process.env.POS_CERT_EVIDENCE_DIR,'purchasing-acceptance.json'),JSON.stringify(report,null,2)+'\n');
 });

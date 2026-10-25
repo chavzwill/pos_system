@@ -65,3 +65,25 @@ inspection, consumables, cancellation, refund, branch combination or failure
 interleaving. It does not simulate production Turso latency or transactions.
 Browser navigation recovery, physical-device installation, scanners and receipt
 printers remain separate checks. No new deployment is needed for these tests.
+
+## Acceptance extension: durable recovery and exceptions queue
+
+Reverified from master `fe0740e78bbbe952b1b09b7a06a7dc71d6311bf6` with the
+acceptance/queue changes in this branch. The normal staff draft API now stores
+six pending operations (two receipts, two captures and two allocations). The
+certificate reloads each stored original key/body, replays its business request,
+and verifies the same result without an extra stock receipt or payable.
+
+The queue is queried through the actual Express app: both deliveries appear as
+unbilled receipt evidence before matching, and the completed PO has no remaining
+exceptions after matching/posting. Final evidence: stock 5, inventory value 60,
+receiving clearing net 0, invoice AP credit 60, payment AP debit 60, net AP 0;
+retail remains 30 while receipt unit cost is 12 and original PO unit cost is 10.
+Every tested journal balances. All draft payloads are cleared after confirmation.
+
+The runner writes `purchasing-acceptance.json` into its printed temporary evidence
+directory. The retained result is
+[evidence/purchasing-acceptance-2026-10-24.json](evidence/purchasing-acceptance-2026-10-24.json).
+API replay is connected to an actual isolated database; browser recovery/failure
+interleavings remain separately covered by browser fixtures. This does not
+simulate a real production network failure or certify production Turso latency.
