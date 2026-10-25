@@ -168,6 +168,7 @@ app.use('/api', sameOriginMutationGuard);
 app.use('/api', require('./routes/multi-branch-integrity-guard'));
 app.use('/api/department-approvals', require('./routes/department-approval-admin'));
 app.use('/api/workspace-profile', require('./routes/workspace-profile'));
+app.use('/api/purchasing-drafts', require('./routes/purchasing-drafts'));
 app.use('/api/employee-workspace-intelligence', require('./routes/employee-workspace-intelligence'));
 app.use('/api/employee-assist', require('./routes/employee-assist'));
 app.use('/api/predictive-lookup', require('./routes/predictive-lookup'));
