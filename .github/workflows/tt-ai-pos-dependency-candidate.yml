@@ -17,6 +17,9 @@ jobs:
     steps:
       - uses: actions/checkout@v4
         with:
+          # Remediation must use this PR's exact branch tree, not GitHub's
+          # synthetic merge commit containing unrelated target-branch changes.
+          ref: ${{ github.event.pull_request.head.sha || github.sha }}
           persist-credentials: false
       - uses: actions/setup-node@v4
         with:
