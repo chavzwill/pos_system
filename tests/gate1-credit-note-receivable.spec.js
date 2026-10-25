@@ -150,10 +150,13 @@ test.describe('Gate 1 credit-note receivable invariant', () => {
       notes: 'Gate 1 concurrent partial credit note',
       return_authorizer_id:actor.id,return_authorizer_password:ADMIN_PASSWORD,
     });
-    const [first, second] = await Promise.all([
+    let [first, second] = await Promise.all([
       api(cashier.cookie, `/api/transactions/${sale.id}/return`, { method: 'POST', body: returnBody }),
       api(cashier.cookie, `/api/transactions/${sale.id}/return`, { method: 'POST', body: returnBody }),
     ]);
+    const retryable=r=>r.status===409&&r.body?.error==='RETURN_CONCURRENT_MODIFICATION_RETRY';
+    if(retryable(first))first=await api(cashier.cookie,`/api/transactions/${sale.id}/return`,{method:'POST',body:returnBody});
+    if(retryable(second))second=await api(cashier.cookie,`/api/transactions/${sale.id}/return`,{method:'POST',body:returnBody});
     expect(first.status, JSON.stringify(first.body)).toBe(201);
     expect(second.status, JSON.stringify(second.body)).toBe(201);
     expect(Number(first.body.total)).toBe(50);

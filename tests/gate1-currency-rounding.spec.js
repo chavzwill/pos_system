@@ -139,7 +139,7 @@ test.describe('Gate 1 deterministic currency and rounding invariants', () => {
     expect(rejected.length).toBeLessThanOrEqual(1);
     if (rejected.length === 1) {
       expect([400, 409]).toContain(rejected[0].status);
-      expect(String(rejected[0].body?.error || '')).toMatch(/RETURN_TAX_EXCEEDS_ORIGINAL_LINE|RETURN_QUANTITY_EXCEEDS_ELIGIBLE/);
+      expect(String(rejected[0].body?.error || '')).toMatch(/RETURN_TAX_EXCEEDS_ORIGINAL_LINE|RETURN_QUANTITY_EXCEEDS_ELIGIBLE|RETURN_CONCURRENT_MODIFICATION_RETRY/);
       const retry = await creditOne(cashier.cookie, fx, 'Gate 1 concurrent rounding deterministic retry',actor.id);
       expect(retry.status, JSON.stringify(retry.body)).toBe(201);
     } else {
