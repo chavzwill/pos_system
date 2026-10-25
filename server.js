@@ -170,6 +170,8 @@ app.use('/api/department-approvals', require('./routes/department-approval-admin
 app.use('/api/workspace-profile', require('./routes/workspace-profile'));
 app.use('/api/purchasing-drafts', require('./routes/purchasing-drafts'));
 app.use('/api/purchasing-exceptions', require('./routes/purchasing-exceptions'));
+app.use('/api/supplier-returns', require('./routes/supplier-return-replacements'));
+app.use('/api/supplier-returns', require('./routes/supplier-returns'));
 app.use('/api/employee-workspace-intelligence', require('./routes/employee-workspace-intelligence'));
 app.use('/api/employee-assist', require('./routes/employee-assist'));
 app.use('/api/predictive-lookup', require('./routes/predictive-lookup'));
@@ -208,6 +210,7 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/operational-reports', require('./routes/operational-reports'));
 app.use('/api/accounting-intelligence', require('./routes/accounting-intelligence'));
 app.use('/api/financial-controls-intelligence', require('./routes/financial-controls-intelligence'));
+app.use('/api/supplier-ledger/credit-notes', require('./routes/supplier-credit-notes'));
 app.use('/api/supplier-ledger', require('./routes/supplier-invoice-capture'));
 app.use('/api/supplier-ledger', require('./routes/supplier-invoice-loss-prevention'));
 app.use('/api/supplier-ledger', require('./routes/supplier-payment-loss-prevention'));
