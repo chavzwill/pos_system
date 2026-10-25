@@ -3587,3 +3587,27 @@ body .tt-sales__discount select{max-width:none}
 @media(max-width:600px){.tt-pc .tt-pc__scope{padding:10px 14px;font-size:12px}.tt-pc .tt-pc__filters{padding:0 8px;grid-template-columns:repeat(2,minmax(0,1fr))}.tt-pc .tt-pc__filters button{font-size:12px;min-height:45px;padding:8px}.tt-pc .tt-pc__filters strong{font-size:18px}.tt-pc .tt-rr__head p{font-size:12px}.tt-pc .tt-rr__search{flex-wrap:wrap;gap:8px}.tt-pc .tt-rr__search label{flex-basis:100%}.tt-pc .tt-rr__search button{flex:1}.tt-pc .tt-pc__row{grid-template-columns:minmax(0,1fr);gap:12px;padding:15px}.tt-pc .tt-pc__next{border-left:0;border-top:1px solid var(--tt-border);padding:12px 0 0;gap:4px}.tt-pc .tt-pc__row h3{font-size:17px}.tt-pc .tt-pc__row p{font-size:13px}.tt-pc .tt-pc__next button{margin-top:8px}.tt-pc .tt-pc__coverage,.tt-pc .tt-pc__footer{padding:10px 14px;font-size:12px}.tt-pc .tt-pc__footer{flex-wrap:wrap}.tt-pc .tt-pc__footer button{width:100%}.tt-pc .tt-rr__message{font-size:12px;margin:0}}
 
 .tt-pc .tt-pc__amount{display:flex;flex-wrap:wrap;gap:6px 12px;padding-top:8px;color:var(--tt-text)}.tt-pc .tt-pc__amount span{color:var(--tt-text-2)}.tt-pc .tt-pc__amount strong{font-variant-numeric:tabular-nums}
+/* Consumables catalog, complete cost reporting and controlled corrections. */
+.tt-consumables .ttc-main{display:flex;flex-direction:column;flex:1;min-height:0;min-width:0;overflow:hidden}
+.tt-consumables .ttc-notice:empty,.tt-consumables .ttc-drafts:empty{display:none}
+.tt-consumables .ttc-notice{font-size:13px;line-height:1.5;color:#215f3a;padding:12px 14px;background:#eaf5ed;border-left:3px solid #29844c;margin:0 0 16px;overflow-wrap:anywhere}
+.tt-consumables .ttc-drafts{display:flex;gap:8px;flex-wrap:wrap;margin-bottom:18px}
+.tt-consumables .ttc-form-panel fieldset{border:0;padding:0;margin:0;min-width:0;display:grid;gap:18px}
+.tt-consumables .ttc-draft-note{font-size:12px;line-height:1.5;color:#556c5d;margin:0}
+.tt-consumables .ttc-availability{margin:0;color:#235e3c;font-size:13px;background:#f0f7f2;padding:10px;border-radius:8px}
+.tt-consumables .ttc-filters{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));align-items:end;gap:14px;margin:18px 0}
+.tt-consumables .ttc-filters label{display:grid;gap:7px;font-size:12px;font-weight:700;color:#3e5445;min-width:0}
+.tt-consumables .ttc-filters :is(input,select){width:100%;min-width:0;min-height:45px;border:1px solid #cadbd1;border-radius:9px;padding:10px;background:white;color:#203c29;font-size:16px}
+.tt-consumables .ttc-report-total{display:flex;gap:44px;padding:18px 0 22px;margin:0 0 18px;border-bottom:1px solid #d7e4da;color:#5d7465;font-size:12px}
+.tt-consumables .ttc-report-total strong{display:block;color:#193d27;font-size:25px;margin-top:6px;font-variant-numeric:tabular-nums}
+.tt-consumables .ttc-correction-sections{display:grid;gap:28px}
+.tt-consumables .ttc-correction-sections h4{font-size:15px;margin:0 0 12px;color:#244b32}
+.tt-consumables .ttc-correction-sections .ttc-actions{margin-bottom:12px;gap:10px}
+.tt-consumables .ttc-correction-sections td{vertical-align:top}
+.tt-consumables .ttc-correction-sections td button{margin:0 5px 6px 0}
+.tt-consumables .ttc-tabs{overflow-x:auto;flex-shrink:0}
+.tt-consumables .ttc-tabs button{white-space:nowrap;flex-shrink:0}
+.tt-consumables .ttc-form-panel footer{flex-wrap:wrap}
+.tt-consumables .ttc-form-panel footer [type=submit]{margin-left:auto}
+@media(max-width:1000px){.tt-consumables .ttc-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:680px){.tt-consumables .ttc-main>.ttc-metrics{padding-top:9px;padding-bottom:9px}.tt-consumables .ttc-header{padding-top:12px;padding-bottom:12px}.tt-consumables .ttc-header p{max-width:30ch}.tt-consumables .ttc-filters{grid-template-columns:1fr}.tt-consumables .ttc-report-total{gap:24px;flex-wrap:wrap}.tt-consumables .ttc-form-panel footer{gap:8px}.tt-consumables .ttc-form-panel footer button{flex:1;padding-left:9px!important;padding-right:9px!important}.tt-consumables .ttc-form-panel footer [type=submit]{flex-basis:100%}.tt-consumables .ttc-record small{white-space:normal}.tt-consumables .ttc-brief{grid-template-columns:1fr}.tt-consumables .ttc-metrics strong{font-size:18px}.tt-consumables .ttc-metrics>div{padding:10px}.tt-consumables .ttc-header .ttc-kicker{font-size:12px}}
