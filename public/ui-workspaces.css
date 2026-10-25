@@ -3386,6 +3386,7 @@ body:has(#shell-root.shell-app){display:block!important;width:100%!important;max
 .tt-ir__shade{position:absolute;inset:0;background:rgba(9,25,15,.58);backdrop-filter:blur(4px)}
 .tt-ir__panel{position:absolute;inset:12px;max-width:1180px;margin:auto;border-radius:20px;background:#f6f9f7;box-shadow:0 26px 90px #091b0f55;display:flex;flex-direction:column;overflow:hidden;min-width:0}
 .tt-ir__header{padding:22px 26px;display:flex;align-items:center;justify-content:space-between;gap:18px;background:white;border-bottom:1px solid #dce8df}
+.tt-ir__header{flex-wrap:wrap}.tt-ir__header>div{flex:1 1 240px}
 .tt-ir__header span{color:#25834c;font-size:12px;font-weight:760;letter-spacing:.07em}
 .tt-ir__header h2{font-size:24px;letter-spacing:-.03em;line-height:1.2;margin:5px 0}
 .tt-ir__header p{font-size:13px;color:#627769;margin:0}
@@ -3547,3 +3548,5 @@ body .tt-sales__discount select{max-width:none}
 #tt-ir-match .tt-ir__footer{position:sticky;bottom:-24px;background:var(--tt-surface);padding:16px;border:1px solid var(--tt-border);z-index:2}
 #tt-ir-preview{font-size:14px;line-height:1.6}#tt-ir-preview.is-variance{color:var(--tt-danger)}
 @media(max-width:680px){.tt-fr__quantities{grid-template-columns:repeat(2,minmax(0,1fr))}.tt-ir__filters{grid-template-columns:1fr}#tt-ir-match .tt-ir__footer{bottom:-14px}}
+
+#tt-purchasing-workspace .tt-work-note{flex:none;margin:0;padding:10px 16px;background:var(--tt-surface,#fff);border-bottom:1px solid var(--tt-border);color:var(--tt-text-2);font-size:13px;line-height:1.5}
