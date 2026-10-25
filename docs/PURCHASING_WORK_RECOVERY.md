@@ -1,62 +1,71 @@
 # Purchasing work recovery
 
-The purchasing workspace can keep unfinished purchase orders, purchase requests,
-receiving entries, and supplier invoice/matching entries while moving between
-supported tasks in the same app tab.
+The app shell saves unfinished PO/PR composers, Fast Receive entries, and supplier
+invoice/matching entries in the existing database. Reopen the same task after a
+refresh, browser restart or later sign-in to resume saved entries.
 
-## Draft lifetime
+## Ownership and lifetime
 
-Drafts live only in JavaScript memory, scoped to the loaded employee and default
-branch. They are not written to browser storage or the server. Refreshing or
-closing the tab loses them. Signing out in this tab explicitly clears them.
-Changing the loaded employee/branch clears old drafts. This does not broadcast
-logout to other tabs.
+Drafts are private to the signed-in employee and their assigned default branch.
+Every draft request carries the employee/branch expected by the screen; the
+server rejects a stale tab when the shared login cookie or branch assignment has
+changed. Staff sessions and current task permissions are required; API keys
+cannot access staff drafts. Signing out forgets local memory while preserving
+private account drafts for later sign-in. No browser storage is used.
 
-There is one composer draft per PO/PR type, plus drafts keyed by PO for receiving
-and invoice work. A maximum of 20 entries is kept; each snapshot expires after
-30 minutes. Continuing to edit refreshes the snapshot lifetime. Opening another
-copy does not overwrite an existing PO/PR draft without resuming it first.
+One composer draft is retained per PO/PR type, and receiving/invoice drafts are
+keyed by PO. Each employee/branch can hold 20 live drafts, up to 256 KiB each.
+Snapshots expire seven days after the latest save. Expired payloads are hidden
+and removed when that account next loads drafts; small revision tombstones remain
+to prevent stale tabs resurrecting discarded drafts.
 
-Normal close, workspace navigation and relevant keyboard controls ask whether to
-keep unfinished entries. An active submission blocks these controls until its
-result arrives. Browser unload uses the native unsaved-work warning where
-supported; it cannot preserve drafts across refresh or reliably warn on all mobile
-browser exits. Programmatic module calls outside these controls are not a general
-transaction guard.
+Ordinary edits save after a 1.5-second pause. Identical snapshots are skipped;
+writes for a draft are serialized. Saving, saved and failure messages distinguish
+confirmed recovery from unsaved edits. Wait for **Draft saved** before closing the
+app. Refreshing during autosave or a network outage can lose the final unsaved
+edits. Native unload warnings are best-effort, especially on mobile browsers.
 
-## Submission behavior
+Two tabs cannot silently overwrite each other: a revision conflict blocks the
+stale tab's submission and asks the user to reopen the app with current state.
 
-- An uncertain PO/PR creation is locked against another submission. Users must
-  review the document list before discarding that draft and starting again;
-  these creation endpoints do not offer a reliable replay identity.
-- Receiving retries reuse the original idempotency key and payload. Uncertain
-  entries are frozen, including receipt cost adjustments, serials and quantities.
-  The server remains responsible for permissions, validation and replay handling.
-- Invoice capture and receipt allocation retain their original retry identities
-  across reopening. Frozen capture payloads preserve disabled select values.
-  Allocation replay is allowed even when refreshed remaining quantities have
-  changed, so the server can recognize an already recorded operation.
-- A confirmed mutation followed by a failed refresh is described as confirmed,
-  rather than as a failed save. Users should inspect recorded evidence before
-  starting another operation.
-- Discard/clear controls remove only unsaved tab entries. They do not delete,
-  reverse or void recorded business documents.
+## Submission safeguards
 
-This adds no offline queue or automatic network retries. Receipt recording,
-invoice capture, receipt allocation and Finance posting remain separate server
-operations. Capturing an invoice still changes neither inventory nor Accounts
-Payable. No server/schema changes or new dependencies are required.
+Before sending a supported creation, receipt or invoice action, the app saves a
+pending snapshot and awaits confirmation. If recovery cannot be saved, that
+business request is not sent. Loading drafts must succeed before these tasks
+open, so an existing pending operation cannot be hidden by a storage outage.
+
+- An uncertain PO/PR composer submission is locked against resubmission. Check
+  the document list before discarding its draft and starting again. Local
+  validation failures do not become uncertain submissions.
+- Fast Receive retries preserve the original key and payload, including receipt
+  cost changes, retail proposals, quantities and tracking details. The PO detail
+  Receive action opens this same screen instead of using a second posting path.
+- Invoice capture preserves its frozen body and key. Allocation preserves the
+  complete original endpoint, kind, serialized body and key, even if refreshed
+  receipt quantities have been fully consumed. Another invoice action cannot
+  clear that unresolved operation.
+- Confirmed results and subsequent evidence-refresh failures remain distinct.
+  Discard/clear controls remove drafts only, never posted business records.
+
+Server transaction validation, permissions and idempotency remain authoritative.
+Drafts are never automatically submitted, stock is never received by draft saves,
+and invoice capture still creates neither stock nor Accounts Payable.
+
+This scope does not add offline transactions, attachment uploads, arbitrary
+programmatic navigation guards, PR conversion drafts, or recovery for legacy
+screens outside the app shell. Explicit PR conversion retains its existing
+server workflow. Seven-day expiry is not indefinite transaction archival.
 
 ## Verification
 
-Run `npm run vercel-build` and the Playwright specs:
+Run `npm run vercel-build`, Node tests `tests/purchasing-drafts.test.cjs` and
+`tests/invoice-capture-runtime.test.cjs`, and Playwright specs
+`durable-work-protection`, `work-protection`, `purchasing-order-editor` and
+`receiving-match-ui`.
 
-- `tests/work-protection.spec.js`
-- `tests/purchasing-order-editor.spec.js`
-- `tests/receiving-match-ui.spec.js`
-
-These browser fixtures exercise draft scope/expiry, leave guards, pending-submit
-protection, uncertain outcomes, identical retry bodies/keys, confirmed saves with
-failed refreshes, history replay and PO layouts at 390, 768 and 1440 pixels. They
-use mocked API responses, not production transactions, and do not certify native
-mobile unload behavior or server inventory/accounting effects.
+Tests use isolated local databases and mocked browser API responses. They cover
+account and branch isolation, stale sessions, permissions, size/count limits,
+expiry, revision races, reload recovery, checkpoint outages, frozen original
+requests, known rejections, and layouts at 390/768/1440 pixels. They do not certify
+production database latency or native mobile browser termination behavior.

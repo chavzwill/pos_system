@@ -1,11 +1,11 @@
 (()=>{'use strict';
 const base='/api/purchase-orders/receiving-controls/invoice-receipts';
-let overlay=null,info=null,selectedInvoice=null,retry=null,captureRetry=null,saving=false,dirty=false,unknown=false,capturePayload=null,acknowledged=false;
+let overlay=null,info=null,selectedInvoice=null,retry=null,captureRetry=null,saving=false,dirty=false,unknown=false,capturePayload=null,acknowledged=false,allocationOperation=null,pendingKind=null;
 const esc=v=>String(v??'').replace(/[&<>"']/g,c=>({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;','"':'&quot;',"'":'&#39;'}[c]));
 const money=v=>new Intl.NumberFormat('en-JM',{style:'currency',currency:'JMD'}).format(Number(v)||0);
 async function get(path,options={}){const res=await fetch(path.startsWith('/api/')?path:base+path,{...options,credentials:'same-origin',headers:{Accept:'application/json','Content-Type':'application/json',...(options.headers||{})}});const data=await res.json().catch(()=>({}));if(!res.ok){const error=new Error(data.error||'Unable to reconcile supplier invoice');error.status=res.status;throw error;}return data;}
 const status=(s,fail=false)=>{const el=overlay?.querySelector('.tt-ir__status');if(el){el.textContent=s;el.classList.toggle('is-error',fail)}};
-function close(){keepInvoiceDraft();overlay?.remove();overlay=null;info=null;selectedInvoice=null;retry=null;captureRetry=null;saving=false;dirty=false;unknown=false;capturePayload=null;acknowledged=false;}
+function close(){keepInvoiceDraft();overlay?.remove();overlay=null;info=null;selectedInvoice=null;retry=null;captureRetry=null;saving=false;dirty=false;unknown=false;capturePayload=null;acknowledged=false;allocationOperation=null;pendingKind=null;}
 function poId(){
  const n=Number(document.querySelector('#tt-rr-po')?.value||0);
  return Number.isSafeInteger(n)&&n>0?n:null;
@@ -89,9 +89,10 @@ function render(){
  if(form){
   const filter=()=>{const receipt=form.querySelector('#tt-ir-delivery').value,q=form.querySelector('#tt-ir-find').value.trim().toLowerCase();let count=0;form.querySelectorAll('tr[data-delivery]').forEach(row=>{row.hidden=!!((receipt&&row.dataset.delivery!==receipt)||(q&&!row.dataset.search.includes(q)));if(!row.hidden)count++;});form.querySelector('#tt-ir-filter-count').textContent=count+' received lines shown. Selections in other deliveries are retained.';};
   form.querySelector('#tt-ir-delivery').addEventListener('change',filter);form.querySelector('#tt-ir-find').addEventListener('input',filter);filter();
-  form.addEventListener('input',e=>{if(e.target.name){dirty=true;if(!unknown)retry=null;}updatePreview()});
+  form.addEventListener('input',e=>{if(e.target.name){dirty=true;if(!unknown){retry=null;allocationOperation=null;pendingKind=null;}}updatePreview()});
   form.addEventListener('submit',async e=>{
    e.preventDefault();
+   if(unknown&&allocationOperation)return performAllocation();
    if(!selectedInvoice)return status('Choose an invoice.',true);
    const lines=currentLines(form);
    if(!lines.length)return status('Enter a positive billed quantity for at least one goods receipt line.',true);
@@ -100,18 +101,14 @@ function render(){
     if(!unknown&&(!found||!Number.isFinite(l.quantityNumber)||l.quantityNumber>Number(found.remaining_qty)+1e-6))return status('Quantity cannot exceed the available received units.',true);
    }
    if(!retry)retry='invoice-receipt-'+(globalThis.crypto?.randomUUID?.()||String(Date.now())+String(Math.random()).slice(2));
-   if(!beginInvoice())return;const btn=form.querySelector('button[type=submit]');btn.disabled=true;status('Saving receipt-to-invoice evidence…');
-   try{
-    const inv=info.invoices.find(x=>String(x.id)===String(selectedInvoice));
-    const endpoint=inv?.capture_id?'/api/supplier-ledger/captured-invoices/'+inv.capture_id+'/allocate':'/orders/'+info.po.id+'/invoices/'+selectedInvoice+'/allocate';
-    const resp=await get(endpoint,{method:'POST',headers:{'Idempotency-Key':retry},body:JSON.stringify({lines:lines.map(x=>({receipt_item_id:x.receipt_item_id,quantity_invoiced:x.quantity_invoiced,invoice_unit_cost:x.invoice_unit_cost}))})});
-    if(!resp.id&&!resp.invoice_id)throw new Error('Matching confirmation was not received');acknowledged=true;info=await loadInfo(info.po.id);retry=null;invoiceSaved();status(inv?.capture_id?'Delivery evidence saved. Invoice remains captured and unposted.':resp.payment_cleared?'Invoice matches recorded receipts and is payment-eligible.':'Invoice linked. Quantity or unit-cost variance requires Finance review before payment.');
-    render();
-   }catch(err){invoiceFailed(err);}finally{btn.disabled=false;finishInvoice();}
+   const inv=info.invoices.find(x=>String(x.id)===String(selectedInvoice));
+   allocationOperation={key:retry,captured:!!inv?.capture_id,endpoint:inv?.capture_id?'/api/supplier-ledger/captured-invoices/'+inv.capture_id+'/allocate':'/orders/'+info.po.id+'/invoices/'+selectedInvoice+'/allocate',body:JSON.stringify({lines:lines.map(x=>({receipt_item_id:x.receipt_item_id,quantity_invoiced:x.quantity_invoiced,invoice_unit_cost:x.invoice_unit_cost}))})};
+   await performAllocation();
   });
   updatePreview();
- }
+ }else if(unknown&&allocationOperation){const button=document.createElement('button');button.type='button';button.textContent='Link invoice to received goods';button.onclick=performAllocation;overlay.querySelector('#tt-ir-detail').prepend(button);}
 }
+async function performAllocation(){if(!allocationOperation||!beginInvoice('allocate'))return;const op=allocationOperation;const btn=overlay.querySelector('#tt-ir-match [type=submit]');if(btn)btn.disabled=true;status('Checking the original receipt-to-invoice operation…');try{keepInvoiceDraft();await window.TotalToolsWorkProtection?.checkpoint?.('invoice-'+info.po.id);const resp=await get(op.endpoint,{method:'POST',headers:{'Idempotency-Key':op.key},body:op.body});if(!resp.id&&!resp.invoice_id)throw new Error('Matching confirmation was not received');acknowledged=true;info=await loadInfo(info.po.id);retry=null;invoiceSaved();status(op.captured?'Delivery evidence saved. Invoice remains captured and unposted.':resp.payment_cleared?'Invoice matches recorded receipts and is payment-eligible.':'Invoice linked. Quantity or unit-cost variance requires Finance review before payment.');render();}catch(error){invoiceFailed(error);}finally{if(btn)btn.disabled=false;finishInvoice();}}
 function bindCaptureAndPosting(){
  const capture=overlay.querySelector('#tt-ir-capture');
  if(capture){
@@ -120,28 +117,28 @@ function bindCaptureAndPosting(){
   const sum=data=>amounts.reduce((total,name)=>total+Math.round(Number(data[name]||0)*100),0)/100;
   capture.addEventListener('input',()=>{dirty=true;if(!unknown){captureRetry=null;capturePayload=null;}overlay.querySelector('#tt-ir-capture-total').textContent='Invoice total: '+money(sum(values()));});
   capture.addEventListener('submit',async e=>{
-   e.preventDefault();if(!beginInvoice())return;const btn=capture.querySelector('button');btn.disabled=true;
+   e.preventDefault();if(!beginInvoice('capture'))return;const btn=capture.querySelector('button');btn.disabled=true;
    if(!captureRetry)captureRetry='capture-'+crypto.randomUUID();
    try{
     const data=capturePayload||values();data.purchase_order_id=info.po.id;data.total=sum(data);capturePayload=data;
-    const saved=await get('/api/supplier-ledger/captured-invoices',{method:'POST',headers:{'Idempotency-Key':captureRetry},body:JSON.stringify(data)});
-    if(!saved.id)throw new Error('Invoice confirmation was not received');acknowledged=true;selectedInvoice='capture-'+saved.id;info=await loadInfo(info.po.id);captureRetry=null;capturePayload=null;invoiceSaved();render();status('Invoice captured. Stock and Accounts Payable are unchanged.');
+    keepInvoiceDraft();await window.TotalToolsWorkProtection?.checkpoint?.('invoice-'+info.po.id);const saved=await get('/api/supplier-ledger/captured-invoices',{method:'POST',headers:{'Idempotency-Key':captureRetry},body:JSON.stringify(data)});
+    if(!saved.id)throw new Error('Invoice confirmation was not received');acknowledged=true;info=await loadInfo(info.po.id);selectedInvoice='capture-'+saved.id;captureRetry=null;capturePayload=null;invoiceSaved();render();status('Invoice captured. Stock and Accounts Payable are unchanged.');
    }catch(err){invoiceFailed(err);}finally{btn.disabled=false;finishInvoice();}
   });
  }
  const inv=info.invoices.find(x=>String(x.id)===String(selectedInvoice));
  const post=overlay.querySelector('#tt-ir-post');
  post?.addEventListener('submit',async e=>{
-  e.preventDefault();if(!beginInvoice())return;const btn=post.querySelector('button');btn.disabled=true;status('Finance is posting the captured invoice…');
+  e.preventDefault();if(!beginInvoice('post'))return;const btn=post.querySelector('button');btn.disabled=true;status('Finance is posting the captured invoice…');
   try{
-   const result=await get('/api/supplier-ledger/invoices',{method:'POST',body:JSON.stringify({captured_invoice_id:inv.capture_id,match_override_reason:new FormData(post).get('match_override_reason')})});
-   if(!result.id)throw new Error('Posting confirmation was not received');acknowledged=true;selectedInvoice=result.id;info=await loadInfo(info.po.id);invoiceSaved();render();status('Invoice posted to Accounts Payable. '+(result.invoice_match_status==='matched'?'Delivery evidence matches.':'Check match status before payment.'));
+   keepInvoiceDraft();await window.TotalToolsWorkProtection?.checkpoint?.('invoice-'+info.po.id);const result=await get('/api/supplier-ledger/invoices',{method:'POST',body:JSON.stringify({captured_invoice_id:inv.capture_id,match_override_reason:new FormData(post).get('match_override_reason')})});
+   if(!result.id)throw new Error('Posting confirmation was not received');acknowledged=true;info=await loadInfo(info.po.id);selectedInvoice=result.id;invoiceSaved();render();status('Invoice posted to Accounts Payable. '+(result.invoice_match_status==='matched'?'Delivery evidence matches.':'Check match status before payment.'));
   }catch(err){invoiceFailed(err);}finally{btn.disabled=false;finishInvoice();}
  });
  const voidForm=overlay.querySelector('#tt-ir-void');
  voidForm?.addEventListener('submit',async e=>{
-  e.preventDefault();if(!beginInvoice())return;const btn=voidForm.querySelector('button');btn.disabled=true;
-  try{await get('/api/supplier-ledger/captured-invoices/'+inv.capture_id+'/void',{method:'POST',body:JSON.stringify({reason:new FormData(voidForm).get('reason')})});selectedInvoice=null;info=await loadInfo(info.po.id);invoiceSaved();render();status('Captured invoice voided. Its delivery quantities are available for matching again.');}
+  e.preventDefault();if(!beginInvoice('void'))return;const btn=voidForm.querySelector('button');btn.disabled=true;
+  try{keepInvoiceDraft();await window.TotalToolsWorkProtection?.checkpoint?.('invoice-'+info.po.id);await get('/api/supplier-ledger/captured-invoices/'+inv.capture_id+'/void',{method:'POST',body:JSON.stringify({reason:new FormData(voidForm).get('reason')})});selectedInvoice=null;info=await loadInfo(info.po.id);invoiceSaved();render();status('Captured invoice voided. Its delivery quantities are available for matching again.');}
   catch(err){invoiceFailed(err);}finally{btn.disabled=false;finishInvoice();}
  });
 }
@@ -151,16 +148,16 @@ async function open(orderId){
  close();overlay=document.createElement('div');overlay.className='tt-ir';overlay.innerHTML=layout();document.body.appendChild(overlay);
  overlay.querySelectorAll('[data-close]').forEach(x=>x.onclick=close);
  overlay.querySelector('.tt-ir__panel').onkeydown=e=>{if(e.key==='Escape')close()};
- try{info=await loadInfo(n);const draft=window.TotalToolsWorkProtection?.take('invoice-'+n);if(draft){selectedInvoice=draft.selectedInvoice;retry=draft.retry;captureRetry=draft.captureRetry;capturePayload=draft.capturePayload;dirty=true;unknown=draft.unknown;acknowledged=!!draft.acknowledged;}status('Capture the supplier invoice or select an existing bill, then match received lines.');render();if(draft){for(const field of draft.fields){const form=overlay.querySelector('#'+field.form);const el=[...(form?.querySelectorAll('[name]')||[])].find(el=>el.name===field.name&&(el.dataset.item||'')===field.item);if(el)el.value=field.value;}overlay.querySelector('#tt-ir-capture')?.dispatchEvent(new Event('input',{bubbles:true}));updatePreview();finishInvoice();if(!unknown)status('Resumed invoice entries from this tab. Check the current delivery evidence before saving.');}protectInvoice();overlay.querySelector('[data-close][aria-label]')?.focus();}
+ try{await window.TotalToolsWorkProtection?.ready?.();info=await loadInfo(n);const draft=window.TotalToolsWorkProtection?.take('invoice-'+n);if(draft){selectedInvoice=draft.selectedInvoice;retry=draft.retry;captureRetry=draft.captureRetry;capturePayload=draft.capturePayload;allocationOperation=draft.allocationOperation||null;pendingKind=draft.pendingKind||null;dirty=true;unknown=draft.unknown;acknowledged=!!draft.acknowledged;}status('Capture the supplier invoice or select an existing bill, then match received lines.');render();if(draft){for(const field of draft.fields){const form=overlay.querySelector('#'+field.form);const el=[...(form?.querySelectorAll('[name]')||[])].find(el=>el.name===field.name&&(el.dataset.item||'')===field.item);if(el)el.value=field.value;}overlay.querySelector('#tt-ir-capture')?.dispatchEvent(new Event('input',{bubbles:true}));updatePreview();finishInvoice();if(!unknown)status('Resumed invoice entries from your saved draft. Check the current delivery evidence before saving.');}protectInvoice();overlay.querySelector('[data-close][aria-label]')?.focus();}
  catch(e){status(e.message,true);}
 }
 
-function keepInvoiceDraft(){if(!info||(!dirty&&!unknown&&!saving)||!overlay)return;const fields=[...overlay.querySelectorAll('form input[name],form select[name],form textarea[name]')].map(el=>({form:el.closest('form').id,name:el.name,item:el.dataset.item||'',value:el.value}));window.TotalToolsWorkProtection?.put('invoice-'+info.po.id,{selectedInvoice,retry,captureRetry,capturePayload,fields,unknown:unknown||saving,acknowledged});}
-function protectInvoice(){if(!overlay)return;window.TotalToolsWorkProtection?.watch(overlay,{dirty:()=>dirty||unknown||saving,saving:()=>saving,keep:keepInvoiceDraft});overlay.addEventListener('input',e=>{if(e.target.name)dirty=true});const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Clear unsaved entries';button.onclick=async()=>{if(saving)return;const ok=await window.TotalToolsShellUI?.confirm?.({title:'Clear unsaved invoice entries?',message:unknown?'A submission may already exist. Check the invoice and receipt history before starting again. This clears only the tab draft.':'Clear entered invoice and match quantities? Recorded invoices and links remain unchanged.',confirmLabel:'Clear entries',cancelLabel:'Keep editing'});if(ok){window.TotalToolsWorkProtection?.clear('invoice-'+info.po.id);dirty=false;unknown=false;acknowledged=false;retry=null;captureRetry=null;capturePayload=null;render();status('Unsaved entries cleared. Recorded evidence is unchanged.');}};overlay.querySelector('.tt-ir__header').append(button);}
-function beginInvoice(){if(saving)return false;saving=true;dirty=true;overlay.querySelector('.tt-ir__body').inert=true;return true;}
-function finishInvoice(){saving=false;if(!overlay)return;overlay.querySelector('.tt-ir__body').inert=false;if(unknown){overlay.querySelectorAll('form input,form textarea').forEach(x=>x.readOnly=true);overlay.querySelectorAll('form select').forEach(x=>x.disabled=true);status(acknowledged?'Submission confirmed, but refreshed evidence is unavailable. Entries are locked; retry reuses the original operation.':'Submission outcome unknown. Entries are locked; retry reuses the original operation. Check invoice and delivery history before clearing this draft.',true);}keepInvoiceDraft();}
+function keepInvoiceDraft(){if(!info||(!dirty&&!unknown&&!saving)||!overlay)return;const fields=[...overlay.querySelectorAll('form input[name],form select[name],form textarea[name]')].map(el=>({form:el.closest('form').id,name:el.name,item:el.dataset.item||'',value:el.value}));window.TotalToolsWorkProtection?.put('invoice-'+info.po.id,{selectedInvoice,retry,captureRetry,capturePayload,allocationOperation,pendingKind,fields,unknown:unknown||saving,acknowledged});}
+function protectInvoice(){if(!overlay)return;const label=document.createElement('p');label.className='tt-ir__hint';label.dataset.draftStatusKey='invoice-'+info.po.id;label.setAttribute('role','status');label.textContent=window.TotalToolsWorkProtection?.status?.(label.dataset.draftStatusKey)||'';overlay.querySelector('.tt-ir__body').prepend(label);window.TotalToolsWorkProtection?.watch(overlay,{dirty:()=>dirty||unknown||saving,saving:()=>saving,keep:keepInvoiceDraft});overlay.addEventListener('input',e=>{if(e.target.name)dirty=true});const button=document.createElement('button');button.type='button';button.className='secondary';button.textContent='Clear unsaved entries';button.onclick=async()=>{if(saving)return;const ok=await window.TotalToolsShellUI?.confirm?.({title:'Clear unsaved invoice entries?',message:unknown?'A submission may already exist. Check the invoice and receipt history before starting again. This clears only the saved draft.':'Clear entered invoice and match quantities? Recorded invoices and links remain unchanged.',confirmLabel:'Clear entries',cancelLabel:'Keep editing'});if(ok){window.TotalToolsWorkProtection?.clear('invoice-'+info.po.id);dirty=false;unknown=false;acknowledged=false;retry=null;captureRetry=null;capturePayload=null;allocationOperation=null;pendingKind=null;render();status('Unsaved entries cleared. Recorded evidence is unchanged.');}};overlay.querySelector('.tt-ir__header').append(button);}
+function beginInvoice(kind){if(saving)return false;if(unknown&&pendingKind&&kind!==pendingKind){status('Resolve the original submission before starting another invoice action.',true);return false;}pendingKind=kind;saving=true;dirty=true;overlay.querySelector('.tt-ir__body').inert=true;return true;}
+function finishInvoice(){saving=false;if(!overlay)return;overlay.querySelector('.tt-ir__body').inert=false;if(unknown){overlay.querySelectorAll('form input,form textarea').forEach(x=>x.readOnly=true);overlay.querySelectorAll('form select').forEach(x=>x.disabled=true);if(pendingKind){const original={allocate:'tt-ir-match',capture:'tt-ir-capture',post:'tt-ir-post',void:'tt-ir-void'}[pendingKind];overlay.querySelectorAll('form button').forEach(x=>{if(x.closest('form').id!==original)x.disabled=true;});}status(acknowledged?'Submission confirmed, but refreshed evidence is unavailable. Entries are locked; retry reuses the original operation.':'Submission outcome unknown. Entries are locked; retry reuses the original operation. Check invoice and delivery history before clearing this draft.',true);}keepInvoiceDraft();}
 function invoiceFailed(error){if(!error.status||error.status>=500)unknown=true;status(unknown?'Submission outcome unknown. Keep this draft and check its original operation before creating another entry.':error.message,true);}
-function invoiceSaved(){dirty=false;unknown=false;acknowledged=false;window.TotalToolsWorkProtection?.clear('invoice-'+info.po.id);}
+function invoiceSaved(){pendingKind=null;allocationOperation=null;dirty=false;unknown=false;acknowledged=false;window.TotalToolsWorkProtection?.clear('invoice-'+info.po.id);}
 
 function launch(){
  const host=document.querySelector('.tt-rr__panel .tt-rr__search');
