@@ -155,8 +155,19 @@ test.describe('Gate 1 credit-note receivable invariant', () => {
       api(cashier.cookie, `/api/transactions/${sale.id}/return`, { method: 'POST', body: returnBody }),
     ]);
     const retryable=r=>r.status===409&&r.body?.error==='RETURN_CONCURRENT_MODIFICATION_RETRY';
-    if(retryable(first))first=await api(cashier.cookie,`/api/transactions/${sale.id}/return`,{method:'POST',body:returnBody});
-    if(retryable(second))second=await api(cashier.cookie,`/api/transactions/${sale.id}/return`,{method:'POST',body:returnBody});
+    async function retryAfterUncommittedConflict(result){
+      // The server only emits this code after a rollback (no return posted).
+      // Bound retries so a persistent database outage remains a test failure,
+      // and never retry successful 201s or unknown/ambiguous errors.
+      for(const delay of [40,100,200,400,800]){
+        if(!retryable(result))break;
+        await new Promise(resolve=>setTimeout(resolve,delay));
+        result=await api(cashier.cookie,`/api/transactions/${sale.id}/return`,{method:'POST',body:returnBody});
+      }
+      return result;
+    }
+    first=await retryAfterUncommittedConflict(first);
+    second=await retryAfterUncommittedConflict(second);
     expect(first.status, JSON.stringify(first.body)).toBe(201);
     expect(second.status, JSON.stringify(second.body)).toBe(201);
     expect(Number(first.body.total)).toBe(50);
