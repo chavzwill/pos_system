@@ -1,3 +1,4 @@
+const {creditAmountSql,outstandingSql}=require('../lib/supplier-ap-balances');
 const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
@@ -42,7 +43,7 @@ router.get('/summary',async(req,res)=>{
       if(!allowed(req,['reports','reports_financial','accounts']))return res.status(403).json({error:'Finance workspace not permitted'});
       const args=[];const bc=branchClause('t',branchId,args);const {rows:[today]}=await db.execute({sql:`SELECT COUNT(*) transactions,COALESCE(SUM(total),0) revenue,COALESCE(SUM(discount_amount),0) discounts FROM transactions t WHERE status='completed' AND date(created_at)=date('now')${bc}`,args});
       const {rows:[ar]}=await db.execute({sql:`SELECT COALESCE(SUM(CASE WHEN credit_enabled=1 THEN account_balance ELSE 0 END),0) receivables,COALESCE(SUM(CASE WHEN credit_enabled=1 AND credit_limit>0 AND account_balance>credit_limit THEN 1 ELSE 0 END),0) over_limit_customers FROM customers WHERE active=1`,args:[]});
-      const apargs=[];const apbc=branchClause('si',branchId,apargs);const {rows:[ap]}=await db.execute({sql:`SELECT COALESCE(SUM(MAX(0,si.total-COALESCE(a.paid,0))),0) open_ap,COALESCE(SUM(CASE WHEN MAX(0,si.total-COALESCE(a.paid,0))>0.001 AND si.due_date IS NOT NULL AND date(si.due_date)<date('now') THEN MAX(0,si.total-COALESCE(a.paid,0)) ELSE 0 END),0) overdue_ap FROM supplier_invoices si LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM supplier_payment_allocations GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id WHERE si.status!='void'${apbc}`,args:apargs}).catch(()=>({rows:[{open_ap:0,overdue_ap:0}]}));
+      await require('../lib/supplier-credit-notes').ensureSupplierCreditSchema();const apargs=[];const apbc=branchClause('si',branchId,apargs);const {rows:[ap]}=await db.execute({sql:`SELECT COALESCE(SUM(${outstandingSql('si')}),0) open_ap,COALESCE(SUM(CASE WHEN ${outstandingSql('si')}>0.001 AND si.due_date IS NOT NULL AND date(si.due_date)<date('now') THEN ${outstandingSql('si')} ELSE 0 END),0) overdue_ap FROM supplier_invoices si LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM supplier_payment_allocations GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id WHERE si.status!='void'${apbc}`,args:apargs}).catch(()=>({rows:[{open_ap:0,overdue_ap:0}]}));
       res.json({workspace,summary:{...today,...ar,...ap}});return;
     }
     if(workspace==='administration'){

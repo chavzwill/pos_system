@@ -5,7 +5,7 @@ const {can}=require('../lib/permissions');
 const TTL=7*24*60*60*1000,MAX_BYTES=256*1024,MAX_DRAFTS=20;
 let schema;
 function allowed(employee,key){return key==='purchasing-pr'?can(employee.permissions,'pr_create'):key==='purchasing-po'?can(employee.permissions,'purchasing_create'):key.startsWith('receiving-')?can(employee.permissions,'purchasing_receive'):can(employee.permissions,'purchasing_receive')||can(employee.permissions,'reports_financial');}
-function validKey(key){return /^(?:purchasing-(?:po|pr)|(?:receiving|invoice)-[1-9]\d{0,14})$/.test(key);}
+function validKey(key){return /^(?:purchasing-(?:po|pr)|(?:receiving|invoice|supplier-return)-[1-9]\d{0,14})$/.test(key);}
 function ensure(){if(!schema)schema=db.execute({sql:`CREATE TABLE IF NOT EXISTS purchasing_work_drafts (
  employee_id INTEGER NOT NULL,branch_id INTEGER NOT NULL,draft_key TEXT NOT NULL,
  payload TEXT,revision INTEGER NOT NULL,expires_at INTEGER NOT NULL,

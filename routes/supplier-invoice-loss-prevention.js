@@ -1,3 +1,4 @@
+const {creditAmountSql,outstandingSql}=require('../lib/supplier-ap-balances');
 'use strict';
 const crypto=require('crypto');
 const express=require('express');
@@ -170,15 +171,16 @@ router.post('/invoices',async(req,res,next)=>{
 
 router.post('/payments',async(req,res,next)=>{
   try{
+    await require('../lib/supplier-credit-notes').ensureSupplierCreditSchema();
     const supplierId=Number(req.body?.supplier_id),amount=money(req.body?.amount||0);if(!supplierId||amount<=0)return next();
     let allocations=Array.isArray(req.body?.allocations)?req.body.allocations.filter(x=>Number(x.amount)>0):[];
     if(allocations.length){
       for(const a of allocations){const {rows:[m]}=await db.execute({sql:`SELECT c.match_status FROM supplier_invoice_match_controls c JOIN supplier_invoices si ON si.id=c.supplier_invoice_id WHERE c.supplier_invoice_id=? AND si.supplier_id=?`,args:[Number(a.invoice_id),supplierId]});if(!m||!['matched','approved_exception'].includes(String(m.match_status)))return res.status(409).json({error:`Supplier invoice ${a.invoice_id} is not cleared by PO/receipt matching and cannot be paid yet.`});}
       return next();
     }
-    const {rows:open}=await db.execute({sql:`SELECT si.id,MAX(0,si.total-COALESCE(a.paid,0)) balance_due FROM supplier_invoices si JOIN supplier_invoice_match_controls c ON c.supplier_invoice_id=si.id
+    const {rows:open}=await db.execute({sql:`SELECT si.id,${outstandingSql('si')} balance_due FROM supplier_invoices si JOIN supplier_invoice_match_controls c ON c.supplier_invoice_id=si.id
       LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM supplier_payment_allocations GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id
-      WHERE si.supplier_id=? AND si.status!='void' AND c.match_status IN ('matched','approved_exception') AND MAX(0,si.total-COALESCE(a.paid,0))>0.001 ORDER BY COALESCE(si.due_date,si.invoice_date),si.id`,args:[supplierId]});
+      WHERE si.supplier_id=? AND si.status!='void' AND c.match_status IN ('matched','approved_exception') AND ${outstandingSql('si')}>0.001 ORDER BY COALESCE(si.due_date,si.invoice_date),si.id`,args:[supplierId]});
     let left=amount;allocations=[];for(const inv of open){if(left<=0.001)break;const applied=Math.min(left,Number(inv.balance_due));allocations.push({invoice_id:inv.id,amount:money(applied)});left=money(left-applied);}
     if(!allocations.length)return res.status(409).json({error:'No matched supplier invoices are eligible for payment. Review PO/receipt matching first.'});
     req.body.allocations=allocations;

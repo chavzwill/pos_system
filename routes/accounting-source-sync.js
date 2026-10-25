@@ -6,6 +6,7 @@ const {ensureLedger,postSourceJournal}=require('../lib/accounting-posting');
 const {syncRetailReturns}=require('../lib/accounting-retail-returns');
 const {syncRentalAccounting}=require('../lib/accounting-rentals');
 const {syncPurchasingAccounting}=require('../lib/accounting-purchasing');
+const {syncSupplierCorrections}=require('../lib/accounting-supplier-corrections');
 // This router creates ledger postings; read-only Reports authority must never imply posting authority.
 router.use(requirePermission('reports_financial'));
 function actor(req){return req.employee?.id||req.user?.employee_id||null;}
@@ -179,6 +180,7 @@ router.post('/sync',async(req,res)=>{try{
   await syncPurchasingAccounting({actorId:actor(req),stats});
   await syncSupplierInvoices(req,stats);
   await syncSupplierPayments(req,stats);
+  await syncSupplierCorrections({actorId:actor(req),stats});
   await syncSettlements(req,stats);
   await syncRetailSales(req,stats);
   await syncRetailReturns({actorId:actor(req),stats});
