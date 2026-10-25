@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { db, ensureReady } = require('../database');
+const {makeCashier}=require('./helpers/return-cashier-fixture.cjs');
 
 const BASE = 'http://localhost:3001';
 const ADMIN_USER = process.env.POS_TEST_USER || 'admin';
@@ -12,7 +13,8 @@ async function login() {
     body: JSON.stringify({ username: ADMIN_USER, password: ADMIN_PASSWORD }),
   });
   expect(response.status).toBe(200);
-  return (response.headers.get('set-cookie') || '').split(';')[0];
+  const actor=await response.json();
+  return {cookie:(response.headers.get('set-cookie') || '').split(';')[0],actor};
 }
 
 async function api(cookie, path, options = {}) {
@@ -93,7 +95,7 @@ async function customer(cookie, id) {
 
 test.describe('Gate 1 credit-note receivable invariant', () => {
   test('database authority rejects a credit note that tries to move receivable in the wrong direction', async () => {
-    const cookie = await login();
+    const {cookie,actor}=await login();
     const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
     const fx = await fixture(cookie, suffix, 1, 40);
     const sale = await sell(cookie, fx, 'credit', 1);
@@ -130,11 +132,12 @@ test.describe('Gate 1 credit-note receivable invariant', () => {
   });
 
   test('two valid concurrent partial credit notes reduce receivable exactly once each and reconcile the invoice', async () => {
-    const cookie = await login();
+    const {cookie,actor}=await login();
     const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
     const fx = await fixture(cookie, suffix, 2, 50);
     const sale = await sell(cookie, fx, 'credit', 2);
     const itemId = sale.items[0].id;
+    const cashier=await makeCashier(api,cookie,fx.branch.id,suffix);
 
     expect(Number((await customer(cookie, fx.customer.id)).account_balance)).toBe(100);
     let invoices = await api(cookie, `/api/accounts/invoices/${fx.customer.id}`);
@@ -145,10 +148,11 @@ test.describe('Gate 1 credit-note receivable invariant', () => {
       resolution: 'credit_note',
       items: [{ transaction_item_id: itemId, quantity: 1 }],
       notes: 'Gate 1 concurrent partial credit note',
+      return_authorizer_id:actor.id,return_authorizer_password:ADMIN_PASSWORD,
     });
     const [first, second] = await Promise.all([
-      api(cookie, `/api/transactions/${sale.id}/return`, { method: 'POST', body: returnBody }),
-      api(cookie, `/api/transactions/${sale.id}/return`, { method: 'POST', body: returnBody }),
+      api(cashier.cookie, `/api/transactions/${sale.id}/return`, { method: 'POST', body: returnBody }),
+      api(cashier.cookie, `/api/transactions/${sale.id}/return`, { method: 'POST', body: returnBody }),
     ]);
     expect(first.status, JSON.stringify(first.body)).toBe(201);
     expect(second.status, JSON.stringify(second.body)).toBe(201);
@@ -168,7 +172,7 @@ test.describe('Gate 1 credit-note receivable invariant', () => {
     expect(active).toHaveLength(2);
     expect(active.reduce((sum, row) => sum + Number(row.total || 0), 0)).toBe(100);
 
-    const overCredit = await api(cookie, `/api/transactions/${sale.id}/return`, {
+    const overCredit = await api(cashier.cookie, `/api/transactions/${sale.id}/return`, {
       method: 'POST',
       body: returnBody,
     });
@@ -177,18 +181,20 @@ test.describe('Gate 1 credit-note receivable invariant', () => {
   });
 
   test('a credit note on a paid cash sale creates store credit instead of a positive receivable', async () => {
-    const cookie = await login();
+    const {cookie,actor}=await login();
     const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
     const fx = await fixture(cookie, suffix, 1, 30);
     const sale = await sell(cookie, fx, 'cash', 1);
+    const cashier=await makeCashier(api,cookie,fx.branch.id,suffix);
     expect(Number((await customer(cookie, fx.customer.id)).account_balance)).toBe(0);
 
-    const credit = await api(cookie, `/api/transactions/${sale.id}/return`, {
+    const credit = await api(cashier.cookie, `/api/transactions/${sale.id}/return`, {
       method: 'POST',
       body: JSON.stringify({
         resolution: 'credit_note',
         items: [{ transaction_item_id: sale.items[0].id, quantity: 1 }],
         notes: 'Gate 1 store-credit direction proof',
+        return_authorizer_id:actor.id,return_authorizer_password:ADMIN_PASSWORD,
       }),
     });
     expect(credit.status, JSON.stringify(credit.body)).toBe(201);

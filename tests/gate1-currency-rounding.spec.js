@@ -1,5 +1,6 @@
 const { test, expect } = require('@playwright/test');
 const { db, ensureReady } = require('../database');
+const {makeCashier}=require('./helpers/return-cashier-fixture.cjs');
 
 const BASE = 'http://localhost:3001';
 const ADMIN_USER = process.env.POS_TEST_USER || 'admin';
@@ -12,7 +13,8 @@ async function login() {
     body: JSON.stringify({ username: ADMIN_USER, password: ADMIN_PASSWORD }),
   });
   expect(response.status).toBe(200);
-  return (response.headers.get('set-cookie') || '').split(';')[0];
+  const actor=await response.json();
+  return {cookie:(response.headers.get('set-cookie') || '').split(';')[0],actor};
 }
 
 async function api(cookie, path, options = {}) {
@@ -69,10 +71,10 @@ async function fixture(cookie, suffix, { quantity, price, taxRate }) {
   return { branch, customer, product, sale: sale.body, item: sale.body.items[0] };
 }
 
-async function creditOne(cookie, fx, note) {
+async function creditOne(cookie, fx, note, authorizerId) {
   return api(cookie, `/api/transactions/${fx.sale.id}/return`, {
     method: 'POST',
-    body: JSON.stringify({ resolution: 'credit_note', items: [{ transaction_item_id: fx.item.id, quantity: 1 }], notes: note }),
+    body: JSON.stringify({ resolution: 'credit_note', items: [{ transaction_item_id: fx.item.id, quantity: 1 }], notes: note,return_authorizer_id:authorizerId,return_authorizer_password:ADMIN_PASSWORD }),
   });
 }
 
@@ -91,17 +93,18 @@ function cents(value) { return Math.round(Number(value || 0) * 100); }
 
 test.describe('Gate 1 deterministic currency and rounding invariants', () => {
   test('three partial returns reconcile fractional tax cents exactly to the original persisted line', async () => {
-    const cookie = await login();
+    const {cookie,actor}=await login();
     const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
     const fx = await fixture(cookie, suffix, { quantity: 3, price: 0.07, taxRate: 8.5 });
+    const cashier=await makeCashier(api,cookie,fx.branch.id,suffix);
 
     expect(Number(fx.item.total)).toBe(0.21);
     expect(Number(fx.item.tax_amount)).toBe(0.02);
     expect(Number(fx.sale.total)).toBe(0.23);
 
-    const first = await creditOne(cookie, fx, 'Gate 1 rounding partial 1');
-    const second = await creditOne(cookie, fx, 'Gate 1 rounding partial 2');
-    const third = await creditOne(cookie, fx, 'Gate 1 rounding final residual');
+    const first = await creditOne(cashier.cookie, fx, 'Gate 1 rounding partial 1',actor.id);
+    const second = await creditOne(cashier.cookie, fx, 'Gate 1 rounding partial 2',actor.id);
+    const third = await creditOne(cashier.cookie, fx, 'Gate 1 rounding final residual',actor.id);
     expect(first.status, JSON.stringify(first.body)).toBe(201);
     expect(second.status, JSON.stringify(second.body)).toBe(201);
     expect(third.status, JSON.stringify(third.body)).toBe(201);
@@ -118,17 +121,18 @@ test.describe('Gate 1 deterministic currency and rounding invariants', () => {
   });
 
   test('simultaneous partial returns cannot over-allocate one tax cent under either serialized or stale-retry execution', async () => {
-    const cookie = await login();
+    const {cookie,actor}=await login();
     const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
     const fx = await fixture(cookie, suffix, { quantity: 2, price: 0.06, taxRate: 8.5 });
+    const cashier=await makeCashier(api,cookie,fx.branch.id,suffix);
 
     expect(Number(fx.item.total)).toBe(0.12);
     expect(Number(fx.item.tax_amount)).toBe(0.01);
     expect(Number(fx.sale.total)).toBe(0.13);
 
     const [a, b] = await Promise.all([
-      creditOne(cookie, fx, 'Gate 1 concurrent rounding A'),
-      creditOne(cookie, fx, 'Gate 1 concurrent rounding B'),
+      creditOne(cashier.cookie, fx, 'Gate 1 concurrent rounding A',actor.id),
+      creditOne(cashier.cookie, fx, 'Gate 1 concurrent rounding B',actor.id),
     ]);
     const results = [a, b];
     const rejected = results.filter(result => result.status !== 201);
@@ -136,7 +140,7 @@ test.describe('Gate 1 deterministic currency and rounding invariants', () => {
     if (rejected.length === 1) {
       expect([400, 409]).toContain(rejected[0].status);
       expect(String(rejected[0].body?.error || '')).toMatch(/RETURN_TAX_EXCEEDS_ORIGINAL_LINE|RETURN_QUANTITY_EXCEEDS_ELIGIBLE/);
-      const retry = await creditOne(cookie, fx, 'Gate 1 concurrent rounding deterministic retry');
+      const retry = await creditOne(cashier.cookie, fx, 'Gate 1 concurrent rounding deterministic retry',actor.id);
       expect(retry.status, JSON.stringify(retry.body)).toBe(201);
     } else {
       expect(results.every(result => result.status === 201)).toBe(true);
@@ -154,7 +158,7 @@ test.describe('Gate 1 deterministic currency and rounding invariants', () => {
   });
 
   test('database return authority rejects sub-cent persisted money evidence', async () => {
-    const cookie = await login();
+    const {cookie,actor}=await login();
     const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
     const fx = await fixture(cookie, suffix, { quantity: 1, price: 1, taxRate: 0 });
     const init = await api(cookie, `/api/transactions/${fx.sale.id}/returns`);
@@ -184,7 +188,7 @@ test.describe('Gate 1 deterministic currency and rounding invariants', () => {
   });
 
   test('database return authority rejects cumulative tax above the original persisted line', async () => {
-    const cookie = await login();
+    const {cookie,actor}=await login();
     const suffix = `${Date.now()}${Math.random().toString(36).slice(2, 7)}`;
     const fx = await fixture(cookie, suffix, { quantity: 2, price: 0.06, taxRate: 8.5 });
     expect(cents(fx.item.tax_amount)).toBe(1);
