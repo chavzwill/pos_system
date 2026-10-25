@@ -39,6 +39,7 @@ async function ensureSchema(){
  if(ready)return ready;
  ready=(async()=>{
   await ensureSupplierLedgerBase();
+  await require('../lib/supplier-credit-notes').ensureSupplierCreditSchema();
   await ensurePurchaseReceiptBaseSchema();
   await ensureInvoiceMatchControls();
   await require('../lib/supplier-invoice-capture').ensureSchema();
@@ -109,6 +110,7 @@ router.post('/orders/:poId/invoices/:invoiceId/allocate',requireAnyPermission('p
   if(invoice.purchase_order_id&&Number(invoice.purchase_order_id)!==po.id)throw failure(409,'PO_MISMATCH','Invoice belongs to a different purchase order');
   if(invoice.branch_id&&Number(invoice.branch_id)!==Number(po.branch_id))throw failure(409,'BRANCH_MISMATCH','Invoice belongs to a different receiving branch');
   const {rows:[paid]}=await tx.execute(sql('SELECT COUNT(*) n FROM supplier_payment_allocations WHERE supplier_invoice_id=?',[invoiceId]));
+  const hasConsumableLinks=(await tx.execute(sql("SELECT 1 FROM sqlite_master WHERE type='table' AND name='consumable_invoice_receipt_allocations'"))).rows.length;if(hasConsumableLinks&&(await tx.execute(sql('SELECT 1 FROM consumable_invoice_receipt_allocations WHERE supplier_invoice_id=? LIMIT 1',[invoiceId]))).rows.length)throw failure(409,'CONSUMABLE_INVOICE_LOCKED','Consumables invoices must use consumables receipt matching');
   const hasCreditTable=(await tx.execute(sql("SELECT name FROM sqlite_master WHERE type='table' AND name='supplier_credit_notes'"))).rows.length;
   if(hasCreditTable){const credited=(await tx.execute(sql("SELECT COUNT(*) n FROM supplier_credit_notes WHERE supplier_invoice_id=? AND status!='void'",[invoiceId]))).rows[0];if(Number(credited.n)>0)throw failure(409,'CREDITED_INVOICE_LOCKED','Credited invoices cannot receive new receipt allocations');}
   if(Number(paid.n)>0)throw failure(409,'PAID_INVOICE_LOCKED','Paid invoices require a controlled correction/credit workflow, not new receipt allocations');

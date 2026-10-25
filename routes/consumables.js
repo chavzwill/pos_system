@@ -22,14 +22,16 @@ function cents(value){
  if(!Number.isSafeInteger(n)||n>100000000000)fail('INVALID_COST','Unit cost exceeds safe limits');
  return n;
 }
+function requireConsumableRead(req,res,next){return can(req.employee?.permissions,'purchasing')||can(req.employee?.permissions,'reports_financial')||can(req.employee?.permissions,'inventory_adjust')?next():res.status(403).json({error:'Purchasing, Finance or consumable issuing permission required'});}
 function actor(req){return Number(req.employee?.id)||null;}
 function canCrossBranch(req){return can(req.employee?.permissions,'branches')||can(req.employee?.permissions,'security_manage');}
 function assertBranch(req,branch){
  const assigned=req.employee?.default_branch_id;
- if(assigned!=null&&!canCrossBranch(req)&&Number(assigned)!==Number(branch))fail('BRANCH_FORBIDDEN','Use your assigned branch or request cross-branch authority',403);
+ if(!canCrossBranch(req)&&(assigned==null||!Number.isSafeInteger(Number(assigned))||Number(assigned)<1||Number(assigned)!==Number(branch)))fail('BRANCH_FORBIDDEN','Use your assigned branch or request cross-branch authority',403);
 }
 function branchFilter(req,col='po.branch_id'){
  const assigned=req.employee?.default_branch_id;
+ if(!canCrossBranch(req))assertBranch(req,assigned);
  return assigned!=null&&!canCrossBranch(req)?{clause:' AND '+col+'=?',args:[Number(assigned)]}:{clause:'',args:[]};
 }
 async function exists(tx,table,identifier,{active=true}={}){
@@ -56,14 +58,35 @@ async function target(tx,{allocation_type,allocation_id,unit_reference},branchId
  return{kind,identifier:destination,unitRef};
 }
 function sourceKind(req){return String(req.headers['idempotency-key']||'').trim();}
+function safeInteger(value,field){
+ const n=Number(value);if(!Number.isSafeInteger(n)||n<0)fail('UNSAFE_CONSUMABLE_VALUE',field+' exceeds safe whole-number limits',409);return n;
+}
+function safeAdd(a,b,field){return safeInteger(BigInt(safeInteger(a,field))+BigInt(safeInteger(b,field)),field);}
+function safeProduct(a,b,field){return safeInteger(BigInt(safeInteger(a,field))*BigInt(safeInteger(b,field)),field);}
+function weightedCost(value,quantity,totalQuantity){
+ const v=BigInt(safeInteger(value,'Stock value')),q=BigInt(safeInteger(quantity,'Issue quantity')),total=BigInt(safeInteger(totalQuantity,'Stock quantity'));
+ if(total===0n||q>total)fail('INSUFFICIENT_CONSUMABLES','Available consumables cannot cover this issue',409);
+ return safeInteger((v*q+total/2n)/total,'Issue value');
+}
+async function authorizeOperation(req,tx,operation){
+ if(operation==='create-po'||operation==='issue-consumables')assertBranch(req,id(req.body?.branch_id,'Branch'));
+ else if(/^(submit|approve|receive)-po:/.test(operation)){
+  const oid=id(req.params.id,'PO');
+  const {rows:[po]}=await tx.execute(sql('SELECT * FROM consumable_purchase_orders WHERE id=?',[oid]));
+  if(!po)fail('PO_NOT_FOUND','Consumables PO not found',404);
+  assertBranch(req,po.branch_id);
+  if(operation.startsWith('approve-po:')&&po.requested_by&&Number(po.requested_by)===actor(req))fail('SELF_APPROVAL','Another authorized employee must approve this purchase order',403);
+ }
+}
 async function mutate(req,res,operation,fn){
  try{
   const key=sourceKind(req);
   if(key.length<12||key.length>160||!/^[\w:.-]+$/.test(key))return res.status(400).json({error:'A stable Idempotency-Key (12–160 safe characters) is required',code:'IDEMPOTENCY_KEY_REQUIRED'});
   const scoped=operation+':'+key;
-  const fingerprint=crypto.createHash('sha256').update(operation+'\n'+JSON.stringify(req.body||{})).digest('hex');
+  const fingerprint=crypto.createHash('sha256').update(operation+'\n'+actor(req)+'\n'+JSON.stringify(req.body||{})).digest('hex');
   const tx=await db.transaction('write');let committed=false;
   try{
+   await authorizeOperation(req,tx,operation);
    const prior=(await tx.execute(sql('SELECT fingerprint,response_json FROM consumable_operations WHERE idempotency_key=?',[scoped]))).rows[0];
    if(prior){
     if(prior.fingerprint!==fingerprint)fail('IDEMPOTENCY_CONFLICT','This request key was already used with different content',409);
@@ -83,8 +106,9 @@ async function mutate(req,res,operation,fn){
  }
 }
 router.use(requireAuth,(req,res,next)=>req.apiKey?res.status(403).json({error:'Consumable records require an authenticated staff session',code:'CONSUMABLE_STAFF_ONLY'}):next());
+router.use((req,res,next)=>{try{if(!canCrossBranch(req))assertBranch(req,req.employee?.default_branch_id);next();}catch(e){res.status(e.status||403).json({error:e.message,code:e.code});}});
 router.use(async(req,res,next)=>{try{await ensureConsumablesSchema();next();}catch(e){console.error('consumable_schema_error',{code:e?.code||'unknown'});res.status(503).json({error:'Consumable records are temporarily unavailable',code:'CONSUMABLE_SCHEMA_UNAVAILABLE'});}});
-router.get('/lookups',requirePermission('purchasing'),async(req,res)=>{
+router.get('/lookups',requireConsumableRead,async(req,res)=>{
  try{
   const b=branchFilter(req,'id');
   const [suppliers,branches,departments,equipment]=await Promise.all([
@@ -96,7 +120,7 @@ router.get('/lookups',requirePermission('purchasing'),async(req,res)=>{
   res.json({suppliers:suppliers.rows,branches:branches.rows,departments:departments.rows,rental_equipment:equipment.rows});
  }catch(e){res.status(500).json({error:'Unable to load consumables lookups'});}
 });
-router.get('/catalog',requirePermission('purchasing'),async(req,res)=>{
+router.get('/catalog',requireConsumableRead,async(req,res)=>{
  try{const r=await db.execute(sql('SELECT * FROM consumable_catalog ORDER BY active DESC,name,id'));res.json(r.rows);}
  catch(e){res.status(500).json({error:'Unable to load consumables catalog'});}
 });
@@ -106,11 +130,11 @@ router.post('/catalog',requirePermission('purchasing_create'),(req,res)=>mutate(
  const r=await tx.execute(sql('INSERT INTO consumable_catalog(sku,name,uom) VALUES(?,?,?)',[sku,name,uom]));
  return{id:Number(r.lastInsertRowid),sku,name,uom,active:1};
 }));
-router.get('/orders',requirePermission('purchasing'),async(req,res)=>{
+router.get('/orders',requireConsumableRead,async(req,res)=>{
  try{const b=branchFilter(req);const r=await db.execute(sql('SELECT po.*,s.name supplier_name,b.name branch_name FROM consumable_purchase_orders po JOIN suppliers s ON s.id=po.supplier_id JOIN branches b ON b.id=po.branch_id WHERE 1=1'+b.clause+' ORDER BY po.id DESC LIMIT 250',b.args));res.json(r.rows);}
  catch(e){res.status(500).json({error:'Unable to load consumables orders'});}
 });
-router.get('/orders/:id',requirePermission('purchasing'),async(req,res)=>{
+router.get('/orders/:id',requireConsumableRead,async(req,res)=>{
  try{
   const oid=id(req.params.id,'Order');
   const b=branchFilter(req);
@@ -139,7 +163,7 @@ router.post('/orders',requirePermission('purchasing_create'),(req,res)=>mutate(r
   if(seen.has(catalogId))fail('DUPLICATE_LINE','Combine repeated consumables into one PO line');
   seen.add(catalogId);await exists(tx,'consumable_catalog',catalogId);
   const quantity=whole(row.quantity,'Order quantity'),unitCost=cents(row.unit_cost);
-  const lineCost=quantity*unitCost;sum+=lineCost;
+  const lineCost=safeProduct(quantity,unitCost,'PO line value');sum=safeAdd(sum,lineCost,'PO value');
   if(!Number.isSafeInteger(sum)||sum>10000000000000)fail('PO_VALUE_LIMIT','Purchase order value exceeds safe limits');
   lines.push({catalogId,quantity,unitCost});
  }
@@ -188,10 +212,17 @@ router.post('/orders/:id/receive',requirePermission('purchasing_receive'),(req,r
   if(!line)fail('LINE_NOT_FOUND','Receipt line does not belong to this PO',409);
   const changed=await tx.execute(sql('UPDATE consumable_po_lines SET quantity_received=quantity_received+? WHERE id=? AND po_id=? AND quantity_received+?<=quantity_ordered',[qty,lineId,oid,qty]));
   if(changed.rowsAffected!==1)fail('OVER_RECEIPT','Receipt exceeds the remaining authorized quantity',409);
-  const value=qty*Number(line.unit_cost_cents);
+  const originalUnitCost=safeInteger(line.unit_cost_cents,'PO unit cost');
+  const actualUnitCost=Object.prototype.hasOwnProperty.call(item,'unit_cost')?cents(item.unit_cost):originalUnitCost;
+  const costChangeReason=text(item.cost_change_reason,'Cost change reason',800,false);
+  if(actualUnitCost!==originalUnitCost&&(!costChangeReason||costChangeReason.length<10))fail('COST_CHANGE_REASON_REQUIRED','Explain the actual receipt cost change in at least 10 characters');
+  const value=safeProduct(qty,actualUnitCost,'Receipt value');
+  const receiptPurpose='Received against '+po.po_number+(actualUnitCost!==originalUnitCost?' | Unit cost changed from '+originalUnitCost+' to '+actualUnitCost+' cents: '+costChangeReason:'');
+  const {rows:[existingBalance]}=await tx.execute(sql('SELECT qty_on_hand,value_cents FROM consumable_balances WHERE branch_id=? AND consumable_id=?',[po.branch_id,line.consumable_id]));
+  safeAdd(existingBalance?.qty_on_hand||0,qty,'Stock quantity');safeAdd(existingBalance?.value_cents||0,value,'Stock value');
   await tx.execute(sql('INSERT INTO consumable_balances(consumable_id,branch_id,qty_on_hand,value_cents) VALUES(?,?,?,?) ON CONFLICT(consumable_id,branch_id) DO UPDATE SET qty_on_hand=qty_on_hand+excluded.qty_on_hand,value_cents=value_cents+excluded.value_cents,updated_at=CURRENT_TIMESTAMP',[line.consumable_id,po.branch_id,qty,value]));
-  await tx.execute(sql("INSERT INTO consumable_movements(consumable_id,branch_id,action,quantity,value_cents,po_id,po_line_id,purpose,actor_employee_id) VALUES(?,?,'receive',?,?,?,?,?,?)",[line.consumable_id,po.branch_id,qty,value,oid,lineId,'Received against '+po.po_number,actor(req)]));
-  evidence.push({line_id:lineId,quantity:qty,value_cents:value});
+  const movement=await tx.execute(sql("INSERT INTO consumable_movements(consumable_id,branch_id,action,quantity,value_cents,po_id,po_line_id,purpose,actor_employee_id) VALUES(?,?,'receive',?,?,?,?,?,?)",[line.consumable_id,po.branch_id,qty,value,oid,lineId,receiptPurpose,actor(req)]));
+  evidence.push({movement_id:Number(movement.lastInsertRowid),line_id:lineId,quantity:qty,original_unit_cost_cents:originalUnitCost,actual_unit_cost_cents:actualUnitCost,cost_change_reason:costChangeReason,value_cents:value});
  }
  const {rows:remaining}=await tx.execute(sql('SELECT count(*) pending FROM consumable_po_lines WHERE po_id=? AND quantity_received<quantity_ordered',[oid]));
  const status=Number(remaining[0].pending)===0?'received':'partial';
@@ -199,7 +230,7 @@ router.post('/orders/:id/receive',requirePermission('purchasing_receive'),(req,r
  await tx.execute(sql("INSERT INTO consumable_order_events(po_id,event_type,actor_employee_id,details) VALUES(?,'received',?,?)",[oid,actor(req),JSON.stringify(evidence)]));
  return{po_id:oid,status,receipt:evidence};
 }));
-router.get('/balances',requirePermission('purchasing'),async(req,res)=>{
+router.get('/balances',requireConsumableRead,async(req,res)=>{
  try{const b=branchFilter(req,'b.branch_id');const {rows}=await db.execute(sql('SELECT b.*,c.sku,c.name,c.uom,br.name branch_name FROM consumable_balances b JOIN consumable_catalog c ON c.id=b.consumable_id JOIN branches br ON br.id=b.branch_id WHERE 1=1'+b.clause+' ORDER BY br.name,c.name',[...b.args]));res.json(rows);}
  catch(e){res.status(500).json({error:'Unable to load consumable balances'});}
 });
@@ -212,18 +243,54 @@ router.post('/issues',requirePermission('inventory_adjust'),(req,res)=>mutate(re
  const purpose=text(body.purpose,'Usage reason',800);
  const {rows:[balance]}=await tx.execute(sql('SELECT qty_on_hand,value_cents FROM consumable_balances WHERE branch_id=? AND consumable_id=?',[branchId,consumableId]));
  if(!balance||Number(balance.qty_on_hand)<qty)fail('INSUFFICIENT_CONSUMABLES','Available consumables cannot cover this issue',409);
- const previousQty=Number(balance.qty_on_hand),previousValue=Number(balance.value_cents);
- const value=qty===previousQty?previousValue:Math.round(previousValue*qty/previousQty);
+ const previousQty=safeInteger(balance.qty_on_hand,'Stock quantity'),previousValue=safeInteger(balance.value_cents,'Stock value');
+ const value=weightedCost(previousValue,qty,previousQty);
  const changed=await tx.execute(sql('UPDATE consumable_balances SET qty_on_hand=qty_on_hand-?,value_cents=value_cents-?,updated_at=CURRENT_TIMESTAMP WHERE branch_id=? AND consumable_id=? AND qty_on_hand>=? AND value_cents>=?',[qty,value,branchId,consumableId,qty,value]));
  if(changed.rowsAffected!==1)fail('INSUFFICIENT_CONSUMABLES','Consumable balance changed; recheck the available quantity',409);
  const movement=await tx.execute(sql("INSERT INTO consumable_movements(consumable_id,branch_id,action,quantity,value_cents,department_id,rental_product_id,rental_unit_reference,purpose,actor_employee_id) VALUES(?,?,'issue',?,?,?,?,?,?,?)",[consumableId,branchId,qty,value,allocation.kind==='department'?allocation.identifier:null,allocation.kind==='rental'?allocation.identifier:null,allocation.unitRef,purpose,actor(req)]));
  return{id:Number(movement.lastInsertRowid),branch_id:branchId,consumable_id:consumableId,quantity:qty,cost_cents:value,allocated_to:allocation.kind,allocation_id:allocation.identifier,unit_reference:allocation.unitRef};
 }));
-router.get('/usage',requirePermission('purchasing'),async(req,res)=>{
+router.get('/usage',requireConsumableRead,async(req,res)=>{
  try{
   const b=branchFilter(req,'m.branch_id');
   const {rows}=await db.execute(sql("SELECT m.*,c.name,c.sku,c.uom,br.name branch_name,d.name department_name,p.name rental_equipment_name FROM consumable_movements m JOIN consumable_catalog c ON c.id=m.consumable_id JOIN branches br ON br.id=m.branch_id LEFT JOIN departments d ON d.id=m.department_id LEFT JOIN products p ON p.id=m.rental_product_id WHERE m.action='issue'"+b.clause+' ORDER BY m.id DESC LIMIT 500',b.args));
   res.json(rows);
  }catch(e){res.status(500).json({error:'Unable to load usage records'});}
 });
+router.get('/usage-summary',requireConsumableRead,async(req,res)=>{
+ try{
+  const filter=usageFilter(req);
+  const {rows}=await db.execute(sql("SELECT m.branch_id,br.name branch_name,m.department_id,d.name department_name,m.rental_product_id,p.name rental_equipment_name,m.rental_unit_reference,m.consumable_id,c.sku,c.name,c.uom,SUM(m.quantity) quantity,SUM(m.value_cents) cost_cents,COUNT(*) issue_count FROM consumable_movements m JOIN consumable_catalog c ON c.id=m.consumable_id JOIN branches br ON br.id=m.branch_id LEFT JOIN departments d ON d.id=m.department_id LEFT JOIN products p ON p.id=m.rental_product_id WHERE m.action='issue'"+filter.clause+' GROUP BY m.branch_id,m.department_id,m.rental_product_id,m.rental_unit_reference,m.consumable_id ORDER BY br.name,c.name,m.department_id,m.rental_product_id,m.rental_unit_reference',filter.args));
+  let totalCost=0,totalIssues=0;
+  const quantities=new Map();
+  for(const row of rows){
+   row.quantity=safeInteger(row.quantity,'Usage quantity');row.cost_cents=safeInteger(row.cost_cents,'Usage cost');row.issue_count=safeInteger(row.issue_count,'Issue count');
+   totalCost=safeAdd(totalCost,row.cost_cents,'Total usage cost');totalIssues=safeAdd(totalIssues,row.issue_count,'Total issue count');
+   const key=Number(row.consumable_id),item=quantities.get(key)||{consumable_id:key,sku:row.sku,name:row.name,uom:row.uom,quantity:0};
+   item.quantity=safeAdd(item.quantity,row.quantity,'Product usage quantity');quantities.set(key,item);
+  }
+  res.json({groups:rows,totals:{cost_cents:totalCost,issue_count:totalIssues,quantities_by_consumable:[...quantities.values()]}});
+ }catch(e){res.status(e.status||500).json({error:e.status?e.message:'Unable to load usage summary',code:e.code||'USAGE_SUMMARY_FAILED'});}
+});
+function usageFilter(req){
+ const scoped=branchFilter(req,'m.branch_id'),args=[...scoped.args];let clause=scoped.clause;
+ for(const [query,col] of [['branch_id','m.branch_id'],['department_id','m.department_id'],['rental_product_id','m.rental_product_id'],['consumable_id','m.consumable_id']]){
+  if(req.query?.[query]!=null&&req.query[query]!==''){
+   const value=id(req.query[query],query);if(query==='branch_id')assertBranch(req,value);
+   clause+=' AND '+col+'=?';args.push(value);
+  }
+ }
+ const dates={};
+ for(const field of ['date_from','date_to'])if(req.query?.[field]){
+  const value=String(req.query[field]);
+  if(!/^\d{4}-\d{2}-\d{2}$/.test(value)||!Number.isFinite(Date.parse(value+'T00:00:00Z'))||new Date(value+'T00:00:00Z').toISOString().slice(0,10)!==value)fail('INVALID_DATE','Use valid ISO dates');
+  dates[field]=value;
+ }
+ if(dates.date_from&&dates.date_to&&dates.date_from>dates.date_to)fail('INVALID_DATE_RANGE','Start date must be on or before end date');
+ if(dates.date_from){clause+=" AND m.created_at>=?";args.push(dates.date_from+' 00:00:00');}
+ if(dates.date_to){clause+=" AND m.created_at<datetime(?, '+1 day')";args.push(dates.date_to+' 00:00:00');}
+ if(req.query?.rental_unit_reference){clause+=' AND m.rental_unit_reference=?';args.push(text(req.query.rental_unit_reference,'Rental unit',120));}
+ return{clause,args};
+}
+router.controls={assertBranch,branchFilter,authorizeOperation,safeInteger,safeAdd,safeProduct,weightedCost,usageFilter};
 module.exports=router;

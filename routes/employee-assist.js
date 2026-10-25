@@ -36,7 +36,7 @@ router.get('/my-day',async(req,res)=>{
   }
   if(allowed(req,['reports','reports_financial','accounts'])){
    await require('../lib/supplier-credit-notes').ensureSupplierCreditSchema();
-   const late=await rows(`SELECT id,invoice_number,due_date FROM supplier_invoices WHERE total-COALESCE((SELECT SUM(amount) FROM supplier_payment_allocations WHERE supplier_invoice_id=supplier_invoices.id),0)-COALESCE((SELECT SUM(amount_cents)/100.0 FROM supplier_credit_applications ca JOIN supplier_credit_notes cn ON cn.id=ca.credit_note_id WHERE ca.supplier_invoice_id=supplier_invoices.id AND cn.status='posted'),0)>0.001 AND status!='void' AND due_date IS NOT NULL AND date(due_date)<date('now') AND (? IS NULL OR branch_id=?) ORDER BY due_date LIMIT 20`,[branch,branch]);
+   const late=await rows(`SELECT id,invoice_number,due_date FROM supplier_invoices WHERE total-COALESCE((SELECT SUM(amount) FROM supplier_payment_allocations WHERE supplier_invoice_id=supplier_invoices.id),0)-${require('../lib/supplier-ap-balances').creditAmountSql('supplier_invoices')}>0.001 AND status!='void' AND due_date IS NOT NULL AND date(due_date)<date('now') AND (? IS NULL OR branch_id=?) ORDER BY due_date LIMIT 20`,[branch,branch]);
    for(const x of late)tasks.push(task('finance',`Supplier invoice ${x.invoice_number||x.id} is overdue`,`Due ${x.due_date}`,'high','Supplier Ledger & Payables',x.id));
   }
   const followups=await rows(`SELECT id,subject,description,due_date FROM crm_activities WHERE employee_id=? AND completed=0 AND type='follow_up' ORDER BY CASE WHEN due_date IS NOT NULL AND datetime(due_date)<datetime('now') THEN 0 ELSE 1 END,due_date,created_at LIMIT 30`,[req.employee.id]);

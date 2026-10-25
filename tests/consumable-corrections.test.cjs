@@ -1,0 +1,63 @@
+'use strict';
+const test=require('node:test'),assert=require('node:assert/strict'),fs=require('node:fs');
+const filename=require('node:path').join(require('node:os').tmpdir(),'consumable-corrections-'+require('node:crypto').randomUUID()+'.db');
+const db=require('@libsql/client').createClient({url:'file:'+filename});
+require.cache[require.resolve('../database')]={exports:{db}};
+const core=require('../lib/consumable-corrections');
+const statement=(sql,args=[])=>({sql,args});
+let server,url;
+async function api(path,body,key,role='receiver',actor=1){const result=await fetch(url+path,{method:body==null?'GET':'POST',headers:{'Content-Type':'application/json','Idempotency-Key':key||'',role,actor:String(actor)},...(body==null?{}:{body:JSON.stringify(body)})});return{status:result.status,body:await result.json()};}
+async function ok(path,body,key,role,actor){const r=await api(path,body,key,role,actor);assert.ok(r.status>=200&&r.status<300,JSON.stringify(r));return r.body;}
+test.before(async()=>{
+ await db.batch([`CREATE TABLE employees(id INTEGER PRIMARY KEY)`,`CREATE TABLE suppliers(id INTEGER PRIMARY KEY,name TEXT,active INTEGER)`,`CREATE TABLE branches(id INTEGER PRIMARY KEY,name TEXT,active INTEGER)`,`CREATE TABLE products(id INTEGER PRIMARY KEY,stock_qty INTEGER,name TEXT)`,`CREATE TABLE purchase_orders(id INTEGER PRIMARY KEY)`,`CREATE TABLE customers(id INTEGER PRIMARY KEY)`,`INSERT INTO employees VALUES(1),(2),(3)`,`INSERT INTO suppliers VALUES(1,'Supplier',1)`,`INSERT INTO branches VALUES(1,'One',1),(2,'Two',1)`,`INSERT INTO products VALUES(1,77,'Retail')`].map(s=>statement(s)),'write');
+ await core.ensureConsumableCorrectionsSchema();
+ await db.batch([`INSERT INTO consumable_catalog(id,sku,name) VALUES(1,'OIL','Oil')`,`INSERT INTO consumable_purchase_orders(id,po_number,supplier_id,branch_id,reason,requested_for,status) VALUES(1,'CPO-1',1,1,'Work','Workshop','received')`,`INSERT INTO consumable_po_lines(id,po_id,consumable_id,quantity_ordered,quantity_received,unit_cost_cents) VALUES(1,1,1,10,10,100)`,`INSERT INTO consumable_movements(id,consumable_id,branch_id,action,quantity,value_cents,po_id,po_line_id,purpose) VALUES(1,1,1,'receive',10,1000,1,1,'Original receipt'),(2,1,1,'issue',3,300,NULL,NULL,'Maintenance')`,`INSERT INTO consumable_balances VALUES(1,1,7,700,CURRENT_TIMESTAMP)`,`INSERT INTO supplier_invoices(id,supplier_id,branch_id,invoice_number,invoice_date,subtotal,tax_amount,tax_treatment,total) VALUES(1,1,1,'INV-1','2026-10-25',10,1.5,'recoverable',11.5)`].map(s=>statement(s)),'write');
+ const app=require('express')();app.use(require('express').json());app.use((req,res,next)=>{const r=req.headers.role;req.employee={id:Number(req.headers.actor||1),default_branch_id:r==='other'?2:r==='unassigned'?null:1,permissions:r==='finance'?{reports_financial:true}:r==='denied'?{}:{purchasing:true,purchasing_create:true,purchasing_receive:true,purchasing_approve:true}};next();});app.use('/base',require('../routes/consumables'));app.use(require('../routes/consumable-corrections'));server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});url='http://127.0.0.1:'+server.address().port;
+});
+test.after(async()=>{if(server)await new Promise(r=>server.close(r));db.close();for(const f of [filename,filename+'-wal',filename+'-shm'])try{fs.unlinkSync(f);}catch{}});
+test('receipt return dispatch, original invoice credit, application and refund are exact, atomic and branch-scoped',async()=>{
+ for(const path of ['/receipts','/returns','/credits','/invoices','/base/catalog','/base/orders','/base/balances','/base/usage'])assert.equal((await api(path,null,null,'finance')).status,200,path);
+ const link={supplier_invoice_id:1,items:[{receipt_movement_id:1,quantity:10,invoice_line_cents:1000}]};
+ assert.equal((await api('/invoice-links',link,'invoice-link-denied')).status,403);
+ const linked=await ok('/invoice-links',link,'invoice-link-0001','finance');assert.equal(linked.match_status,'matched');
+ assert.equal((await api('/invoice-links',link,'invoice-link-0001','other')).status,403);
+ const payload={reason:'Damaged oil',items:[{receipt_movement_id:1,quantity:3}]};
+ const r=await ok('/returns',payload,'return-create-0001');assert.equal(r.status,'requested');
+ assert.equal((await api('/returns',payload,'return-create-0001','other')).status,403);
+ assert.equal((await api('/returns',payload,'return-create-0001','unassigned')).status,403);
+ assert.equal((await api('/returns',payload,'return-create-0001','receiver',2)).status,409);
+ assert.equal((await api('/returns/'+r.id+'/approve',{},'return-approve-0001')).status,403);
+ await ok('/returns/'+r.id+'/approve',{},'return-approve-0001','receiver',2);
+ assert.equal((await api('/returns/'+r.id+'/approve',{},'return-approve-0001','receiver',1)).status,403);
+ const returned=await ok('/returns/'+r.id+'/dispatch',{},'return-dispatch-0001');assert.equal(returned.items[0].carrying_cents,300);
+ await ok('/returns/'+r.id+'/dispatch',{},'return-dispatch-0001');
+ assert.equal(Number((await db.execute('SELECT qty_on_hand FROM consumable_balances')).rows[0].qty_on_hand),4);
+ assert.equal(Number((await db.execute('SELECT stock_qty FROM products')).rows[0].stock_qty),77);
+ const credit={return_id:r.id,supplier_invoice_id:1,credit_number:'CR-1',credit_date:'2026-10-25',reason:'Supplier credit',items:[{return_item_id:r.items[0].id,quantity:2,line_cents:180}],tax_cents:30,tax_treatment:'recoverable'};
+ const c=await ok('/credits',credit,'capture-credit-0001');assert.equal(c.available_cents,0);
+ assert.equal((await require('../lib/supplier-ap-balances').invoiceBalance(db,1)).balance_cents,1150);
+ assert.equal((await api('/credits/'+c.id+'/post',{},'post-credit-0001','finance')).status,409);
+ const posted=await ok('/credits/'+c.id+'/post',{variance_reason:'Supplier retained fee'},'post-credit-0002','finance');assert.equal(posted.available_cents,210);
+ assert.equal((await require('../lib/supplier-ap-balances').invoiceBalance(db,1)).balance_cents,1150);
+ await ok('/credits/'+c.id+'/apply',{supplier_invoice_id:1,amount_cents:200},'apply-credit-0001','finance');
+ assert.equal((await require('../lib/supplier-ap-balances').invoiceBalance(db,1)).balance_cents,950);
+ assert.equal((await api('/credits/'+c.id+'/apply',{supplier_invoice_id:1,amount_cents:11},'apply-credit-over','finance')).status,409);
+ await ok('/credits/'+c.id+'/refund',{amount_cents:10,refund_date:'2026-10-25',payment_method:'bank',reference:'REF-1',reason:'Balance refund'},'refund-credit-0001','finance');
+ await ok('/credits/'+c.id+'/refund',{amount_cents:10,refund_date:'2026-10-25',payment_method:'bank',reference:'REF-1',reason:'Balance refund'},'refund-credit-0001','finance');
+ assert.equal((await ok('/credits/'+c.id,null,null,'finance')).available_cents,0);
+ assert.equal(await require('../lib/supplier-ap-balances').netSupplierAp(db,1),9.5);
+ const over={...credit,credit_number:'CR-OVER',items:[{return_item_id:r.items[0].id,quantity:1,line_cents:121}],tax_cents:0};
+ assert.equal((await api('/credits',over,'capture-credit-over')).status,409);
+ const extra=await ok('/returns',{reason:'More damage',items:[{receipt_movement_id:1,quantity:7}]},'create-return-more');await ok('/returns/'+extra.id+'/approve',{},'approve-return-more','receiver',2);
+ assert.equal((await api('/returns/'+extra.id+'/dispatch',{},'dispatch-return-more')).status,409);
+ assert.equal(Number((await db.execute('SELECT qty_on_hand FROM consumable_balances')).rows[0].qty_on_hand),4);
+ assert.equal((await core.getReturn(db,extra.id)).status,'approved');
+ for(const m of (await db.execute('SELECT * FROM consumable_movements')).rows){await core.postMovementJournal(db,m,1);await core.postMovementJournal(db,m,1);}
+ assert.equal(Number((await db.execute('SELECT COUNT(*) n FROM supplier_invoices')).rows[0].n),1);
+ assert.equal(Number((await db.execute('SELECT SUM(ROUND(debit*100)-ROUND(credit*100)) n FROM journal_lines')).rows[0].n),0);
+ assert.equal(Number((await db.execute("SELECT COUNT(*) n FROM journal_entries WHERE source_type='consumable_return_dispatch'")).rows[0].n),1);
+ assert.equal(Number((await db.execute('SELECT COUNT(*) n FROM consumable_credit_refunds')).rows[0].n),1);
+ await assert.rejects(db.execute('UPDATE consumable_invoice_receipt_allocations SET quantity_invoiced=9'),/immutable/);
+ await assert.rejects(db.execute('UPDATE consumable_return_items SET quantity=2'),/immutable/);
+});
+test('proportional cents use integer cumulative boundaries without losing receipt cents',()=>{assert.equal(core.proportional(100,1,3),33);assert.equal(core.proportional(100,2,3)-core.proportional(100,1,3),34);assert.equal(core.proportional(100,3,3)-core.proportional(100,2,3),33);assert.equal(core.proportional(10000000000000,999999,1000000),9999990000000);});
