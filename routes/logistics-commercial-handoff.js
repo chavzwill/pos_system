@@ -95,6 +95,22 @@ router.post('/from-rental/:id',requireAnyPermission('rentals','rentals_manage','
   }catch(e){res.status(400).json({error:e.message});}
 });
 
+// Legacy/ordinary dispatch jobs do not necessarily have immutable commercial
+// documents. A read-only presence probe lets the board skip missing snapshots
+// without issuing a 404 or inventing a source document.
+router.get('/jobs/:id/source-document-status',requireAnyPermission('transfers','purchasing','transactions','rentals','work_orders'),async(req,res)=>{
+  try{
+    const id=Number(req.params.id);
+    if(!Number.isSafeInteger(id)||id<=0)return res.status(400).json({error:'Invalid dispatch job'});
+    await ensureSchema();
+    const {rows:[found]}=await db.execute({
+      sql:'SELECT 1 AS present FROM dispatch_source_documents WHERE dispatch_job_id=? LIMIT 1',
+      args:[id]
+    });
+    res.json({available:Boolean(found)});
+  }catch(error){res.status(500).json({error:'Source document availability could not be checked'});}
+});
+
 router.get('/jobs/:id/source-document',requireAnyPermission('transfers','purchasing','transactions','rentals','work_orders'),async(req,res)=>{try{const {rows:[row]}=await db.execute({sql:'SELECT * FROM dispatch_source_documents WHERE dispatch_job_id=?',args:[req.params.id]});if(!row)return res.status(404).json({error:'Dispatch source document not found'});row.snapshot=JSON.parse(row.snapshot_json||'{}');delete row.snapshot_json;res.json(row);}catch(e){res.status(500).json({error:e.message});}});
 
 router.use(require('./logistics-repair-handoff'));
