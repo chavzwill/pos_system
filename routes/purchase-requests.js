@@ -39,8 +39,10 @@ router.get('/', async (req, res) => {
     params.push(parseInt(limit));
     const { rows } = await db.execute({ sql, args: params });
     res.json(rows);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(e.status||500).json({ error: e.message }); }
 });
+
+router.get('/tax-options',async(req,res)=>{res.set('Cache-Control','private, no-store');try{res.json({tax_rate:await require('../lib/purchase-request-tax').configured(db)});}catch(e){res.status(e.status||500).json({error:e.message});}});
 
 router.get('/:id', async (req, res) => {
   try {
@@ -52,7 +54,7 @@ router.get('/:id', async (req, res) => {
     });
     pr.items = items;
     res.json(pr);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(e.status||500).json({ error: e.message }); }
 });
 
 // Shared by create and edit. Items may reference a catalog product
@@ -65,7 +67,7 @@ async function processPRItems(items, request_type) {
   const processedItems = [];
   for (const item of items) {
     const product = item.product_id ? (await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [item.product_id] })).rows[0] : null;
-    const unit_cost = parseFloat(item.unit_cost || (product ? product.cost : 0)) || 0;
+    const unit_cost = parseFloat(item.unit_cost ?? (product ? product.cost : 0)) || 0;
     const qty = parseInt(item.quantity || 1);
     const item_type = item.item_type || (request_type === 'internal_use' ? 'internal' : 'sale');
     processedItems.push({
@@ -93,6 +95,7 @@ router.post('/', async (req, res) => {
 
     const pr_number = await nextNumber(db, 'purchase_requests', 'pr_number', 'PR-', 6);
     const processedItems = await processPRItems(items, request_type);
+    const selectedTax=await require('../lib/purchase-request-tax').selection(db,req.body,processedItems);
 
     const tx = await db.transaction('write');
     let committed = false;
@@ -101,7 +104,7 @@ router.post('/', async (req, res) => {
         sql: 'INSERT INTO purchase_requests (pr_number, branch_id, employee_id, department, notes, required_date, request_type, supplier_id, currency, is_online_purchase, tax_rate, tax_amount) VALUES (?,?,?,?,?,?,?,?,?,?,?,?)',
         args: [pr_number, branch_id||null, employee_id||null, department||null, notes||null, required_date||null,
                request_type, supplier_id||null, currency||null, is_online_purchase?1:0,
-               parseFloat(tax_rate)||0, parseFloat(tax_amount)||0]
+               selectedTax.tax_rate, selectedTax.tax_amount]
       });
       const prId = Number(result.lastInsertRowid);
       for (const item of processedItems) {
@@ -123,7 +126,7 @@ router.post('/', async (req, res) => {
       if (!committed) await tx.rollback();
       res.status(committed ? 500 : 400).json({ error: e.message });
     }
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(e.status||500).json({ error: e.message }); }
 });
 
 // Edit a purchase request (details + items, including product URLs for
@@ -142,6 +145,7 @@ router.put('/:id', async (req, res) => {
     if (!['sale_items', 'internal_use'].includes(request_type)) return res.status(400).json({ error: 'Invalid request_type' });
 
     const processedItems = await processPRItems(items, request_type);
+    const selectedTax=await require('../lib/purchase-request-tax').selection(db,req.body,processedItems,pr);
 
     const tx = await db.transaction('write');
     let committed = false;
@@ -150,7 +154,7 @@ router.put('/:id', async (req, res) => {
         sql: 'UPDATE purchase_requests SET branch_id=?, employee_id=?, department=?, notes=?, required_date=?, request_type=?, supplier_id=?, currency=?, is_online_purchase=?, tax_rate=?, tax_amount=? WHERE id=?',
         args: [branch_id||null, employee_id||pr.employee_id||null, department||null, notes||null, required_date||null,
                request_type, supplier_id||null, currency||null, is_online_purchase?1:0,
-               parseFloat(tax_rate)||0, parseFloat(tax_amount)||0, pr.id]
+               selectedTax.tax_rate, selectedTax.tax_amount, pr.id]
       });
       await tx.execute({ sql: 'DELETE FROM purchase_request_items WHERE pr_id = ?', args: [pr.id] });
       for (const item of processedItems) {
@@ -172,7 +176,7 @@ router.put('/:id', async (req, res) => {
       if (!committed) await tx.rollback();
       res.status(committed ? 500 : 400).json({ error: e.message });
     }
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(e.status||500).json({ error: e.message }); }
 });
 
 router.patch('/:id/status', async (req, res) => {
@@ -200,7 +204,7 @@ router.patch('/:id/status', async (req, res) => {
 
     const { rows: [row] } = await db.execute({ sql: PR_SELECT + ' WHERE pr.id = ?', args: [req.params.id] });
     res.json(row);
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(e.status||500).json({ error: e.message }); }
 });
 
 // Convert approved PR to a Purchase Order
@@ -217,7 +221,7 @@ router.post('/:id/convert', async (req, res) => {
     if (!prItems.length) return res.status(400).json({ error: 'PR has no items' });
     const approvedCurrency=String(pr.currency||await require('../lib/procurement-fx').getBaseCurrency(db)).toUpperCase();
     if(req.body.currency&&String(req.body.currency).toUpperCase()!==approvedCurrency)return res.status(409).json({error:'PO conversion must preserve the approved purchase-request currency'});
-    req.body.currency=approvedCurrency;
+    req.body.currency=approvedCurrency;req.body.tax_rate=require('../lib/purchase-request-tax').rate(pr.tax_rate||0);
     const currencyContext=await require('../lib/purchase-order-currency').resolveCurrency(req,prItems.map(i=>({...i,quantity_ordered:i.quantity})));
     const convertedItems=currencyContext.items.map(i=>({...i,total:Number((i.quantity*i.unit_cost).toFixed(2))}));
 

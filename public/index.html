@@ -11567,7 +11567,7 @@ const App = {
               Online Purchase
             </label>
             <span style="font-size:12px;color:var(--text-muted)">Enable to add product URLs per item</span>
-            <div id="pr-tax-badge" style="display:none;margin-left:auto;padding:4px 12px;background:#e8f5e9;border-radius:20px;font-size:13px;color:#2e7d32"></div>
+            <label style="display:flex;align-items:center;gap:8px"><input type="checkbox" id="pr-gct-enabled" onchange="App._onPRCurrencyChange()" ${!pr||Number(pr.tax_rate)>0?'checked':''}> Include GCT</label><div id="pr-tax-badge" style="display:none;margin-left:auto;padding:4px 12px;background:#e8f5e9;border-radius:20px;font-size:13px;color:#2e7d32"></div>
           </div>
 
           <div style="margin-bottom:10px">
@@ -11638,9 +11638,9 @@ const App = {
     this._prIsLocalSupplier = currency === this._prDefaultCurrency;
     const badge = document.getElementById('pr-tax-badge');
     if (badge) {
-      if (this._prIsLocalSupplier && this._prTaxRate > 0) {
+      if (document.getElementById('pr-gct-enabled')?.checked && this._prTaxRate > 0) {
         badge.style.display = 'block';
-        badge.textContent = `${currency} is local currency — ${this._prTaxRate}% tax applies`;
+        badge.textContent = `GCT included at ${this._prTaxRate}%`;
       } else {
         badge.style.display = 'none';
       }
@@ -11701,7 +11701,7 @@ const App = {
       const idx = qEl.id.split('-').pop();
       subtotal += (parseFloat(qEl.value)||0) * (parseFloat(document.getElementById(`pri-cost-${idx}`)?.value)||0);
     });
-    const taxRate = this._prIsLocalSupplier ? (this._prTaxRate || 0) : 0;
+    const taxRate = document.getElementById('pr-gct-enabled')?.checked ? (this._prTaxRate || 0) : 0;
     const taxAmt = parseFloat((subtotal * taxRate / 100).toFixed(2));
     const total = parseFloat((subtotal + taxAmt).toFixed(2));
 
@@ -11729,7 +11729,7 @@ const App = {
     const supplier_id = document.getElementById('pr-supplier')?.value || null;
     const currency = document.getElementById('pr-currency')?.value || null;
     const is_online_purchase = document.getElementById('pr-online')?.checked ? 1 : 0;
-    const taxRate = this._prIsLocalSupplier ? (this._prTaxRate || 0) : 0;
+    const taxRate = document.getElementById('pr-gct-enabled')?.checked ? (this._prTaxRate || 0) : 0;
 
     const items = [];
     document.querySelectorAll('[id^="pri-qty-"]').forEach(qEl => {
@@ -11760,7 +11760,7 @@ const App = {
         branch_id: branch_id||null, department: department||null, notes: notes||null,
         required_date: required_date||null, request_type,
         supplier_id: supplier_id||null, currency: currency||null,
-        is_online_purchase, tax_rate: taxRate, tax_amount, items
+        is_online_purchase, gct_enabled:!!document.getElementById('pr-gct-enabled')?.checked, tax_rate: taxRate, tax_amount, items
       };
       const pr = this._editingPRId
         ? await this.api('PUT', `/purchase-requests/${this._editingPRId}`, payload)
