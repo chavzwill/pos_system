@@ -28,6 +28,7 @@ router.use('/rental-economics',require('./rental-active-buyout-account-bootstrap
 router.use('/rental-economics',require('./rental-active-buyout'));
 router.use('/rental-economics',require('./rental-asset-sale-guard'));
 router.use('/rental-economics',require('./rental-asset-sales'));
+router.use('/rental-economics/maintenance-board',require('./rental-maintenance-board'));
 router.use('/rental-economics',require('./rental-consumable-economics'));
 router.use('/rental-economics',require('./rental-asset-lifetime-economics').router);
 router.use('/loss-control',require('./loss-control-intelligence'));
