@@ -237,13 +237,15 @@ router.post('/:id/convert', async (req, res) => {
 
       for (const item of convertedItems) {
         // Internal-use items are added to PO but without a product link (won't update stock on receive)
-        const productId = item.item_type === 'internal' ? null : item.product_id;
+        const internal = pr.request_type==='internal_use'||item.item_type==='internal';
+        const productId = internal ? null : item.product_id;
         await tx.execute({
-          sql: 'INSERT INTO purchase_order_items (po_id, product_id, product_name, sku, quantity_ordered, unit_cost, total, quotation_item_id, work_order_item_id) VALUES (?,?,?,?,?,?,?,?,?)',
-          args: [poId, productId, item.product_name, item.sku, item.quantity, item.unit_cost, item.total, item.quotation_item_id, item.work_order_item_id]
+          sql: 'INSERT INTO purchase_order_items (po_id, product_id, product_name, sku, quantity_ordered, unit_cost, total, quotation_item_id, work_order_item_id,item_type,product_url) VALUES (?,?,?,?,?,?,?,?,?,?,?)',
+          args: [poId, productId, item.product_name, item.sku, item.quantity, item.unit_cost, item.total, item.quotation_item_id, item.work_order_item_id,internal?'internal':'sale',item.product_url||null]
         });
       }
 
+      await require('../lib/purchase-order-options').persist(tx,poId,require('../lib/purchase-order-options').options({...pr,items:prItems}));
       await require('../lib/purchase-order-currency').persistCurrency(tx,req,poId,currencyContext);
       await tx.execute({ sql: 'UPDATE purchase_requests SET status = ?, converted_to_po_id = ? WHERE id = ?', args: ['converted', poId, pr.id] });
       await tx.commit();

@@ -3679,3 +3679,10 @@ body .tt-sales__discount select{max-width:none}
 /* Service dialogs stay in the viewport when the board is mounted in the shell. */
 [data-tt-workspace].tt-maint .tt-maint__form-shade{position:fixed;z-index:10090}
 [data-tt-workspace].tt-maint .tt-maint__form-panel{position:fixed;z-index:10091}
+/* Purchasing purpose and supplier references stay with their line item. */
+.tt-purch__compose-line>label:has([data-line-field=item_type]),.tt-purch__compose-line>label:has([data-line-field=product_url]){grid-column:1/-1}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-line>label:has([data-line-field=item_type]){grid-column:1;grid-row:2}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-line>label:has([data-line-field=product_url]){grid-column:2/-1;grid-row:2}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-line>.tt-purch__duplicate-line{grid-column:4;grid-row:1}
+#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-line>.tt-purch__remove-line{grid-column:5;grid-row:1}
+@media(max-width:600px){#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-line>label:has([data-line-field=item_type]){grid-column:1/-1!important;grid-row:3}#tt-purchasing-workspace .tt-po-editor .tt-purch__compose-line>label:has([data-line-field=product_url]){grid-column:1/-1!important;grid-row:4}}

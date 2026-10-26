@@ -15,7 +15,7 @@ const checks=[
  ['Copy does not clone original IDs, approval or receipt state',!ui.slice(ui.indexOf('function copiedLine('),ui.indexOf('function updateLineStatus')).includes('quantity_received:')&&!ui.slice(ui.indexOf('function copySelected()'),ui.indexOf('function updateLineStatus')).includes('status:x.status')],
  ['Copied PO review includes purpose and beneficiary',ui.includes("approval_purpose:type==='po'?String(x.approval_purpose")&&ui.includes("requested_for:type==='po'?String(x.requested_for")],
  ['Copied PR preserves request type and department',ui.includes("x.request_type==='internal_use'")&&ui.includes("String(x.department||'')")],
- ['Old scheduled delivery dates are cleared',ui.includes("date:'',department:type==='pr'")],
+ ['Old scheduled delivery dates are cleared',ui.includes("date:'',department:")&&ui.includes("required_date:'',is_online_purchase:")],
  ['Source document is never auto submitted',ui.includes('a new number is assigned only when saved.')||ui.includes('A new number is assigned only when saved.')],
  ['Duplicate line uses new editable object',ui.includes('state.composer.items.splice(index+1,0,copiedLine(line))')],
  ['Copy and remove buttons remain separate direct children',ui.includes('data-duplicate-line=')&&ui.includes('data-remove-line=')],

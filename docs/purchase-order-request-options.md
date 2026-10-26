@@ -1,0 +1,11 @@
+# Purchase-request options in direct purchase orders
+
+Direct PO creation supports resale/internal purpose, department, separate required-by and expected delivery dates, online purchase, per-line item type and HTTP(S) supplier product links. Existing supplier, branch, currency conversion, delivery, justification and named catalog lookup remain in the editor. Department uses the existing free-text department convention; creating department master records is outside this change.
+
+Order-level internal use forces every line to internal. An internal line may be selected from the catalog to reuse its description, SKU, purchase unit and cost, but its saved retail product ID is cleared. The canonical receipt records accepted quantities and costs while the existing unlinked-line receiving path skips stock movements. This does not create a separate consumables balance; use consumable purchase orders for managed consumable stock and usage allocation. Goods receipts, supplier invoices and posted AP remain separate.
+
+POs persist purpose, department, required date and online flag; lines persist item type and product URL. PR conversion preserves the same metadata and forces internal purpose consistently. Copied drafts retain purchasing intent and supplier references while dates and approvals reset. Approval/detail views show the saved choices. Links are validated as HTTP(S), bounded, and must not include URL credentials. The form uses existing responsive PO styling and account-backed draft storage.
+
+Verification: pure validation tests; actual isolated create/approve/receive with a catalog-selected internal item and unchanged retail stock; PO editor currency, delivery, purchase-unit, copy-line, draft and request-options checks at phone/tablet/desktop widths. No production records are used during verification.
+
+Review correction: internal orders and lines reject the legacy product-link action, both before and after receipt, so an internal receipt cannot be reconciled into retail stock later. The connected test covers both rejections and department-approved PR conversion. Legacy approved PRs with invalid dates, oversized department names or unsafe URLs must be corrected before conversion; the new PO validation fails closed.

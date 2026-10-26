@@ -69,6 +69,7 @@ router.post('/', async (req, res) => {
       sourceQuote = quote;
     }
 
+    const purchaseOptions=require('../lib/purchase-order-options').options(req.body);
     const storedNotes = buildApprovalNotes({ approval_purpose, requested_for, notes });
     const po_number = await nextNumber(db, 'purchase_orders', 'po_number', 'PO-', 6);
 
@@ -81,7 +82,7 @@ router.post('/', async (req, res) => {
       const qty = parseInt(item.quantity_ordered || item.quantity || 1);
       const total = parseFloat((unit_cost * qty).toFixed(2));
       subtotal += total;
-      processedItems.push({ product_id: item.product_id || null, product_name: item.product_name || (product ? product.name : 'Unknown'), sku: item.sku || (product ? product.sku : ''), quantity_ordered: qty, unit_cost, total });
+      processedItems.push({ item_type: item.item_type||(purchaseOptions.request_type==='internal_use'?'internal':'sale'), product_url:item.product_url||null, product_id: (purchaseOptions.request_type==='internal_use'||item.item_type==='internal')?null:(item.product_id || null), product_name: item.product_name || (product ? product.name : 'Unknown'), sku: item.sku || (product ? product.sku : ''), quantity_ordered: qty, unit_cost, total });
     }
     subtotal = parseFloat(subtotal.toFixed(2));
 
@@ -91,8 +92,9 @@ router.post('/', async (req, res) => {
       const result = await tx.execute({ sql: 'INSERT INTO purchase_orders (po_number,supplier_id,branch_id,employee_id,subtotal,total,notes,expected_date) VALUES (?,?,?,?,?,?,?,?)', args: [po_number, supplier_id||null, branch_id||null, employee_id||null, subtotal, subtotal, storedNotes, expected_date||null] });
       const poId = Number(result.lastInsertRowid);
       for (const item of processedItems) {
-        await tx.execute({ sql: 'INSERT INTO purchase_order_items (po_id,product_id,product_name,sku,quantity_ordered,unit_cost,total) VALUES (?,?,?,?,?,?,?)', args: [poId, item.product_id, item.product_name, item.sku, item.quantity_ordered, item.unit_cost, item.total] });
+        await tx.execute({ sql: 'INSERT INTO purchase_order_items (po_id,product_id,product_name,sku,quantity_ordered,unit_cost,total,item_type,product_url) VALUES (?,?,?,?,?,?,?,?,?)', args: [poId, item.product_id, item.product_name, item.sku, item.quantity_ordered, item.unit_cost, item.total,item.item_type,item.product_url] });
       }
+      await require('../lib/purchase-order-options').persist(tx,poId,purchaseOptions);
       await require('../lib/purchase-order-currency').persistCurrency(tx,req,poId);
       if (sourceQuote) {
         const claim = await tx.execute({ sql: `UPDATE purchase_quote_imports SET converted_po_id=?,status='converted',updated_at=CURRENT_TIMESTAMP WHERE id=? AND converted_po_id IS NULL`, args: [poId, sourceQuote.id] });
@@ -203,6 +205,7 @@ router.post('/:id/items/:itemId/link-product', async (req, res) => {
     if (!po) return res.status(404).json({ error: 'PO not found' });
     const { rows: [item] } = await db.execute({ sql: 'SELECT * FROM purchase_order_items WHERE id = ? AND po_id = ?', args: [req.params.itemId, req.params.id] });
     if (!item) return res.status(404).json({ error: 'PO item not found' });
+    if (po.request_type==='internal_use'||item.item_type==='internal') return res.status(409).json({error:'Internal-use purchases cannot be linked to retail stock. Create a resale purchase order for stock.'});
     if (item.product_id) return res.status(400).json({ error: 'Item is already linked to a product' });
 
     const { product_id, sku, name, category_id, price, cost, tax_rate } = req.body;
