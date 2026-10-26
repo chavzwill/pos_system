@@ -1,7 +1,7 @@
 'use strict';
 const fs=require('fs'),path=require('path'),vm=require('vm');
 const root=path.join(__dirname,'..'),read=p=>fs.readFileSync(path.join(root,p),'utf8');
-const route=read('routes/rental-asset-lifetime-economics.js'),guard=read('routes/rental-asset-economics-financial-guard.js'),integration=read('routes/rental-asset-workflow-integration.js'),lifecycle=read('routes/rental-asset-lifecycle.js'),loss=read('routes/rental-loss-prevention.js'),trace=read('routes/inventory-traceability.js'),workspace=read('public/rentals-workspace.js');
+const route=read('routes/rental-asset-lifetime-economics.js'),revenueModule=read('lib/rental-asset-revenue.js'),guard=read('routes/rental-asset-economics-financial-guard.js'),integration=read('routes/rental-asset-workflow-integration.js'),lifecycle=read('routes/rental-asset-lifecycle.js'),loss=read('routes/rental-loss-prevention.js'),trace=read('routes/inventory-traceability.js'),workspace=read('public/rentals-workspace.js');
 new vm.Script(route,{filename:'rental asset lifetime economics'});new vm.Script(guard,{filename:'rental asset financial guard'});new vm.Script(integration,{filename:'rental asset workflow integration'});new vm.Script(lifecycle,{filename:'rental asset lifecycle'});new vm.Script(workspace,{filename:'rental workspace'});
 const checks=[
  ['rental asset financial guard is mounted before economics route',trace.includes("router.use('/rental-economics',require('./rental-asset-economics-financial-guard'))")&&trace.indexOf('rental-asset-economics-financial-guard')<trace.indexOf('rental-asset-lifetime-economics')],
@@ -16,7 +16,7 @@ const checks=[
  ['asset allocations link exact rental agreement items',route.includes('rental_asset_allocations')&&route.includes('agreement_item_id')],
  ['an asset cannot have overlapping unresolved allocations',route.includes('already allocated to an unresolved rental')],
  ['asset allocation checks product and branch',route.includes('Rental asset product does not match the rental line')&&route.includes('agreement branch')],
- ['multi-unit rental revenue allocation method is explicit',route.includes("equal_share_per_issued_unit")&&route.includes('rai.rental_fee')],
+ ['multi-unit rental revenue allocation method is explicit',route.includes("equal_share_per_issued_unit")&&revenueModule.includes('rai.rental_fee')],
  ['maintenance records direct cost and evidence',route.includes('rental_asset_maintenance')&&route.includes('direct_cost')&&route.includes('evidence_ref')],
  ['maintenance with cost requires evidence',route.includes('Cost evidence reference is required when maintenance has a direct cost')],
  ['allocated assets cannot silently enter maintenance',route.includes('Release the active rental allocation before putting the asset into maintenance')],

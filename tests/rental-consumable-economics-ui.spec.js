@@ -54,3 +54,13 @@ test('fleet loads older branch assets and searches beyond the currently visible 
  expect(requested.some(q=>q.cursor==='next-asset-page'&&q.branch_id==='1')).toBe(true);
  expect(requested.some(q=>q.search==='older'&&q.branch_id==='1')).toBe(true);
 });
+
+test('fleet shows unresolved revenue without falsely displaying zero or contribution',async({page})=>{
+ await mount(page);
+ await page.route('http://fleet.test/**/asset-economics*',r=>r.fulfill({json:{assets:[{...asset,rentals:{rental_count:1,core_rental_revenue:null,quoted_rental_revenue:10,revenue_review_required:true,revenue_review_reasons:['agreement_adjustment_unattributed'],provisional_active_allocations:0},lifetime:{...asset.lifetime,evidenced_contribution:null}}]}}));
+ await page.evaluate(()=>{TotalToolsRentalFleet.close();return TotalToolsRentalFleet.open();});
+ await expect(page.locator('.tt-fleet__detail')).toContainText('Revenue review required');
+ await expect(page.locator('.tt-fleet__detail')).toContainText('Original quoted rental fees');
+ await expect(page.locator('.tt-fleet__detail')).toContainText('10.00');
+ await expect(page.locator('.tt-fleet__detail')).toContainText('settlement override');
+});

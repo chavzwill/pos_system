@@ -75,6 +75,27 @@ test('unissued and cancelled allocations do not masquerade as earned rental reve
  await sql("INSERT INTO rental_agreements VALUES(2,'pending'),(3,'cancelled')");await sql('INSERT INTO rental_agreement_items VALUES(2,2,1,100),(3,3,1,200)');await sql('INSERT INTO rental_asset_allocations(asset_id,agreement_id,agreement_item_id) VALUES(1,2,2),(1,3,3)');
  const report=(await economics(1)).body;assert.equal(report.rentals.core_rental_revenue,10);assert.equal(report.rentals.rental_count,1);
 });
+test('returned rental true-up and active buyout use final fee once; unexplained overrides withhold contribution',async()=>{
+ await sql('ALTER TABLE rental_agreement_items ADD COLUMN final_rental_fee REAL DEFAULT 0');
+ await sql('ALTER TABLE rental_agreement_items ADD COLUMN quantity_returned INTEGER DEFAULT 0');
+ await sql('ALTER TABLE rental_agreements ADD COLUMN duration_adjustment_total REAL DEFAULT 0');
+ await sql('UPDATE rental_agreement_items SET final_rental_fee=10,quantity_returned=1 WHERE id=1');
+ const original=(await economics(1)).body;assert.equal(original.rentals.core_rental_revenue,10);assert.equal(original.rentals.revenue_review_required,false);
+ await sql('UPDATE rental_agreement_items SET final_rental_fee=8 WHERE id=1');
+ await sql('UPDATE rental_agreements SET duration_adjustment_total=-2 WHERE id=1');
+ const early=(await economics(1)).body;assert.equal(early.rentals.core_rental_revenue,8);assert.equal(early.lifetime.evidenced_contribution,Number((original.lifetime.evidenced_contribution-2).toFixed(2)));
+ await sql('UPDATE rental_agreements SET duration_adjustment_total=-1 WHERE id=1');
+ const mismatch=(await economics(1)).body;assert.equal(mismatch.rentals.core_rental_revenue,null);assert.equal(mismatch.rentals.quoted_rental_revenue,10);assert.equal(mismatch.lifetime.evidenced_contribution,null);assert.ok(mismatch.rentals.revenue_review_reasons.includes('agreement_adjustment_unattributed'));
+ await sql("UPDATE rental_agreements SET status='buyout_closed',duration_adjustment_total=0 WHERE id=1");
+ await sql('UPDATE rental_agreement_items SET final_rental_fee=12 WHERE id=1');
+ const buyout=(await economics(1)).body;assert.equal(buyout.rentals.core_rental_revenue,12);assert.equal(buyout.rentals.rental_count,1);assert.equal(buyout.lifetime.evidenced_contribution,Number((original.lifetime.evidenced_contribution+2).toFixed(2)));
+ await sql('UPDATE rental_agreement_items SET final_rental_fee=NULL WHERE id=1');
+ const unknownBuyout=(await economics(1)).body;assert.equal(unknownBuyout.rentals.core_rental_revenue,null);assert.equal(unknownBuyout.lifetime.evidenced_contribution,null);
+ await sql("UPDATE rental_agreements SET status='active' WHERE id=1");await sql('UPDATE rental_agreement_items SET final_rental_fee=0,quantity_returned=0 WHERE id=1');
+ const active=(await economics(1)).body;assert.equal(active.rentals.core_rental_revenue,10);assert.equal(active.rentals.provisional_active_allocations,1);
+ await sql("UPDATE rental_agreements SET status='returned' WHERE id=1");await sql('UPDATE rental_agreement_items SET final_rental_fee=10,quantity_returned=1 WHERE id=1');
+ const restored=(await economics(1)).body;assert.equal(restored.lifetime.evidenced_contribution,original.lifetime.evidenced_contribution);
+});
 test('reports fail closed on foreign or missing branch and retain costs across physical asset transfer',async()=>{
  for(const role of ['other','unassigned','key','denied','anonymous'])assert.ok([401,403].includes((await api('/assets/1/economics',undefined,role)).status),role);
  assert.equal((await api('/asset-economics?branch_id=2',undefined,'viewer')).status,403);
