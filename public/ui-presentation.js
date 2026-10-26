@@ -48,7 +48,7 @@ async function mount(key,title,api,options={}){
   if(heading){if(!heading.id)heading.id='tt-workspace-heading-'+(++sequence);root.setAttribute('aria-labelledby',heading.id);}else root.setAttribute('aria-label',title||'Workspace');
   for(const child of root.children){if(child.getAttribute('role')==='dialog'){child.removeAttribute('role');child.removeAttribute('aria-modal');}}
   content.replaceChildren(root);active={key,title,api,root,trigger};
-  normalizeWorkspace(root);labelControls(root);window.TotalToolsShellUI?.remember?.(key,title);document.title=(title||'Workspace')+' · Total Tools';
+  normalizeWorkspace(root);labelControls(root);window.TotalToolsShellUI?.remember?.(key,title);window.TotalToolsShellUI?.location?.(key,title,options);document.title=(title||'Workspace')+' · Total Tools';
   document.dispatchEvent(new CustomEvent('tt:workspace-mounted',{detail:{key,title}}));
   const input=root.querySelector('input[type=search],input[id*="search"],[data-search]');
   requestAnimationFrame(()=>{if(input)input.focus({preventScroll:true});else root.focus({preventScroll:true});});
