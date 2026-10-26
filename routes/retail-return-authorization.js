@@ -79,7 +79,13 @@ async function authorizeReturn(req,res,next,capturedPassword){
   body.notes=approval.reason;
   res.once?.('finish',()=>approvals.delete(req));
   next();
- }catch(error){approvals.delete(req);res.status(error.status||500).json({error:error.status?error.message:'Return authorization failed'});}
+ }catch(error){
+   approvals.delete(req);
+   const busy=/SQLITE_BUSY|SQLITE_LOCKED|database is locked/i.test(String(error?.message||error));
+   return res.status(busy?409:(error.status||500)).json({
+     error:busy?'RETURN_CONCURRENT_MODIFICATION_RETRY':error.status?error.message:'Return authorization failed'
+   });
+ }
 }
 async function recordReturnAuthorization(tx,req,returnId){
  const approval=approvals.get(req);

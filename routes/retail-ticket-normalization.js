@@ -14,6 +14,14 @@ async function normalize(req,res,next){try{
   // Overwrite any client assertion. Canonical extras participate in checkout replay hashes.
   req.body.retail_ticket={extras:result.extras};next();
 }catch(e){res.status(400).json({error:e.message});}}
-router.post('/',requirePermission('pos'),normalize);
+router.post('/',requirePermission('pos'),(req,res,next)=>{
+  // Fail before cart normalization: every sale needs one durable operation ID.
+  if(require('./retail-sale-idempotency').operationKey(req))return next();
+  res.set('Idempotency-Protection','required');
+  return res.status(428).json({
+    error:'Idempotency-Key is required for sale settlement. Retry the same logical sale with one stable operation key.',
+    code:'IDEMPOTENCY_KEY_REQUIRED'
+  });
+},normalize);
 router.post('/hold',requirePermission('pos_hold'),normalize);
 module.exports=router;

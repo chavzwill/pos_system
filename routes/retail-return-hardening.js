@@ -9,6 +9,7 @@ const {ensureSchema:ensureCustomerAccountIntegrity}=require('./customer-account-
 
 let readyPromise=null;
 const money=v=>{const n=Number(v);return Number.isFinite(n)?Number(n.toFixed(2)):0;};
+const isBusy=e=>/SQLITE_BUSY|SQLITE_LOCKED|database is locked/i.test(String(e?.message||e));
 async function ensureSchema(){
   if(readyPromise)return readyPromise;
   readyPromise=(async()=>{
@@ -161,8 +162,18 @@ router.post('/:id/return',requirePermission('transactions_returns'),async(req,re
       const {rows:items}=await db.execute({sql:'SELECT * FROM return_items WHERE return_id=? ORDER BY id',args:[returnId]});
       const {rows:[allocation]}=await db.execute({sql:'SELECT * FROM retail_return_allocations WHERE return_id=?',args:[returnId]});
       return res.status(201).json({...saved,items,allocation});
-    }catch(e){if(!committed)await txn.rollback();return res.status(committed?500:400).json({error:e.message});}
-  }catch(e){res.status(500).json({error:e.message});}
+    }catch(e){
+      if(!committed){
+        try{await txn.rollback();}catch(_){return res.status(500).json({error:'Return rollback failed; reconciliation required'});}
+        if(isBusy(e))return res.status(409).json({error:'RETURN_CONCURRENT_MODIFICATION_RETRY'});
+      }
+      // Never encourage retry if the transaction has already committed.
+      return res.status(committed?500:400).json({error:e.message});
+    }
+  }catch(e){
+    if(isBusy(e))return res.status(409).json({error:'RETURN_CONCURRENT_MODIFICATION_RETRY'});
+    res.status(500).json({error:e.message});
+  }
 });
 
 module.exports=router;

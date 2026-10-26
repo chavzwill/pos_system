@@ -87,6 +87,7 @@ router.post('/',async(req,res,next)=>{
   next();
 });
 
+router.operationKey=operationKey;
 module.exports=router;
 module.exports.ensureSchema=ensureSchema;
 module.exports.fingerprint=fingerprint;
