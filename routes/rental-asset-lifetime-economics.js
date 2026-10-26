@@ -6,6 +6,7 @@ const {can,requireAnyPermission,requirePermission}=require('../lib/permissions')
 
 const costReader=require('../lib/rental-consumable-economics');
 const rentalRevenue=require('../lib/rental-asset-revenue');
+const fleetProfitability=require('../lib/rental-fleet-profitability');
 const costAccess=require('./rental-consumable-economics');
 let readyPromise=null;
 async function ensureSchema(){
@@ -161,6 +162,26 @@ function fleetCursor(raw){
   return decoded;
  }catch(_){throw costReader.fail('INVALID_CURSOR','Refresh the fleet list; its page position is invalid',400);}
 }
+// Financial fleet rollup covers ALL matching assets or refuses the request. Never publish a silently capped company total.
+router.get('/fleet-profitability',async(req,res)=>{try{
+ costAccess.authorizeRead(req);
+ if(!can(req.employee.permissions,'reports_financial'))throw costReader.fail('FINANCE_PERMISSION_REQUIRED','Finance reporting permission is required for fleet profitability',403);
+ const cross=can(req.employee.permissions,'branches')||can(req.employee.permissions,'security_manage');
+ const requested=req.query.branch_id;
+ const branch=requested==null?(cross?null:Number(req.employee.default_branch_id)):requested==='all'?null:Number(requested);
+ if(branch==null&&!cross)throw costReader.fail('BRANCH_FORBIDDEN','Company-wide fleet reporting requires cross-branch authority',403);
+ if(branch!=null){if(!Number.isSafeInteger(branch)||branch<1)throw costReader.fail('INVALID_BRANCH','Select a valid assigned branch',requested==null?403:400);costAccess.assertBranch(req,{branch_id:branch});}
+ if(requested!=null&&requested!=='all'&&typeof requested!=='string')throw costReader.fail('INVALID_BRANCH','Select a valid branch',400);
+ const where=branch==null?'':'WHERE a.branch_id=?',args=branch==null?[]:[branch];
+ const {rows:[total]}=await db.execute({sql:`SELECT COUNT(*) n FROM rental_assets a JOIN products p ON p.id=a.product_id JOIN branches b ON b.id=a.branch_id ${where}`,args});
+ const assetCount=Number(total?.n||0),MAX_INTERACTIVE_ASSETS=1500;
+ if(assetCount>MAX_INTERACTIVE_ASSETS)throw costReader.fail('REPORT_TOO_LARGE',`Fleet contains ${assetCount} assets; detailed profitability report supports at most ${MAX_INTERACTIVE_ASSETS} in one interactive request. Narrow the branch selection; no partial company total was generated.`,413);
+ const {rows:assets}=await db.execute({sql:`SELECT a.*,p.name product_name,p.sku,b.name branch_name,s.serial_number FROM rental_assets a JOIN products p ON p.id=a.product_id JOIN branches b ON b.id=a.branch_id LEFT JOIN inventory_serials s ON s.id=a.serial_id ${where} ORDER BY a.id`,args});
+ if(assets.length!==assetCount)throw costReader.fail('REPORT_CHANGED','Fleet changed during report generation; refresh',409);
+ const fields=await rentalRevenue.schema(db),all=[];
+ for(let i=0;i<assets.length;i+=60){const batch=assets.slice(i,i+60),costs=await costReader.readAssetCosts(db,batch);for(const asset of batch)all.push(await economics(asset,costs.get(Number(asset.id)),fields));}
+ res.json({...fleetProfitability.summarize(all),asset_count:assetCount,as_of:new Date().toISOString()});
+ }catch(e){reportError(res,e);}});
 router.get('/assets/:id/economics',async(req,res)=>{try{costAccess.authorizeRead(req);const n=Number(req.params.id);if(!Number.isSafeInteger(n)||n<1)throw costReader.fail('INVALID_ID','Select a valid asset',400);const asset=await getAsset(n);if(!asset)return res.status(404).json({error:'Rental asset not found'});costAccess.assertBranch(req,asset);res.json(await economics(asset));}catch(e){reportError(res,e);}});
 router.get('/asset-economics',async(req,res)=>{try{
  costAccess.authorizeRead(req);const args=[];let query=`SELECT a.*,p.name product_name,p.sku,b.name branch_name,s.serial_number FROM rental_assets a JOIN products p ON p.id=a.product_id JOIN branches b ON b.id=a.branch_id LEFT JOIN inventory_serials s ON s.id=a.serial_id WHERE 1=1`;

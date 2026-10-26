@@ -125,6 +125,41 @@ test('fleet pages cover the whole authorized branch and search is server-side an
  for(const invalid of ['0','-1','501','3.5','hello'])assert.equal((await api('/asset-economics?limit='+invalid,undefined,'viewer')).status,400);
  assert.equal((await api('/asset-economics?limit=2',undefined,'key')).status,403);
 });
+test('fleet profitability covers all authorized branch assets and never implies local staff have company access',async()=>{
+ for(const role of ['viewer','denied','key','anonymous','unassigned'])assert.ok([401,403].includes((await api('/fleet-profitability',undefined,role)).status),role);
+ const local=await api('/fleet-profitability',undefined,'finance');assert.equal(local.status,200,JSON.stringify(local.body));assert.equal(local.body.company.asset_count,4);assert.deepEqual(local.body.branches.map(x=>x.branch_id),[1]);
+ const global=await api('/fleet-profitability',undefined,'global');assert.equal(global.status,200,JSON.stringify(global.body));assert.equal(global.body.company.asset_count,5);assert.deepEqual(global.body.branches.map(x=>x.branch_id),[1,2]);assert.equal(global.body.asset_count,5);assert.equal(global.body.methodology.no_partial_totals_as_company_profit,true);
+ assert.equal((await api('/fleet-profitability?branch_id=all',undefined,'finance')).status,403);
+ assert.equal((await api('/fleet-profitability?branch_id=2',undefined,'finance')).status,403);
+ assert.equal((await api('/fleet-profitability?branch_id=nope',undefined,'global')).status,400);
+ const restricted=await api('/fleet-profitability?branch_id=2',undefined,'global');assert.equal(restricted.body.company.asset_count,1);assert.equal(restricted.body.branches[0].branch_id,2);
+ const offsite=await api('/fleet-profitability',undefined,'other');assert.equal(offsite.body.company.asset_count,1);assert.equal(offsite.body.branches[0].branch_id,2);
+});
+test('fleet exceptions withhold misleading totals while keeping certified branch subset distinct',async()=>{
+ const before=(await api('/fleet-profitability',undefined,'global')).body;
+ assert.equal(before.company.asset_count,5);
+ assert.equal(before.company.assets_requiring_review,0,JSON.stringify(before.company));
+ await sql('UPDATE rental_agreement_items SET final_rental_fee=8 WHERE id=1');
+ await sql('UPDATE rental_agreements SET duration_adjustment_total=-1 WHERE id=1');
+ const mismatched=await api('/fleet-profitability',undefined,'global');assert.equal(mismatched.status,200,JSON.stringify(mismatched.body));
+ const report=mismatched.body;assert.equal(report.company.certified_lifetime_contribution,null);assert.equal(report.company.assets_requiring_review,1);assert.equal(report.company.revenue_review_assets,1);assert.equal(report.company.certified_asset_count,4);assert.equal(report.exceptions.total,1);assert.equal(report.exceptions.items[0].asset_id,1);assert.ok(report.exceptions.items[0].reasons.includes('agreement_adjustment_unattributed'));
+ const kingston=report.branches.find(x=>x.branch_id===1),ochi=report.branches.find(x=>x.branch_id===2);assert.equal(kingston.certified_lifetime_contribution,null);assert.notEqual(ochi.certified_lifetime_contribution,null);
+ assert.equal(report.company.certified_subset_contribution,Number((kingston.certified_subset_contribution+ochi.certified_subset_contribution).toFixed(2)));
+ assert.equal(report.methodology.read_only,true);
+ await sql('UPDATE rental_agreement_items SET final_rental_fee=10 WHERE id=1');
+ await sql('UPDATE rental_agreements SET duration_adjustment_total=0 WHERE id=1');
+ const restored=(await api('/fleet-profitability',undefined,'global')).body;assert.equal(restored.company.assets_requiring_review,0);assert.notEqual(restored.company.certified_lifetime_contribution,null);
+});
+test('active rental bookings are provisional and cannot masquerade as reconciled company revenue',async()=>{
+ await sql("UPDATE rental_agreements SET status='active' WHERE id=1");await sql('UPDATE rental_agreement_items SET quantity_returned=0 WHERE id=1');
+ try{const report=(await api('/fleet-profitability',undefined,'global')).body;assert.equal(report.company.provisional_active_assets,1);assert.equal(report.company.reconciled_rental_revenue,null);assert.equal(report.company.verified_revenue_subset,0);assert.equal(report.company.original_quoted_rental_fees,10);assert.equal(report.company.certified_lifetime_contribution,null);assert.ok(report.exceptions.items.some(x=>x.reasons.includes('active_revenue_provisional')));}
+ finally{await sql("UPDATE rental_agreements SET status='returned' WHERE id=1");await sql('UPDATE rental_agreement_items SET quantity_returned=1 WHERE id=1');}
+});
+test('oversized fleet report rejects without emitting silently capped totals',async()=>{
+ await sql("WITH RECURSIVE n(x) AS (SELECT 0 UNION ALL SELECT x+1 FROM n WHERE x<1499) INSERT INTO rental_assets(id,asset_number,product_id,branch_id,acquisition_cost,acquisition_date,acquisition_evidence_ref) SELECT 10000+x,'STRESS-'||x,1,1,2,'2026-01-01','Generated test evidence' FROM n");
+ try{const over=await api('/fleet-profitability',undefined,'global');assert.equal(over.status,413,JSON.stringify(over.body));assert.equal(over.body.code,'REPORT_TOO_LARGE');assert.equal(over.body.company,undefined);}finally{await sql('DELETE FROM rental_assets WHERE id>=10000');}
+});
+
 test('source evidence never guesses legacy asset identities and missing lazy tables remain explicit',async()=>{
  await sql("INSERT INTO consumable_movements VALUES(4,'issue',1,1,1,NULL,NULL,'MIX-1',1,50,'Legacy service','2025-01-01')");
  let r=(await economics(1)).body;assert.equal(r.consumables.net_cost_cents,0);assert.equal(r.consumables.unresolved_legacy_issues,1);assert.equal(r.cost_coverage.partial,true);
