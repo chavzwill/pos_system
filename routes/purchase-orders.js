@@ -1,3 +1,4 @@
+const {assertReceivingApproved}=require('../lib/purchase-receiving-approval');
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
@@ -142,11 +143,11 @@ router.patch('/:id/receive', requirePermission('purchasing_receive'), async (req
     const { items } = req.body;
     const { rows: [po] } = await db.execute({ sql: 'SELECT * FROM purchase_orders WHERE id = ?', args: [req.params.id] });
     if (!po) return res.status(404).json({ error: 'Not found' });
-    if (po.status === 'cancelled') return res.status(400).json({ error: 'Cannot receive cancelled PO' });
-    if (po.status === 'received') return res.status(400).json({ error: 'PO already fully received' });
+    if (!['approved','partial'].includes(po.status)) return res.status(409).json({ error: `PO must be approved before receiving; current status is ${po.status}` });
 
     const tx = await db.transaction('write');
     try {
+      await assertReceivingApproved(tx,po.id);
       for (const { item_id, quantity_received } of (items || [])) {
         const qty = parseInt(quantity_received);
         if (!qty || qty <= 0) continue;

@@ -1,3 +1,4 @@
+const {assertReceivingApproved}=require('../lib/purchase-receiving-approval');
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
@@ -198,6 +199,7 @@ router.patch('/:id/receive', requirePermission('purchasing_receive'), async (req
     }
     const tx = await db.transaction('write');let committed = false;let receiptId = null;let receiptNumber = null;
     try {
+      await assertReceivingApproved(tx,po.id);
       const receiptTotal = Number(validated.reduce((sum, x) => sum + x.lineCost, 0).toFixed(2));
       receiptNumber = `RCV-${po.id}-${Date.now()}`;
       const receiptResult = await tx.execute({sql:`INSERT INTO purchase_receipts(receipt_number,po_id,supplier_id,branch_id,received_by_employee_id,total_cost) VALUES (?,?,?,?,?,?)`,args:[receiptNumber,po.id,po.supplier_id||null,po.branch_id||null,actor(req),receiptTotal]});

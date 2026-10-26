@@ -11436,7 +11436,7 @@ const App = {
                     <td>
                       <button class="btn btn-sm btn-secondary" onclick="App.viewPO(${po.id})">View</button>
                       ${(po.status==='draft'||po.status==='sent') && this.can('purchasing_approve') ? `<button class="btn btn-sm btn-primary" onclick="App.updatePOStatus(${po.id},'approved')">Approve</button>` : ''}
-                      ${(po.status==='draft'||po.status==='sent'||po.status==='approved'||po.status==='partial') && this.can('purchasing_receive') ? `<button class="btn btn-sm btn-success" onclick="App.showReceivePO(${po.id})">Receive</button>` : ''}
+                      ${(po.status==='approved'||po.status==='partial') && this.can('purchasing_receive') ? `<button class="btn btn-sm btn-success" onclick="App.showReceivePO(${po.id})">Receive</button>` : ''}
                     </td>
                   </tr>`).join('') : '<tr><td colspan="8" class="empty-state">No purchase orders yet</td></tr>'}
               </tbody>
@@ -12270,7 +12270,7 @@ const App = {
           ${po.status==='draft' ? `<button class="btn btn-secondary" onclick="App.updatePOStatus(${po.id},'sent')">Mark as Sent</button>` : ''}
           ${(po.status==='draft'||po.status==='sent') && this.can('purchasing_approve') ? `<button class="btn btn-primary" onclick="App.updatePOStatus(${po.id},'approved')">Approve PO</button>` : ''}
           ${po.status!=='cancelled'&&po.status!=='received' ? `<button class="btn btn-danger" onclick="App.updatePOStatus(${po.id},'cancelled')">Cancel PO</button>` : ''}
-          ${(po.status==='draft'||po.status==='sent'||po.status==='approved'||po.status==='partial') && this.can('purchasing_receive') ? `<button class="btn btn-success" onclick="App.closeModal();App.showReceivePO(${po.id})">Receive Items</button>` : ''}
+          ${(po.status==='approved'||po.status==='partial') && this.can('purchasing_receive') ? `<button class="btn btn-success" onclick="App.closeModal();App.showReceivePO(${po.id})">Receive Items</button>` : ''}
           ${(po.status==='received'||po.status==='partial') && this.can('purchasing_receive') ? `<button class="btn" style="background:#f59e0b;color:#fff;border:none" onclick="App.closeModal();App.showProcessDamaged(${po.id})">⚠️ Process Damaged</button>` : ''}
           ${(po.status==='received'||po.status==='partial') && this.can('purchasing_receive') ? `<button class="btn btn-secondary" onclick="App.emailGRN(${po.id},'${(po.supplier_email||'').replace(/'/g,"\\'")}')">✉️ Email GRN</button>` : ''}
           <button class="btn btn-secondary" onclick="App.closeModal()">Close</button>
@@ -12468,6 +12468,7 @@ const App = {
 
   async showReceivePO(id) {
     const po = await this.api('GET', `/purchase-orders/${id}`);
+    if (!['approved','partial'].includes(po.status)) { this.alert('Approval required before receiving this purchase order.', 'warning'); return; }
     const pendingItems = po.items.filter(i => (i.quantity_received||0) < i.quantity_ordered);
     if (!pendingItems.length) { this.alert('All items already received', 'warning'); return; }
     this.showModal(`

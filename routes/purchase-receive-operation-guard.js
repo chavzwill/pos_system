@@ -39,7 +39,7 @@ function canonical(v){
 function hashRequest(poId,body){return crypto.createHash('sha256').update(JSON.stringify({po_id:Number(poId),body:canonical(body||{})})).digest('hex');}
 function keyOf(req){return String(req.get('Idempotency-Key')||req.get('X-Idempotency-Key')||req.body?.operation_id||'').trim();}
 
-router.patch('/:id/receive',async(req,res,next)=>{
+router.patch('/:id/receive',requirePermission('purchasing_receive'),async(req,res,next)=>{
   try{
     await ensureSchema();
     const poId=Number(req.params.id);
@@ -61,7 +61,7 @@ router.patch('/:id/receive',async(req,res,next)=>{
         return res.status(409).set('Retry-After','2').json({error:'This receiving operation is already in progress. Retry with the same Idempotency-Key.',operation_key:key});
       }
     }
-    if(!['approved','partial'].includes(String(po.status)))return next();
+    if(!['approved','partial'].includes(String(po.status)))return res.status(400).json({error:`PO must be approved before receiving; current status is ${po.status}`});
     if(!key)return res.status(428).json({error:'Idempotency-Key is required for purchase-order receiving'});
     if(key.length<8||key.length>160)return res.status(400).json({error:'Idempotency-Key must be 8 to 160 characters'});
 

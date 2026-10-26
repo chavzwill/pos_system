@@ -1,7 +1,7 @@
 const {test,expect}=require('@playwright/test');const path=require('node:path');
 async function mount(page){
  await page.route('http://purchasing.test/**',route=>{const url=route.request().url();
-  if(url.endsWith('/me'))return route.fulfill({json:{permissions:{purchase_requests:true,purchasing:true,purchasing_create:true,purchasing_approve:true},employee:{id:1,default_branch_id:1}}});
+  if(url.endsWith('/me'))return route.fulfill({json:{permissions:{purchase_requests:true,purchasing:true,purchasing_create:true,purchasing_approve:true,purchasing_receive:true},employee:{id:1,default_branch_id:1}}});
   if(url.endsWith('/tax-options'))return route.fulfill({json:{tax_rate:15}});
   if(url.endsWith('/currency-options'))return route.fulfill({json:{base_currency:'JMD',as_of:'2026-10-24',can_set_order_rate:true,options:[{currency:'JMD',rate_to_base:1,available:true},{currency:'USD',rate_to_base:150,rate_id:5,available:true,source_reference:'Test quote'}]}});
   if(url.endsWith('/document-context'))return route.fulfill({json:{branches:[{id:1,name:'Kingston',address:'10 Test Street',city:'Kingston',country:'Jamaica'}]}});
@@ -47,3 +47,18 @@ test('purchase request can add and remove GCT with a visible estimate',async({pa
 test('legacy request calculator removes GCT independently of currency',async({page})=>{const fs=require('node:fs'),src=fs.readFileSync('public/index.html','utf8'),method=src.slice(src.indexOf('  calcPRTotal() {'),src.indexOf('  async savePR(initialStatus)'));await page.setContent('<input id="pr-gct-enabled" type="checkbox" checked><input id="pr-currency" value="JMD"><input id="pri-qty-1" value="1"><input id="pri-cost-1" value="100"><span id="pr-subtotal"></span><span id="pr-tax-row"></span><span id="pr-tax-pct"></span><span id="pr-tax-amt"></span><span id="pr-total"></span>');await page.evaluate(method=>{window.fixtureApp=Function('return ({'+method+'})')();fixtureApp._prTaxRate=15;fixtureApp.calcPRTotal();document.querySelector('#pr-gct-enabled').onchange=()=>fixtureApp.calcPRTotal();},method);await expect(page.locator('#pr-total')).toContainText('115.00');await page.locator('#pr-gct-enabled').uncheck();await expect(page.locator('#pr-total')).toContainText('100.00');await expect(page.locator('#pr-tax-row')).toBeHidden();});
 
 test('GCT selection survives saved purchase request draft recovery',async({page})=>{await mount(page);await page.evaluate(()=>{TotalToolsPurchasingWorkspace.close();const drafts=new Map();window.TotalToolsWorkProtection={ready:async()=>{},put:(k,v)=>drafts.set(k,structuredClone(v)),take:k=>drafts.has(k)?structuredClone(drafts.get(k)):null,clear:k=>drafts.delete(k),watch:()=>{},status:()=>'',checkpoint:async()=>{}};});await page.evaluate(()=>TotalToolsPurchasingWorkspace.open({tab:'pr',create:'pr'}));await page.locator('[data-line-field=product_name]').fill('Saved tax fixture');await page.locator('[data-line-field=unit_cost]').fill('100');await page.locator('[name=gct_enabled]').selectOption('1');await page.evaluate(()=>TotalToolsPurchasingWorkspace.close());await page.evaluate(()=>TotalToolsPurchasingWorkspace.open({tab:'pr',create:'pr'}));await expect(page.locator('[name=gct_enabled]')).toHaveValue('1');await expect(page.locator('#tt-pr-tax-preview')).toContainText('115.00');await page.setViewportSize({width:390,height:844});await page.screenshot({path:test.info().outputPath('pr-gct-390.png')});expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);});
+
+test('receiving is available only for approved or partially received purchase orders',async({page})=>{
+ await mount(page);await page.evaluate(()=>TotalToolsPurchasingWorkspace.close());
+ await page.route('http://purchasing.test/api/employees/me',r=>r.fulfill({json:{permissions:{purchasing:true,purchasing_receive:true,purchasing_approve:true},employee:{id:1}}}));
+ for(const status of ['draft','sent','approved','partial','received','cancelled']){
+  const po={id:91,po_number:'APPROVAL-91',status,items:[]};
+  await page.route('http://purchasing.test/api/purchase-orders?branch_id=1',r=>r.fulfill({json:[po]}));
+  await page.route('http://purchasing.test/api/purchase-orders/91',r=>r.fulfill({json:po}));
+  await page.evaluate(()=>TotalToolsPurchasingWorkspace.open({tab:'po'}));
+  await page.locator('[data-id="91"]').click();
+  await expect(page.locator('[data-action=receive]')).toHaveCount(['approved','partial'].includes(status)?1:0);
+  if(['draft','sent'].includes(status))await expect(page.locator('.tt-purch__actions')).toContainText('Approval required before receiving');
+  await page.evaluate(()=>TotalToolsPurchasingWorkspace.close());
+ }
+});
