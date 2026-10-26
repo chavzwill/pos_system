@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const VERSION='20261025-recovery1';
+const VERSION='20261025-asset-cost1';
 const loaded=new Set();
 const nativeFetch=window.fetch.bind(window);
 let profileResponsePromise=null,scheduled=false;
