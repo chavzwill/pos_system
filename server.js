@@ -229,6 +229,7 @@ app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/consumables/recovery', require('./routes/consumable-recovery'));
 app.use('/api/consumables/corrections', require('./routes/consumable-corrections'));
 app.use('/api/consumables', require('./routes/consumables'));
+app.use('/api/purchasing-register', require('./routes/purchasing-register'));
 app.use('/api/purchase-orders', require('./routes/purchase-order-currency'));
 app.use('/api/purchase-orders', require('./routes/purchase-order-document-context'));
 app.use('/api/purchase-orders', require('./routes/purchase-receive-operation-guard'));
