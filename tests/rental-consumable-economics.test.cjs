@@ -33,7 +33,7 @@ before(async()=>{
  try{app.use(require('../routes/rental-consumable-economics'));}catch(e){if(e.code!=='MODULE_NOT_FOUND')throw e;}
  app.use(route.router);server=await new Promise(resolve=>{const s=app.listen(0,'127.0.0.1',()=>resolve(s));});base='http://127.0.0.1:'+server.address().port;
 });
-after(async()=>{if(server)await new Promise(r=>server.close(r));db.close();fs.rmSync(dir,{recursive:true,force:true});});
+after(async()=>{if(server)await new Promise(r=>server.close(r));db.close();try{fs.rmSync(dir,{recursive:true,force:true,maxRetries:3,retryDelay:100});}catch(e){if(process.platform!=='win32'||!['EPERM','EBUSY'].includes(e.code))throw e;/* Windows libsql may retain a native handle until process exit; OS temp cleanup then applies. */}});
 test('asset report exposes exact original costs and withholds contribution when maintenance may overlap supplies',async()=>{
  const r=await economics(1);assert.equal(r.status,200);assert.equal(r.body.consumables?.gross_cost_cents,101);assert.equal(r.body.consumables.returned_cost_cents,34);assert.equal(r.body.consumables.net_cost_cents,67);assert.equal(r.body.lifetime.evidenced_contribution,null);assert.equal(r.body.maintenance.cost_review_required,true);
 });
@@ -88,6 +88,21 @@ test('full unused returns restore every original issue cent and excess evidence 
  const report=(await economics(1)).body;assert.equal(report.consumables.gross_cost_cents,101);assert.equal(report.consumables.returned_cost_cents,101);assert.equal(report.consumables.net_cost_cents,0);assert.equal(report.lifetime.evidenced_contribution,6.2);
  assert.equal(Number((await sql('SELECT value_cents FROM consumable_movements WHERE id=1')).rows[0].value_cents),101);
  await sql("INSERT INTO consumable_issue_returns VALUES(3,1,1,1,'Invalid evidence sentinel','2026-02-03')");assert.equal((await economics(1)).status,409);await sql('DELETE FROM consumable_issue_returns WHERE id=3');
+});
+test('fleet pages cover the whole authorized branch and search is server-side and literal',async()=>{
+ await sql("INSERT INTO rental_assets(id,asset_number,product_id,branch_id,acquisition_cost,acquisition_date,acquisition_evidence_ref) VALUES(4,'MIX%4',1,1,2,'2026-01-01','Register'),(5,'MIX-5',1,1,2,'2026-01-01','Register')");
+ const seen=[],first=await api('/asset-economics?limit=2',undefined,'viewer');assert.equal(first.status,200,JSON.stringify(first.body));
+ assert.equal(first.body.assets.length,2);assert.equal(first.body.has_more,true);assert.ok(first.body.next_cursor);
+ let cursor=first.body.next_cursor;seen.push(...first.body.assets.map(a=>a.asset_id));
+ while(cursor){const r=await api('/asset-economics?limit=2&cursor='+encodeURIComponent(cursor),undefined,'viewer');assert.equal(r.status,200,JSON.stringify(r.body));seen.push(...r.body.assets.map(a=>a.asset_id));cursor=r.body.next_cursor;}
+ assert.deepEqual([...seen].sort((a,b)=>a-b),[1,3,4,5]);assert.equal(new Set(seen).size,4);
+ const exact=await api('/asset-economics?search=%25',undefined,'viewer');assert.equal(exact.status,200,JSON.stringify(exact.body));assert.deepEqual(exact.body.assets.map(a=>a.asset_number),['MIX%4']);
+ const escapedUnderscore=await api('/asset-economics?search=MIX_4',undefined,'viewer');assert.deepEqual(escapedUnderscore.body.assets,[]);
+ const sku=await api('/asset-economics?search=mix&limit=2',undefined,'viewer');assert.equal(sku.body.assets.length,2);assert.equal(sku.body.has_more,true);
+ const other=await api('/asset-economics?search=mix',undefined,'other');assert.deepEqual(other.body.assets.map(a=>a.asset_id),[2]);
+ for(const invalid of ['not-a-cursor','W10','eyJ4IjoxfQ'])assert.equal((await api('/asset-economics?cursor='+invalid,undefined,'viewer')).status,400);
+ for(const invalid of ['0','-1','501','3.5','hello'])assert.equal((await api('/asset-economics?limit='+invalid,undefined,'viewer')).status,400);
+ assert.equal((await api('/asset-economics?limit=2',undefined,'key')).status,403);
 });
 test('source evidence never guesses legacy asset identities and missing lazy tables remain explicit',async()=>{
  await sql("INSERT INTO consumable_movements VALUES(4,'issue',1,1,1,NULL,NULL,'MIX-1',1,50,'Legacy service','2025-01-01')");

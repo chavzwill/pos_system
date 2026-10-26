@@ -3637,3 +3637,8 @@ body .tt-sales__discount select{max-width:none}
 .tt-fleet__cost-table th,.tt-fleet__cost-table td{text-align:left;padding:12px;border-bottom:1px solid #dce7e0;vertical-align:top}
 .tt-fleet__cost-table small{display:block;color:#50685c}
 @media(max-width:640px){.tt-fleet__cost-panel{width:100%;max-height:96dvh;border-radius:18px 18px 0 0}.tt-fleet__cost-panel header,.tt-fleet__cost-panel footer,.tt-fleet__cost-body{padding:16px}.tt-fleet__cost-panel header{align-items:flex-start}.tt-fleet__cost-panel header h3{font-size:18px}.tt-fleet__detail{min-width:0}}
+
+/* Fleet list continuation stays visible as asset inventories grow beyond one page. */
+.tt-fleet__pagination{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:14px 16px;border-top:1px solid rgba(36,53,46,.12);font-size:12px;color:#52635c}
+.tt-fleet__pagination button{min-height:40px;max-width:100%;white-space:normal}
+@media(max-width:520px){.tt-fleet__pagination{align-items:stretch}.tt-fleet__pagination button{width:100%}}

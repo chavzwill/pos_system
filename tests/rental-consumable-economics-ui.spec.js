@@ -31,3 +31,26 @@ test('a rejected stale review refreshes its source snapshot before creating a ne
  await page.getByRole('button',{name:'Cost evidence',exact:true}).click();await page.getByRole('button',{name:'Review maintenance cost',exact:true}).click();await page.locator('[name=external_cost]').fill('1.00');await page.locator('[name=reason]').fill('External labour excludes issued supplies');await page.locator('[name=evidence_ref]').fill('Workshop invoice');await page.getByRole('button',{name:'Save cost review',exact:true}).click();await expect(page.locator('#tt-cost-review-error')).toContainText('Maintenance cost changed');await expect(page.locator('[name=external_cost]')).toBeEnabled();
  await page.route('http://fleet.test/**/cost-evidence',r=>r.fulfill({json:{...evidence,maintenance_records:[{...evidence.maintenance_records[0],recorded_cost_cents:200,review_id:22}]}}));await page.getByRole('button',{name:'Refresh source',exact:true}).click();await expect(page.locator('#tt-cost-review-error')).toContainText('Source refreshed');await page.getByRole('button',{name:'Save cost review',exact:true}).click();await expect(page.locator('#tt-cost-review-form')).toHaveCount(0);expect(attempts[1].body.recorded_cost_cents).toBe(200);expect(attempts[1].body.expected_review_id).toBe(22);expect(attempts[1].key).not.toBe(attempts[0].key);
 });
+
+test('fleet loads older branch assets and searches beyond the currently visible page',async({page})=>{
+ await mount(page);
+ const older={...asset,asset_id:2,asset_number:'MIX-OLDER-02',lifetime:{...asset.lifetime,evidenced_contribution:3}};
+ const requested=[];
+ await page.route('http://fleet.test/**/asset-economics*',r=>{
+  const params=new URL(r.request().url()).searchParams;requested.push(Object.fromEntries(params));
+  if(params.get('search')==='older')return r.fulfill({json:{assets:[older],has_more:false,next_cursor:null}});
+  if(params.get('cursor')==='next-asset-page')return r.fulfill({json:{assets:[older],has_more:false,next_cursor:null}});
+  return r.fulfill({json:{assets:[asset],has_more:true,next_cursor:'next-asset-page'}});
+ });
+ await page.evaluate(()=>{TotalToolsRentalFleet.close();return TotalToolsRentalFleet.open();});
+ await expect(page.getByRole('button',{name:'Load more assets'})).toBeVisible();
+ await page.getByRole('button',{name:'Load more assets'}).click();
+ await expect(page.locator('.tt-fleet__card')).toHaveCount(2);
+ await expect(page.locator('.tt-fleet__list')).toContainText('MIX-OLDER-02');
+ await expect(page.getByRole('button',{name:'Load more assets'})).toHaveCount(0);
+ await page.locator('#tt-fleet-search').fill('older');
+ await expect(page.locator('.tt-fleet__card')).toHaveCount(1);
+ await expect(page.locator('.tt-fleet__list')).toContainText('MIX-OLDER-02');
+ expect(requested.some(q=>q.cursor==='next-asset-page'&&q.branch_id==='1')).toBe(true);
+ expect(requested.some(q=>q.search==='older'&&q.branch_id==='1')).toBe(true);
+});
