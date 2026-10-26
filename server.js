@@ -224,6 +224,7 @@ app.use('/api/erp-intelligence', require('./routes/erp-intelligence'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/branches', require('./routes/branches'));
 app.use('/api/suppliers', require('./routes/suppliers'));
+app.use('/api/consumables/recovery', require('./routes/consumable-recovery'));
 app.use('/api/consumables/corrections', require('./routes/consumable-corrections'));
 app.use('/api/consumables', require('./routes/consumables'));
 app.use('/api/purchase-orders', require('./routes/purchase-order-currency'));

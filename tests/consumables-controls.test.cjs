@@ -122,3 +122,37 @@ test('receipt overflow rolls back PO quantity and movement evidence',async()=>{
  const balance=(await execute('SELECT qty_on_hand,value_cents FROM consumable_balances WHERE branch_id=1 AND consumable_id=1')).rows[0];assert.equal(balance.qty_on_hand,4);assert.equal(balance.value_cents,1000);
  const issue=await api('POST','/issues',{branch_id:1,consumable_id:1,quantity:1,purpose:'Actual cost weighted issue'},'staff','actual-cost-issue-operation');assert.equal(issue.status,200);assert.equal(issue.body.cost_cents,250);
  });
+
+test('rental allocations require registered active assets matching branch/product and preserve unresolved legacy evidence',async()=>{
+ await execute('CREATE TABLE IF NOT EXISTS inventory_serials(id INTEGER PRIMARY KEY)');
+ await execute("INSERT INTO products VALUES(2,'Second Rental','R2',1,1)");
+ await execute("INSERT INTO rental_assets(id,asset_number,product_id,branch_id,acquisition_cost,acquisition_date,acquisition_evidence_ref,status) VALUES(1,'ASSET-1',1,1,0,'2026-01-01','test','active'),(2,'ASSET-OTHER-BRANCH',1,2,0,'2026-01-01','test','active'),(3,'ASSET-WRONG-PRODUCT',2,1,0,'2026-01-01','test','active'),(4,'ASSET-RETIRED',1,1,0,'2026-01-01','test','retired')");
+ const body={branch_id:1,consumable_id:1,quantity:1,allocation_type:'rental',allocation_id:1,unit_reference:'UNTRUSTED-FREE-TEXT',purpose:'Registered equipment servicing'};
+ assert.equal((await api('POST','/issues',body,'staff','asset-issue-missing')).body.code,'RENTAL_ASSET_REQUIRED');
+ for(const aid of [2,3,4,999])assert.equal((await api('POST','/issues',{...body,rental_asset_id:aid},'staff','asset-issue-invalid-'+aid)).body.code,'RENTAL_ASSET_UNAVAILABLE');
+ const result=await api('POST','/issues',{...body,rental_asset_id:1},'staff','asset-issue-valid');assert.equal(result.status,200,JSON.stringify(result.body));assert.equal(result.body.unit_reference,'ASSET-1');assert.equal(result.body.rental_asset_id,1);
+ const movement=(await execute('SELECT * FROM consumable_movements WHERE id=?',[result.body.id])).rows[0];assert.equal(movement.rental_asset_number,'ASSET-1');assert.equal(movement.rental_unit_reference,'ASSET-1');
+ const lookup=await api('GET','/lookups');assert.deepEqual(lookup.body.rental_assets.map(a=>a.id),[1,3]);
+ assert.equal((await api('GET','/lookups?branch_id=2')).status,403);
+ assert.deepEqual((await api('GET','/lookups?product_id=1')).body.rental_assets.map(a=>a.id),[1]);
+ const legacy=(await api('GET','/usage?rental_unit_reference=UNIT-1')).body[0];assert.equal(legacy.rental_asset_id,null);assert.equal(legacy.rental_asset_resolution,'unresolved_legacy');
+ const poBody={supplier_id:1,branch_id:1,reason:'Rental service',requested_for:'Workshop',allocation_type:'rental',allocation_id:1,unit_reference:'ASSET-1',items:[{consumable_id:1,quantity:1,unit_cost:'1.00'}]};
+ assert.equal((await api('POST','/orders',poBody,'staff','asset-po-missing')).body.code,'RENTAL_ASSET_REQUIRED');
+ const created=await api('POST','/orders',{...poBody,rental_asset_id:1},'staff','asset-po-valid');assert.equal(created.status,201,JSON.stringify(created.body));
+ await execute("UPDATE rental_assets SET status='maintenance' WHERE id=1");
+ assert.equal((await api('POST',`/orders/${created.body.id}/submit`,{},'staff','asset-po-submit')).body.code,'RENTAL_ASSET_UNAVAILABLE');
+ await execute("UPDATE rental_assets SET status='active' WHERE id=1");
+});
+
+test('net usage reports preserve original cents and aggregate asset IDs across snapshot renames on original issue dates',async()=>{
+ // Isolated report fixture uses the authoritative return table shape without depending on its route initializer.
+ await execute('CREATE TABLE IF NOT EXISTS consumable_issue_returns(id INTEGER PRIMARY KEY,issue_movement_id INTEGER NOT NULL,quantity INTEGER NOT NULL,value_cents INTEGER NOT NULL,reason TEXT,actor_employee_id INTEGER,created_at TEXT)');
+ const a=await execute("INSERT INTO consumable_movements(consumable_id,branch_id,action,quantity,value_cents,rental_product_id,rental_asset_id,rental_asset_number,rental_unit_reference,created_at) VALUES(1,1,'issue',3,5,1,1,'ASSET-OLD','ASSET-OLD','2025-01-01 10:00:00')");
+ const b=await execute("INSERT INTO consumable_movements(consumable_id,branch_id,action,quantity,value_cents,rental_product_id,rental_asset_id,rental_asset_number,rental_unit_reference,created_at) VALUES(1,1,'issue',2,3,1,1,'ASSET-NEW','ASSET-NEW','2025-01-01 11:00:00')");
+ await execute("INSERT INTO consumable_issue_returns(issue_movement_id,quantity,value_cents,created_at) VALUES(?,1,2,'2026-10-25 12:00:00'),(?,1,1,'2026-10-25 12:00:00')",[Number(a.lastInsertRowid),Number(b.lastInsertRowid)]);
+ const summary=await api('GET','/usage-summary?date_from=2025-01-01&date_to=2025-01-01&rental_asset_id=1');assert.equal(summary.status,200,JSON.stringify(summary.body));assert.equal(summary.body.groups.length,1);
+ const group=summary.body.groups[0];assert.equal(group.rental_asset_id,1);assert.equal(group.rental_asset_resolution,'linked');assert.equal(group.original_quantity,5);assert.equal(group.returned_quantity,2);assert.equal(group.quantity,3);assert.equal(group.original_cost_cents,8);assert.equal(group.returned_value_cents,3);assert.equal(group.cost_cents,5);assert.equal(summary.body.totals.cost_cents,5);
+ assert.match(summary.body.methodology.date_attribution,/original issue date/);
+ const history=await api('GET','/usage?date_from=2025-01-01&date_to=2025-01-01&rental_asset_id=1');assert.equal(history.body.length,2);
+ const first=history.body.find(row=>Number(row.id)===Number(a.lastInsertRowid));assert.equal(first.quantity,3);assert.equal(first.value_cents,5);assert.equal(first.original_quantity,3);assert.equal(first.returned_quantity,1);assert.equal(first.net_quantity,2);assert.equal(first.net_cost_cents,3);
+});

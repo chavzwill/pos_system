@@ -16,4 +16,27 @@ test('return settlement uses captured and posted credits and replacement quantit
 test('credit availability subtracts applications and refunds; Finance amounts remain restricted',async()=>{const staff=await get('?category=credits');assert.equal(staff.body.rows[0].can_action,false);assert.deepEqual(staff.body.rows.map(x=>x.key),['credit:1']);assert.equal('amount_cents' in staff.body.rows[0],false);const f=await get('?category=credits','finance');assert.deepEqual(f.body.rows.map(x=>[x.key,x.amount_cents]),[['credit:1',1000],['credit:2',500]]);assert.equal(f.body.rows[0].credit_id,1);assert.equal(f.body.rows[0].record_id,3);});
 test('authorization, branch scope and bounded filters are enforced',async()=>{for(const role of ['none','api'])assert.equal((await get('',role)).status,401);assert.equal((await get('','denied')).status,403);assert.equal((await get('?branch_id=2')).status,403);assert.equal((await get('?branch_id=2','global')).body.rows[0].po_id,4);assert.equal((await get('?after=-1')).status,400);assert.equal((await get('?limit=51')).status,400);assert.equal((await get('?category=no')).status,400);const buyer=(await get('','buyer')).body;assert.equal(buyer.permissions.match_invoice,false);assert.ok(buyer.rows.filter(x=>x.action==='match_invoice'||x.action==='review_return').every(x=>!x.can_action));});
 test('whole-filter counts remain stable across keyset pages and literal search',async()=>{const first=await get('?limit=2');const second=await get('?limit=2&after='+encodeURIComponent(first.body.next_cursor));assert.equal(first.body.total_items,second.body.total_items);assert.deepEqual(first.body.counts,second.body.counts);assert.equal(new Set([...first.body.rows,...second.body.rows].map(x=>x.key)).size,4);assert.equal((await get('?q=%')).body.total_items,0);assert.equal((await get('?q=PO-UNKNOWN')).body.total_items,1);});
+test('consumables-only branches expose source actions, exclude closures and net posted credit with Finance scope',async()=>{
+ await sql("INSERT INTO consumable_purchase_orders VALUES(1,'CPO-A',1,3,'submitted',NULL),(2,'CPO-B',1,3,'partial','2000-01-01'),(3,'CPO-C',1,3,'cancelled',NULL)");
+ await sql('INSERT INTO consumable_po_lines VALUES(1,2,5,2)');
+ await sql("INSERT INTO consumable_movements VALUES(1,2,1,3,'receive',2)");
+ await sql("INSERT INTO consumable_returns VALUES(1,3,'requested'),(2,3,'approved'),(3,3,'dispatched'),(4,3,'requested')");
+ await sql('INSERT INTO consumable_return_items VALUES(1,1,1,1),(2,2,1,1),(3,3,1,2),(4,4,1,1)');
+ await sql("INSERT INTO consumable_credit_notes VALUES(1,3,1000,'captured'),(2,3,1000,'posted'),(3,3,999,'captured')");
+ await sql('INSERT INTO consumable_credit_items VALUES(1,3,1),(3,3,1)');
+ await sql('INSERT INTO consumable_credit_applications VALUES(2,200)');await sql('INSERT INTO consumable_credit_refunds VALUES(2,300)');
+ await sql("INSERT INTO consumable_document_closures VALUES('return',4),('credit',3)");
+ const staff=await get('?branch_id=3','global');assert.equal(staff.status,200);assert.equal(staff.body.total_items,7);
+ assert.ok(staff.body.rows.every(x=>x.po_number.startsWith('CPO-')&&x.action==='review_consumable'));
+ assert.equal(staff.body.rows.find(x=>x.key==='consumable-delivery:1').overdue,true);
+ assert.equal(staff.body.rows.find(x=>x.key==='consumable-credit:1').can_action,false);
+ assert.ok(staff.body.rows.every(x=>!('amount_cents' in x)));
+ assert.ok(!staff.body.rows.some(x=>['consumable-return:4','consumable-credit:3','consumable-order:3'].includes(x.key)));
+ const query=require('../lib/purchasing-control-query').buildQuery(new Set(Object.keys(SOURCES)),{finance:true});
+ const f=(await sql(query+'SELECT * FROM filtered ORDER BY key',[3,'2026-10-25','','%%','%%','%%'])).rows;
+ assert.equal(f.find(x=>x.kind==='consumable_posted_credit_available').amount_cents,500);
+ assert.equal((await get('?branch_id=3&after=consumable-order:1','global')).status,200);
+ await sql("INSERT INTO consumable_invoice_receipt_allocations VALUES(5,1,2)");
+ assert.ok(!(await get('?branch_id=3','global')).body.rows.some(x=>x.key==='consumable-receipt:1'));
+});
 test('reads never initialize lazy schema or claim full coverage when evidence is missing',async()=>{await sql('DROP TABLE supplier_credit_refunds');const before=JSON.stringify((await sql("SELECT name FROM sqlite_master ORDER BY name")).rows);const result=await get();assert.equal(result.status,200);assert.equal(result.body.coverage.partial,true);assert.ok(result.body.coverage.missing_sources.includes('supplier_credit_refunds'));assert.equal(JSON.stringify((await sql("SELECT name FROM sqlite_master ORDER BY name")).rows),before);});
