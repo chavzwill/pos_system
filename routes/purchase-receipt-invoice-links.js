@@ -24,10 +24,7 @@ function unitCost(value){
  if(!/^\d{1,9}(?:\.\d{1,2})?$/.test(s))throw failure(400,'INVALID_UNIT_COST','Invoiced unit cost must use up to two decimal places');
  return cash(s);
 }
-function assertBranch(req,po){
- const own=req.employee?.default_branch_id;
- if(own!=null&&Number(own)!==Number(po.branch_id)&&!can(req.employee?.permissions,'branches')&&!can(req.employee?.permissions,'security_manage'))throw failure(403,'BRANCH_FORBIDDEN','Purchase order belongs to another branch');
-}
+const {assertPurchaseInvoiceBranch:assertBranch}=require('../lib/purchase-invoice-branch-access');
 function report(res,e){
  const conflict=/UNIQUE|SQLITE_CONSTRAINT/.test(String(e?.message||''));
  const status=e.status||(conflict?409:500);

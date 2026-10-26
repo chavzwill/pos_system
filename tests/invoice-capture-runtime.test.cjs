@@ -33,7 +33,7 @@ before(async()=>{
   'INSERT INTO products VALUES(1,10)'
  ],'write');
  const app=express();app.use(express.json());
- app.use((req,res,next)=>{const role=req.headers['x-test-role'];req.employee={id:1,default_branch_id:role==='other'?2:1,permissions:role==='receiver'?{purchasing_receive:true}:role==='none'?{}:{reports_financial:true}};if(role==='key')req.apiKey={};next();});
+ app.use((req,res,next)=>{const role=req.headers['x-test-role'];const unassigned=['unassigned','unassigned-multi'].includes(role);req.employee={id:1,default_branch_id:unassigned?null:role==='other'?2:1,permissions:role==='receiver'?{purchasing_receive:true}:role==='none'?{}:{reports_financial:true,...(['multi','unassigned-multi'].includes(role)?{multi_branch_access:true}:{})}};if(role==='key')req.apiKey={};next();});
  app.use(require('../routes/supplier-invoice-capture'));
  app.use(require('../routes/supplier-invoice-loss-prevention'));
  app.use(require('../routes/supplier-ledger'));
@@ -46,7 +46,14 @@ before(async()=>{
  ],'write');
  await new Promise(resolve=>{server=app.listen(0,'127.0.0.1',resolve)});base='http://127.0.0.1:'+server.address().port;
 });
-after(async()=>{if(server)await new Promise(resolve=>server.close(resolve));db.close();fs.rmSync(dir,{recursive:true,force:true});});
+after(async()=>{
+ if(server)await new Promise(resolve=>server.close(resolve));
+ db.close();
+ // Windows can retain the native SQLite file handle briefly after close.
+ const resolved=path.resolve(dir),temporaryRoot=path.resolve(os.tmpdir())+path.sep;
+ assert.ok(resolved.startsWith(temporaryRoot)&&path.basename(resolved).startsWith('pos-invoice-capture-'));
+ await fs.promises.rm(resolved,{recursive:true,force:true,maxRetries:10,retryDelay:100});
+});
 test('capture and match are separate from AP and stock; Finance posts once with delivery evidence',async()=>{
  const saved=await capture('INV-001');assert.equal(saved.status,201,JSON.stringify(saved.body));const id=saved.body.id;
  assert.equal(saved.body.status,'captured');
@@ -131,4 +138,82 @@ test('a PO supplier change invalidates its captured invoice receipt matching',as
  await execute('UPDATE purchase_orders SET supplier_id=2 WHERE id=1');
  try{const result=await api('POST',`/captured-invoices/${saved.body.id}/allocate`,lines(4,'1'),'receiver','allocation-po-changed');assert.equal(result.status,409,JSON.stringify(result.body));}
  finally{await execute('UPDATE purchase_orders SET supplier_id=1 WHERE id=1');}
+});
+
+test('unassigned staff cannot read, capture, allocate, void or post branch invoice evidence',async()=>{
+ const saved=await capture('BRANCH-GUARD');assert.equal(saved.status,201);
+ const id=saved.body.id;
+ const attempts=[
+  ['GET','/captured-invoices?purchase_order_id=1'],
+  ['GET','/receipt-links/orders/1'],
+  ['POST','/captured-invoices',payload('UNASSIGNED-BLOCK')],
+  ['POST','/captured-invoices/'+id+'/allocate',lines(4,'1')],
+  ['POST','/captured-invoices/'+id+'/void',{reason:'Unassigned attempt'}],
+  ['POST','/invoices',{captured_invoice_id:id}],
+ ];
+ for(const [method,url,body] of attempts){
+  const result=await api(method,url,body,'unassigned','unassigned-branch-operation');
+  assert.equal(result.status,403,method+' '+url+' '+JSON.stringify(result.body));
+ }
+ assert.equal((await execute('SELECT status FROM captured_supplier_invoices WHERE id=?',[id])).rows[0].status,'captured');
+ assert.equal((await execute("SELECT COUNT(*) n FROM supplier_invoices WHERE invoice_number='BRANCH-GUARD'")).rows[0].n,0);
+});
+test('explicit multi-branch staff and Finance-only staff can read authorized reconciliation',async()=>{
+ for(const role of ['finance','receiver','multi','unassigned-multi']){
+  for(const url of ['/captured-invoices?purchase_order_id=1','/receipt-links/orders/1']){
+   const result=await api('GET',url,undefined,role);
+   assert.equal(result.status,200,role+' '+url+' '+JSON.stringify(result.body));
+  }
+ }
+ assert.equal((await api('GET','/receipt-links/orders/2',undefined,'multi')).status,200);
+ assert.equal((await api('GET','/receipt-links/orders/1',undefined,'other')).status,403);
+ assert.equal((await api('GET','/receipt-links/orders/1',undefined,'none')).status,403);
+ assert.equal((await api('GET','/receipt-links/orders/1',undefined,'key')).status,403);
+});
+test('pending and posted evidence share one receipt allocation count for Finance review',async()=>{
+ await execute("INSERT INTO purchase_receipts(id,receipt_number,po_id,supplier_id,branch_id) VALUES(6,'GR-SHARED',1,1,1)");
+ await execute('INSERT INTO purchase_receipt_items(id,receipt_id,po_item_id,product_id,quantity_received,unit_cost,line_cost) VALUES(6,6,1,1,2,10,20)');
+ const saved=await capture('SHARED-ALLOCATION');assert.equal(saved.status,201);
+ assert.equal((await api('POST','/captured-invoices/'+saved.body.id+'/allocate',lines(6,'1'),'receiver','shared-pending-allocation')).status,201);
+ let review=await api('GET','/receipt-links/orders/1');
+ assert.equal(review.body.receipt_items.find(x=>Number(x.receipt_item_id)===6).remaining_qty,1);
+ const posted=await api('POST','/invoices',{captured_invoice_id:saved.body.id});assert.equal(posted.status,201);
+ review=await api('GET','/receipt-links/orders/1');
+ assert.equal(review.body.receipt_items.find(x=>Number(x.receipt_item_id)===6).remaining_qty,1);
+ const second=await capture('SHARED-SECOND');assert.equal(second.status,201);
+ assert.equal((await api('POST','/captured-invoices/'+second.body.id+'/allocate',lines(6,'2'),'receiver','shared-overallocation')).status,409);
+ assert.equal((await execute("SELECT COUNT(*) n FROM sqlite_master WHERE type='table' AND name='purchase_receipt_invoice_evidence'")).rows[0].n,0);
+});
+
+test('branch guard rejects malformed assignments and nonboolean multi-branch claims',()=>{
+ const {assertPurchaseInvoiceBranch:guard}=require('../lib/purchase-invoice-branch-access');
+ const req=(branch,permissions={})=>({employee:{id:1,default_branch_id:branch,permissions}});
+ for(const branch of [null,undefined,'',0,-1,'invalid',1.5]){
+  assert.throws(()=>guard(req(branch),{branch_id:1}),e=>e.status===403);
+ }
+ for(const claim of ['false','true',1,{}]){
+  assert.throws(()=>guard(req(null,{multi_branch_access:claim}),{branch_id:1}),e=>e.status===403);
+ }
+ for(const permissions of [{multi_branch_access:true},{branches:true},{branches_add:true},{security:true},{security_manage:true}]){
+  assert.doesNotThrow(()=>guard(req(null,permissions),{branch_id:2}));
+ }
+ for(const branch_id of [null,0,'',-1,'invalid']){
+  assert.throws(()=>guard(req(1,{multi_branch_access:true}),{branch_id}),e=>e.status===403);
+ }
+ assert.throws(()=>guard({...req(1),apiKey:{}},{branch_id:1}),e=>e.status===403);
+ assert.throws(()=>guard({},{branch_id:1}),e=>e.status===403);
+});
+test('posted allocation and replay reject unassigned staff before evidence or operation lookup',async()=>{
+ const invoice=(await execute("SELECT id FROM supplier_invoices WHERE invoice_number='INV-001'")).rows[0];
+ const url='/receipt-links/orders/1/invoices/'+invoice.id+'/allocate';
+ const before=Number((await execute('SELECT COUNT(*) n FROM supplier_invoice_receipt_allocations')).rows[0].n);
+ for(const op of ['posted-new-branch-key','posted-replay-branch-key']){
+  await execute('INSERT OR IGNORE INTO supplier_invoice_receipt_operations(operation_key,fingerprint,result_json) VALUES(?,?,?)',['receipt-invoice:'+invoice.id+':'+op,'fixture-fingerprint','{"fixture":"private branch result"}']);
+  const denied=await api('POST',url,lines(1,'1'),'unassigned',op);
+  assert.equal(denied.status,403,JSON.stringify(denied.body));
+  assert.equal(denied.body.code,'BRANCH_FORBIDDEN');
+ }
+ assert.equal(Number((await execute('SELECT COUNT(*) n FROM supplier_invoice_receipt_allocations')).rows[0].n),before);
+ const replay=await api('POST','/invoices',{captured_invoice_id:1},'unassigned');
+ assert.equal(replay.status,403,JSON.stringify(replay.body));
 });
