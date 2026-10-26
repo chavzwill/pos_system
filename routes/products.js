@@ -1,11 +1,13 @@
 const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
+const {createWithSku}=require('../lib/product-sku');
 const { syncBinQty } = require('../lib/binSync');
 const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
+const { requireDurableProvider } = require('../lib/mediaDurability');
 const { requireAuth, requirePermission, can } = require('../lib/permissions');
 const { archiveProduct, assertProductNotConsolidated, resolveCanonicalProduct } = require('../lib/catalog-integrity');
 const { validateMemoryUpload, imageMulterFilter } = require('../lib/uploadSecurity');
@@ -82,6 +84,7 @@ const upload = multer({
 async function storeProductImage(product,file,validation){
   const skuSlug=sanitizeSkuForFilename(product.sku);
   const result=await cloudUpload(file.buffer,{folder:'pos-system/products',public_id:skuSlug,overwrite:true,resource_type:'image'});
+  requireDurableProvider(result);
   let imagePath;
   if(result){
     imagePath=result.secure_url;
@@ -93,19 +96,24 @@ async function storeProductImage(product,file,validation){
     fs.writeFileSync(path.join(dir,filename),file.buffer);
     imagePath=`/uploads/products/${filename}`;
   }
+  // The prior catalog pointer remains authoritative until a verified
+  // replacement has been stored and the database update has succeeded.
+  await db.execute({sql:'UPDATE products SET image_path=? WHERE id=?',args:[imagePath,product.id]});
   if(product.image_path&&product.image_path!==imagePath){
-    if(product.image_path.startsWith('https://')){
-      // Cloudinary overwrite is keyed by the canonical SKU public_id. Do not
-      // destroy the prior URL after a successful overwrite because versioned
-      // URLs can differ while still pointing at the same underlying asset.
-      if(!result)await cloudDestroy(product.image_path).catch(()=>{});
-    }else{
-      const old=path.join(__dirname,'..',product.image_path);
-      const next=imagePath.startsWith('/uploads/')?path.join(__dirname,'..',imagePath):null;
-      if(fs.existsSync(old)&&(!next||path.resolve(old)!==path.resolve(next)))fs.unlinkSync(old);
+    try{
+      if(product.image_path.startsWith('https://')){
+        // Overwrites reuse the canonical SKU public_id. Never delete the new
+        // cloud asset by destroying its previous, versioned URL.
+        if(!result)await cloudDestroy(product.image_path);
+      }else{
+        const old=path.join(__dirname,'..',product.image_path);
+        const next=imagePath.startsWith('/uploads/')?path.join(__dirname,'..',imagePath):null;
+        if(fs.existsSync(old)&&(!next||path.resolve(old)!==path.resolve(next)))fs.unlinkSync(old);
+      }
+    }catch(cleanupError){
+      console.error('product_previous_image_cleanup_failed',{code:cleanupError?.code||'unknown'});
     }
   }
-  await db.execute({sql:'UPDATE products SET image_path=? WHERE id=?',args:[imagePath,product.id]});
   return imagePath;
 }
 
@@ -570,15 +578,17 @@ router.get('/:id', requireAuth, async (req, res) => {
 // permission required is chosen per-request based on the product's own type
 // (see requireProductPermission above), not any-of-the-three statically.
 router.post('/', (req, res, next) => requireProductPermission(!!req.body.is_rental, !!req.body.is_service)(req, res, next), async (req, res) => {
-  const { sku, barcode, name, description, category_id, brand_id, price, cost, tax_rate, stock_qty, min_stock, active, branch_id, supplier_id, is_service, unit, online_available, web_allotment, is_rental, rental_rate_type, rental_rate, rental_deposit, rental_late_fee_rate, replacement_value, rental_classification, rental_weekly_rate, rental_monthly_rate, rental_hourly_rate, is_accessory, is_layaway_eligible, model_number, size, taxable } = req.body;
-  if (!sku || !name) return res.status(400).json({ error: 'SKU and name are required' });
+  const { sku: suppliedSku, barcode, name, description, category_id, brand_id, price, cost, tax_rate, stock_qty, min_stock, active, branch_id, supplier_id, is_service, unit, online_available, web_allotment, is_rental, rental_rate_type, rental_rate, rental_deposit, rental_late_fee_rate, replacement_value, rental_classification, rental_weekly_rate, rental_monthly_rate, rental_hourly_rate, is_accessory, is_layaway_eligible, model_number, size, taxable } = req.body;
+  let sku=String(suppliedSku??'').trim();
+  const automatic=req.body.auto_generate_sku===true;
+  if ((!sku&&!automatic) || !name) return res.status(400).json({ error: 'SKU and name are required' });
   try {
     const svc = is_service ? 1 : 0;
     const rnt = is_rental ? 1 : 0;
     const acc = is_accessory ? 1 : 0;
     const lay = is_layaway_eligible ? 1 : 0;
     const tax = taxable === undefined ? 1 : (taxable ? 1 : 0);
-    const result = await db.execute({ sql: `INSERT INTO products (sku,barcode,name,description,category_id,brand_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,is_service,unit,online_available,web_allotment,is_rental,rental_rate_type,rental_rate,rental_deposit,rental_late_fee_rate,replacement_value,rental_classification,rental_weekly_rate,rental_monthly_rate,rental_hourly_rate,is_accessory,is_layaway_eligible,model_number,size,taxable) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [sku, barcode||null, name, description||null, category_id||null, brand_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : (stock_qty||0), svc ? 0 : (min_stock||5), active??1, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax] });
+    const result = await createWithSku(db,sku,automatic,async assigned=>{sku=assigned;return db.execute({ sql: `INSERT INTO products (sku,barcode,name,description,category_id,brand_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,is_service,unit,online_available,web_allotment,is_rental,rental_rate_type,rental_rate,rental_deposit,rental_late_fee_rate,replacement_value,rental_classification,rental_weekly_rate,rental_monthly_rate,rental_hourly_rate,is_accessory,is_layaway_eligible,model_number,size,taxable) VALUES (?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)`, args: [sku, barcode||null, name, description||null, category_id||null, brand_id||null, price||0, cost||0, tax_rate??8.5, svc ? 0 : (stock_qty||0), svc ? 0 : (min_stock||5), active??1, supplier_id||null, svc, unit||null, online_available?1:0, web_allotment!=null?parseInt(web_allotment):null, rnt, rental_rate_type||'daily', rental_rate||0, rental_deposit||0, rental_late_fee_rate||0, replacement_value||0, rental_classification||'tool', rental_weekly_rate||0, rental_monthly_rate||0, rental_hourly_rate||0, acc, lay, model_number||null, size||null, tax] });});
     const productId = Number(result.lastInsertRowid);
     if (!svc && branch_id && (parseInt(stock_qty) || 0) > 0) {
       await db.execute({ sql: 'INSERT OR IGNORE INTO branch_inventory (product_id, branch_id, stock_qty, min_stock) VALUES (?, ?, ?, ?)', args: [productId, branch_id, parseInt(stock_qty) || 0, parseInt(min_stock) || 5] });
@@ -586,7 +596,7 @@ router.post('/', (req, res, next) => requireProductPermission(!!req.body.is_rent
     const { rows: [prod] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [productId] });
     res.status(201).json(prod);
   } catch (e) {
-    res.status(400).json({ error: e.message });
+    res.status(Number(e.status)||400).json({ error: /UNIQUE constraint failed: products\.sku/.test(e.message)?'This SKU / item number already exists.':e.message });
   }
 });
 
@@ -742,7 +752,7 @@ router.post('/images/bulk', requirePermission('inventory_media_bulk'), upload.ar
     res.json(result);
   }catch(e){
     console.error('product_media_bulk_error',{message:e?.message||'unknown'});
-    res.status(500).json({error:'Unable to process the product image batch right now.',code:'PRODUCT_MEDIA_BULK_FAILED'});
+    res.status(Number(e?.status)||500).json({error:'Unable to process the product image batch right now.',code:e?.code||'PRODUCT_MEDIA_BULK_FAILED'});
   }
 });
 

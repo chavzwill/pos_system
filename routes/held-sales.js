@@ -4,6 +4,7 @@ const { db } = require('../database');
 const { requireAuth, requirePermission } = require('../lib/permissions');
 
 router.use(requireAuth);
+router.use(async(req,res,next)=>{try{await require('../lib/retail-ticket').ensureSchema();next();}catch(e){res.status(500).json({error:e.message});}});
 
 router.get('/', requirePermission('pos_hold'), async (req, res) => {
   try {
@@ -40,12 +41,12 @@ router.get('/:id', requirePermission('pos_hold'), async (req, res) => {
     });
     if (!held) return res.status(404).json({ error: 'Held sale not found' });
     const { rows: items } = await db.execute({
-      sql: `SELECT ti.*,p.tax_rate,p.active,p.is_service,p.is_rental,
+      sql: `SELECT ti.*,CASE WHEN ti.line_type='delivery' THEN (SELECT CAST(value AS REAL) FROM settings WHERE key='tax_rate') ELSE COALESCE(p.tax_rate,0) END tax_rate,p.active,p.is_service,p.is_rental,
         COALESCE(bi.stock_qty,p.stock_qty,0) AS current_stock_qty
         FROM transaction_items ti
         LEFT JOIN products p ON p.id=ti.product_id
         LEFT JOIN branch_inventory bi ON bi.product_id=ti.product_id AND bi.branch_id=?
-        WHERE ti.transaction_id=? ORDER BY ti.id`,
+        WHERE ti.transaction_id=? ORDER BY COALESCE(ti.display_order,ti.id),ti.id`,
       args: [held.branch_id || -1, held.id]
     });
     held.items = items;
@@ -74,14 +75,15 @@ router.post('/:id/finalize', requirePermission('pos_hold'), async (req, res) => 
     if (!completedId) return res.status(400).json({ error: 'Completed transaction id is required' });
     const tx = await db.transaction('write');
     try {
-      const { rows: [held] } = await tx.execute({ sql: `SELECT * FROM transactions WHERE id=? AND status='hold'`, args: [req.params.id] });
+      const { rows: [held] } = await tx.execute({ sql: `SELECT * FROM transactions WHERE id=? AND status IN ('hold','converted')`, args: [req.params.id] });
       if (!held) { await tx.rollback(); return res.status(404).json({ error: 'Held sale not found or already finalized' }); }
+      const {rows:[link]}=await tx.execute({sql:'SELECT completed_transaction_id FROM held_sale_recall_links WHERE held_transaction_id=?',args:[held.id]});
+      if(!link||Number(link.completed_transaction_id)!==completedId){await tx.rollback();return res.status(409).json({error:'Complete this held sale using its source hold identity first'});}
       const { rows: [completed] } = await tx.execute({ sql: `SELECT * FROM transactions WHERE id=? AND status='completed'`, args: [completedId] });
       if (!completed) { await tx.rollback(); return res.status(400).json({ error: 'Replacement transaction is not a completed sale' }); }
       if (String(completed.branch_id || '') !== String(held.branch_id || '')) { await tx.rollback(); return res.status(400).json({ error: 'Completed sale must belong to the same branch as the held sale' }); }
       await tx.execute({ sql: `UPDATE quotations SET status='converted',converted_to_tx=? WHERE converted_to_tx=?`, args: [completedId, held.id] });
-      await tx.execute({ sql: 'DELETE FROM transaction_items WHERE transaction_id=?', args: [held.id] });
-      await tx.execute({ sql: 'DELETE FROM transactions WHERE id=?', args: [held.id] });
+      await tx.execute({sql:"UPDATE transactions SET status='converted' WHERE id=?",args:[held.id]});
       await tx.commit();
       res.json({ success: true, completed_transaction_id: completedId });
     } catch (e) { await tx.rollback(); throw e; }

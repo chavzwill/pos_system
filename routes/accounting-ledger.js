@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
 const { requireAnyPermission, requirePermission } = require('../lib/permissions');
+router.use('/supplier-payment-journal-review',require('./supplier-payment-journal-review'));
 
 // General report users may inspect the ledger, but only financial-report
 // authority may create accounts, draft journals, post journals or reverse them.

@@ -22,8 +22,8 @@ Module._load = function(request,parent,isMain) {
   }
   return actualLoad.call(this,request,parent,isMain);
 };
-let queryTTAI;
-try { ({queryTTAI}=require('../lib/tt-ai-client')); }
+let queryTTAI, configuration, requestTTAIAdmin;
+try { ({queryTTAI,configuration,requestTTAIAdmin}=require('../lib/tt-ai-client')); }
 finally { Module._load=actualLoad; }
 
 const { privateKey, publicKey }=crypto.generateKeyPairSync('ed25519');
@@ -109,4 +109,61 @@ test('empty plan rejected as invalid',async()=>{
 test('second response must match ID and finish the query',async()=>{
   await assert.rejects(scenario([plan(),answer('wrong-request')]),/inconsistent query reply/);
   await assert.rejects(scenario([plan(),answer(requestId,'needs_evidence')]),/inconsistent query reply/);
+});
+
+test('TT AI service configuration allows only clean HTTPS origins',()=>{
+  const originalUrl=process.env.TT_AI_SERVICE_URL;
+  const originalEnv=process.env.NODE_ENV;
+  try {
+    process.env.NODE_ENV='production';
+    for(const bad of [
+      'https://user:pass@tt-ai.example.test',
+      'https://tt-ai.example.test/other-service',
+      'https://tt-ai.example.test/?token=secret',
+      'https://tt-ai.example.test/#fragment',
+      'http://tt-ai.example.test',
+      'http://localhost:8787',
+      'file:///tmp/tt-ai',
+    ]) {
+      process.env.TT_AI_SERVICE_URL=bad;
+      assert.throws(()=>configuration(),e=>[
+        'TT_AI_SERVICE_URL_INVALID','TT_AI_SERVICE_HTTPS_REQUIRED',
+      ].includes(e.code),bad);
+    }
+    process.env.TT_AI_SERVICE_URL='https://tt-ai.example.test:8443/';
+    assert.equal(configuration(),'https://tt-ai.example.test:8443');
+    process.env.NODE_ENV='test';
+    process.env.TT_AI_SERVICE_URL='http://127.0.0.1:8787/';
+    assert.equal(configuration(),'http://127.0.0.1:8787');
+  }finally {
+    if(originalUrl===undefined)delete process.env.TT_AI_SERVICE_URL;
+    else process.env.TT_AI_SERVICE_URL=originalUrl;
+    if(originalEnv===undefined)delete process.env.NODE_ENV;
+    else process.env.NODE_ENV=originalEnv;
+  }
+});
+
+test('TT AI admin routing refuses traversal and URLs with query or fragment',async()=>{
+  const oldUrl=process.env.TT_AI_SERVICE_URL;
+  const oldKey=process.env.TT_AI_SIGNING_PRIVATE_KEY;
+  const oldFetch=global.fetch;
+  try{
+    process.env.TT_AI_SERVICE_URL='https://tt-ai.example.test';
+    process.env.TT_AI_SIGNING_PRIVATE_KEY=privatePem;
+    global.fetch=async()=>{throw Error('Unsafe route must not send a request');};
+    for(const path of [
+      '/v1/admin/knowledge/catalog-links/../../query',
+      '/v1/admin/knowledge/catalog-links/list?untrusted=1',
+      '/v1/admin/knowledge/technical-proposals/list#fragment',
+    ]) {
+      await assert.rejects(requestTTAIAdmin({employee,path,requestId}),error=>
+        error?.code==='TT_AI_ADMIN_PATH_NOT_ALLOWED',path);
+    }
+  }finally{
+    if(oldUrl===undefined)delete process.env.TT_AI_SERVICE_URL;
+    else process.env.TT_AI_SERVICE_URL=oldUrl;
+    if(oldKey===undefined)delete process.env.TT_AI_SIGNING_PRIVATE_KEY;
+    else process.env.TT_AI_SIGNING_PRIVATE_KEY=oldKey;
+    global.fetch=oldFetch;
+  }
 });

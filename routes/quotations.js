@@ -7,6 +7,7 @@ const { createTransfer } = require('../lib/transfers');
 const { feeFor, buildRentalLines, revalidateQuoteLines, insertPendingAgreement, assertRentalCustomerEligible } = require('../lib/rentals');
 
 router.use(requirePermission('quotations'));
+router.use(async(req,res,next)=>{try{await require('../lib/retail-ticket').ensureSchema();next();}catch(e){res.status(500).json({error:e.message});}});
 
 router.get('/', async (req, res) => {
   try {
@@ -84,6 +85,13 @@ async function processQuoteItems(items) {
   let subtotal = 0, tax_amount = 0;
   const processedItems = [];
   for (const item of items) {
+    if(['delivery','comment'].includes(item.line_type)){
+      const {extras}=require('../lib/retail-ticket-pricing').normalizeExtras([item],defaultTaxRate);
+      const line=extras[0], totals=require('../lib/retail-ticket').extraTotals(extras,false);
+      subtotal+=totals.subtotal;tax_amount+=totals.tax;
+      processedItems.push({...line,qty:1,lineTotal:totals.subtotal,lineTax:totals.tax,lineDisc:0,is_temp_item:0,purchase_request_id:null,sources:null});continue;
+    }
+    if(item.line_type&&item.line_type!=='product')throw new Error('Unknown quote line type');
     let product = null;
     if (item.product_id) {
       const { rows: [p] } = await db.execute({ sql: 'SELECT * FROM products WHERE id = ?', args: [item.product_id] });
@@ -344,6 +352,7 @@ router.post('/', async (req, res) => {
         for (const item of processedItems) {
           const { product_id, product_name, sku, is_temp_item, purchase_request_id, sources, qty, unit_price, lineTotal, lineTax, lineDisc } = item;
           const itemResult = await tx.execute({ sql: 'INSERT INTO quotation_items (quote_id,product_id,product_name,sku,quantity,unit_price,discount_amount,tax_amount,total,is_temp_item,purchase_request_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)', args: [quoteId, product_id, product_name, sku, qty, unit_price, lineDisc, lineTax, lineTotal, is_temp_item, purchase_request_id] });
+          await tx.execute({sql:'UPDATE quotation_items SET line_type=? WHERE id=?',args:[item.line_type||'product',Number(itemResult.lastInsertRowid)]});
           item.id = Number(itemResult.lastInsertRowid);
           if (sources) {
             for (const src of sources) {
@@ -416,6 +425,7 @@ router.put('/:id', async (req, res) => {
         for (const item of processedItems) {
           const { product_id, product_name, sku, is_temp_item, purchase_request_id, sources, qty, unit_price, lineTotal, lineTax, lineDisc } = item;
           const itemResult = await tx.execute({ sql: 'INSERT INTO quotation_items (quote_id,product_id,product_name,sku,quantity,unit_price,discount_amount,tax_amount,total,is_temp_item,purchase_request_id) VALUES (?,?,?,?,?,?,?,?,?,?,?)', args: [quote.id, product_id, product_name, sku, qty, unit_price, lineDisc, lineTax, lineTotal, is_temp_item, purchase_request_id] });
+          await tx.execute({sql:'UPDATE quotation_items SET line_type=? WHERE id=?',args:[item.line_type||'product',Number(itemResult.lastInsertRowid)]});
           item.id = Number(itemResult.lastInsertRowid);
           if (sources) {
             for (const src of sources) {
@@ -549,7 +559,7 @@ router.post('/:id/convert', async (req, res) => {
       const txId = Number(result.lastInsertRowid);
 
       for (const item of items) {
-        await convTx.execute({ sql: 'INSERT INTO transaction_items (transaction_id,product_id,product_name,sku,quantity,unit_price,discount_amount,tax_amount,total) VALUES (?,?,?,?,?,?,?,?,?)', args: [txId, item.product_id, item.product_name, item.sku || '', item.quantity, item.unit_price, item.discount_amount, item.tax_amount, item.total] });
+        await convTx.execute({ sql: 'INSERT INTO transaction_items (transaction_id,product_id,product_name,sku,quantity,unit_price,discount_amount,tax_amount,total,line_type) VALUES (?,?,?,?,?,?,?,?,?,?)', args: [txId, item.product_id, item.product_name, item.sku || '', item.quantity, item.unit_price, item.discount_amount, item.tax_amount, item.total,item.line_type||'product'] });
       }
 
       await convTx.execute({ sql: 'UPDATE quotations SET status = ?, converted_to_tx = ? WHERE id = ?', args: ['converted', txId, quote.id] });

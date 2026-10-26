@@ -5,6 +5,7 @@ const { calcCommission } = require('./commissions');
 const { getWcSettings, wcRequest } = require('./woocommerce');
 const { syncBinQty } = require('../lib/binSync');
 const { requireAuth, requirePermission } = require('../lib/permissions');
+const { persistTicket, extraTotals } = require('../lib/retail-ticket');
 const { nextNumber } = require('../lib/nextNumber');
 
 function computeAvailableCashBack(row) {
@@ -30,7 +31,8 @@ router.post('/hold', requirePermission('pos_hold'), async (req, res) => {
       const lineTax = parseFloat((lineTotal * (parseFloat(item.tax_rate) || 0) / 100).toFixed(2));
       subtotal += lineTotal; tax_amount += lineTax;
     }
-    subtotal = parseFloat(subtotal.toFixed(2)); tax_amount = parseFloat(tax_amount.toFixed(2));
+    const extra = extraTotals(req.retailTicketExtras, req.body.tax_exempt);
+    subtotal = parseFloat((subtotal + extra.subtotal).toFixed(2)); tax_amount = parseFloat((tax_amount + extra.tax).toFixed(2));
     const disc = parseFloat(discount_amount || 0); const total = parseFloat((subtotal + tax_amount - disc).toFixed(2));
     const txn = await db.transaction('write'); let committed = false;
     try {
@@ -41,9 +43,10 @@ router.post('/hold', requirePermission('pos_hold'), async (req, res) => {
         const lineTax = parseFloat((lineTotal * (parseFloat(item.tax_rate) || 0) / 100).toFixed(2));
         await txn.execute({sql:`INSERT INTO transaction_items (transaction_id,product_id,product_name,sku,quantity,unit_price,discount_amount,tax_amount,total,variation_id,variation_name) VALUES (?,?,?,?,?,?,0,?,?,?,?)`,args:[txId, item.product_id, item.product_name, item.sku || '', item.quantity, parseFloat(item.unit_price), lineTax, lineTotal, item.variation_id || null, item.variation_name || null]});
       }
+      await persistTicket(txn, req, txId);
       await txn.commit(); committed = true;
       const { rows: [savedTx] } = await db.execute({ sql: `SELECT t.*, c.first_name || ' ' || c.last_name as customer_name FROM transactions t LEFT JOIN customers c ON t.customer_id = c.id WHERE t.id = ?`, args: [txId] });
-      const { rows: savedItems } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ?', args: [txId] }); savedTx.items = savedItems; res.status(201).json(savedTx);
+      const { rows: savedItems } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ? ORDER BY COALESCE(display_order,id),id', args: [txId] }); savedTx.items = savedItems; res.status(201).json(savedTx);
     } catch(e) { if (!committed) await txn.rollback(); res.status(committed ? 500 : 400).json({ error: e.message }); }
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -96,7 +99,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       FROM transactions t LEFT JOIN customers c ON t.customer_id = c.id LEFT JOIN employees e ON t.employee_id = e.id LEFT JOIN employees sa ON t.sales_agent_id = sa.id LEFT JOIN branches b ON t.branch_id = b.id LEFT JOIN quotations q ON q.converted_to_tx = t.id LEFT JOIN employees qe ON q.employee_id = qe.id LEFT JOIN returns r ON t.source_return_id = r.id LEFT JOIN shipments sh ON sh.transaction_id = t.id
       LEFT JOIN employees ve ON t.voided_by = ve.id LEFT JOIN rental_agreements ra ON ra.checkout_transaction_id = t.id OR ra.settlement_transaction_id = t.id WHERE t.id = ?`, args: [req.params.id] });
     if (!tx) return res.status(404).json({ error: 'Transaction not found' });
-    const { rows: items } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ?', args: [req.params.id] }); tx.items = items;
+    const { rows: items } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ? ORDER BY COALESCE(display_order,id),id', args: [req.params.id] }); tx.items = items;
     const { rows: payments } = await db.execute({ sql: 'SELECT * FROM transaction_payments WHERE transaction_id = ? ORDER BY id', args: [req.params.id] }); tx.payments = payments;
     if (tx.rental_agreement_id) { const { rows: pauses } = await db.execute({ sql: 'SELECT reason, notes, started_at, ended_at FROM rental_agreement_pauses WHERE agreement_id = ? ORDER BY id', args: [tx.rental_agreement_id] }); tx.rental_pauses = pauses; }
     res.json(tx);
@@ -125,7 +128,8 @@ router.post('/', requirePermission('pos'), async (req, res) => {
       const lineTax = isTaxExempt ? 0 : parseFloat((lineTotal * product.tax_rate / 100).toFixed(2)); subtotal += lineTotal; tax_amount += lineTax;
       processedItems.push({ product, variation, quantity: item.quantity, unit_price, lineTotal, lineTax, discount: item.discount || 0 });
     }
-    subtotal = parseFloat(subtotal.toFixed(2)); tax_amount = parseFloat(tax_amount.toFixed(2));
+    const extra = extraTotals(req.retailTicketExtras, req.body.tax_exempt);
+    subtotal = parseFloat((subtotal + extra.subtotal).toFixed(2)); tax_amount = parseFloat((tax_amount + extra.tax).toFixed(2));
     const disc = parseFloat(discount_amount || 0); const storeCredit = parseFloat(store_credit_applied || 0);
     let cashBack = parseFloat(cash_back_applied || 0); let cashBackCard = null;
     if (cashBack > 0 && customer_id) {
@@ -174,9 +178,10 @@ router.post('/', requirePermission('pos'), async (req, res) => {
         if (cashBack > 0 && cashBackCard) { const pointsToDeduct = Math.round((cashBack / cashBackCard.reward_amount) * cashBackCard.points_threshold); await tx.execute({ sql: 'UPDATE customers SET loyalty_points = MAX(0, loyalty_points - ?), cash_back_last_redeemed_at = CURRENT_TIMESTAMP WHERE id = ?', args: [pointsToDeduct, customer_id] }); }
       }
       if (quote_id) await tx.execute({ sql: `UPDATE quotations SET status = 'converted', converted_to_tx = ? WHERE id = ? AND status NOT IN ('converted','declined','cancelled')`, args: [txId, quote_id] });
+      await persistTicket(tx, req, txId);
       await tx.commit(); committed = true;
       const { rows: [savedTx] } = await db.execute({ sql: `SELECT t.*, c.first_name || ' ' || c.last_name as customer_name, b.name as branch_name, b.address as branch_address, b.city as branch_city, b.state as branch_state, b.zip as branch_zip, b.phone as branch_phone FROM transactions t LEFT JOIN customers c ON t.customer_id = c.id LEFT JOIN branches b ON t.branch_id = b.id WHERE t.id = ?`, args: [txId] });
-      const { rows: txItems } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ?', args: [txId] }); savedTx.items = txItems;
+      const { rows: txItems } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ? ORDER BY COALESCE(display_order,id),id', args: [txId] }); savedTx.items = txItems;
       const { rows: txPayments } = await db.execute({ sql: 'SELECT * FROM transaction_payments WHERE transaction_id = ? ORDER BY id', args: [txId] }); savedTx.payments = txPayments;
       try { await calcCommission(savedTx.sales_agent_id || savedTx.employee_id, savedTx.total, 'transaction', txId, savedTx.transaction_number); } catch(e) {}
       res.status(201).json(savedTx);
@@ -185,7 +190,7 @@ router.post('/', requirePermission('pos'), async (req, res) => {
 });
 
 router.get('/:id/returns', requireAuth, async (req, res) => {
-  try { const { rows: returns } = await db.execute({ sql: 'SELECT * FROM returns WHERE original_transaction_id = ?', args: [req.params.id] }); for (const r of returns) { const { rows: items } = await db.execute({ sql: 'SELECT * FROM return_items WHERE return_id = ?', args: [r.id] }); r.items = items; } res.json(returns); } catch(e) { res.status(500).json({ error: e.message }); }
+  try { await require('./retail-return-authorization').ensureSchema(); const { rows: returns } = await db.execute({ sql: 'SELECT * FROM returns WHERE original_transaction_id = ?', args: [req.params.id] }); for (const r of returns) { const { rows: items } = await db.execute({ sql: 'SELECT * FROM return_items WHERE return_id = ?', args: [r.id] }); r.items = items; const {rows:[authorization]}=await db.execute({sql:'SELECT authorized_by_employee_id,authorizer_name,reason,authorized_at FROM retail_return_authorizations WHERE return_id=?',args:[r.id]}); r.authorization=authorization||null; } res.json(returns); } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
 router.get('/returns/:id', requireAuth, async (req, res) => {
@@ -195,7 +200,7 @@ router.get('/returns/:id', requireAuth, async (req, res) => {
       e.first_name || ' ' || e.last_name as employee_name,
       b.name as branch_name, b.address as branch_address, b.city as branch_city, b.state as branch_state, b.zip as branch_zip, b.phone as branch_phone
       FROM returns r LEFT JOIN transactions t ON r.original_transaction_id = t.id LEFT JOIN customers c ON r.customer_id = c.id LEFT JOIN employees e ON r.employee_id = e.id LEFT JOIN branches b ON r.branch_id = b.id WHERE r.id = ?`, args: [req.params.id] });
-    if (!ret) return res.status(404).json({ error: 'Return not found' }); const { rows: items } = await db.execute({ sql: 'SELECT * FROM return_items WHERE return_id = ?', args: [req.params.id] }); ret.items = items; res.json(ret);
+    if (!ret) return res.status(404).json({ error: 'Return not found' }); const { rows: items } = await db.execute({ sql: 'SELECT * FROM return_items WHERE return_id = ?', args: [req.params.id] }); ret.items = items; await require('./retail-return-authorization').ensureSchema(); const {rows:[authorization]}=await db.execute({sql:'SELECT authorized_by_employee_id,authorizer_name,reason,authorized_at FROM retail_return_authorizations WHERE return_id=?',args:[ret.id]}); ret.authorization=authorization||null; res.json(ret);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
 
@@ -220,7 +225,7 @@ router.post('/:id/return', requirePermission('transactions_returns'), async (req
     if (resolution === 'credit_note' && !tx.customer_id) return res.status(400).json({ error: 'Credit note requires a customer on the original transaction' });
     const { rows: [linkedAgreement] } = await db.execute({ sql: 'SELECT agreement_number FROM rental_agreements WHERE checkout_transaction_id = ? OR settlement_transaction_id = ?', args: [req.params.id, req.params.id] });
     if (linkedAgreement) return res.status(400).json({ error: `This transaction belongs to rental agreement ${linkedAgreement.agreement_number} — process the return from the Rentals screen instead.` });
-    const { rows: txItems } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ?', args: [req.params.id] });
+    const { rows: txItems } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ? ORDER BY COALESCE(display_order,id),id', args: [req.params.id] });
     const { rows: alreadyReturned } = await db.execute({ sql: `SELECT ri.transaction_item_id, SUM(ri.quantity) as returned_qty FROM return_items ri JOIN returns r ON ri.return_id = r.id WHERE r.original_transaction_id = ? AND r.status != 'cancelled' GROUP BY ri.transaction_item_id`, args: [req.params.id] });
     const returnedMap = {}; alreadyReturned.forEach(r => { returnedMap[r.transaction_item_id] = r.returned_qty; });
     let returnSubtotal = 0, returnTax = 0; const processedItems = [];
@@ -258,8 +263,8 @@ router.patch('/:id/void', requireAuth, async (req, res) => {
     const voidTxn = await db.transaction('write');
     try {
       await voidTxn.execute({ sql: "UPDATE transactions SET status='voided', voided_by=?, voided_at=CURRENT_TIMESTAMP, void_reason=? WHERE id=?", args: [authorizer.id, reason || null, req.params.id] });
-      const { rows: items } = await voidTxn.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ?', args: [req.params.id] });
-      for (const item of items) { await voidTxn.execute({ sql: 'UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?', args: [item.quantity, item.product_id] }); if (tx.branch_id) { await voidTxn.execute({ sql: `INSERT INTO branch_inventory (product_id, branch_id, stock_qty, min_stock, updated_at) VALUES (?, ?, ?, (SELECT min_stock FROM products WHERE id = ?), CURRENT_TIMESTAMP) ON CONFLICT(product_id, branch_id) DO UPDATE SET stock_qty = stock_qty + ?, updated_at = CURRENT_TIMESTAMP`, args: [item.product_id, tx.branch_id, item.quantity, item.product_id, item.quantity] }); await syncBinQty(voidTxn, item.product_id, tx.branch_id, item.quantity); } }
+      const { rows: items } = await voidTxn.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ? ORDER BY COALESCE(display_order,id),id', args: [req.params.id] });
+      for (const item of items) { if (!item.product_id) continue; await voidTxn.execute({ sql: 'UPDATE products SET stock_qty = stock_qty + ? WHERE id = ?', args: [item.quantity, item.product_id] }); if (tx.branch_id) { await voidTxn.execute({ sql: `INSERT INTO branch_inventory (product_id, branch_id, stock_qty, min_stock, updated_at) VALUES (?, ?, ?, (SELECT min_stock FROM products WHERE id = ?), CURRENT_TIMESTAMP) ON CONFLICT(product_id, branch_id) DO UPDATE SET stock_qty = stock_qty + ?, updated_at = CURRENT_TIMESTAMP`, args: [item.product_id, tx.branch_id, item.quantity, item.product_id, item.quantity] }); await syncBinQty(voidTxn, item.product_id, tx.branch_id, item.quantity); } }
       if (tx.customer_id) { const loyaltyPts = Math.floor(tx.total * 0.5); await voidTxn.execute({ sql: 'UPDATE customers SET loyalty_points = loyalty_points - ?, total_spent = total_spent - ? WHERE id = ?', args: [loyaltyPts, tx.total, tx.customer_id] }); if (tx.is_credit) await voidTxn.execute({ sql: 'UPDATE customers SET account_balance = MAX(0, account_balance - ?) WHERE id = ?', args: [tx.total, tx.customer_id] }); }
       await voidTxn.commit();
     } catch(e) { await voidTxn.rollback(); throw e; }

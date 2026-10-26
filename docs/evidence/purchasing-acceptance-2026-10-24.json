@@ -1,0 +1,33 @@
+{
+  "scenario": "partial deliveries, cost adjustment, many-to-many invoice matching and saved-operation recovery",
+  "production_data_used": false,
+  "po_id": 1,
+  "receipt_ids": [
+    1,
+    2
+  ],
+  "invoice_ids": [
+    1,
+    2
+  ],
+  "payment_id": 1,
+  "recovered_operations": [
+    "receipt-0",
+    "receipt-1",
+    "capture-0",
+    "allocation-0",
+    "capture-1",
+    "allocation-1"
+  ],
+  "final_stock": 5,
+  "inventory_value": 60,
+  "receiving_clearing_net": 0,
+  "invoice_ap_credit": 60,
+  "payment_ap_debit": 60,
+  "final_ap_net": 0,
+  "retail_price": 30,
+  "original_po_unit_cost": 10,
+  "receipt_unit_cost": 12,
+  "all_tested_journals_balanced": true,
+  "exceptions_queue_clear": true
+}

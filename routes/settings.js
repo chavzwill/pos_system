@@ -8,6 +8,7 @@ const { requireAuth, requirePermission, can } = require('../lib/permissions');
 const { ensureSecurityAuditTable, recordSecurityAudit } = require('../lib/securityAudit');
 const { SECRET_SETTING_KEYS, protectSettingValue, secretValuesEqual } = require('../lib/secureSettings');
 const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
+const { requireDurableProvider } = require('../lib/mediaDurability');
 const { validateMemoryUpload, imageMulterFilter } = require('../lib/uploadSecurity');
 
 const upload = multer({
@@ -198,6 +199,7 @@ router.post('/logo', requirePermission('settings'), upload.single('logo'), async
   try {
     const { rows: [existing] } = await db.execute({ sql: "SELECT value FROM settings WHERE key = 'company_logo_url'", args: [] });
     const result = await cloudUpload(req.file.buffer, { folder: 'pos-system/branding', public_id: 'company-logo', overwrite: true, resource_type: 'image' });
+    requireDurableProvider(result);
     let logoUrl;
     if (result) logoUrl = result.secure_url;
     else {
@@ -219,11 +221,15 @@ router.post('/logo', requirePermission('settings'), upload.single('logo'), async
       throw error;
     }
     if (existing?.value && existing.value !== logoUrl) {
-      if (existing.value.startsWith('https://')) await cloudDestroy(existing.value).catch(()=>{});
-      else { const old = path.join(__dirname, '..', existing.value); if (fs.existsSync(old)) fs.unlinkSync(old); }
+      // Upload uses a stable Cloudinary public_id; deleting the old cloud
+      // URL here would destroy the newly overwritten company logo.
+      if (!existing.value.startsWith('https://')) {
+        try { const old = path.join(__dirname, '..', existing.value); if (fs.existsSync(old)) fs.unlinkSync(old); }
+        catch(cleanupError){ console.error('company_logo_old_file_cleanup_failed',{code:cleanupError?.code||'unknown'}); }
+      }
     }
     res.json({ logo_url: logoUrl });
-  } catch(e) { res.status(500).json({ error: 'Unable to store company logo' }); }
+  } catch(e) { const unavailable=Number(e?.status)===503;res.status(unavailable?503:500).json({ error:unavailable?'Durable company logo storage is unavailable. Existing branding was preserved.':'Unable to store company logo',code:e?.code||'COMPANY_LOGO_UNAVAILABLE' }); }
 });
 
 router.delete('/logo', requirePermission('settings'), async (req, res) => {

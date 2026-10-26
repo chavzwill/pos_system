@@ -1,0 +1,44 @@
+name: POS to TT AI gateway contract
+
+on:
+  pull_request:
+    paths:
+      - 'lib/tt-ai-*.js'
+      - 'routes/tt-ai-read.js'
+      - 'scripts/check-tt-ai-*.js'
+      - 'tests/tt-ai-*.js'
+      - '.github/workflows/tt-ai-pos-gateway.yml'
+
+permissions:
+  contents: read
+
+concurrency:
+  group: pos-tt-ai-gateway-${{ github.event.pull_request.number || github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  read-boundary:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 10
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          persist-credentials: false
+      - uses: actions/setup-node@v4
+        with:
+          node-version: '22'
+      - name: Validate gateway JavaScript syntax
+        run: |
+          node --check lib/tt-ai-client.js
+          node --check lib/tt-ai-assertion.js
+          node --check lib/tt-ai-read-tools.js
+          node --check routes/tt-ai-read.js
+          node --check tests/tt-ai-query-bridge.spec.js
+      - name: Verify POS read-only and least-privilege source contracts
+        run: node scripts/check-tt-ai-read-contract.js
+      - name: Exercise branch, stock, rental, cost and permission boundaries
+        run: node scripts/check-tt-ai-read-runtime.js
+      - name: Verify signed staff assertion protocol
+        run: node scripts/check-tt-ai-assertion-contract.js
+      - name: Execute signed two-phase query bridge regressions
+        run: node --test tests/tt-ai-query-bridge.spec.js

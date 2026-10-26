@@ -1,5 +1,6 @@
 const express = require('express');
 const router = express.Router();
+router.use(async(req,res,next)=>{try{await require('../lib/retail-ticket').ensureSchema();next();}catch(e){res.status(500).json({error:e.message});}});
 const nodemailer = require('nodemailer');
 const { db } = require('../database');
 const { revealSettingsRows } = require('../lib/secureSettings');
@@ -47,7 +48,7 @@ function buildReceiptHtml(tx, s) {
 
   const rows = (tx.items || []).map(i => `
     <tr>
-      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${i.product_name}<br><span style="color:#888;font-size:11px">${i.sku}${i.quantity > 1 ? ` × ${i.quantity} @ ${fmt(i.unit_price)}` : ''}</span></td>
+      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${escHtml(i.product_name)}<br><span style="color:#888;font-size:11px">${i.sku}${i.quantity > 1 ? ` × ${i.quantity} @ ${fmt(i.unit_price)}` : ''}</span></td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">${fmt(i.total)}</td>
     </tr>`).join('');
 
@@ -119,7 +120,7 @@ function buildVoidReceiptHtml(tx, s) {
     : s.store_address || '';
   const rows = (tx.items || []).filter(i => i.product_id).map(i => `
     <tr>
-      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${i.product_name}<br><span style="color:#888;font-size:11px">${i.sku}${i.quantity > 1 ? ` × ${i.quantity} @ ${fmt(i.unit_price)}` : ''}</span></td>
+      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${escHtml(i.product_name)}<br><span style="color:#888;font-size:11px">${i.sku}${i.quantity > 1 ? ` × ${i.quantity} @ ${fmt(i.unit_price)}` : ''}</span></td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">${fmt(i.total)}</td>
     </tr>`).join('');
 
@@ -163,7 +164,7 @@ function buildReturnReceiptHtml(ret, s) {
   const resolutionLabel = { refund: 'Refund', credit_note: 'Credit Note', replacement: 'Replacement / Exchange' }[ret.resolution] || ret.resolution;
   const rows = (ret.items || []).map(i => `
     <tr>
-      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${i.product_name}<br><span style="color:#888;font-size:11px">${i.sku}${i.quantity > 1 ? ` × ${i.quantity} @ ${fmt(i.unit_price)}` : ''}</span></td>
+      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${escHtml(i.product_name)}<br><span style="color:#888;font-size:11px">${i.sku}${i.quantity > 1 ? ` × ${i.quantity} @ ${fmt(i.unit_price)}` : ''}</span></td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">${fmt(i.total)}</td>
     </tr>`).join('');
 
@@ -207,7 +208,7 @@ function buildCancellationReceiptHtml(agreement, s) {
   const items = (agreement.items || []).filter(i => !i.parent_item_id);
   const rows = items.map(i => `
     <tr>
-      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${i.product_name}<br><span style="color:#888;font-size:11px">${i.sku} × ${i.quantity}</span></td>
+      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${escHtml(i.product_name)}<br><span style="color:#888;font-size:11px">${i.sku} × ${i.quantity}</span></td>
     </tr>`).join('');
 
   return `<!DOCTYPE html>
@@ -252,7 +253,7 @@ function buildQuoteHtml(q, s) {
 
   const rows = (q.items || []).map(i => `
     <tr>
-      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${i.product_name}<br><span style="color:#888;font-size:11px">${i.sku || ''}</span></td>
+      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${escHtml(i.product_name)}<br><span style="color:#888;font-size:11px">${i.sku || ''}</span></td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:center">${i.quantity}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right">${fmt(i.unit_price)}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:right;font-weight:600">${fmt(i.total)}</td>
@@ -325,7 +326,7 @@ router.post('/send-receipt/:id', requirePermission('transactions'), async (req, 
       LEFT JOIN branches b ON t.branch_id = b.id
       WHERE t.id = ?`, args: [req.params.id] });
     if (!tx) return res.status(404).json({ error: 'Transaction not found' });
-    const { rows: items } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ?', args: [req.params.id] });
+    const { rows: items } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ? ORDER BY COALESCE(display_order,id),id', args: [req.params.id] });
     tx.items = items;
 
     const s = await getSettings();
@@ -362,7 +363,7 @@ router.post('/send-void-receipt/:id', requirePermission('transactions'), async (
       WHERE t.id = ?`, args: [req.params.id] });
     if (!tx) return res.status(404).json({ error: 'Transaction not found' });
     if (tx.status !== 'voided') return res.status(400).json({ error: 'Transaction is not voided' });
-    const { rows: items } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ?', args: [req.params.id] });
+    const { rows: items } = await db.execute({ sql: 'SELECT * FROM transaction_items WHERE transaction_id = ? ORDER BY COALESCE(display_order,id),id', args: [req.params.id] });
     tx.items = items;
 
     const s = await getSettings();
@@ -509,7 +510,7 @@ function buildGrnHtml(po, s) {
     const good = (i.quantity_received || 0) - damaged;
     return `
     <tr>
-      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${i.product_name}<br><span style="color:#888;font-size:11px">${i.sku || ''}</span></td>
+      <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0">${escHtml(i.product_name)}<br><span style="color:#888;font-size:11px">${i.sku || ''}</span></td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:center">${i.quantity_ordered}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:center">${i.quantity_received || 0}</td>
       <td style="padding:6px 8px;border-bottom:1px solid #f0f0f0;text-align:center;${damaged > 0 ? 'color:#dc2626;font-weight:600' : ''}">${damaged}</td>

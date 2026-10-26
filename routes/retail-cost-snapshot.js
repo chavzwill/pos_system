@@ -60,7 +60,7 @@ async function prepare(req){
 }
 async function persist(req,payload){
   const lines=req.retailCostSnapshotEvidence||[];if(!payload?.id||!lines.length)return;
-  const saved=Array.isArray(payload.items)?payload.items:[];
+  const saved=Array.isArray(payload.items)?payload.items.filter(x=>x.product_id):[];
   const tx=await db.transaction('write');let committed=false;
   try{
     for(const line of lines){

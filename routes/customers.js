@@ -7,6 +7,7 @@ const multer = require('multer');
 const path = require('path');
 const fs = require('fs');
 const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
+const { requireDurableProvider } = require('../lib/mediaDurability');
 const { can } = require('../lib/permissions');
 const { complianceMissing, grantException } = require('../lib/rental-compliance');
 
@@ -371,15 +372,6 @@ router.post('/:id/id-scan', requirePermission('customers'), upload.single('id_sc
   if (!req.file) return res.status(400).json({ error: 'No file uploaded' });
   try {
     const { rows: [existing] } = await db.execute({ sql: 'SELECT rental_id_scan_path FROM customers WHERE id = ?', args: [req.params.id] });
-    if (existing?.rental_id_scan_path) {
-      if (existing.rental_id_scan_path.startsWith('https://')) {
-        await cloudDestroy(existing.rental_id_scan_path);
-      } else {
-        const old = path.join(__dirname, '..', existing.rental_id_scan_path);
-        if (fs.existsSync(old)) fs.unlinkSync(old);
-      }
-    }
-
     const result = await cloudUpload(req.file.buffer, {
       folder: 'pos-system/customer-ids',
       public_id: `customer-${req.params.id}`,
@@ -387,11 +379,14 @@ router.post('/:id/id-scan', requirePermission('customers'), upload.single('id_sc
       resource_type: 'image',
     });
 
+    // Private identity uploads deliberately cannot use bearer-accessible
+    // public Cloudinary URLs. Never acknowledge ephemeral serverless files.
+    requireDurableProvider(result,{kind:'private'});
     let scanPath;
     if (result) {
       scanPath = result.secure_url;
     } else {
-      // Cloudinary not configured — save locally
+      // Persistent self-hosted storage only — never Vercel/serverless disk
       const dir = path.join(__dirname, '../uploads/customer-ids');
       fs.mkdirSync(dir, { recursive: true });
       const ext = path.extname(req.file.originalname).toLowerCase();
@@ -401,8 +396,19 @@ router.post('/:id/id-scan', requirePermission('customers'), upload.single('id_sc
     }
 
     await db.execute({ sql: 'UPDATE customers SET rental_id_scan_path = ? WHERE id = ?', args: [scanPath, req.params.id] });
+    // Delete the obsolete evidence only AFTER the durable replacement has
+    // been saved and the row update has succeeded.
+    if(existing?.rental_id_scan_path && existing.rental_id_scan_path!==scanPath){
+      try{
+        if(existing.rental_id_scan_path.startsWith('https://'))await cloudDestroy(existing.rental_id_scan_path);
+        else{
+          const old=path.join(__dirname,'..',existing.rental_id_scan_path);
+          if(fs.existsSync(old))fs.unlinkSync(old);
+        }
+      }catch(cleanupError){console.error('customer_id_scan_old_file_cleanup_failed',{code:cleanupError?.code||'unknown'});}
+    }
     res.json({ rental_id_scan_path: scanPath });
-  } catch(e) { res.status(500).json({ error: e.message }); }
+  } catch(e) { res.status(Number(e?.status)||500).json({ error: Number(e?.status)===503?'Durable private identity document storage is not configured. Existing evidence was preserved.':'Unable to save the identity document right now.',code:e?.code||'CUSTOMER_ID_SCAN_UNAVAILABLE' }); }
 });
 
 // DELETE rental customer's ID scan

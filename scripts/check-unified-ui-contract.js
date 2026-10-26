@@ -407,8 +407,9 @@ check('purchasing accelerates document entry while preserving authority boundari
   purchasingJs.includes('aria-keyshortcuts="F2"') &&
   purchasingJs.includes('aria-keyshortcuts="F3"') &&
   purchasingJs.includes("title:'Cancel purchase order?'") &&
-  purchasingJs.includes("title:'Post received quantities?'") &&
-  purchasingJs.includes("notice('Enter at least one quantity received.','error')")
+  purchasingJs.includes('await window.TotalToolsFastReceiving.open(x.id)') &&
+  !purchasingJs.includes('sessionStorage') &&
+  read('public/purchase-fast-receiving.js').includes("checkpoint?.('receiving-'+poId)")
 );
 
 check('remaining purchasing admin supplier transfer surfaces keep final mobile interaction law',

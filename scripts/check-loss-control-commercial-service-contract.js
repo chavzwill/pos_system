@@ -29,7 +29,7 @@ const checks=[
  ['promotion runs before margin protection',uom.indexOf('retail-promotion-protection')<uom.indexOf('retail-margin-protection')],
  ['fast POS exposes a promotion-code workflow',sales.includes('tt-sales-promo-code')&&sales.includes('tt-sales-apply-promo')&&sales.includes('/api/promotions/validate-code')],
  ['fast POS retains category identity for promotion scope validation',sales.includes('category_id:product.category_id||null')&&sales.includes('category_id:i.category_id||null')],
- ['fast POS total visibly and financially applies authoritative promotion discount',sales.includes('discount:Number(discount.toFixed(2))')&&sales.includes('raw.subtotal+raw.tax-discount')&&sales.includes('Promotion</span><strong>−')],
+ ['fast POS total visibly and financially applies authoritative promotion discount',sales.includes('discount:Number(discount.toFixed(2))')&&sales.includes('raw.subtotal+raw.tax-discount')&&sales.includes("state.promotion?'Promotion':'Discount'")],
  ['cart mutations invalidate previously validated promotions',sales.includes('function invalidatePromotion()')&&sales.includes('invalidatePromotion();render()')],
  ['fast POS refreshes promotion immediately before checkout',sales.includes('if(state.promotion)await refreshPromotion()')],
  ['fast POS sends promotion identity and discount into protected transaction engine',sales.includes('base.promotion_code=state.promotion.code')&&sales.includes('discount_amount:t.discount')],

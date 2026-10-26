@@ -8,6 +8,9 @@ const {moveStockStatus}=require('../lib/inventory-stock-status');
 
 router.use(async(req,res,next)=>{try{await ensurePurchaseReceivingControls();next();}catch(e){res.status(500).json({error:'Receiving-control initialization failed',detail:e.message});}});
 router.use('/fast-receiving',require('./purchase-fast-receiving-assistant'));
+router.use('/review',require('./purchase-receiving-review'));
+router.use('/invoice-receipts',require('./purchase-receipt-invoice-links'));
+
 
 router.get('/products/:productId',requirePermission('purchasing'),async(req,res)=>{
   try{res.json(await getReceivingControl(db,Number(req.params.productId)));}catch(e){res.status(500).json({error:e.message});}
@@ -38,6 +41,7 @@ router.get('/quality-holds',requirePermission('purchasing'),async(req,res)=>{
 });
 
 router.post('/quality-holds/:id/release',requirePermission('purchasing_approve'),async(req,res)=>{
+  await require('../lib/supplier-returns').ensureSupplierReturnSchema();
   const tx=await db.transaction('write');let committed=false;
   try{
     const {rows:[hold]}=await tx.execute({sql:'SELECT * FROM purchase_receipt_quality_holds WHERE id=?',args:[req.params.id]});
@@ -45,9 +49,13 @@ router.post('/quality-holds/:id/release',requirePermission('purchasing_approve')
     const disposition=String(req.body?.disposition||'available').toLowerCase();
     if(!['available','quarantine','damaged','blocked'].includes(disposition)){await tx.rollback();return res.status(400).json({error:'disposition must be available, quarantine, damaged, or blocked'});}
     const reason=String(req.body?.reason||'').trim();if(!reason){await tx.rollback();return res.status(400).json({error:'Inspection disposition reason is required'});}
-    await moveStockStatus(tx,{productId:hold.product_id,branchId:hold.branch_id,fromStatus:'inspection',toStatus:disposition,quantity:Number(hold.quantity),reason,employeeId:req.employee?.id||null,reference:`purchase_quality_hold:${hold.id}`});
+    require('../lib/supplier-returns').assertBranch(req,hold);
+    const {rows:[used]}=await tx.execute({sql:'SELECT COALESCE(SUM(quantity),0) quantity FROM supplier_return_hold_consumptions WHERE hold_id=?',args:[hold.id]});
+    const remaining=Number((Number(hold.quantity)-Number(used.quantity)).toFixed(4));
+    if(remaining<0)throw new Error('Quality hold consumption exceeds original immutable hold quantity');
+    if(remaining>0)await moveStockStatus(tx,{productId:hold.product_id,branchId:hold.branch_id,fromStatus:'inspection',toStatus:disposition,quantity:remaining,reason,employeeId:req.employee?.id||null,reference:`purchase_quality_hold:${hold.id}`});
     await tx.execute({sql:`UPDATE purchase_receipt_quality_holds SET status=?,released_by_employee_id=?,released_at=CURRENT_TIMESTAMP WHERE id=? AND status='inspection'`,args:[disposition,req.employee?.id||null,hold.id]});
-    await tx.commit();committed=true;res.json({id:hold.id,status:disposition,released:true});
+    await tx.commit();committed=true;res.json({id:hold.id,status:disposition,released:true,released_quantity:remaining,returned_quantity:Number(used.quantity)});
   }catch(e){if(!committed)await tx.rollback();res.status(400).json({error:e.message});}
 });
 module.exports=router;

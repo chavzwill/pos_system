@@ -41,6 +41,7 @@ async function authorize(req){
   if(!await settingBool('loss_control_tax_exemption_allow_self_approval',false)&&req.employee&&String(req.employee.id)===String(authorizer.id))throw Object.assign(new Error('Independent supervisor authorization is required for tax-exempt sales.'),{status:403});
   const items=Array.isArray(b.items)?b.items:[];let subtotal=0,taxAvoided=0;
   for(const line of items){const qty=Number(line.quantity||0),price=Number(line.uom_base_unit_price??line.unit_price??0),taxRate=Number(line.tax_rate||0);if(qty>0&&price>=0){const lineValue=qty*price;subtotal+=lineValue;taxAvoided+=lineValue*taxRate/100;}}
+  const extras=require('../lib/retail-ticket').extraTotals(req.retailTicketExtras,false);subtotal+=extras.subtotal;taxAvoided+=extras.tax;
   return {authorizer,exemption,reason,subtotal:Number(subtotal.toFixed(2)),taxAvoided:Number(taxAvoided.toFixed(2))};
 }
 async function persist(req,payload,ev){

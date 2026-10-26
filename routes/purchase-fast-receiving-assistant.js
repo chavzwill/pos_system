@@ -4,6 +4,7 @@ const router=express.Router();
 const {db}=require('../database');
 const {requirePermission,can}=require('../lib/permissions');
 const {getReceivingControl}=require('../lib/purchase-receiving-controls');
+const {getProfile}=require('../lib/unit-of-measure');
 const {getTrackingProfile}=require('../lib/inventory-traceability');
 router.use(requirePermission('purchasing_receive'));
 const branchId=req=>req.employee?.default_branch_id||null;
@@ -32,11 +33,13 @@ router.get('/:id',async(req,res)=>{
   const {rows:[po]}=await db.execute({sql:`SELECT po.*,s.name supplier_name,b.name branch_name FROM purchase_orders po LEFT JOIN suppliers s ON s.id=po.supplier_id LEFT JOIN branches b ON b.id=po.branch_id WHERE po.id=?`,args:[id]});
   if(!po)return res.status(404).json({error:'Purchase order not found'});assertBranch(req,po);
   if(!['approved','partial'].includes(String(po.status)))return res.status(409).json({error:`Purchase order is ${po.status}; only approved or partially received orders can be received`});
-  const {rows:items}=await db.execute({sql:`SELECT poi.*,p.barcode FROM purchase_order_items poi LEFT JOIN products p ON p.id=poi.product_id WHERE poi.po_id=? ORDER BY poi.id`,args:[id]});
+  const {rows:items}=await db.execute({sql:`SELECT poi.*,p.barcode,p.price current_retail_price,p.cost current_catalog_cost,p.is_rental,p.is_service,p.is_non_inventory FROM purchase_order_items poi LEFT JOIN products p ON p.id=poi.product_id WHERE poi.po_id=? ORDER BY poi.id`,args:[id]});
   for(const item of items){
     const ordered=Number(item.quantity_ordered||0),received=Number(item.quantity_received||0);item.remaining=Math.max(0,ordered-received);
     item.receiving_control=await getReceivingControl(db,item.product_id);
     item.tracking_profile=item.product_id?await getTrackingProfile(db,item.product_id):{tracking_mode:'none',expiry_required:0,manufacture_date_required:0};
+    item.cost_uom=item.product_id?(await getProfile(db,item.product_id)).base_uom:'each';
+    item.retail_price_eligible=!!item.product_id&&!Number(item.is_rental)&&!Number(item.is_service)&&!Number(item.is_non_inventory);
     item.put_away=null;
     if(item.product_id&&po.branch_id){
       const {rows:[bin]}=await db.execute({sql:`SELECT pba.id assignment_id,pba.quantity located_quantity,pba.is_primary,sb.id bin_id,sb.bin_code,wz.name zone_name
@@ -45,7 +48,7 @@ router.get('/:id',async(req,res)=>{
       if(bin)item.put_away=bin;
     }
   }
-  res.json({po:{id:po.id,po_number:po.po_number,status:po.status,supplier_name:po.supplier_name,branch_id:po.branch_id,branch_name:po.branch_name,expected_date:po.expected_date},can_close_short:!!req.apiKey||can(req.employee?.permissions||{},'purchasing_approve'),items});
+  res.json({po:{id:po.id,po_number:po.po_number,status:po.status,supplier_name:po.supplier_name,branch_id:po.branch_id,branch_name:po.branch_name,expected_date:po.expected_date},can_adjust_receipt_cost:!req.apiKey&&!!req.employee&&can(req.employee.permissions,'inventory_edit'),can_propose_retail:!req.apiKey&&!!req.employee,can_close_short:!!req.apiKey||can(req.employee?.permissions||{},'purchasing_approve'),items});
  }catch(e){res.status(e.status||500).json({error:e.message});}
 });
 module.exports=router;
