@@ -3642,3 +3642,24 @@ body .tt-sales__discount select{max-width:none}
 .tt-fleet__pagination{display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:10px;padding:14px 16px;border-top:1px solid rgba(36,53,46,.12);font-size:12px;color:#52635c}
 .tt-fleet__pagination button{min-height:40px;max-width:100%;white-space:normal}
 @media(max-width:520px){.tt-fleet__pagination{align-items:stretch}.tt-fleet__pagination button{width:100%}}
+
+/* Fleet profitability: financial reporting overlay (no independent global shell). */
+.tt-fleet__report-shade{z-index:12;padding:clamp(8px,2.5vw,32px);box-sizing:border-box;background:rgba(9,25,22,.62);align-items:center;justify-items:center}
+.tt-fleet__report{width:min(1100px,100%);max-height:94dvh;min-width:0;display:flex;flex-direction:column;overflow:hidden;border-radius:20px;background:var(--tt-surface,#fff);color:var(--tt-text,#152a25);box-shadow:0 26px 80px rgba(0,0,0,.26)}
+.tt-fleet__report>header{display:flex;align-items:flex-start;justify-content:space-between;gap:20px;padding:20px 24px;border-bottom:1px solid #dae4df;flex-shrink:0}
+.tt-fleet__report>header h2{margin:4px 0 0;font-size:clamp(20px,2vw,28px)}
+.tt-fleet__report>header p{margin:4px 0 0;font-size:13px;opacity:.78;overflow-wrap:anywhere}
+.tt-fleet__report-scroll{padding:22px 24px;overflow:auto;min-height:0}
+.tt-fleet__report-note{font-size:13px;line-height:1.55;color:#40574c;background:#f4f7f5;border:1px solid #e0eae5;padding:12px 14px;border-radius:12px}
+.tt-fleet__report-metrics{display:grid;grid-template-columns:repeat(4,minmax(0,1fr));gap:12px;margin:18px 0 26px}
+.tt-fleet__report-metrics>div{min-width:0;padding:16px;border:1px solid #dfe9e3;border-radius:12px;background:#fff}
+.tt-fleet__report-metrics small{display:block;font-size:12px;color:#577066;margin-bottom:8px}
+.tt-fleet__report-metrics strong{display:block;font-size:clamp(16px,1.6vw,21px);letter-spacing:-.02em;overflow-wrap:anywhere;font-variant-numeric:tabular-nums}
+.tt-fleet__report h3{font-size:16px;margin:22px 0 10px}
+.tt-fleet__report-table{overflow:auto;max-width:100%;border:1px solid #dce5df;border-radius:12px}
+.tt-fleet__report-table table{width:100%;border-collapse:collapse;min-width:580px;text-align:left;font-size:13px}
+.tt-fleet__report-table th,.tt-fleet__report-table td{padding:12px;vertical-align:top;border-bottom:1px solid #e9efec}
+.tt-fleet__report-table thead{background:#f5f8f6}
+.tt-fleet__report-table td:not(:first-child){font-variant-numeric:tabular-nums}
+@media(max-width:850px){.tt-fleet__report-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
+@media(max-width:480px){.tt-fleet__report-shade{padding:0}.tt-fleet__report{height:100dvh;max-height:100dvh;border-radius:0}.tt-fleet__report>header{padding:16px;align-items:center}.tt-fleet__report-scroll{padding:14px}.tt-fleet__report-metrics{gap:8px}.tt-fleet__report-metrics>div{padding:12px}}

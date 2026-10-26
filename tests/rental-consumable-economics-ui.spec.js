@@ -64,3 +64,13 @@ test('fleet shows unresolved revenue without falsely displaying zero or contribu
  await expect(page.locator('.tt-fleet__detail')).toContainText('10.00');
  await expect(page.locator('.tt-fleet__detail')).toContainText('settlement override');
 });
+
+for(const width of [390,1280])test('finance fleet report exposes company coverage and exception boundaries at '+width,async({page})=>{
+ await page.setViewportSize({width,height:844});await mount(page);
+ await page.route('http://fleet.test/**/fleet-profitability',r=>r.fulfill({json:{as_of:'2026-10-26T02:00:00.000Z',company:{asset_count:2,certified_asset_count:1,assets_requiring_review:1,original_quoted_rental_fees:20,reconciled_rental_revenue:null,net_consumables:1.01,registered_acquisition_cost:10,certified_lifetime_contribution:null,certified_subset_contribution:5.5,complete:false},branches:[{branch_id:1,branch_name:'Kingston',asset_count:2,certified_asset_count:1,assets_requiring_review:1,reconciled_rental_revenue:null,certified_lifetime_contribution:null}],exceptions:{total:1,shown:1,truncated:false,items:[{asset_id:1,asset_number:'MIX-KGN-01',branch_name:'Kingston',reasons:['agreement_adjustment_unattributed']}]}}}));
+ await page.getByRole('button',{name:'Fleet profitability'}).click();const report=page.getByRole('dialog',{name:'Fleet profitability'});
+ await expect(report).toContainText('Not a complete profit total');await expect(report).toContainText('MIX-KGN-01');await expect(report).toContainText('Kingston');await expect(report).toContainText('Certified subset only');await expect(report).toContainText('Review required');
+ expect(await page.evaluate(()=>document.documentElement.scrollWidth<=innerWidth)).toBe(true);
+ await report.getByRole('button',{name:'Close'}).click();await expect(report).toHaveCount(0);
+});
+test('nonfinancial rental staff cannot open company finance report',async({page})=>{await mount(page,false);await expect(page.getByRole('button',{name:'Fleet profitability'})).toHaveCount(0);});
