@@ -30,7 +30,7 @@ const db={execute:async({sql,args})=>{
 }};
 const load=Module._load;
 Module._load=function(request,parent,isMain){
-  if(String(parent?.filename||'').endsWith('/lib/tt-ai-read-tools.js')){
+  if(String(parent?.filename||'').replace(/\\/g,'/').endsWith('/lib/tt-ai-read-tools.js')){
     if(request==='../database') return {db};
     if(request==='./permissions') return {can:(permissions,key)=>permissions?.[key]===true};
   }
