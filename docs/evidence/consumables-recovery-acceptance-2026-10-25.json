@@ -1,0 +1,69 @@
+{
+  "recovery": {
+    "unused_return_id": 1,
+    "returned_original_cost_cents": 325,
+    "net_usage_cents": 2165,
+    "final_quantity": 5,
+    "final_value_cents": 1796,
+    "voided_credit_id": 1,
+    "closed_order_id": 3,
+    "closed_return_ids": [
+      3,
+      4
+    ],
+    "accounting_replay_verified": true
+  },
+  "scenario": "isolated connected consumables purchasing, weighted issues, evidenced supplier invoice, returns, credits, payment/refund races and accounting replay",
+  "production_data_used": false,
+  "consumable_id": 1,
+  "po_ids": [
+    1,
+    2
+  ],
+  "receipt_movement_ids": [
+    1,
+    3,
+    4
+  ],
+  "issue_movement_ids": [
+    2,
+    5,
+    6,
+    7
+  ],
+  "supplier_invoice_id": 1,
+  "return_ids": [
+    1,
+    2
+  ],
+  "credit_ids": [
+    2,
+    3
+  ],
+  "payment_id": 1,
+  "receipt_value_cents": 5800,
+  "issue_cost_cents": 2490,
+  "return_carrying_cents": 1839,
+  "final_quantity": 5,
+  "final_value_cents": 1796,
+  "net_issue_cost_cents": 2165,
+  "cash_paid": 49,
+  "credit_applied": 9,
+  "supplier_refund": 6.5,
+  "return_clearing_net": 0,
+  "variance": 2.89,
+  "journal_count": 15,
+  "source_sync_replays": 4,
+  "all_journals_balanced": true,
+  "retail_stock_unchanged": true,
+  "permission_and_branch_replays_denied": true,
+  "validation": {
+    "node_tests_passed": 62,
+    "browser_regression_tests_passed": 93,
+    "consumables_ui_tests_passed": 23,
+    "connected_lifecycle_passed": true,
+    "vercel_build_passed": true,
+    "production_records_used": false,
+    "code_review": "No remaining blocker after carrying-cent reservation fix; reviewer independently passed the five recovery tests."
+  }
+}

@@ -3611,3 +3611,10 @@ body .tt-sales__discount select{max-width:none}
 .tt-consumables .ttc-form-panel footer [type=submit]{margin-left:auto}
 @media(max-width:1000px){.tt-consumables .ttc-filters{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:680px){.tt-consumables .ttc-main>.ttc-metrics{padding-top:9px;padding-bottom:9px}.tt-consumables .ttc-header{padding-top:12px;padding-bottom:12px}.tt-consumables .ttc-header p{max-width:30ch}.tt-consumables .ttc-filters{grid-template-columns:1fr}.tt-consumables .ttc-report-total{gap:24px;flex-wrap:wrap}.tt-consumables .ttc-form-panel footer{gap:8px}.tt-consumables .ttc-form-panel footer button{flex:1;padding-left:9px!important;padding-right:9px!important}.tt-consumables .ttc-form-panel footer [type=submit]{flex-basis:100%}.tt-consumables .ttc-record small{white-space:normal}.tt-consumables .ttc-brief{grid-template-columns:1fr}.tt-consumables .ttc-metrics strong{font-size:18px}.tt-consumables .ttc-metrics>div{padding:10px}.tt-consumables .ttc-header .ttc-kicker{font-size:12px}}
+
+/* Consumables recovery: source evidence and opaque controlled forms. */
+.tt-consumables .ttc-evidence{padding:14px;background:#f2f7f3;border:1px solid #d6e4da;border-radius:10px;overflow-wrap:anywhere}
+.tt-consumables .ttc-evidence p{font-size:13px;line-height:1.6;margin:8px 0 0;color:#496451}
+.tt-consumables .ttc-target{outline:3px solid #318454;outline-offset:-3px;background:#eef7f0}
+.tt-consumables .ttc-form-panel{background:#fff;isolation:isolate}
+.tt-consumables .ttc-form-panel footer{background:#fff;z-index:2}

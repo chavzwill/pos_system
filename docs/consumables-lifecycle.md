@@ -58,8 +58,60 @@ records cash/bank received against AP. The certificate verifies balanced journal
 and zero AP/receipt/return clearing at completed settlement.
 
 Current quantities use whole consumable units and costs use JMD cents. Rental
-usage records a rental product and equipment/unit reference; it does not alter
-retail stock or automatically reconstruct an asset identity from free text.
+new rental orders and issues require a registered active rental asset at the
+selected branch for the selected product. The asset ID and displayed asset number
+are preserved on the source; historical free-text rows remain explicitly unresolved.
 Supplier tax reversal supports the original recoverable or expense classification;
 landed-tax reversal is blocked. Separate approval and Finance authority remain
 necessary even when all steps are opened from one workspace.
+
+
+## Correction and recovery controls
+
+Cancel an unfulfilled draft/submitted PO as its requester, or cancel an approved
+unreceived PO as an independent approver. An independent approver can reject a
+submitted PO. Any received quantity or receipt movement blocks closure. The
+original order remains visible with its closure reason and decision evidence.
+
+Supplier return requests can be cancelled by the requester before approval, or
+cancelled after approval by an independent approver. An independent approver can
+reject a requested return. Dispatched returns cannot be closed. Closures release
+receipt quantity reservations without receiving stock or posting money.
+
+Receiving staff or Finance can void an incorrect captured supplier credit before
+Finance posting. The captured source, its lines and its void reason remain in the
+audit trail. Voiding releases quantity, carrying value, merchandise, invoice total
+and tax reservations so a replacement document can be captured. Posted credits
+cannot be voided through this control. The supplier's original document number
+remains unique even after voiding.
+
+In Usage ledger, choose **Return unused supplies** against the original issue.
+The remaining whole quantity is capped server-side across all prior returns.
+Returned value uses cumulative proportional boundaries on the original issue's
+integer cents; returning the full issue restores exactly its original cost.
+The immutable issue is preserved, stock increases once, and accounting posts
+Dr1280 / Cr5460. No PO receipt or payable is created. Stock can only return to the
+original branch, under consumable stock adjustment authority.
+
+Usage and Cost report show gross issues, unused returns and net consumption.
+Date filters apply to the original issue date, including returns recorded later.
+Registered asset groups use the asset ID even if its number changes. Reports
+retain whole-unit quantities separately by consumable and UOM, and use JMD cents.
+
+Purchasing control includes consumables approval, expected delivery, unbilled
+receipt, supplier return and credit posting/available-credit actions. Its counts
+cover the full filter; it reads original sources without schema initialization.
+Closed documents are excluded and available posted credit is shown only to
+Finance after applications and refunds. Missing evidence is reported as partial.
+Actions open the specific source and preserve an active or uncertain draft.
+
+Schema changes are additive: asset identity columns, immutable issue-return rows,
+and immutable return/credit closure rows. Deployed return and credit CHECK states
+are preserved; APIs expose both the original `source_status` and effective closed
+status. All recovery mutations require actor-bound operation keys and enforce
+current source branch, role and independence before replay.
+
+Run `node scripts/certify-consumables.cjs` for the connected isolated certificate.
+It creates temporary local staff, records and accounting evidence without inherited
+production credentials, including void/replacement credit capture, unused returns,
+closure reservation release, source-sync replay and unchanged retail inventory.

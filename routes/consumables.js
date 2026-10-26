@@ -41,7 +41,7 @@ async function exists(tx,table,identifier,{active=true}={}){
  if(!item||active&&item.active===0)fail('REFERENCE_UNAVAILABLE','Selected '+table+' record was not found or is inactive',409);
  return item;
 }
-async function target(tx,{allocation_type,allocation_id,unit_reference},branchId){
+async function target(tx,{allocation_type,allocation_id,rental_asset_id},branchId){
  const kind=String(allocation_type||'branch');
  if(!['branch','department','rental'].includes(kind))fail('INVALID_ALLOCATION','Allocate to a branch, department or rental machine');
  const destination=kind==='branch'?branchId:id(allocation_id,'Allocation');
@@ -53,9 +53,13 @@ async function target(tx,{allocation_type,allocation_id,unit_reference},branchId
  if(kind==='rental'){
   const equipment=await exists(tx,'products',destination);
   if(!equipment.is_rental)fail('NOT_RENTAL_EQUIPMENT','Choose a rental equipment product',409);
+  if(!rental_asset_id)fail('RENTAL_ASSET_REQUIRED','Choose a registered rental asset',400);
+  const assetId=id(rental_asset_id,'Rental asset');
+  const {rows:[asset]}=await tx.execute(sql('SELECT id,asset_number,product_id,branch_id,status FROM rental_assets WHERE id=?',[assetId]));
+  if(!asset||asset.status!=='active'||Number(asset.branch_id)!==Number(branchId)||Number(asset.product_id)!==destination)fail('RENTAL_ASSET_UNAVAILABLE','Choose an active asset matching the rental product and branch',409);
+  return{kind,identifier:destination,unitRef:asset.asset_number,assetId,assetNumber:asset.asset_number};
  }
- const unitRef=kind==='rental'?text(unit_reference,'Rental unit / equipment identifier',120):null;
- return{kind,identifier:destination,unitRef};
+ return{kind,identifier:destination,unitRef:null,assetId:null,assetNumber:null};
 }
 function sourceKind(req){return String(req.headers['idempotency-key']||'').trim();}
 function safeInteger(value,field){
@@ -111,14 +115,18 @@ router.use(async(req,res,next)=>{try{await ensureConsumablesSchema();next();}cat
 router.get('/lookups',requireConsumableRead,async(req,res)=>{
  try{
   const b=branchFilter(req,'id');
-  const [suppliers,branches,departments,equipment]=await Promise.all([
+  const ab=branchFilter(req,'a.branch_id');let assetClause=ab.clause;const assetArgs=[...ab.args];
+  if(req.query?.branch_id){const value=id(req.query.branch_id,'Branch');assertBranch(req,value);assetClause+=' AND a.branch_id=?';assetArgs.push(value);}
+  if(req.query?.product_id){assetClause+=' AND a.product_id=?';assetArgs.push(id(req.query.product_id,'Rental product'));}
+  const [suppliers,branches,departments,equipment,assets]=await Promise.all([
    db.execute(sql('SELECT id,name FROM suppliers WHERE active=1 ORDER BY name LIMIT 300')),
    db.execute(sql('SELECT id,name FROM branches WHERE active=1'+b.clause+' ORDER BY name',b.args)),
    db.execute(sql('SELECT id,name FROM departments WHERE active=1 ORDER BY name LIMIT 300')),
-   db.execute(sql('SELECT id,name,sku FROM products WHERE active=1 AND is_rental=1 ORDER BY name LIMIT 1000'))
+   db.execute(sql('SELECT id,name,sku FROM products WHERE active=1 AND is_rental=1 ORDER BY name LIMIT 1000')),
+   db.execute(sql("SELECT a.id,a.asset_number,a.product_id,a.branch_id,a.status FROM rental_assets a JOIN products p ON p.id=a.product_id JOIN branches br ON br.id=a.branch_id WHERE a.status='active' AND p.active=1 AND p.is_rental=1 AND br.active=1"+assetClause+' ORDER BY a.asset_number,a.id',assetArgs))
   ]);
-  res.json({suppliers:suppliers.rows,branches:branches.rows,departments:departments.rows,rental_equipment:equipment.rows});
- }catch(e){res.status(500).json({error:'Unable to load consumables lookups'});}
+  res.json({suppliers:suppliers.rows,branches:branches.rows,departments:departments.rows,rental_equipment:equipment.rows,rental_assets:assets.rows});
+ }catch(e){res.status(e.status||500).json({error:e.status?e.message:'Unable to load consumables lookups',code:e.code});}
 });
 router.get('/catalog',requireConsumableRead,async(req,res)=>{
  try{const r=await db.execute(sql('SELECT * FROM consumable_catalog ORDER BY active DESC,name,id'));res.json(r.rows);}
@@ -131,18 +139,18 @@ router.post('/catalog',requirePermission('purchasing_create'),(req,res)=>mutate(
  return{id:Number(r.lastInsertRowid),sku,name,uom,active:1};
 }));
 router.get('/orders',requireConsumableRead,async(req,res)=>{
- try{const b=branchFilter(req);const r=await db.execute(sql('SELECT po.*,s.name supplier_name,b.name branch_name FROM consumable_purchase_orders po JOIN suppliers s ON s.id=po.supplier_id JOIN branches b ON b.id=po.branch_id WHERE 1=1'+b.clause+' ORDER BY po.id DESC LIMIT 250',b.args));res.json(r.rows);}
+ try{const b=branchFilter(req);const r=await db.execute(sql('SELECT po.*,(SELECT e.event_type FROM consumable_order_events e WHERE e.po_id=po.id AND e.event_type IN(\'cancelled\',\'rejected\') ORDER BY e.id DESC LIMIT 1) closure_action,s.name supplier_name,b.name branch_name FROM consumable_purchase_orders po JOIN suppliers s ON s.id=po.supplier_id JOIN branches b ON b.id=po.branch_id WHERE 1=1'+b.clause+' ORDER BY po.id DESC LIMIT 250',b.args));res.json(r.rows.map(assetResolution));}
  catch(e){res.status(500).json({error:'Unable to load consumables orders'});}
 });
 router.get('/orders/:id',requireConsumableRead,async(req,res)=>{
  try{
   const oid=id(req.params.id,'Order');
   const b=branchFilter(req);
-  const {rows:[po]}=await db.execute(sql('SELECT po.*,s.name supplier_name,b.name branch_name FROM consumable_purchase_orders po JOIN suppliers s ON s.id=po.supplier_id JOIN branches b ON b.id=po.branch_id WHERE po.id=?'+b.clause,[oid,...b.args]));
+  const {rows:[po]}=await db.execute(sql('SELECT po.*,(SELECT e.event_type FROM consumable_order_events e WHERE e.po_id=po.id AND e.event_type IN(\'cancelled\',\'rejected\') ORDER BY e.id DESC LIMIT 1) closure_action,s.name supplier_name,b.name branch_name FROM consumable_purchase_orders po JOIN suppliers s ON s.id=po.supplier_id JOIN branches b ON b.id=po.branch_id WHERE po.id=?'+b.clause,[oid,...b.args]));
   if(!po)return res.status(404).json({error:'Purchase order not found'});
   const {rows:lines}=await db.execute(sql('SELECT l.*,c.sku,c.name,c.uom FROM consumable_po_lines l JOIN consumable_catalog c ON c.id=l.consumable_id WHERE l.po_id=? ORDER BY l.id',[oid]));
   const {rows:events}=await db.execute(sql('SELECT event_type,actor_employee_id,details,created_at FROM consumable_order_events WHERE po_id=? ORDER BY id DESC',[oid]));
-  res.json({...po,items:lines,events});
+  res.json({...assetResolution(po),closure_action:events.find(e=>['cancelled','rejected'].includes(e.event_type))?.event_type||null,items:lines,events});
  }catch(e){res.status(400).json({error:e.message});}
 });
 router.post('/orders',requirePermission('purchasing_create'),(req,res)=>mutate(req,res,'create-po',async(tx)=>{
@@ -168,7 +176,7 @@ router.post('/orders',requirePermission('purchasing_create'),(req,res)=>mutate(r
   lines.push({catalogId,quantity,unitCost});
  }
  const temporary='CPO-PENDING-'+crypto.randomUUID();
- const r=await tx.execute(sql('INSERT INTO consumable_purchase_orders(po_number,supplier_id,branch_id,requested_by,status,reason,requested_for,allocation_type,allocation_id,unit_reference,notes,expected_date,total_cents) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)',[temporary,supplierId,branchId,actor(req),'draft',reason,requestedFor,allocation.kind,allocation.identifier,allocation.unitRef,notes,expected,sum]));
+ const r=await tx.execute(sql('INSERT INTO consumable_purchase_orders(po_number,supplier_id,branch_id,requested_by,status,reason,requested_for,allocation_type,allocation_id,unit_reference,rental_asset_id,rental_asset_number,notes,expected_date,total_cents) VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?,?,?)',[temporary,supplierId,branchId,actor(req),'draft',reason,requestedFor,allocation.kind,allocation.identifier,allocation.unitRef,allocation.assetId||null,allocation.assetNumber||null,notes,expected,sum]));
  const poId=Number(r.lastInsertRowid),number='CPO-'+String(poId).padStart(6,'0');
  await tx.execute(sql('UPDATE consumable_purchase_orders SET po_number=? WHERE id=?',[number,poId]));
  for(const line of lines)await tx.execute(sql('INSERT INTO consumable_po_lines(po_id,consumable_id,quantity_ordered,unit_cost_cents) VALUES(?,?,?,?)',[poId,line.catalogId,line.quantity,line.unitCost]));
@@ -180,6 +188,7 @@ router.post('/orders/:id/submit',requirePermission('purchasing_create'),(req,res
  const {rows:[po]}=await tx.execute(sql('SELECT * FROM consumable_purchase_orders WHERE id=?',[oid]));
  if(!po)fail('PO_NOT_FOUND','Consumables PO not found',404);
  assertBranch(req,po.branch_id);
+ if(po.allocation_type==='rental')await target(tx,po,po.branch_id);
  const update=await tx.execute(sql("UPDATE consumable_purchase_orders SET status='submitted' WHERE id=? AND status='draft'",[oid]));
  if(update.rowsAffected!==1)fail('INVALID_PO_TRANSITION','Only draft purchase orders may be submitted',409);
  await tx.execute(sql("INSERT INTO consumable_order_events(po_id,event_type,actor_employee_id) VALUES(?,'submitted',?)",[oid,actor(req)]));
@@ -247,34 +256,50 @@ router.post('/issues',requirePermission('inventory_adjust'),(req,res)=>mutate(re
  const value=weightedCost(previousValue,qty,previousQty);
  const changed=await tx.execute(sql('UPDATE consumable_balances SET qty_on_hand=qty_on_hand-?,value_cents=value_cents-?,updated_at=CURRENT_TIMESTAMP WHERE branch_id=? AND consumable_id=? AND qty_on_hand>=? AND value_cents>=?',[qty,value,branchId,consumableId,qty,value]));
  if(changed.rowsAffected!==1)fail('INSUFFICIENT_CONSUMABLES','Consumable balance changed; recheck the available quantity',409);
- const movement=await tx.execute(sql("INSERT INTO consumable_movements(consumable_id,branch_id,action,quantity,value_cents,department_id,rental_product_id,rental_unit_reference,purpose,actor_employee_id) VALUES(?,?,'issue',?,?,?,?,?,?,?)",[consumableId,branchId,qty,value,allocation.kind==='department'?allocation.identifier:null,allocation.kind==='rental'?allocation.identifier:null,allocation.unitRef,purpose,actor(req)]));
- return{id:Number(movement.lastInsertRowid),branch_id:branchId,consumable_id:consumableId,quantity:qty,cost_cents:value,allocated_to:allocation.kind,allocation_id:allocation.identifier,unit_reference:allocation.unitRef};
+ const movement=await tx.execute(sql("INSERT INTO consumable_movements(consumable_id,branch_id,action,quantity,value_cents,department_id,rental_product_id,rental_unit_reference,rental_asset_id,rental_asset_number,purpose,actor_employee_id) VALUES(?,?,'issue',?,?,?,?,?,?,?,?,?)",[consumableId,branchId,qty,value,allocation.kind==='department'?allocation.identifier:null,allocation.kind==='rental'?allocation.identifier:null,allocation.unitRef,allocation.assetId||null,allocation.assetNumber||null,purpose,actor(req)]));
+ return{id:Number(movement.lastInsertRowid),branch_id:branchId,consumable_id:consumableId,quantity:qty,cost_cents:value,allocated_to:allocation.kind,allocation_id:allocation.identifier,unit_reference:allocation.unitRef,rental_asset_id:allocation.assetId||null,rental_asset_number:allocation.assetNumber||null};
 }));
+function assetResolution(row){
+ const rental=row.allocation_type==='rental'||row.rental_product_id!=null;
+ return{...row,rental_asset_resolution:rental?(row.rental_asset_id!=null?'linked':'unresolved_legacy'):null};
+}
+async function usageReturns(){
+ const {rows}=await db.execute(sql("SELECT name FROM sqlite_master WHERE type='table' AND name='consumable_issue_returns'"));
+ return rows.length?{
+  join:' LEFT JOIN (SELECT issue_movement_id,SUM(quantity) returned_quantity,SUM(value_cents) returned_value_cents FROM consumable_issue_returns GROUP BY issue_movement_id) ret ON ret.issue_movement_id=m.id',
+  quantity:'COALESCE(ret.returned_quantity,0)',value:'COALESCE(ret.returned_value_cents,0)'
+ }:{join:'',quantity:'0',value:'0'};
+}
+const usageJoins=' FROM consumable_movements m JOIN consumable_catalog c ON c.id=m.consumable_id JOIN branches br ON br.id=m.branch_id LEFT JOIN departments d ON d.id=m.department_id LEFT JOIN products p ON p.id=m.rental_product_id';
 router.get('/usage',requireConsumableRead,async(req,res)=>{
  try{
-  const b=branchFilter(req,'m.branch_id');
-  const {rows}=await db.execute(sql("SELECT m.*,c.name,c.sku,c.uom,br.name branch_name,d.name department_name,p.name rental_equipment_name FROM consumable_movements m JOIN consumable_catalog c ON c.id=m.consumable_id JOIN branches br ON br.id=m.branch_id LEFT JOIN departments d ON d.id=m.department_id LEFT JOIN products p ON p.id=m.rental_product_id WHERE m.action='issue'"+b.clause+' ORDER BY m.id DESC LIMIT 500',b.args));
-  res.json(rows);
- }catch(e){res.status(500).json({error:'Unable to load usage records'});}
+  const filter=usageFilter(req),returns=await usageReturns();
+  const {rows}=await db.execute(sql(`SELECT m.*,c.name,c.sku,c.uom,br.name branch_name,d.name department_name,p.name rental_equipment_name,m.quantity original_quantity,m.value_cents original_cost_cents,${returns.quantity} returned_quantity,${returns.value} returned_value_cents,m.quantity-${returns.quantity} net_quantity,m.value_cents-${returns.value} net_cost_cents`+usageJoins+returns.join+" WHERE m.action='issue'"+filter.clause+' ORDER BY m.id DESC LIMIT 500',filter.args));
+  res.json(rows.map(assetResolution));
+ }catch(e){res.status(e.status||500).json({error:e.status?e.message:'Unable to load usage records',code:e.code});}
 });
 router.get('/usage-summary',requireConsumableRead,async(req,res)=>{
  try{
-  const filter=usageFilter(req);
-  const {rows}=await db.execute(sql("SELECT m.branch_id,br.name branch_name,m.department_id,d.name department_name,m.rental_product_id,p.name rental_equipment_name,m.rental_unit_reference,m.consumable_id,c.sku,c.name,c.uom,SUM(m.quantity) quantity,SUM(m.value_cents) cost_cents,COUNT(*) issue_count FROM consumable_movements m JOIN consumable_catalog c ON c.id=m.consumable_id JOIN branches br ON br.id=m.branch_id LEFT JOIN departments d ON d.id=m.department_id LEFT JOIN products p ON p.id=m.rental_product_id WHERE m.action='issue'"+filter.clause+' GROUP BY m.branch_id,m.department_id,m.rental_product_id,m.rental_unit_reference,m.consumable_id ORDER BY br.name,c.name,m.department_id,m.rental_product_id,m.rental_unit_reference',filter.args));
-  let totalCost=0,totalIssues=0;
+  const filter=usageFilter(req),returns=await usageReturns();
+  // Registered assets group by immutable ID even after asset-number changes. Legacy text remains separate and unresolved.
+  const legacyUnit='CASE WHEN m.rental_asset_id IS NULL THEN m.rental_unit_reference ELSE NULL END';
+  const {rows}=await db.execute(sql(`SELECT m.branch_id,br.name branch_name,m.department_id,d.name department_name,m.rental_product_id,p.name rental_equipment_name,m.rental_asset_id,MAX(m.rental_asset_number) rental_asset_number,MAX(m.rental_unit_reference) rental_unit_reference,m.consumable_id,c.sku,c.name,c.uom,SUM(m.quantity) original_quantity,SUM(m.value_cents) original_cost_cents,SUM(${returns.quantity}) returned_quantity,SUM(${returns.value}) returned_value_cents,SUM(m.quantity-${returns.quantity}) quantity,SUM(m.value_cents-${returns.value}) cost_cents,COUNT(*) issue_count`+usageJoins+returns.join+" WHERE m.action='issue'"+filter.clause+` GROUP BY m.branch_id,m.department_id,m.rental_product_id,m.rental_asset_id,${legacyUnit},m.consumable_id ORDER BY br.name,c.name,m.department_id,m.rental_product_id,m.rental_asset_id,${legacyUnit}`,filter.args));
+  let totalCost=0,totalIssues=0,originalCost=0,returnedValue=0;
   const quantities=new Map();
   for(const row of rows){
-   row.quantity=safeInteger(row.quantity,'Usage quantity');row.cost_cents=safeInteger(row.cost_cents,'Usage cost');row.issue_count=safeInteger(row.issue_count,'Issue count');
+   for(const field of ['quantity','cost_cents','issue_count','original_quantity','original_cost_cents','returned_quantity','returned_value_cents'])row[field]=safeInteger(row[field],'Usage '+field);
+   row.net_quantity=row.quantity;row.net_cost_cents=row.cost_cents;row.rental_asset_resolution=assetResolution(row).rental_asset_resolution;
    totalCost=safeAdd(totalCost,row.cost_cents,'Total usage cost');totalIssues=safeAdd(totalIssues,row.issue_count,'Total issue count');
+   originalCost=safeAdd(originalCost,row.original_cost_cents,'Original usage cost');returnedValue=safeAdd(returnedValue,row.returned_value_cents,'Returned usage value');
    const key=Number(row.consumable_id),item=quantities.get(key)||{consumable_id:key,sku:row.sku,name:row.name,uom:row.uom,quantity:0};
    item.quantity=safeAdd(item.quantity,row.quantity,'Product usage quantity');quantities.set(key,item);
   }
-  res.json({groups:rows,totals:{cost_cents:totalCost,issue_count:totalIssues,quantities_by_consumable:[...quantities.values()]}});
+  res.json({groups:rows,totals:{cost_cents:totalCost,net_cost_cents:totalCost,original_cost_cents:originalCost,returned_value_cents:returnedValue,issue_count:totalIssues,quantities_by_consumable:[...quantities.values()]},methodology:{date_attribution:'Returns reduce usage against the original issue date, including returns recorded after the selected date range.',asset_identity:'Registered rental assets group by rental_asset_id; legacy free-text references remain unresolved.'}});
  }catch(e){res.status(e.status||500).json({error:e.status?e.message:'Unable to load usage summary',code:e.code||'USAGE_SUMMARY_FAILED'});}
 });
 function usageFilter(req){
  const scoped=branchFilter(req,'m.branch_id'),args=[...scoped.args];let clause=scoped.clause;
- for(const [query,col] of [['branch_id','m.branch_id'],['department_id','m.department_id'],['rental_product_id','m.rental_product_id'],['consumable_id','m.consumable_id']]){
+ for(const [query,col] of [['branch_id','m.branch_id'],['department_id','m.department_id'],['rental_product_id','m.rental_product_id'],['rental_asset_id','m.rental_asset_id'],['consumable_id','m.consumable_id']]){
   if(req.query?.[query]!=null&&req.query[query]!==''){
    const value=id(req.query[query],query);if(query==='branch_id')assertBranch(req,value);
    clause+=' AND '+col+'=?';args.push(value);

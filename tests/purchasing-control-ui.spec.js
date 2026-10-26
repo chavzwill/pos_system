@@ -18,3 +18,19 @@ test('delivery review receives the original order line',async({page})=>{await mo
 test('Finance sees exact credit cents with the appropriate balance label',async({page})=>{await mount(page,{...sample,rows:[{...row,key:'credit:4',category:'credits',kind:'posted_credit_available',amount_cents:123457},{...row,key:'credit:5',category:'credits',kind:'captured_credit_posting',amount_cents:100001}]});await expect(page.locator('.tt-pc__amount')).toHaveText(['Available credit JMD 1,234.57','Credit total JMD 1,000.01']);});
 test('non-Finance amounts remain hidden even if included in a response',async({page})=>{await mount(page,{...sample,permissions:{...sample.permissions,finance:false},rows:[{...row,key:'credit:4',category:'credits',kind:'captured_credit_posting',amount_cents:123457}]});await expect(page.locator('.tt-pc__amount')).toHaveCount(0);await expect(page.locator('#tt-pc-rows')).not.toContainText('1,234.57');});
 test('row permission disables an action even when the module is allowed',async({page})=>{await mount(page,{...sample,rows:[{...row,can_action:false}]});await expect(page.getByRole('button',{name:'Match invoice',exact:true})).toHaveCount(0);await expect(page.locator('.tt-pc__restricted')).toBeVisible();});
+
+test('consumables action opens the original source and keeps the dashboard when a protected draft blocks navigation',async({page})=>{
+ const source={...row,key:'consumable-credit:71',action:'review_consumable',kind:'consumable_posted_credit_available',category:'credits',record_id:71,amount_cents:1234,action_label:'Review available credit'};
+ await mount(page,{...sample,rows:[source],permissions:{...sample.permissions,review_consumable:true}});
+ await page.evaluate(()=>{window.TotalToolsConsumablesWorkspace={open:()=>{},openTarget:target=>{window.consumableTarget=target;return false;}};});
+ await expect(page.locator('.tt-pc__amount')).toContainText('Available credit');await page.getByRole('button',{name:'Review available credit',exact:true}).click();await expect(page.locator('.tt-pc')).toHaveCount(1);
+ expect(await page.evaluate(()=>window.consumableTarget)).toEqual({kind:source.kind,recordId:71,poId:1});
+ await page.evaluate(()=>TotalToolsConsumablesWorkspace.openTarget=()=>true);await page.getByRole('button',{name:'Review available credit',exact:true}).click();await expect(page.locator('.tt-pc')).toHaveCount(0);
+});
+
+test('a first consumables action loads its workspace before opening source evidence',async({page})=>{
+ const source={...row,key:'consumable-return:41',action:'review_consumable',kind:'consumable_return_approval',record_id:41,action_label:'Review consumables return'};
+ await mount(page,{...sample,rows:[source],permissions:{...sample.permissions,review_consumable:true}});
+ await page.route('http://control.test/consumables-workspace.js?**',r=>r.fulfill({contentType:'application/javascript',body:'window.TotalToolsConsumablesWorkspace={open:async()=>true,openTarget:async target=>{window.lazyTarget=target;return true;}};'}));
+ await page.getByRole('button',{name:'Review consumables return',exact:true}).click();await expect(page.locator('.tt-pc')).toHaveCount(0);expect(await page.evaluate(()=>window.lazyTarget)).toEqual({kind:source.kind,recordId:41,poId:1});
+});
