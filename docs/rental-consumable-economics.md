@@ -88,3 +88,9 @@ for hydration-failure recovery and in-flight navigation guards.
 local staff and records. It checks the exact asset's net issue cost and reviewed
 maintenance contribution, source-authorized replay and unchanged stock, AP and
 journal counts. It uses no production records or credentials.
+
+## Fleet lists beyond one page
+
+Fleet Management now requests 100 asset records per page, and offers **Load more assets** when older matching assets exist. The endpoint accepts `limit` (1–500), an opaque `cursor`, optional `branch_id`, `product_id`, `status`, and a case-insensitive, literal `search` across asset number, product, SKU and serial. Branch authorization applies on every page. Pagination walks `created_at DESC, id DESC`, so assets are never silently dropped at the previous 500-record limit. The screen sorts currently loaded assets by contribution; that is not a global profitability ranking until every page has been loaded. Search is performed on the server across the authorized fleet, not only visible cards. Refresh or filter changes start a new page sequence. The response reports `has_more` and `next_cursor` without inventing company-wide totals; searches do not mutate financial evidence.
+
+The cursor is a position, not a time-frozen database snapshot. Assets edited or inserted during paging can change result membership; refresh for the current ledger. A separate audited aggregate/export remains necessary for company-wide profit reports. The API retains its existing incomplete-evidence and Finance review indicators for each asset.

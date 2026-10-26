@@ -152,6 +152,16 @@ async function economics(asset,costs){
 }
 
 function reportError(res,e){res.status(e.status||500).json({error:e.status?e.message:'Unable to load rental asset economics',code:e.code||'ASSET_ECONOMICS_FAILED'});}
+function fleetCursor(raw){
+ if(!raw)return null;
+ try{
+  if(typeof raw!=='string'||raw.length>256||!/^[A-Za-z0-9_-]+$/.test(raw))throw new Error('bad cursor');
+  const decoded=JSON.parse(Buffer.from(raw,'base64url').toString('utf8'));
+  if(!Array.isArray(decoded)||decoded.length!==2||typeof decoded[0]!=='string'||!/^\d{4}-\d{2}-\d{2} \d{2}:\d{2}:\d{2}$/.test(decoded[0])||!Number.isSafeInteger(decoded[1])||decoded[1]<1)throw new Error('bad cursor');
+  if(Buffer.from(JSON.stringify(decoded)).toString('base64url')!==raw)throw new Error('noncanonical cursor');
+  return decoded;
+ }catch(_){throw costReader.fail('INVALID_CURSOR','Refresh the fleet list; its page position is invalid',400);}
+}
 router.get('/assets/:id/economics',async(req,res)=>{try{costAccess.authorizeRead(req);const n=Number(req.params.id);if(!Number.isSafeInteger(n)||n<1)throw costReader.fail('INVALID_ID','Select a valid asset',400);const asset=await getAsset(n);if(!asset)return res.status(404).json({error:'Rental asset not found'});costAccess.assertBranch(req,asset);res.json(await economics(asset));}catch(e){reportError(res,e);}});
 router.get('/asset-economics',async(req,res)=>{try{
  costAccess.authorizeRead(req);const args=[];let query=`SELECT a.*,p.name product_name,p.sku,b.name branch_name,s.serial_number FROM rental_assets a JOIN products p ON p.id=a.product_id JOIN branches b ON b.id=a.branch_id LEFT JOIN inventory_serials s ON s.id=a.serial_id WHERE 1=1`;
@@ -159,10 +169,25 @@ router.get('/asset-economics',async(req,res)=>{try{
  const branch=req.query.branch_id==null?(cross?null:Number(req.employee.default_branch_id)):Number(req.query.branch_id);
  if(branch!=null){if(!Number.isSafeInteger(branch)||branch<1)throw costReader.fail('INVALID_BRANCH','Select a valid assigned branch',req.query.branch_id==null?403:400);costAccess.assertBranch(req,{branch_id:branch});query+=' AND a.branch_id=?';args.push(branch);}
  if(req.query.product_id){const p=Number(req.query.product_id);if(!Number.isSafeInteger(p)||p<1)throw costReader.fail('INVALID_PRODUCT','Select a valid product',400);query+=' AND a.product_id=?';args.push(p);}
- if(req.query.status){query+=' AND a.status=?';args.push(String(req.query.status));}query+=' ORDER BY a.created_at DESC,a.id DESC LIMIT 500';
- const {rows}=await db.execute({sql:query,args}),costs=await costReader.readAssetCosts(db,rows),out=[];for(const x of rows)out.push(await economics(x,costs.get(Number(x.id))));
+ if(req.query.status){query+=' AND a.status=?';args.push(String(req.query.status));}
+ const search=String(req.query.search||'').trim();
+ if(search.length>120)throw costReader.fail('INVALID_SEARCH','Fleet search must be 120 characters or fewer',400);
+ if(search){
+  const match='%'+search.toLowerCase().replace(/[\\%_]/g,'\\$&')+'%';
+  query+=" AND (LOWER(a.asset_number) LIKE ? ESCAPE '\\' OR LOWER(p.name) LIKE ? ESCAPE '\\' OR LOWER(p.sku) LIKE ? ESCAPE '\\' OR LOWER(COALESCE(s.serial_number,'')) LIKE ? ESCAPE '\\')";
+  args.push(match,match,match,match);
+ }
+ const size=req.query.limit==null?100:Number(req.query.limit);
+ if(!Number.isSafeInteger(size)||size<1||size>500)throw costReader.fail('INVALID_LIMIT','Fleet page size must be from 1 to 500',400);
+ const cursor=fleetCursor(req.query.cursor);
+ if(cursor){query+=' AND (a.created_at < ? OR (a.created_at = ? AND a.id < ?))';args.push(cursor[0],cursor[0],cursor[1]);}
+ query+=' ORDER BY a.created_at DESC,a.id DESC LIMIT ?';args.push(size+1);
+ const {rows:page}=await db.execute({sql:query,args});
+ const hasMore=page.length>size,rows=page.slice(0,size),last=rows[rows.length-1];
+ const nextCursor=hasMore&&last?Buffer.from(JSON.stringify([last.created_at,Number(last.id)])).toString('base64url'):null;
+ const costs=await costReader.readAssetCosts(db,rows),out=[];for(const x of rows)out.push(await economics(x,costs.get(Number(x.id))));
  out.sort((a,b)=>a.lifetime.evidenced_contribution==null?(b.lifetime.evidenced_contribution==null?0:1):b.lifetime.evidenced_contribution==null?-1:b.lifetime.evidenced_contribution-a.lifetime.evidenced_contribution);
- res.json({assets:out,methodology:{evidence_boundary:'Lifetime economics use registered acquisition cost, linked rental-line revenue, reviewed external maintenance, net original-cost consumables, explicit asset-level recovery/loss events and actual sale/disposal value only.',maintenance_overlap:'Contribution is withheld when recorded maintenance may include issued consumables until Finance reviews its external portion.',current_catalog_cost_forbidden:true,automatic_actions:false}});
+ res.json({assets:out,has_more:hasMore,next_cursor:nextCursor,page_size:size,order:'acquisition_newest_first; contribution_ranked_within_loaded_page',methodology:{evidence_boundary:'Lifetime economics use registered acquisition cost, linked rental-line revenue, reviewed external maintenance, net original-cost consumables, explicit asset-level recovery/loss events and actual sale/disposal value only.',maintenance_overlap:'Contribution is withheld when recorded maintenance may include issued consumables until Finance reviews its external portion.',current_catalog_cost_forbidden:true,automatic_actions:false}});
  }catch(e){reportError(res,e);}});
 
 module.exports={router,ensureSchema};
