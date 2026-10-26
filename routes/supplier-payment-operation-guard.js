@@ -3,6 +3,7 @@ const express=require('express');
 const crypto=require('crypto');
 const {db}=require('../database');
 const router=express.Router();
+const {can}=require('../lib/permissions');
 let readyPromise=null;
 function canonical(v){if(Array.isArray(v))return v.map(canonical);if(v&&typeof v==='object')return Object.keys(v).sort().reduce((o,k)=>{if(!['operation_key','idempotency_key'].includes(k))o[k]=canonical(v[k]);return o;},{});return v;}
 function hash(body){return crypto.createHash('sha256').update(JSON.stringify(canonical(body||{}))).digest('hex');}
@@ -27,6 +28,10 @@ async function ensureSchema(){
 }
 router.use(async(req,res,next)=>{try{await ensureSchema();next();}catch(e){res.status(500).json({error:'Supplier payment operation guard initialization failed',detail:e.message});}});
 router.post('/payments',async(req,res,next)=>{
+  if(req.apiKey||!req.employee||!can(req.employee.permissions,'reports_financial'))return res.status(403).json({error:'Finance staff permission is required for supplier payments'});
+  const own=req.employee.default_branch_id,allBranches=can(req.employee.permissions,'branches')||can(req.employee.permissions,'security_manage');
+  if(!allBranches&&own==null)return res.status(403).json({error:'An assigned branch is required for supplier payments'});
+  if(!allBranches&&own!=null&&req.body?.branch_id!=null&&Number(req.body.branch_id)!==Number(own))return res.status(403).json({error:'Supplier payment belongs to another branch'});
   const operationKey=key(req);
   if(!operationKey)return res.status(428).json({error:'Idempotency-Key is required for supplier payment posting.',code:'IDEMPOTENCY_KEY_REQUIRED'});
   if(operationKey.length<12||operationKey.length>200)return res.status(400).json({error:'Idempotency key must be between 12 and 200 characters',code:'INVALID_IDEMPOTENCY_KEY'});
@@ -34,6 +39,11 @@ router.post('/payments',async(req,res,next)=>{
   const tx=await db.transaction('write');let committed=false;
   try{
     const {rows:[existing]}=await tx.execute({sql:'SELECT * FROM supplier_payment_operations WHERE operation_key=?',args:[operationKey]});
+    if(!allBranches&&own!=null){
+      const ids=Array.isArray(req.body?.allocations)?req.body.allocations.map(a=>Number(a.invoice_id)):[];
+      for(const invoiceId of ids){const row=(await tx.execute({sql:'SELECT branch_id FROM supplier_invoices WHERE id=?',args:[invoiceId]})).rows[0];if(row&&Number(row.branch_id)!==Number(own)){await tx.rollback();return res.status(403).json({error:'Supplier invoice belongs to another branch'});}}
+      if(existing?.supplier_payment_id){const forbidden=(await tx.execute({sql:'SELECT COUNT(*) n FROM supplier_payment_allocations a JOIN supplier_invoices i ON i.id=a.supplier_invoice_id WHERE a.payment_id=? AND (i.branch_id IS NULL OR i.branch_id!=?)',args:[existing.supplier_payment_id,own]})).rows[0];if(Number(forbidden.n)>0){await tx.rollback();return res.status(403).json({error:'Supplier payment belongs to another branch'});}}
+    }
     if(existing){
       await tx.commit();committed=true;
       if(existing.request_hash!==requestHash)return res.status(409).json({error:'Idempotency key was already used for a different supplier payment request'});

@@ -108,6 +108,7 @@ router.post('/:id/return', requirePermission('transactions_returns'), async (req
         (return_number,original_transaction_id,customer_id,employee_id,branch_id,resolution,subtotal,tax_amount,total,notes)
         VALUES (?,?,?,?,?,'replacement',?,?,?,?)`, args: [returnNumber, sale.id, sale.customer_id, employee_id || sale.employee_id, sale.branch_id, subtotal, tax, total, notes || null] });
       const returnId = Number(result.lastInsertRowid);
+      await require('./retail-return-authorization').recordReturnAuthorization(tx, req, returnId);
 
       for (const p of prepared) {
         const ri = await tx.execute({ sql: `INSERT INTO return_items

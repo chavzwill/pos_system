@@ -2098,6 +2098,8 @@ const App = {
       `<button class="pos-grid-btn" onclick="App.showItemLookupModal()">Item Lookup</button>`,
       `<button class="pos-grid-btn" onclick="App.posItemZoom()">Item Zoom</button>`,
       `<button class="pos-grid-btn" onclick="App.showTicketDiscountModal()">Ticket Discount</button>`,
+      `<button class="pos-grid-btn" onclick="App.addTicketExtra('delivery')">Delivery charge</button>`,
+      `<button class="pos-grid-btn" onclick="App.addTicketExtra('comment')">Comment</button>`,
       `<button class="pos-grid-btn" onclick="App.showTaxExemptModal()">Tax Exempt</button>`,
       this.can('layaway_create') ? `<button class="pos-grid-btn" onclick="App.posCreateLayawayFromCart()">Create Layaway</button>` : '',
       this.can('quotations') ? `<button class="pos-grid-btn" onclick="App.posCreateQuoteFromCart()">Create Quote</button>` : '',
@@ -2250,8 +2252,8 @@ const App = {
       <div class="modal" style="max-width:420px">
         <div class="modal-header"><span class="modal-title">Ticket Discount</span><button class="modal-close">✕</button></div>
         <div class="modal-body">
-          <div style="display:flex;gap:8px;align-items:center;margin-bottom:12px" id="discount-row">
-            <input type="number" id="discount-input" placeholder="Discount $" min="0" step="0.01" style="width:120px;">
+          <div style="display:flex;gap:8px;align-items:center;flex-wrap:wrap;margin-bottom:12px" id="discount-row">
+            <select id="discount-mode" aria-label="Discount type"><option value="amount">Amount (JMD)</option><option value="percentage">Percentage (%)</option></select><input type="number" id="discount-input" placeholder="Discount $" min="0" step="0.01" style="width:120px;">
             <button class="btn btn-secondary btn-sm" onclick="App.applyDiscount()">Apply</button>
             <span id="discount-display" style="font-size:13px;color:var(--success);"></span>
           </div>
@@ -2275,7 +2277,8 @@ const App = {
       pd.innerHTML = `✓ ${this.autoAppliedPromo.name}: -${this.fmt(this.autoAppliedPromo.discount_amount)}${changeBtn}`;
       pd.style.display = 'block';
     } else if (this.cartDiscount > 0) {
-      document.getElementById('discount-input').value = this.cartDiscount.toFixed(2);
+      document.getElementById('discount-input').value = this._ticketDiscountIntent?.value ?? this.cartDiscount.toFixed(2);
+      const mode=document.getElementById('discount-mode');if(mode)mode.value=this._ticketDiscountIntent?.mode||'amount';
       document.getElementById('discount-display').textContent = `-${this.fmt(this.cartDiscount)}`;
     }
     this._updateDiscountCardUI();
@@ -2532,7 +2535,7 @@ const App = {
 
   updateCartQty(idx, delta) {
     const item = this.cart[idx];
-    if (!item) return;
+    if (!item || !item.product_id) return;
     const newQty = item.quantity + delta;
     if (newQty <= 0) { this.cart.splice(idx, 1); }
     else {
@@ -2545,28 +2548,49 @@ const App = {
 
   applyDiscount() {
     if (this.appliedDiscountCard) { this.alert('This customer already has a discount card applied — remove the customer to use a manual discount instead.', 'error'); return; }
-    let val = parseFloat(document.getElementById('discount-input')?.value) || 0;
-    const maxPct = parseFloat(this.settings.max_discount_pct) || 0;
-    if (maxPct > 0 && val > 0) {
-      const subtotal = this.cart.reduce((s, i) => s + i.price * i.quantity, 0);
-      const maxAllowed = parseFloat((subtotal * maxPct / 100).toFixed(2));
-      if (val > maxAllowed) {
-        val = maxAllowed;
-        document.getElementById('discount-input').value = val.toFixed(2);
-        this.alert(`Discount capped at ${maxPct}% (${this.fmt(maxAllowed)})`, 'warning');
-      }
-    }
+    const mode=document.getElementById('discount-mode')?.value||'amount';
+    const value=Number(document.getElementById('discount-input')?.value||0);
+    if(!Number.isFinite(value)||value<0||(mode==='percentage'&&value>100)){this.alert('Enter a valid discount','error');return;}
+    this._ticketDiscountIntent={mode,value};this.appliedPromoCode=null;this.autoAppliedPromo=null;
+    const val=this.recalculateTicketDiscount();
     this.cartDiscount = val;
     document.getElementById('discount-display').textContent = val > 0 ? `-${this.fmt(val)}` : '';
     this.renderCart();
   },
 
+  recalculateTicketDiscount() {
+    let net=0,line=0;for(const i of this.cart.filter(i=>i.product_id)){const g=Math.round(i.price*i.quantity*100),d=Math.round(g*Number(i.line_discount_percent||0)/100);net+=g-d;line+=d;}
+    const intent=this._ticketDiscountIntent||{mode:'amount',value:0};
+    return (line+(intent.mode==='percentage'?Math.round(net*intent.value/100):Math.round(intent.value*100)))/100;
+  },
+  requestTicketDetails(options) {
+    if(window.TotalToolsShellUI?.request)return window.TotalToolsShellUI.request(options);
+    return new Promise(resolve=>{
+      const previous=document.activeElement;
+      const overlay=this.showModal(`<form class="modal" style="max-width:420px" role="dialog" aria-modal="true" aria-labelledby="ticket-entry-title"><div class="modal-header"><h2 id="ticket-entry-title">${this.escapeAttr(options.title)}</h2><button type="button" data-ticket-cancel aria-label="Close">×</button></div><div class="modal-body">${options.fields.map((f,i)=>`<div class="form-group"><label for="ticket-field-${i}">${this.escapeAttr(f.label)}</label><input id="ticket-field-${i}" name="${this.escapeAttr(f.name)}" type="${f.type||'text'}" value="${this.escapeAttr(f.value??'')}" ${f.type==='number'?'min="0" step="0.01"':''} ${f.required?'required':''}></div>`).join('')}</div><div class="modal-footer"><button type="button" class="btn btn-secondary" data-ticket-cancel>Cancel</button><button type="submit" class="btn btn-primary">${this.escapeAttr(options.confirmLabel)}</button></div></form>`);
+      let done=false;const finish=value=>{if(done)return;done=true;overlay.remove();previous?.focus?.();resolve(value)};
+      overlay.querySelectorAll('[data-ticket-cancel]').forEach(b=>b.onclick=()=>finish(null));overlay.addEventListener('click',e=>{if(e.target===overlay)finish(null)});overlay.addEventListener('keydown',e=>{if(e.key==='Escape')finish(null);if(e.key==='Tab'){const focus=[...overlay.querySelectorAll('input,button')],first=focus[0],last=focus[focus.length-1];if(e.shiftKey&&document.activeElement===first){e.preventDefault();last.focus()}else if(!e.shiftKey&&document.activeElement===last){e.preventDefault();first.focus()}}});
+      overlay.querySelector('form').onsubmit=e=>{e.preventDefault();finish(Object.fromEntries(new FormData(e.currentTarget)))};overlay.querySelector('input')?.focus();
+    });
+  },
+  async addTicketExtra(type) {
+    const values=await this.requestTicketDetails({title:type==='delivery'?'Add delivery charge':'Add comment',confirmLabel:'Add line',fields:[{name:'description',label:'Description',required:true},...(type==='delivery'?[{name:'amount',label:'Amount (JMD)',type:'number',required:true}]:[])]});
+    if(!values)return;const amount=type==='comment'?0:Number(values.amount);
+    if(!String(values.description||'').trim()||!Number.isFinite(amount)||amount<0){this.alert('Enter a description and valid amount','error');return;}
+    this.cart.push({line_type:type,product_id:null,name:String(values.description).trim(),quantity:1,price:amount,tax_rate:type==='delivery'?Number(this.settings.tax_rate||0):0});this.renderCart();
+  },
+  async setLineDiscount(index) {
+    if(this.appliedPromoCode||this.appliedDiscountCard){this.alert('Remove the promotion or discount card first','warning');return;}
+    const values=await this.requestTicketDetails({title:'Line discount',confirmLabel:'Apply',fields:[{name:'percent',label:'Discount percentage (0–100)',type:'number',required:true,value:this.cart[index].line_discount_percent||0}]});
+    if(!values)return;const n=Number(values.percent);if(!Number.isFinite(n)||n<0||n>100){this.alert('Enter a percentage from 0 to 100','error');return;}this.cart[index].line_discount_percent=n;this._ticketDiscountIntent=this._ticketDiscountIntent||{mode:'amount',value:0};this.cartDiscount=this.recalculateTicketDiscount();this.renderCart();
+  },
   async applyPromoCode() {
     if (this.appliedDiscountCard) { this.alert('This customer already has a discount card applied — promo codes can\'t be combined with it.', 'error'); return; }
+    if(this._ticketDiscountIntent?.value||this.cart.some(i=>i.line_discount_percent)){this.alert('Remove manual discounts before applying a promotion','warning');return;}
     const code = document.getElementById('promo-code-input')?.value?.trim();
     if (!code) return;
-    const subtotal = this.cart.reduce((s, i) => s + i.price * i.quantity, 0);
-    const cartItems = this.cart.map(i => ({ product_id: i.product_id, category_id: i.category_id, price: i.price, quantity: i.quantity }));
+    const subtotal = this.cart.filter(i=>i.product_id).reduce((s, i) => s + i.price * i.quantity, 0);
+    const cartItems = this.cart.filter(i=>i.product_id).map(i => ({ product_id: i.product_id, category_id: i.category_id, price: i.price, quantity: i.quantity }));
     try {
       const result = await this.api('POST', '/promotions/validate-code', { code, subtotal, cart_items: cartItems });
       this.appliedPromoCode = result;
@@ -2606,7 +2630,7 @@ const App = {
       if (row) row.style.display = 'none';
       if (discountRow) discountRow.style.display = 'none';
       if (pd) {
-        const subtotal = this.cart.reduce((s, i) => s + i.price * i.quantity, 0);
+        const subtotal = this.cart.filter(i=>i.product_id).reduce((s, i) => s + i.price * i.quantity, 0);
         this.cartDiscount = parseFloat((subtotal * this.appliedDiscountCard.percent / 100).toFixed(2));
         pd.innerHTML = `✓ ${this.appliedDiscountCard.type_name} Discount Card${this.appliedDiscountCard.card_number ? ` (${this.appliedDiscountCard.card_number})` : ''}: -${this.fmt(this.cartDiscount)}`;
         pd.style.display = 'block';
@@ -2620,6 +2644,7 @@ const App = {
   },
 
   async _checkAutoPromos() {
+    if(this._ticketDiscountIntent||this.cart.some(i=>i.line_discount_percent)){this.cartDiscount=this.recalculateTicketDiscount();this.renderCart();return;}
     if (this.appliedDiscountCard) { this._updateDiscountCardUI(); this.renderCart(); return; }
     if (this.appliedPromoCode) { this.renderCart(); return; }
     if (!this.cart.length) {
@@ -2629,8 +2654,8 @@ const App = {
       this.renderCart();
       return;
     }
-    const subtotal = this.cart.reduce((s, i) => s + i.price * i.quantity, 0);
-    const cartItems = this.cart.map(i => ({ product_id: i.product_id, category_id: i.category_id, price: i.price, quantity: i.quantity }));
+    const subtotal = this.cart.filter(i=>i.product_id).reduce((s, i) => s + i.price * i.quantity, 0);
+    const cartItems = this.cart.filter(i=>i.product_id).map(i => ({ product_id: i.product_id, category_id: i.category_id, price: i.price, quantity: i.quantity }));
     try {
       const promos = await this.api('POST', '/promotions/auto-apply', { cart_items: cartItems, subtotal });
       this._availablePromos = promos || [];
@@ -2697,7 +2722,7 @@ const App = {
   },
 
   clearCart() {
-    this.cart = []; this.cartCustomer = null; this.cartDiscount = 0; this._storeCreditApplied = 0; this._cashBackApplied = 0; this.appliedPromoCode = null; this.autoAppliedPromo = null; this._availablePromos = []; this._returnCredit = null; this._activeQuoteId = null; this._activeHeldOrderId = null; this.appliedDiscountCard = null; this._manualTaxExempt = null;
+    this._ticketDiscountIntent=null;this.cart = []; this.cartCustomer = null; this.cartDiscount = 0; this._storeCreditApplied = 0; this._cashBackApplied = 0; this.appliedPromoCode = null; this.autoAppliedPromo = null; this._availablePromos = []; this._returnCredit = null; this._activeQuoteId = null; this._activeHeldOrderId = null; this.appliedDiscountCard = null; this._manualTaxExempt = null;
     this.renderCart();
     const aqBar = document.getElementById('active-quote-bar');
     if (aqBar) aqBar.style.display = 'none';
@@ -2717,6 +2742,7 @@ const App = {
   },
 
   renderCart() {
+    if(this._ticketDiscountIntent)this.cartDiscount=this.recalculateTicketDiscount();
     const list = document.getElementById('cart-items-list');
     const totals = document.getElementById('cart-totals');
     if (!list || !totals) return;
@@ -2734,7 +2760,7 @@ const App = {
       return `
       <tr class="pos-ticket-row${this._selectedCartLine === idx ? ' selected' : ''}" onclick="App.selectCartLine(event,${idx})">
         <td style="font-family:monospace;font-size:12px">${sku}</td>
-        <td>${item.name}${item.variation_name ? `<div style="font-size:11px;color:var(--text-muted)">${item.variation_name}</div>` : ''}</td>
+        <td>${this.escapeAttr(item.name)}${item.line_type&&item.line_type!=='product'?`<small> · ${this.escapeAttr(item.line_type)}</small>`:''}${item.variation_name ? `<div style="font-size:11px;color:var(--text-muted)">${item.variation_name}</div>` : ''}</td>
         <td style="text-align:center">
           <div class="qty-ctrl" style="justify-content:center">
             <button class="qty-btn" onclick="App.updateCartQty(${idx},-1)">−</button>
@@ -2746,7 +2772,7 @@ const App = {
         <td style="text-align:right;font-weight:600">${this.fmt(item.price * item.quantity)}</td>
         <td style="white-space:nowrap">
           <button class="btn-void-line" title="Void Line" onclick="App.voidCartLine(${idx})">VOID</button>
-          <button class="btn-remove" onclick="App.removeFromCart(${idx})">×</button>
+          ${item.product_id?`<button class="btn btn-sm" onclick="App.setLineDiscount(${idx})">${Number(item.line_discount_percent||0)}% off</button>`:''}<button class="btn-remove" onclick="App.removeFromCart(${idx})">×</button>
         </td>
       </tr>`;
     }).join('');
@@ -2830,7 +2856,9 @@ const App = {
         employee_id: this.currentUser?.id || 1,
         branch_id: this.posBranch?.id || null,
         drawer_session_id: this.currentDrawerSession?.id || null,
-        items: this.cart.map(i => ({ product_id: i.product_id, variation_id: i.variation_id||null, quantity: i.quantity })),
+        items: this.cart.map(i => ({ product_id: i.product_id, variation_id: i.variation_id||null, quantity: i.quantity,line_type:i.line_type||'product',product_name:i.name,unit_price:i.price,line_discount_percent:i.line_discount_percent||0 })),
+        discount_source:this._ticketDiscountIntent?.source||(this.appliedDiscountCard?'customer_discount_card':this.autoAppliedPromo?'automatic_promotion':'manual'),discount_reference_id:this._ticketDiscountIntent?.referenceId||this.autoAppliedPromo?.id||null,
+        discount_mode:this._ticketDiscountIntent?.mode||'amount',discount_value:this._ticketDiscountIntent?.value??discount,
         discount_amount: discount,
         promotion_code: this.appliedDiscountCard ? (this.appliedDiscountCard.card_number || null) : (this.appliedPromoCode?.code || null),
         promotion_name: this.appliedDiscountCard ? `${this.appliedDiscountCard.type_name} Discount Card` : (this.appliedPromoCode?.promo_name || this.autoAppliedPromo?.name || null),
@@ -2877,6 +2905,7 @@ const App = {
 
   async holdOrder() {
     if (!this.cart.length) { this.alert('Cart is empty', 'warning'); return; }
+    if(this.appliedPromoCode){this.alert('Remove the promotion before holding this sale; reapply it at checkout','warning');return;}
     if (!this.cartCustomer?.id) { this.alert('Find or add the customer before placing this sales order on hold', 'warning'); return; }
     try {
       const cartItems = this.cart.map(i => {
@@ -2884,6 +2913,7 @@ const App = {
         return {
           product_id: i.product_id,
           variation_id: i.variation_id || null,
+          line_type:i.line_type||'product',line_discount_percent:i.line_discount_percent||0,
           product_name: i.name,
           sku: product?.sku || '',
           quantity: i.quantity,
@@ -2897,7 +2927,7 @@ const App = {
         employee_id: this.currentUser?.id || 1,
         branch_id: this.posBranch?.id || null,
         items: cartItems,
-        discount_amount: this.cartDiscount || 0,
+        discount_amount: this.cartDiscount || 0,discount_source:this._ticketDiscountIntent?.source||(this.appliedDiscountCard?'customer_discount_card':this.autoAppliedPromo?'automatic_promotion':'manual'),discount_reference_id:this._ticketDiscountIntent?.referenceId||this.autoAppliedPromo?.id||null,discount_mode:this._ticketDiscountIntent?.mode||'amount',discount_value:this._ticketDiscountIntent?.value??this.cartDiscount??0,
       });
       const customerName = this.cartCustomer ? `${this.cartCustomer.first_name} ${this.cartCustomer.last_name}` : 'Walk-in Customer';
       this.clearCart();
@@ -3006,15 +3036,16 @@ const App = {
         return {
           product_id: item.product_id,
           variation_id: item.variation_id || null,
-          name: item.product_name,
+          name: item.product_name,line_type:item.line_type||'product',line_discount_percent:Number(item.line_discount_percent||0),
           price: parseFloat(item.unit_price),
-          tax_rate: product?.tax_rate || 0,
+          tax_rate: item.line_type==='delivery'?Number(this.settings.tax_rate||0):(product?.tax_rate||0),
           quantity: item.quantity,
           variation_name: item.variation_name || null,
           is_service: product?.product_type === 'service' ? 1 : 0,
           stock_qty: product?.stock_qty ?? 999,
         };
       });
+      this._ticketDiscountIntent={mode:held.discount_mode||'amount',value:Number(held.discount_value??held.discount_amount??0),source:held.discount_source,referenceId:held.discount_reference_id};
       this.cartDiscount = parseFloat(held.discount_amount || 0);
       this._storeCreditApplied = 0;
       this._cashBackApplied = 0;
@@ -3172,14 +3203,15 @@ const App = {
         return {
           product_id: item.product_id,
           variation_id: null,
-          name: item.product_name,
+          name: item.product_name,line_type:item.line_type||'product',line_discount_percent:Number(item.line_discount_percent||0),
           price: parseFloat(item.unit_price),
-          tax_rate: product?.tax_rate || 0,
+          tax_rate: item.line_type==='delivery'?Number(this.settings.tax_rate||0):(product?.tax_rate||0),
           quantity: item.quantity,
           is_service: product?.product_type === 'service' ? 1 : 0,
           stock_qty: product?.stock_qty ?? 999,
         };
       });
+      this._ticketDiscountIntent={mode:'amount',value:Number(quote.discount_amount||0)};
       this.cartDiscount = parseFloat(quote.discount_amount || 0);
       this._storeCreditApplied = 0;
       this._cashBackApplied = 0;
@@ -3275,7 +3307,7 @@ const App = {
             <div class="receipt-row"><span>Date:</span><span>${this.fmtDateTime(tx.created_at)}</span></div>
             ${tx.customer_name ? `<div class="receipt-row"><span>Customer:</span><span>${tx.customer_name}</span></div>` : ''}
             <hr>
-            ${items.map(i => `<div class="receipt-row"><span>${i.product_name}</span><span>${this.fmt(i.total)}</span></div>${i.quantity > 1 ? `<div style="color:#666;font-size:11px;padding-left:4px">${i.quantity} x ${this.fmt(i.unit_price)}</div>` : ''}`).join('')}
+            ${items.map(i => `<div class="receipt-row"><span>${this.escapeAttr(i.product_name)}</span><span>${this.fmt(i.total)}</span></div>${i.quantity > 1 ? `<div style="color:#666;font-size:11px;padding-left:4px">${i.quantity} x ${this.fmt(i.unit_price)}</div>` : ''}`).join('')}
             <hr>
             <div class="receipt-row"><span>Subtotal</span><span>${this.fmt(tx.subtotal)}</span></div>
             ${tx.tax_exempt ? `<div class="receipt-row" style="color:#2e7d32"><span>Tax Exempt${tx.tax_exemption_number ? ` — Ref: ${tx.tax_exemption_number}` : ''}</span><span>—</span></div>` : `<div class="receipt-row"><span>Tax</span><span>${this.fmt(tx.tax_amount)}</span></div>`}
@@ -3321,7 +3353,7 @@ const App = {
     const phoneLine = tx.branch_phone || this.settings.store_phone || '';
 
     const itemRows = items.map(i => `<tr>
-        <td style="padding:8px;border-bottom:1px solid #e8e8e8">${i.product_name}</td>
+        <td style="padding:8px;border-bottom:1px solid #e8e8e8">${this.escapeAttr(i.product_name)}</td>
         <td style="padding:8px;border-bottom:1px solid #e8e8e8;text-align:center">${i.quantity}</td>
         <td style="padding:8px;border-bottom:1px solid #e8e8e8;text-align:right">${this.fmt(i.unit_price)}</td>
         <td style="padding:8px;border-bottom:1px solid #e8e8e8;text-align:right;font-weight:600">${this.fmt(i.total)}</td>
@@ -9771,7 +9803,7 @@ const App = {
           </div>
           <table style="margin-bottom:12px">
             <thead><tr><th>Item</th><th>SKU</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
-            <tbody>${(tx.items||[]).map(i=>`<tr><td>${i.product_name}</td><td style="font-family:monospace;font-size:12px">${i.sku}</td><td style="text-align:center">${i.quantity}</td><td>${this.fmt(i.unit_price)}</td><td class="fw-600">${this.fmt(i.total)}</td></tr>`).join('')}</tbody>
+            <tbody>${(tx.items||[]).map(i=>`<tr><td>${this.escapeAttr(i.product_name)}</td><td style="font-family:monospace;font-size:12px">${i.sku}</td><td style="text-align:center">${i.quantity}</td><td>${this.fmt(i.unit_price)}</td><td class="fw-600">${this.fmt(i.total)}</td></tr>`).join('')}</tbody>
           </table>
           <div style="text-align:right;border-top:1px solid var(--border);padding-top:10px">
             <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Subtotal</span><span>${this.fmt(tx.subtotal)}</span></div>
@@ -9806,7 +9838,7 @@ const App = {
   async printLabel(txId, type) {
     const tx = await this.api('GET', `/transactions/${txId}`);
     const company = this._onlineCompanyName || 'Store';
-    const items = (tx.items||[]).map(i=>`${i.quantity}× ${i.product_name}`).join('<br>');
+    const items = (tx.items||[]).map(i=>`${i.quantity}× ${this.escapeAttr(i.product_name)}`).join('<br>');
     const dt = this.fmtDateTime(tx.created_at);
     const addrLine = [tx.customer_address, tx.customer_city && (tx.customer_city+(tx.customer_state?' '+tx.customer_state:'')+(tx.customer_zip?' '+tx.customer_zip:''))].filter(Boolean).join('<br>');
 
@@ -9967,7 +9999,7 @@ const App = {
           </div>` : ''}
           <table style="margin-bottom:12px">
             <thead><tr><th>Item</th><th>SKU</th><th>Qty</th><th>Price</th><th>Total</th></tr></thead>
-            <tbody>${tx.items.map(i => `<tr><td>${i.product_name}</td><td style="font-family:monospace;font-size:12px">${i.sku}</td><td style="text-align:center">${i.quantity}</td><td>${this.fmt(i.unit_price)}</td><td class="fw-600">${this.fmt(i.total)}</td></tr>`).join('')}</tbody>
+            <tbody>${tx.items.map(i => `<tr><td>${this.escapeAttr(i.product_name)}</td><td style="font-family:monospace;font-size:12px">${i.sku}</td><td style="text-align:center">${i.quantity}</td><td>${this.fmt(i.unit_price)}</td><td class="fw-600">${this.fmt(i.total)}</td></tr>`).join('')}</tbody>
           </table>
           <div style="text-align:right;border-top:1px solid var(--border);padding-top:10px">
             <div style="display:flex;justify-content:space-between;font-size:13px;margin-bottom:4px"><span>Subtotal</span><span>${this.fmt(tx.subtotal)}</span></div>
@@ -10020,10 +10052,10 @@ const App = {
     const itemRows = tx.items.map(item => {
       const alreadyRet = returnedQtyMap[item.id] || 0;
       const maxQty = item.quantity - alreadyRet;
-      if (maxQty <= 0) return `<tr style="opacity:0.4"><td><input type="checkbox" disabled></td><td>${item.product_name}</td><td style="font-family:monospace;font-size:12px">${item.sku}</td><td style="text-align:center">${item.quantity}</td><td style="text-align:center;color:var(--danger)">All returned</td><td>${this.fmt(item.unit_price)}</td><td>—</td></tr>`;
+      if (maxQty <= 0) return `<tr style="opacity:0.4"><td><input type="checkbox" disabled></td><td>${this.escapeAttr(item.product_name)}</td><td style="font-family:monospace;font-size:12px">${item.sku}</td><td style="text-align:center">${item.quantity}</td><td style="text-align:center;color:var(--danger)">All returned</td><td>${this.fmt(item.unit_price)}</td><td>—</td></tr>`;
       return `<tr>
         <td><input type="checkbox" class="ret-chk" data-item-id="${item.id}" data-max="${maxQty}" data-price="${item.unit_price}" data-tax-rate="${item.tax_amount > 0 ? (item.tax_amount / item.total * 100) : 0}" data-total="${item.total}" data-tax="${item.tax_amount}" onchange="App._retCalcTotal()"></td>
-        <td>${item.product_name}</td>
+        <td>${this.escapeAttr(item.product_name)}</td>
         <td style="font-family:monospace;font-size:12px">${item.sku}</td>
         <td style="text-align:center">${item.quantity}${alreadyRet > 0 ? ` <span style="font-size:10px;color:var(--warning)">(${alreadyRet} returned)</span>` : ''}</td>
         <td style="text-align:center"><input type="number" class="ret-qty" data-item-id="${item.id}" min="1" max="${maxQty}" value="1" style="width:56px;text-align:center" onchange="App._retCalcTotal()" oninput="App._retCalcTotal()"></td>
@@ -10071,8 +10103,8 @@ const App = {
             </div>
           </div>
           <div class="form-group" style="margin-bottom:0">
-            <label style="font-size:13px">Notes (optional)</label>
-            <input type="text" id="ret-notes" placeholder="Reason for return..." style="font-size:13px">
+            <label style="font-size:13px">Return reason (required, at least 5 characters)</label>
+            <input type="text" id="ret-notes" minlength="5" maxlength="1000" required placeholder="Reason for return..." style="font-size:13px"><label for="ret-authorizer-id">Approving employee ID</label><input id="ret-authorizer-id" type="number" min="1" autocomplete="off" required><label for="ret-authorizer-password">Approving employee password</label><input id="ret-authorizer-password" type="password" autocomplete="off" required><small>A different authorised employee must approve this return.</small>
           </div>
         </div>
         <div class="modal-footer" style="justify-content:space-between;align-items:center">
@@ -10132,7 +10164,7 @@ const App = {
     if (btn) { btn.disabled = true; btn.textContent = 'Processing…'; }
     try {
       const ret = await this.api('POST', `/transactions/${txId}/return`, {
-        items, resolution, notes, employee_id: this.currentUser?.id || null
+        items, resolution, notes, employee_id: this.currentUser?.id || null,return_authorizer_id:Number(document.getElementById('ret-authorizer-id')?.value),return_authorizer_password:document.getElementById('ret-authorizer-password')?.value||''
       });
       document.getElementById('return-overlay')?.remove();
       if (resolution === 'replacement') {
@@ -10196,7 +10228,7 @@ const App = {
             ${ret.employee_name ? `<div class="receipt-row"><span>Processed By:</span><span>${ret.employee_name}</span></div>` : ''}
             ${ret.notes ? `<div class="receipt-row"><span>Reason:</span><span>${ret.notes}</span></div>` : ''}
             <hr>
-            ${items.map(i => `<div class="receipt-row"><span>${i.product_name}</span><span>${this.fmt(i.total)}</span></div>${i.quantity > 1 ? `<div style="color:#666;font-size:11px;padding-left:4px">${i.quantity} x ${this.fmt(i.unit_price)}</div>` : ''}`).join('')}
+            ${items.map(i => `<div class="receipt-row"><span>${this.escapeAttr(i.product_name)}</span><span>${this.fmt(i.total)}</span></div>${i.quantity > 1 ? `<div style="color:#666;font-size:11px;padding-left:4px">${i.quantity} x ${this.fmt(i.unit_price)}</div>` : ''}`).join('')}
             <hr>
             <div class="receipt-row"><span>Subtotal</span><span>${this.fmt(ret.subtotal)}</span></div>
             <div class="receipt-row"><span>Tax</span><span>${this.fmt(ret.tax_amount)}</span></div>
@@ -11927,11 +11959,13 @@ const App = {
   },
 
   async showPOForm() {
-    const [suppliers, products] = await Promise.all([
+    const [suppliers, products, currencyOptions] = await Promise.all([
       this.api('GET', '/suppliers'),
       this.api('GET', '/products'),
+      this.api('GET', '/purchase-orders/currency-options'),
     ]);
     const branches = this.currentUser.branches || [];
+    this._poCurrencyOptions=currencyOptions;this._poLastRate=1;
     this.showModal(`
       <div class="modal" style="max-width:720px">
         <div class="modal-header"><span class="modal-title">New Purchase Order</span><button class="modal-close">✕</button></div>
@@ -11954,6 +11988,7 @@ const App = {
             <div class="form-group"><label>Expected Date</label><input id="po-date" type="date"></div>
             <div class="form-group"><label>Notes</label><input id="po-notes"></div>
           </div>
+          <fieldset class="tt-purch__fx-fields"><legend>Order currency</legend><label>Supplier currency<select id="po-currency" onchange="App.onPOCurrencyChange(true)">${currencyOptions.options.map(r=>`<option value="${this.escapeAttr(r.currency)}" ${r.currency===currencyOptions.base_currency?'selected':''}>${this.escapeAttr(r.currency)}${r.currency===currencyOptions.base_currency?' · local currency':r.available?'':' · rate required'}</option>`).join('')}</select></label><label>Rate option<select id="po-fx-mode" onchange="App.onPOCurrencyChange(false)"><option value="managed">Use saved rate</option>${currencyOptions.can_set_order_rate?'<option value="manual">One-order rate</option>':''}</select></label><label id="po-fx-rate-label">Exchange rate · 1 supplier unit to ${currencyOptions.base_currency}<input id="po-fx-rate" type="number" min="0.00000001" step="0.00000001" value="1" readonly oninput="App.calcPOTotal()"></label><label>Rate source / reference<input id="po-fx-source" maxlength="500" readonly value="base_currency"></label><p id="po-fx-hint">Quoted costs use the selected supplier currency. Receiving and accounting use ${currencyOptions.base_currency}.</p></fieldset>
           <div style="margin-bottom:10px">
             <div class="card-header"><span class="card-title">Items</span>
               <div style="display:flex;gap:8px">
@@ -11964,7 +11999,7 @@ const App = {
             <div id="po-items-status" style="font-size:12px;color:var(--text-muted);padding:4px 0 8px">Select a supplier above to see their products.</div>
             <div id="po-items"></div>
           </div>
-          <div style="text-align:right;font-size:15px;font-weight:700">Total: <span id="po-total">$0.00</span></div>
+          <div style="text-align:right;font-size:15px;font-weight:700">Supplier total: <span id="po-total">0.00</span><div>Local value: <span id="po-base-total">0.00</span></div></div>
         </div>
         <div class="modal-footer">
           <button class="btn btn-secondary" onclick="App.closeModal()">Cancel</button>
@@ -12115,10 +12150,14 @@ const App = {
     const sel = document.getElementById(`poi-prod-${idx}`);
     const opt = sel.options[sel.selectedIndex];
     const cost = opt.dataset.cost;
-    document.getElementById(`poi-cost-${idx}`).value = cost || '';
+    document.getElementById(`poi-cost-${idx}`).value = Number((Number(cost||0)/(Number(document.getElementById('po-fx-rate')?.value)||1)).toFixed(6));
     this.calcPOTotal();
   },
 
+  onPOCurrencyChange(convertCosts) {
+    const currency=document.getElementById('po-currency').value,mode=document.getElementById('po-fx-mode').value,meta=this._poCurrencyOptions,saved=meta.options.find(r=>r.currency===currency),input=document.getElementById('po-fx-rate'),source=document.getElementById('po-fx-source');
+    const oldRate=Number(input.value||0),rate=currency===meta.base_currency?1:Number(saved?.rate_to_base||0);input.readOnly=currency===meta.base_currency||mode!=='manual';input.value=rate||'';source.readOnly=input.readOnly;source.value=input.readOnly?(saved?.source_reference||''):' ';if(convertCosts){document.querySelectorAll('[id^="poi-cost-"]').forEach(el=>el.value=rate>0?Number((Number(el.value||0)*Number(oldRate||1)/rate).toFixed(6)):0);}this._poLastRate=rate;this.calcPOTotal();
+  },
   calcPOTotal() {
     let total = 0;
     document.querySelectorAll('[id^="poi-qty-"]').forEach(qEl => {
@@ -12128,7 +12167,9 @@ const App = {
       total += qty * cost;
     });
     const el = document.getElementById('po-total');
-    if (el) el.textContent = this.fmt(total);
+    const currency=document.getElementById('po-currency')?.value||this._poCurrencyOptions?.base_currency||'JMD',base=this._poCurrencyOptions?.base_currency||'JMD',rate=Number(document.getElementById('po-fx-rate')?.value||0);
+    if(el)el.textContent=new Intl.NumberFormat(undefined,{style:'currency',currency,currencyDisplay:'code'}).format(total);
+    const local=document.getElementById('po-base-total');if(local)local.textContent=rate>0?new Intl.NumberFormat(undefined,{style:'currency',currency:base,currencyDisplay:'code'}).format(total*rate):'Exchange rate required';
   },
 
   async savePO() {
@@ -12149,7 +12190,9 @@ const App = {
     if (!supplier_id) { this.alert('Please select a supplier', 'error'); return; }
     if (!items.length) { this.alert('Add at least one item', 'error'); return; }
     try {
-      await this.api('POST', '/purchase-orders', { supplier_id, branch_id: branch_id||null, notes, expected_date: expected_date||null, items });
+      const currency=document.getElementById('po-currency').value,mode=document.getElementById('po-fx-mode').value,rate=Number(document.getElementById('po-fx-rate').value),saved=this._poCurrencyOptions.options.find(r=>r.currency===currency);
+      if(!(rate>0))throw new Error('A valid exchange rate is required');
+      await this.api('POST', '/purchase-orders', { currency,fx_mode:mode,fx_date:this._poCurrencyOptions.as_of,fx_rate_to_base:rate,fx_rate_id:mode==='managed'?saved?.rate_id:undefined,fx_source_reference:document.getElementById('po-fx-source').value,supplier_id, branch_id: branch_id||null, notes, expected_date: expected_date||null, items });
       this.closeModal();
       this.alert('Purchase order created');
       this.renderPurchasing();
@@ -12161,6 +12204,7 @@ const App = {
       this.api('GET', `/purchase-orders/${id}`),
       this.api('GET', `/purchase-orders/${id}/attachments`),
     ]);
+    const poMoney=n=>new Intl.NumberFormat(undefined,{style:'currency',currency:po.base_currency||'JMD',currencyDisplay:'code'}).format(Number(n||0));
     const statusColor = { draft:'badge-warning', sent:'badge-info', approved:'badge-teal', partial:'badge-purple', received:'badge-success', cancelled:'badge-danger' };
     const docTypeLabel = { purchase_request:'Purchase Request', supplier_quotation:'Supplier Quotation', other:'Other' };
     const fileIcon = mime => {
@@ -12180,7 +12224,7 @@ const App = {
             <button class="modal-close">✕</button>
           </div>
         </div>
-        <div class="modal-body">
+        <div class="modal-body">${po.currency?`<div class="tt-purch__fx-preview"><strong>Supplier total: ${new Intl.NumberFormat(undefined,{style:'currency',currency:po.currency,currencyDisplay:'code'}).format(po.currency_total)}</strong><span>Local value: ${poMoney(po.total)} · 1 ${this.escapeAttr(po.currency)} = ${po.fx_rate_to_base} ${this.escapeAttr(po.base_currency)}</span></div>`:''}
           <div class="two-col" style="margin-bottom:14px;font-size:13px">
             <div><strong>Supplier:</strong> ${po.supplier_name||'-'}<br><strong>Contact:</strong> ${po.supplier_contact||'-'}<br><strong>Email:</strong> ${po.supplier_email||'-'}</div>
             <div><strong>Branch:</strong> ${po.branch_name||'-'}<br><strong>Created:</strong> ${this.fmtDate(po.created_at)}<br><strong>Expected:</strong> ${po.expected_date ? this.fmtDate(po.expected_date) : '-'}</div>
@@ -12195,13 +12239,13 @@ const App = {
                   <td>${i.quantity_ordered}</td>
                   <td><span class="${i.quantity_received>=i.quantity_ordered?'color-success':'color-warning'}">${i.quantity_received||0}</span></td>
                   <td>${i.quantity_damaged>0 ? `<span class="color-danger">${i.quantity_damaged}</span>` : '-'}</td>
-                  <td>${this.fmt(i.unit_cost)}</td>
-                  <td class="fw-600">${this.fmt(i.total)}</td>
+                  <td>${poMoney(i.unit_cost)}</td>
+                  <td class="fw-600">${poMoney(i.total)}</td>
                 </tr>`).join('')}
               </tbody>
             </table>
           </div>
-          <div style="text-align:right;margin-top:10px;font-size:15px;font-weight:700">Total: ${this.fmt(po.total)}</div>
+          <div style="text-align:right;margin-top:10px;font-size:15px;font-weight:700">Total: ${poMoney(po.total)}</div>
 
           <div style="margin-top:20px;border-top:1px solid var(--border);padding-top:14px">
             <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:10px">
@@ -12916,7 +12960,7 @@ const App = {
             <div class="card-header"><span class="card-title">Items</span>
               <div style="display:flex;gap:6px">
                 <button class="btn btn-sm btn-outline" onclick="App.addQuoteItem()">+ Add Item</button>
-                <button class="btn btn-sm btn-outline" onclick="App.addQuoteCustomItem()">+ Custom Item</button>
+                <button class="btn btn-sm btn-outline" onclick="App.addQuoteCustomItem()">+ Item to purchase</button><button class="btn btn-sm btn-outline" onclick="App.addQuoteCustomItem({line_type:'delivery'})">+ Delivery</button><button class="btn btn-sm btn-outline" onclick="App.addQuoteCustomItem({line_type:'comment'})">+ Comment</button>
               </div>
             </div>
             <div id="qt-items"></div>
@@ -13071,10 +13115,10 @@ const App = {
     div.className = 'po-receive-row';
     div.id = `qt-item-${idx}`;
     div.innerHTML = `
-      <input id="qti-desc-${idx}" style="flex:2" placeholder="Custom item description" value="${prefill?this.escapeAttr(prefill.product_name):''}" data-pr-id="${prefill&&prefill.purchase_request_id||''}">
-      <input id="qti-qty-${idx}" type="number" min="1" value="${prefill?prefill.quantity:1}" style="width:70px" placeholder="Qty" oninput="App.calcQuoteTotal()">
-      <input id="qti-price-${idx}" type="number" step="0.01" value="${prefill?prefill.unit_price:''}" style="width:90px" placeholder="Amount" oninput="App.calcQuoteTotal()">
-      <span class="badge-pill badge-warning" style="flex-shrink:0" title="Flags this item for Purchasing to order — a Purchase Request is auto-created">Q</span>
+      <input id="qti-desc-${idx}" style="flex:2" placeholder="Custom item description" value="${prefill?this.escapeAttr(prefill.product_name):''}" data-pr-id="${prefill&&prefill.purchase_request_id||''}" data-line-type="${this.escapeAttr(prefill?.line_type||'product')}">
+      <input id="qti-qty-${idx}" type="number" min="1" value="${prefill?.quantity||1}" ${['delivery','comment'].includes(prefill?.line_type)?'readonly':''} style="width:70px" placeholder="Qty" oninput="App.calcQuoteTotal()">
+      <input id="qti-price-${idx}" type="number" step="0.01" value="${prefill?.unit_price||0}" ${prefill?.line_type==='comment'?'readonly':''} style="width:90px" placeholder="Amount" oninput="App.calcQuoteTotal()">
+      <span class="badge-pill badge-warning" style="flex-shrink:0" title="Flags this item for Purchasing to order — a Purchase Request is auto-created">${prefill?.line_type==='delivery'?'Delivery':prefill?.line_type==='comment'?'Comment':'Q'}</span>
       <button class="btn btn-sm btn-danger" onclick="document.getElementById('qt-item-${idx}').remove();App.calcQuoteTotal()">✕</button>`;
     container.appendChild(div);
     this.calcQuoteTotal();
@@ -13406,7 +13450,7 @@ const App = {
       const description = descInp?.value.trim();
       if (!description) return;
       const purchase_request_id = descInp.dataset.prId || null;
-      items.push({ description, quantity, unit_price, purchase_request_id });
+      items.push({ description, quantity, unit_price, purchase_request_id,line_type:descInp.dataset.lineType||'product' });
     });
     if (!items.length) { this.alert('Add at least one item', 'error'); return; }
     try {
@@ -13462,7 +13506,7 @@ const App = {
           <tbody>
             ${q.items.map(i => {
               const tag = i.parent_item_id ? (i.is_mandatory ? ' <span class="badge-pill badge-success" style="font-size:10px">included</span>' : ' <span class="badge-pill badge-secondary" style="font-size:10px">accessory</span>') : '';
-              return `<tr><td>${i.product_name}${tag}</td><td>${i.quantity}</td><td>${i.condition_out||'-'}</td><td class="fw-600">${this.fmt(i.total)}</td></tr>`;
+              return `<tr><td>${this.escapeAttr(i.product_name)}${tag}</td><td>${i.quantity}</td><td>${i.condition_out||'-'}</td><td class="fw-600">${this.fmt(i.total)}</td></tr>`;
             }).join('')}
           </tbody>
         </table>
@@ -13472,7 +13516,7 @@ const App = {
         <table>
           <thead><tr><th>Product</th><th>Qty</th><th>Price</th><th>Tax</th><th>Total</th></tr></thead>
           <tbody>
-            ${q.items.map(i => `<tr><td>${i.product_name}${i.is_temp_item ? ` <span class="badge-pill badge-warning" style="font-size:10px" title="Flagged for Purchasing to order">Q</span>${i.purchase_request_number ? ` <a href="#" style="font-size:11px;color:var(--primary);text-decoration:none" onclick="event.preventDefault();App.closeModal();App.viewPR(${i.purchase_request_id})">${i.purchase_request_number}</a>` : ''}` : ''}${this.renderQuoteItemSources(i, q)}</td><td>${i.quantity}</td><td>${this.fmt(i.unit_price)}</td><td>${this.fmt(i.tax_amount)}</td><td class="fw-600">${this.fmt(i.total)}</td></tr>`).join('')}
+            ${q.items.map(i => `<tr><td>${this.escapeAttr(i.product_name)}${i.is_temp_item ? ` <span class="badge-pill badge-warning" style="font-size:10px" title="Flagged for Purchasing to order">Q</span>${i.purchase_request_number ? ` <a href="#" style="font-size:11px;color:var(--primary);text-decoration:none" onclick="event.preventDefault();App.closeModal();App.viewPR(${i.purchase_request_id})">${i.purchase_request_number}</a>` : ''}` : ''}${this.renderQuoteItemSources(i, q)}</td><td>${i.quantity}</td><td>${this.fmt(i.unit_price)}</td><td>${this.fmt(i.tax_amount)}</td><td class="fw-600">${this.fmt(i.total)}</td></tr>`).join('')}
           </tbody>
         </table>
       </div>`;
@@ -14269,6 +14313,7 @@ const App = {
       { key: 'transactions_export', label: 'Export Transactions' },
       { key: 'transactions_refund', label: 'Issue Refunds' },
       { key: 'transactions_returns', label: 'Process Returns' },
+      { key: 'returns_authorize', label: 'Independently Authorize Returns' },
     ]},
     { key: 'reports', label: 'Reports', subs: [
       { key: 'reports_export', label: 'Export Reports' },

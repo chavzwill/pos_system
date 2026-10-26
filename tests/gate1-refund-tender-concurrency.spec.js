@@ -100,7 +100,7 @@ test.describe('Gate 1 refund tender concurrency invariants', () => {
 
       const makeReturn = notes => api(cashier.cookie, `/api/transactions/${transactionId}/return`, {
         method: 'POST',
-        body: JSON.stringify({ resolution: 'refund', items: [{ transaction_item_id: transactionItemId, quantity: 1 }], notes }),
+        body: JSON.stringify({ resolution: 'refund', items: [{ transaction_item_id: transactionItemId, quantity: 1 }], notes,return_authorizer_id:admin.body.id,return_authorizer_password:ADMIN_PASSWORD }),
       });
       const firstReturn = await makeReturn('Gate 1 refund race return A');
       const secondReturn = await makeReturn('Gate 1 refund race return B');

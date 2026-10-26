@@ -129,6 +129,10 @@ app.get('/legacy-pos-app.js', (req,res)=>{ try{res.set('Cache-Control','public, 
 app.get('/', sendFastShell);
 app.get('/index.html', sendFastShell);
 app.get('/legacy', sendEnhancedIndex);
+app.get('/sw.js', (req,res)=>{
+  res.set('Cache-Control','no-cache, no-store, must-revalidate');
+  res.sendFile(path.join(publicDir, 'sw.js'));
+});
 app.use(express.static(publicDir, { index:false, etag:true, maxAge:'1h', setHeaders:(res,filePath)=>{ if (/\.(?:js|css|png|jpg|jpeg|gif|svg|webp|ico)$/i.test(filePath)) res.set('Cache-Control','public, max-age=3600, stale-while-revalidate=86400'); else res.set('Cache-Control','no-cache, must-revalidate'); } }));
 app.use(async (req,res,next)=>{try{await ensureReady();next();}catch(e){console.error('POS database initialization failed:',e&&(e.stack||e.message||e));res.status(500).json({error:'Database initialization failed',request_id:req.requestId});}});
 
@@ -164,8 +168,15 @@ app.use('/api', sameOriginMutationGuard);
 app.use('/api', require('./routes/multi-branch-integrity-guard'));
 app.use('/api/department-approvals', require('./routes/department-approval-admin'));
 app.use('/api/workspace-profile', require('./routes/workspace-profile'));
+app.use('/api/purchasing-drafts', require('./routes/purchasing-drafts'));
+app.use('/api/purchasing-exceptions', require('./routes/purchasing-exceptions'));
+app.use('/api/purchasing-control', require('./routes/purchasing-control'));
+app.use('/api/supplier-returns', require('./routes/supplier-return-replacements'));
+app.use('/api/supplier-returns', require('./routes/supplier-returns'));
 app.use('/api/employee-workspace-intelligence', require('./routes/employee-workspace-intelligence'));
 app.use('/api/employee-assist', require('./routes/employee-assist'));
+// TT AI: permissioned, read-only employee gateway; no public machine-identity delegation.
+app.use('/api/tt-ai', require('./routes/tt-ai-read'));
 app.use('/api/predictive-lookup', require('./routes/predictive-lookup'));
 app.use('/api/catalog-integrity', require('./routes/catalog-integrity'));
 app.use('/api/category-corrections', require('./routes/category-corrections'));
@@ -185,6 +196,8 @@ app.use('/api/customer-repair-portal', require('./routes/customer-repair-portal'
 app.use('/api/customers', require('./routes/customer-workflow-hardening'));
 app.use('/api/customers', require('./routes/customers'));
 app.use('/api/held-sales', require('./routes/held-sales'));
+app.use('/api/transactions', require('./routes/retail-ticket-normalization'));
+app.use('/api/transactions', require('./routes/retail-return-authorization').router);
 app.use('/api/transactions', require('./routes/held-sale-recall-hardening'));
 app.use('/api/transactions', require('./routes/retail-traceability-guard'));
 app.use('/api/transactions', require('./routes/retail-checkout-hardening'));
@@ -200,6 +213,8 @@ app.use('/api/reports', require('./routes/reports'));
 app.use('/api/operational-reports', require('./routes/operational-reports'));
 app.use('/api/accounting-intelligence', require('./routes/accounting-intelligence'));
 app.use('/api/financial-controls-intelligence', require('./routes/financial-controls-intelligence'));
+app.use('/api/supplier-ledger/credit-notes', require('./routes/supplier-credit-notes'));
+app.use('/api/supplier-ledger', require('./routes/supplier-invoice-capture'));
 app.use('/api/supplier-ledger', require('./routes/supplier-invoice-loss-prevention'));
 app.use('/api/supplier-ledger', require('./routes/supplier-payment-loss-prevention'));
 app.use('/api/supplier-ledger', require('./routes/supplier-ledger'));
@@ -211,7 +226,10 @@ app.use('/api/erp-intelligence', require('./routes/erp-intelligence'));
 app.use('/api/settings', require('./routes/settings'));
 app.use('/api/branches', require('./routes/branches'));
 app.use('/api/suppliers', require('./routes/suppliers'));
+app.use('/api/consumables/recovery', require('./routes/consumable-recovery'));
+app.use('/api/consumables/corrections', require('./routes/consumable-corrections'));
 app.use('/api/consumables', require('./routes/consumables'));
+app.use('/api/purchase-orders', require('./routes/purchase-order-currency'));
 app.use('/api/purchase-orders', require('./routes/purchase-order-document-context'));
 app.use('/api/purchase-orders', require('./routes/purchase-receive-operation-guard'));
 app.use('/api/purchase-orders', require('./routes/purchase-receipt-traceability'));

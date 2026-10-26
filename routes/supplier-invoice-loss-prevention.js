@@ -1,3 +1,4 @@
+const {creditAmountSql,outstandingSql}=require('../lib/supplier-ap-balances');
 'use strict';
 const crypto=require('crypto');
 const express=require('express');
@@ -140,21 +141,23 @@ async function evaluateInvoice(req){
   }
   return {supplierId,poId,normalized,subtotal,matchStatus,poValue,receivedValue,priorBilled:prior,remainingReceived,variance,overrideReason:null,overrideBy:null};
 }
-async function persistMatch(invoiceId,ev){
+async function persistMatch(invoiceId,ev,executor=db){
   if(!invoiceId||!ev)return;
-  await db.execute({sql:`INSERT INTO supplier_invoice_match_controls(supplier_invoice_id,supplier_id,purchase_order_id,normalized_invoice_number,match_status,po_merchandise_value,received_merchandise_value,prior_billed_merchandise_value,invoice_merchandise_value,remaining_received_value_before_invoice,merchandise_variance,override_reason,override_by_employee_id)
+  await executor.execute({sql:`INSERT INTO supplier_invoice_match_controls(supplier_invoice_id,supplier_id,purchase_order_id,normalized_invoice_number,match_status,po_merchandise_value,received_merchandise_value,prior_billed_merchandise_value,invoice_merchandise_value,remaining_received_value_before_invoice,merchandise_variance,override_reason,override_by_employee_id)
     VALUES(?,?,?,?,?,?,?,?,?,?,?,?,?)`,args:[invoiceId,ev.supplierId,ev.poId,ev.normalized,ev.matchStatus,ev.poValue,ev.receivedValue,ev.priorBilled,ev.subtotal,ev.remainingReceived,ev.variance,ev.overrideReason,ev.overrideBy]});
-  await db.execute({sql:'INSERT INTO supplier_invoice_match_events(supplier_invoice_id,event_type,employee_id,details) VALUES(?,?,?,?)',args:[invoiceId,ev.matchStatus==='matched'?'three_way_matched':ev.matchStatus,ev.overrideBy||null,JSON.stringify({po_merchandise_value:ev.poValue,received_merchandise_value:ev.receivedValue,prior_billed:ev.priorBilled,invoice_merchandise_value:ev.subtotal,variance:ev.variance,override_reason:ev.overrideReason})]});
+  await executor.execute({sql:'INSERT INTO supplier_invoice_match_events(supplier_invoice_id,event_type,employee_id,details) VALUES(?,?,?,?)',args:[invoiceId,ev.matchStatus==='matched'?'three_way_matched':ev.matchStatus,ev.overrideBy||null,JSON.stringify({po_merchandise_value:ev.poValue,received_merchandise_value:ev.receivedValue,prior_billed:ev.priorBilled,invoice_merchandise_value:ev.subtotal,variance:ev.variance,override_reason:ev.overrideReason})]});
 }
 
 router.post('/invoices',async(req,res,next)=>{
   let ev;try{ev=await evaluateInvoice(req);}catch(e){return res.status(e.status||500).json({error:e.message});}
   if(!ev)return next();
   let claimToken;try{claimToken=await claimIdentity(ev.supplierId,ev.normalized);}catch(e){return res.status(e.status||409).json({error:e.message});}
+  req.supplierInvoiceEvaluation=ev;
+  req.supplierInvoiceClaimToken=claimToken;
   delete req.body.match_override_reason;
   const originalJson=res.json.bind(res);let handled=false;
   res.json=function(payload){
-    if(handled)return originalJson(payload);handled=true;
+    if(handled||req.invoiceMatchFinalized)return originalJson(payload);handled=true;
     if(res.statusCode>=200&&res.statusCode<300&&payload?.id){
       return linkIdentityClaim(ev.supplierId,ev.normalized,claimToken,payload.id)
         .then(()=>persistMatch(payload.id,ev))
@@ -168,15 +171,16 @@ router.post('/invoices',async(req,res,next)=>{
 
 router.post('/payments',async(req,res,next)=>{
   try{
+    await require('../lib/supplier-credit-notes').ensureSupplierCreditSchema();
     const supplierId=Number(req.body?.supplier_id),amount=money(req.body?.amount||0);if(!supplierId||amount<=0)return next();
     let allocations=Array.isArray(req.body?.allocations)?req.body.allocations.filter(x=>Number(x.amount)>0):[];
     if(allocations.length){
       for(const a of allocations){const {rows:[m]}=await db.execute({sql:`SELECT c.match_status FROM supplier_invoice_match_controls c JOIN supplier_invoices si ON si.id=c.supplier_invoice_id WHERE c.supplier_invoice_id=? AND si.supplier_id=?`,args:[Number(a.invoice_id),supplierId]});if(!m||!['matched','approved_exception'].includes(String(m.match_status)))return res.status(409).json({error:`Supplier invoice ${a.invoice_id} is not cleared by PO/receipt matching and cannot be paid yet.`});}
       return next();
     }
-    const {rows:open}=await db.execute({sql:`SELECT si.id,MAX(0,si.total-COALESCE(a.paid,0)) balance_due FROM supplier_invoices si JOIN supplier_invoice_match_controls c ON c.supplier_invoice_id=si.id
+    const {rows:open}=await db.execute({sql:`SELECT si.id,${outstandingSql('si')} balance_due FROM supplier_invoices si JOIN supplier_invoice_match_controls c ON c.supplier_invoice_id=si.id
       LEFT JOIN (SELECT supplier_invoice_id,SUM(amount) paid FROM supplier_payment_allocations GROUP BY supplier_invoice_id) a ON a.supplier_invoice_id=si.id
-      WHERE si.supplier_id=? AND si.status!='void' AND c.match_status IN ('matched','approved_exception') AND MAX(0,si.total-COALESCE(a.paid,0))>0.001 ORDER BY COALESCE(si.due_date,si.invoice_date),si.id`,args:[supplierId]});
+      WHERE si.supplier_id=? AND si.status!='void' AND c.match_status IN ('matched','approved_exception') AND ${outstandingSql('si')}>0.001 ORDER BY COALESCE(si.due_date,si.invoice_date),si.id`,args:[supplierId]});
     let left=amount;allocations=[];for(const inv of open){if(left<=0.001)break;const applied=Math.min(left,Number(inv.balance_due));allocations.push({invoice_id:inv.id,amount:money(applied)});left=money(left-applied);}
     if(!allocations.length)return res.status(409).json({error:'No matched supplier invoices are eligible for payment. Review PO/receipt matching first.'});
     req.body.allocations=allocations;
@@ -204,3 +208,12 @@ router.post('/invoice-matches/:invoiceId/review',async(req,res)=>{
 module.exports=router;
 module.exports.ensureSchema=ensureSchema;
 module.exports.normalizeInvoiceNumber=normalizeInvoiceNumber;
+
+// Captured invoices finalize all posting evidence inside the AP transaction.
+module.exports.finalizeCapturedMatch=async function(tx,req,invoiceId,evidence){
+ const ev={...req.supplierInvoiceEvaluation,...evidence};
+ const result=await tx.execute({sql:`UPDATE supplier_invoice_identity_claims SET supplier_invoice_id=?,linked_at=CURRENT_TIMESTAMP WHERE supplier_id=? AND normalized_invoice_number=? AND claim_token=? AND supplier_invoice_id IS NULL`,args:[invoiceId,ev.supplierId,ev.normalized,req.supplierInvoiceClaimToken]});
+ if(Number(result.rowsAffected)!==1)throw new Error('Supplier invoice identity changed before posting');
+ await persistMatch(invoiceId,ev,tx);
+ return ev;
+};

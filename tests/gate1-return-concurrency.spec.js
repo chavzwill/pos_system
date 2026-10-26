@@ -117,7 +117,7 @@ test.describe('Gate 1 return concurrency invariants', () => {
       session = response.body;
 
       const sale = await api(cashier.cookie, '/api/transactions', {
-        method: 'POST',
+        method: 'POST',headers:{'Idempotency-Key':`return-race-sale-${suffix}`},
         body: JSON.stringify({
           branch_id: branch.id,
           drawer_session_id: session.id,
@@ -139,7 +139,7 @@ test.describe('Gate 1 return concurrency invariants', () => {
       const returnBody = JSON.stringify({
         resolution: 'refund',
         items: [{ transaction_item_id: transactionItemId, quantity: 1 }],
-        notes: 'Gate 1 simultaneous double-return attack',
+        notes: 'Gate 1 simultaneous double-return attack',return_authorizer_id:admin.body.id,return_authorizer_password:ADMIN_PASSWORD,
       });
       const [first, second] = await Promise.all([
         api(cashier.cookie, `/api/transactions/${transactionId}/return`, { method: 'POST', body: returnBody }),
@@ -151,7 +151,7 @@ test.describe('Gate 1 return concurrency invariants', () => {
       expect(successes).toHaveLength(1);
       expect(rejected).toHaveLength(1);
       expect([400, 409]).toContain(rejected[0].status);
-      expect(String(rejected[0].body?.error || '')).toMatch(/RETURN_QUANTITY_EXCEEDS_ELIGIBLE|Max returnable|remaining unreturned/i);
+      expect(String(rejected[0].body?.error || '')).toMatch(/RETURN_QUANTITY_EXCEEDS_ELIGIBLE|Max returnable|remaining unreturned|RETURN_CONCURRENT_MODIFICATION_RETRY/i);
 
       const afterRace = await api(cashier.cookie, `/api/products/${product.id}?branch_id=${branch.id}`);
       expect(afterRace.status).toBe(200);

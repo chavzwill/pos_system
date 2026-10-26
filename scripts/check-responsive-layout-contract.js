@@ -8,7 +8,7 @@ const html=read('public/app-shell.html');
 const app=read('public/app-shell.js');
 const loader=read('public/workspace-loader-hardening.js');
 const deferred=read('public/shell-deferred.js');
-const VERSION='20261023-invoice-link1';
+const VERSION='20261025-asset-cost1';
 const checks=[];
 const check=(name,pass)=>checks.push({name,pass:!!pass});
 
@@ -20,7 +20,7 @@ check('wide operational split panes collapse for narrow screens',work.includes('
 check('mobile filters and toolbars can wrap to the viewport',work.includes('@media(max-width:640px)')&&work.includes('flex-wrap:wrap!important'));
 check('mobile tables have horizontal containment',work.includes('overflow-x:auto')&&work.includes('-webkit-overflow-scrolling:touch'));
 check('very small phones receive dedicated 360px rules',shell.includes('@media(max-width:360px)')&&work.includes('@media(max-width:360px)'));
-check('shell and workspace styles use current cache versions',html.includes('/app-shell.css?v=20261021-responsive')&&html.includes('/ui-workspaces.css?v='+VERSION));
+check('shell and workspace styles use current cache versions',html.includes('/app-shell.css?v=20261024-app1')&&html.includes('/ui-workspaces.css?v='+VERSION));
 check('shell workflow loaders use PO responsive cache version',html.includes('/app-shell.js?v='+VERSION)&&html.includes('/workspace-loader-hardening.js?v='+VERSION));
 check('workspace loader uses PO responsive cache version',loader.includes(VERSION));
 check('deferred shell uses current workflow cache version',(()=>{const m=deferred.match(/const VERSION='([^']+)'/);return !!m&&html.includes('/shell-deferred.js?v='+m[1]);})());

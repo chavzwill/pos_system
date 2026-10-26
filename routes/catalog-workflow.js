@@ -1,6 +1,7 @@
 const express=require('express');
 const router=express.Router();
 const {db}=require('../database');
+const {createWithSku}=require('../lib/product-sku');
 const {can}=require('../lib/permissions');
 
 const CONTEXT_PERMISSIONS={
@@ -52,11 +53,11 @@ router.post('/items',guard,async(req,res)=>{
   try{
     const b=req.body||{};const name=String(b.name||'').trim();let sku=String(b.sku||'').trim();const barcode=String(b.barcode||'').trim()||null;
     if(!name)return res.status(400).json({error:'Item name is required'});
-    if(!sku)sku=`NEW-${Date.now().toString(36).toUpperCase()}`;
+    const automatic=b.auto_generate_sku===true||(!sku&&b.auto_generate_sku===undefined);
     const price=Math.max(0,num(b.price));const cost=Math.max(0,num(b.cost));const tax=Math.max(0,num(b.tax_rate,8.5));const minStock=Math.max(0,Math.floor(num(b.min_stock,0)));const opening=Math.max(0,Math.floor(num(b.opening_qty,0)));const branchId=b.branch_id||null;
     const tx=await db.transaction('write');let committed=false;
     try{
-      const r=await tx.execute({sql:`INSERT INTO products(sku,barcode,name,description,category_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,unit) VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?)`,args:[sku,barcode,name,b.description||null,b.category_id||null,price,cost,tax,opening,minStock,b.supplier_id||null,b.unit||'each']});
+      const r=await createWithSku(tx,sku,automatic,async assigned=>{sku=assigned;return tx.execute({sql:`INSERT INTO products(sku,barcode,name,description,category_id,price,cost,tax_rate,stock_qty,min_stock,active,supplier_id,unit) VALUES(?,?,?,?,?,?,?,?,?,?,1,?,?)`,args:[sku,barcode,name,b.description||null,b.category_id||null,price,cost,tax,opening,minStock,b.supplier_id||null,b.unit||'each']});});
       const productId=Number(r.lastInsertRowid);
       if(branchId){await tx.execute({sql:`INSERT INTO branch_inventory(product_id,branch_id,stock_qty,min_stock,updated_at) VALUES(?,?,?,?,CURRENT_TIMESTAMP) ON CONFLICT(product_id,branch_id) DO UPDATE SET stock_qty=excluded.stock_qty,min_stock=excluded.min_stock,updated_at=CURRENT_TIMESTAMP`,args:[productId,branchId,opening,minStock]});}
       if(opening>0)await tx.execute({sql:`INSERT INTO stock_movements(product_id,branch_id,quantity_change,type,reference,reason) VALUES(?,?,?,'opening_balance',?,?)`,args:[productId,branchId,opening,`CAT-${productId}`,`Opening quantity created through ${req.catalogContext} catalog workflow`]});
@@ -64,13 +65,14 @@ router.post('/items',guard,async(req,res)=>{
       await tx.commit();committed=true;
       const {rows:[product]}=await db.execute({sql:'SELECT * FROM products WHERE id=?',args:[productId]});res.status(201).json(product);
     }catch(e){if(!committed)await tx.rollback();if(String(e.message).includes('UNIQUE'))return res.status(409).json({error:'SKU or barcode already exists'});throw e;}
-  }catch(e){res.status(500).json({error:e.message});}
+  }catch(e){res.status(Number(e.status)||500).json({error:e.message});}
 });
 
 router.post('/purchase-orders/:poId/items',guard,async(req,res)=>{
   try{
     if(!['purchase_order','receiving'].includes(req.catalogContext))return res.status(400).json({error:'Invalid context for purchase-order item add'});
     const {rows:[po]}=await db.execute({sql:'SELECT * FROM purchase_orders WHERE id=?',args:[req.params.poId]});if(!po)return res.status(404).json({error:'Purchase order not found'});if(['received','cancelled'].includes(po.status))return res.status(409).json({error:'Purchase order is closed'});
+    if(po.currency)return res.status(409).json({error:'This PO has a frozen currency valuation. Copy it to a new draft and include all required items before saving.'});
     const productId=Number(req.body.product_id);const qty=Math.max(1,Math.floor(num(req.body.quantity,1)));const {rows:[p]}=await db.execute({sql:'SELECT * FROM products WHERE id=? AND active=1',args:[productId]});if(!p)return res.status(404).json({error:'Catalog item not found'});const unitCost=Math.max(0,num(req.body.unit_cost,p.cost));const total=Number((qty*unitCost).toFixed(2));
     const r=await db.execute({sql:`INSERT INTO purchase_order_items(po_id,product_id,product_name,sku,quantity_ordered,quantity_received,unit_cost,total) VALUES(?,?,?,?,?,0,?,?)`,args:[po.id,p.id,p.name,p.sku,qty,unitCost,total]});await db.execute({sql:`UPDATE purchase_orders SET subtotal=(SELECT COALESCE(SUM(total),0) FROM purchase_order_items WHERE po_id=?),total=(SELECT COALESCE(SUM(total),0) FROM purchase_order_items WHERE po_id=?) WHERE id=?`,args:[po.id,po.id,po.id]});res.status(201).json({id:Number(r.lastInsertRowid),product_id:p.id,product_name:p.name,sku:p.sku,quantity_ordered:qty,quantity_received:0,unit_cost:unitCost,total});
   }catch(e){res.status(500).json({error:e.message});}
