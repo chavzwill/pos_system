@@ -18,7 +18,7 @@ test('global work protection blocks leaving while a cost review is posting',asyn
  await mount(page,true,{realDrafts:true});let release;
  await page.route('http://fleet.test/**/cost-review',async r=>{await new Promise(resolve=>{release=resolve;});return r.fulfill({json:{id:8}});});
  await page.getByRole('button',{name:'Cost evidence',exact:true}).click();await page.getByRole('button',{name:'Review maintenance cost',exact:true}).click();await page.locator('[name=external_cost]').fill('1.00');await page.locator('[name=reason]').fill('External labour excludes issued supplies');await page.locator('[name=evidence_ref]').fill('Workshop invoice');await page.getByRole('button',{name:'Save cost review',exact:true}).click();
- await expect(page.getByRole('button',{name:'Saving…',exact:true})).toBeVisible();const allowed=await page.evaluate(()=>TotalToolsWorkProtection.leave());expect(allowed).toBe(false);expect(await page.evaluate(()=>window.confirmCalls)).toBe(0);release();await expect(page.locator('#tt-cost-review-form')).toHaveCount(0);
+ await expect(page.getByRole('button',{name:'Saving…',exact:true})).toBeVisible();await expect.poll(()=>typeof release).toBe('function');const allowed=await page.evaluate(()=>TotalToolsWorkProtection.leave());expect(allowed).toBe(false);expect(await page.evaluate(()=>window.confirmCalls)).toBe(0);release();await expect(page.locator('#tt-cost-review-form')).toHaveCount(0);
 });
 
 test('failed draft recovery blocks new reviews and later resumes the original uncertain operation',async({page})=>{
