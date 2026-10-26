@@ -3618,3 +3618,22 @@ body .tt-sales__discount select{max-width:none}
 .tt-consumables .ttc-target{outline:3px solid #318454;outline-offset:-3px;background:#eef7f0}
 .tt-consumables .ttc-form-panel{background:#fff;isolation:isolate}
 .tt-consumables .ttc-form-panel footer{background:#fff;z-index:2}
+
+/* Fleet cost evidence extends the existing fleet surface. */
+.tt-fleet__cost-notice{padding:12px 14px;background:#f1f7f3;border:1px solid #d3e4d9;border-radius:12px;color:#355844;line-height:1.6;font-size:14px}
+.tt-fleet__cost-panel{background:#fff;border:1px solid #d4e2d9;border-radius:18px;box-shadow:0 20px 70px #102c2940;margin:auto;max-height:92dvh;display:flex;flex-direction:column;overflow:hidden;color:#172b24}
+.tt-fleet__cost-panel header,.tt-fleet__cost-panel footer{padding:18px 22px;background:#fff;border-bottom:1px solid #dde7e0;flex-shrink:0}
+.tt-fleet__cost-panel header h3{margin:0;flex:1;font-size:20px;overflow-wrap:anywhere}
+.tt-fleet__cost-panel form{display:flex;flex-direction:column;min-height:0;overflow:hidden}
+.tt-fleet__cost-body{padding:20px 22px;overflow:auto;line-height:1.6;min-height:0}
+.tt-fleet__cost-panel fieldset{border:0;padding:0;display:grid;gap:16px;min-width:0}
+.tt-fleet__cost-panel input,.tt-fleet__cost-panel textarea{font:inherit;min-height:44px;width:100%;padding:10px 12px;border:1px solid #a7beb1;border-radius:10px;background:#fff;color:#172b24}
+.tt-fleet__cost-panel button{min-height:44px;font-size:14px}
+.tt-fleet__cost-panel textarea{min-height:88px}
+.tt-fleet__cost-record{padding:16px 0;border-top:1px solid #dce7e0}
+.tt-fleet__cost-record p{margin:8px 0}
+.tt-fleet__cost-table{max-width:100%;overflow:auto}
+.tt-fleet__cost-table table{border-collapse:collapse;width:100%;min-width:560px;font-size:14px}
+.tt-fleet__cost-table th,.tt-fleet__cost-table td{text-align:left;padding:12px;border-bottom:1px solid #dce7e0;vertical-align:top}
+.tt-fleet__cost-table small{display:block;color:#50685c}
+@media(max-width:640px){.tt-fleet__cost-panel{width:100%;max-height:96dvh;border-radius:18px 18px 0 0}.tt-fleet__cost-panel header,.tt-fleet__cost-panel footer,.tt-fleet__cost-body{padding:16px}.tt-fleet__cost-panel header{align-items:flex-start}.tt-fleet__cost-panel header h3{font-size:18px}.tt-fleet__detail{min-width:0}}

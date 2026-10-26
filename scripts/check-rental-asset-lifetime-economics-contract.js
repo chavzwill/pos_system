@@ -25,7 +25,7 @@ const checks=[
  ['asset economic events require financial/writeoff authority',guard.includes("requireAnyPermission('reports_financial','inventory_writeoff_approve')")&&guard.includes('/economic-events')],
  ['disposal requires financial/writeoff authority and meaningful evidence',guard.includes('/dispose')&&guard.includes('disposal/sale/write-off evidence reference')],
  ['disposal is blocked while rental allocation remains open',route.includes('cannot be disposed while allocated to an unresolved rental')],
- ['lifetime contribution includes revenue recovery disposal acquisition maintenance and losses',route.includes('revenue+recoveries+disposal-acq-maintenance-otherCosts')],
+ ['lifetime contribution includes net consumables and reviewed external costs',route.includes('external/100-net/100-externalOther/100')&&route.includes('non_consumable_direct_cost_cents')],
  ['ROI is based on preserved acquisition cost',route.includes('return_on_acquisition_cost_pct')&&route.includes('100*contribution/acq')],
  ['economics discloses missing unrecorded costs rather than inventing them',route.includes('Unrecorded maintenance, downtime, insurance, financing, depreciation and overhead are not invented')],
  ['asset economics does not autonomously purchase dispose or alter unrelated financial records',route.includes('automatic_actions:false')&&!route.includes('INSERT INTO purchase_orders')&&!route.includes('UPDATE customers SET')&&!route.includes('INSERT INTO journal_entries')],
