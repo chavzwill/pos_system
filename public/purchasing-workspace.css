@@ -82,3 +82,10 @@
  #tt-purchasing-workspace .tt-purch__approval-fields{margin-top:14px;padding:14px}
  #tt-purchasing-workspace .tt-purch__convert{grid-template-columns:minmax(0,1fr)!important}
 }
+
+/* Commercial PO document actions */
+.tt-purch__doc-toolbar{display:flex;flex-wrap:wrap;gap:8px;margin:14px 0 16px}
+.tt-purch__doc-toolbar button{min-height:44px;border:1px solid var(--tt-green,#0B7A3E);border-radius:12px;padding:0 17px;background:var(--tt-green,#0B7A3E);color:#fff;font-size:13px;font-weight:750;cursor:pointer}
+.tt-purch__doc-toolbar button:hover{filter:brightness(.94)}
+.tt-purch__doc-toolbar button:focus-visible{outline:3px solid var(--tt-green,#0B7A3E);outline-offset:3px}
+@media(max-width:600px){.tt-purch__doc-toolbar button{width:100%}}

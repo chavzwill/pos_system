@@ -1,5 +1,5 @@
 (()=>{'use strict';
-const defaults={store_name:'Your Business',company_logo_url:'',brand_primary_color:'#0B7A3E',brand_secondary_color:'#075C31',brand_accent_color:'#F2D11F',brand_theme:'light',brand_font:'inter',store_phone:'',store_email:'',store_address:'',receipt_footer:''};
+const defaults={store_name:'Your Business',company_logo_url:'',currency:'JMD',quote_terms:'',invoice_terms:'',purchase_order_terms:'',brand_primary_color:'#0B7A3E',brand_secondary_color:'#075C31',brand_accent_color:'#F2D11F',brand_theme:'light',brand_font:'inter',store_phone:'',store_email:'',store_address:'',receipt_footer:''};
 const appearanceDefaults={display_mode:'system',density:'comfortable',accent:'company'};
 const accents={blue:['#2563EB','#1D4ED8'],teal:['#0F766E','#115E59'],violet:['#7C3AED','#6D28D9']};
 let brand={...defaults},appearance={...appearanceDefaults},loaded=false;

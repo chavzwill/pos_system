@@ -40,3 +40,11 @@
 .tt-brand__preview>p{font-size:11px;color:var(--set-muted);margin:0}
 @media(max-width:920px){.tt-brand__layout{grid-template-columns:1fr}.tt-brand__preview{position:static;max-width:420px}}
 @media(max-width:520px){.tt-brand__upload{grid-template-columns:1fr}.tt-brand__logo{width:80px;height:80px}}
+
+.tt-settings__terms{max-width:980px;margin-top:24px;padding-top:18px;border-top:1px solid var(--set-border)}
+.tt-settings__terms h3{margin:0;font-size:17px;letter-spacing:-.025em}
+.tt-settings__terms>p{margin:4px 0 14px;font-size:12px;color:var(--set-muted)}
+.tt-settings__terms .tt-settings__grid{grid-template-columns:1fr;max-width:900px}
+.tt-settings__field textarea{width:100%;min-height:100px;padding:12px;border:1px solid var(--set-border-strong);border-radius:12px;resize:vertical;background:var(--set-surface);font-size:13px;line-height:1.6}
+.tt-settings__field textarea:focus-visible{outline:3px solid var(--set-green);outline-offset:2px}
+@media(max-width:760px){.tt-settings__field textarea{font-size:16px}}

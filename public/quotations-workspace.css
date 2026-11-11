@@ -7,3 +7,10 @@
 @media(max-width:900px){.tt-quotes__panel{inset:8px}.tt-quotes__toolbar{grid-template-columns:1fr 1fr}.tt-quotes__mine{grid-column:1/-1}.tt-quotes__metrics,.tt-quotes__detail-metrics{grid-template-columns:repeat(2,minmax(0,1fr))}}
 @media(max-width:760px){#tt-quotes #tt-quotes-search,#tt-quotes #tt-quotes-status,#tt-quotes #tt-quotes-type,#tt-quotes #tt-quotes-date{font-size:16px!important}.tt-quotes__panel{inset:0;border-radius:0}.tt-quotes__panel>header{min-height:64px;padding:0 14px}.tt-quotes__panel header h2{font-size:21px}.tt-quotes__panel header p,.tt-quotes__shortcuts{display:none}.tt-quotes__panel main{padding:9px 10px 14px}.tt-quotes__metrics,.tt-quotes__detail-metrics{gap:6px}.tt-quotes__metrics article,.tt-quotes__detail-metrics article{min-height:64px;padding:9px 10px}.tt-quotes__metrics strong,.tt-quotes__detail-metrics strong{font-size:17px}.tt-quotes__searchbar input{font-size:16px!important}.tt-quotes__searchbar button{min-width:84px}.tt-quotes__toolbar{grid-template-columns:1fr}.tt-quotes__mine{grid-column:auto}.tt-quote-card{grid-template-columns:1fr;padding:12px}.tt-quote-card>div:last-child{text-align:left}.tt-quote-card em{justify-self:start}.tt-quotes__detail-head{grid-template-columns:1fr}.tt-quotes__detail-head em{justify-self:start}.tt-quotes__detail-head>button{justify-self:start}.tt-quotes__items article{grid-template-columns:1fr}.tt-quotes__history summary em{display:none}}
 @media(prefers-reduced-motion:reduce){.tt-quotes *{animation:none!important;transition:none!important;scroll-behavior:auto!important}}
+
+/* Commercial quotation document actions */
+.tt-quotes__doc-actions{display:flex;justify-content:flex-end;gap:8px;padding:12px 0 16px}
+.tt-quotes__doc-actions button{min-height:44px;padding:0 17px;border-radius:12px;border:1px solid var(--tt-green,#0B7A3E);background:var(--tt-green,#0B7A3E);color:#fff;font-size:13px;font-weight:750;cursor:pointer}
+.tt-quotes__doc-actions button:hover{filter:brightness(.94)}
+.tt-quotes__doc-actions button:focus-visible{outline:3px solid var(--tt-green,#0B7A3E);outline-offset:3px}
+@media(max-width:600px){.tt-quotes__doc-actions button{width:100%}}

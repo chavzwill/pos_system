@@ -35,7 +35,7 @@ const INTEGRATION_KEYS = new Set([
   'woo_url','woo_consumer_key','woo_consumer_secret','woo_pos_url','woo_sync_branch_id','woo_sync_interval','woocommerce_consumer_key','woocommerce_consumer_secret','woocommerce_webhook_secret',
   'stripe_secret_key','stripe_webhook_secret','twilio_auth_token','whatsapp_access_token','openai_api_key'
 ]);
-const COMPANY_KEYS = new Set(['store_name','store_phone','store_email','store_address','currency','receipt_footer',...BRAND_KEYS]);
+const COMPANY_KEYS = new Set(['store_name','store_phone','store_email','store_address','currency','receipt_footer','quote_terms','invoice_terms','purchase_order_terms',...BRAND_KEYS]);
 const TAX_KEYS = new Set(['tax_rate']);
 const MANAGED_KEYS = new Set([
   ...COMPANY_KEYS,...TAX_KEYS,
@@ -128,7 +128,7 @@ router.get('/manage', requirePermission('settings'), async (req,res)=>{
 });
 
 async function readPublicBrand(){
-  const keys=['store_name','company_logo_url','store_phone','store_email','store_address','receipt_footer',...BRAND_KEYS];
+  const keys=['store_name','company_logo_url','currency','store_phone','store_email','store_address','receipt_footer','quote_terms','invoice_terms','purchase_order_terms',...BRAND_KEYS];
   const placeholders=keys.map(()=>'?').join(',');
   const { rows }=await db.execute({sql:'SELECT key,value FROM settings WHERE key IN ('+placeholders+')',args:keys});
   const settings=Object.fromEntries(rows.map(row=>[row.key,row.value]));
@@ -136,7 +136,10 @@ async function readPublicBrand(){
     store_phone:String(settings.store_phone||'').slice(0,80),
     store_email:String(settings.store_email||'').slice(0,120),
     store_address:String(settings.store_address||'').slice(0,240),
-    receipt_footer:String(settings.receipt_footer||'').slice(0,240)};
+    receipt_footer:String(settings.receipt_footer||'').slice(0,240),
+    quote_terms:String(settings.quote_terms||'').slice(0,1200),
+    invoice_terms:String(settings.invoice_terms||'').slice(0,1200),
+    purchase_order_terms:String(settings.purchase_order_terms||'').slice(0,1200)};
 }
 router.get('/public', async (req, res) => {
   try {res.set('Cache-Control','no-store');res.json(await readPublicBrand());}
@@ -154,6 +157,7 @@ router.put('/', requirePermission('settings'), async (req, res) => {
     const entries=Object.entries(body).filter(([key])=>MANAGED_KEYS.has(key));
     for(const [key,value] of entries){
       if(BRAND_KEYS.includes(key) && validateBrandValue(key,value)===null) return res.status(400).json({error:'Invalid value for '+key});
+      if(['quote_terms','invoice_terms','purchase_order_terms'].includes(key) && (typeof value!=='string'||value.length>1200))return res.status(400).json({error:'Document terms must be 1200 characters or less'});
     }
     if(!entries.length) return res.status(400).json({error:'No supported settings supplied'});
     for(const [key] of entries){

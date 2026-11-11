@@ -36,3 +36,16 @@ Each employee also has **My appearance** in navigation. The user-specific displa
 - Browser PWA icon compatibility varies by image shape and MIME type. Provide a square PNG for best results; the manifest also retains generic fallback icons.
 - Some legacy UI copy and older print/export paths remain company-specific. These must be removed or adapted before an unrestricted commercial release.
 - Changes made on this development branch do **not** change the hosted Total Tools POS.
+
+## Premium stationery — quotation / purchase order / sales invoice
+
+The shared `public/commercial-documents.js` and `public/commercial-documents.css` provide one restrained, white-label print system. It uses each installation's saved company name, uploaded logo, address/contact, palette, currency and selected font.
+
+- Purchase Orders: open an existing PO in Purchasing → select the order → **Preview / Print purchase order**. Supplier currency and local FX context are kept separate. Unapproved PO status is shown, and internal approval purpose/recipient/notes are not printed for the supplier.
+- Quotations: open an existing quote in Sales → Quotes → **Preview / Print quotation**. The printer uses saved quotation totals and selling-unit UOM evidence when available; quote validity and configured quotation terms are displayed.
+- Sales Invoices: open a completed transaction in Sales → Transactions → **Preview / Print invoice**. Held and voided transactions cannot be printed as completed invoices; the invoice uses recorded totals, tax, discounts, buyer and payment context, including selling-unit UOM evidence when available.
+- Open **Administration → System Configuration → Company** to configure optional purchase-order terms, quotation terms and invoice terms (up to 1,200 characters each). These are buyer/supplier-facing terms, distinct from internal approval notes.
+- Browser print includes **Print / Save PDF** and A4 layouts with repeating column headers for long line-item tables. The vendor's native browser Save-as-PDF or printer output is used; this is not a separate server PDF generation service.
+- `docs/previews` contains clearly fictional preview PNGs and PDFs rendered from the actual document template code. A three-line sample for each document fitted one A4 page in Microsoft Edge; a 48-line purchase-order fixture paginated over four A4 pages with repeating table headers and totals on the final page.
+
+Verification: `node --test tests/commercial-documents.test.js tests/white-label-branding.test.js` plus local POS client syntax, unified UI, quotation and purchasing contract checks. Live customer-data acceptance and all legacy/export/email document variants still need review before commercialization.
