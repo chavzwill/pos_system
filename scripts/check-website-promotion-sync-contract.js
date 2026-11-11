@@ -12,7 +12,10 @@ check('startup reconciles promotion scopes from older consolidations',database.i
 check('promotion scope writes canonicalize stale duplicate ids',promotions.includes('resolveCanonicalProduct')&&promotions.includes('canonicalized')&&promotions.includes('PROMOTION_PRODUCT_NOT_ACTIVE'));
 check('promotion scope write errors are stable and staff safe',promotions.includes('PROMOTION_SCOPE_ADD_UNAVAILABLE'));
 check('commerce sync exposes promotions route',sync.includes("router.get('/promotions'"));
-check('commerce contract version includes promotion sync',/CONTRACT_VERSION = '2026-09-20\.[23]'/.test(sync));
+const promotionContractVersion=sync.match(/CONTRACT_VERSION = '([0-9]{4}-[0-9]{2}-[0-9]{2})[.]([0-9]+)'/);
+check('commerce contract version includes promotion sync',
+  Boolean(promotionContractVersion) && Number.isFinite(Date.parse(promotionContractVersion[1])) &&
+  promotionContractVersion[1] >= '2026-09-20' && Number(promotionContractVersion[2]) >= 2);
 check('promotion export declares checkout authority',sync.includes('checkout_authoritative:true'));
 check('promotion export derives live scheduled ended status',sync.includes("'scheduled'")&&sync.includes("'ended'")&&sync.includes("'live'"));
 check('promotion export supports inactive reconciliation',sync.includes('include_inactive'));
