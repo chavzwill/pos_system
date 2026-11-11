@@ -13,7 +13,7 @@ const CONTRACT_VERSION = '2026-09-20.3';
 
 function publicProduct(p) {
   return {
-    id: p.id, sku: p.sku, barcode: p.barcode, name: p.name, description: p.description,
+    id: p.id, sku: p.sku, barcode: p.barcode, manufacturer_part_number: p.manufacturer_part_number || null, name: p.name, description: p.description,
     category_id: p.category_id, category_name: p.category_name || null,
     brand_id: p.brand_id || null, brand_name: p.brand_name || null,
     price: Number(p.price) || 0, tax_rate: Number(p.tax_rate) || 0, taxable: Number(p.taxable ?? 1) !== 0,

@@ -27,11 +27,52 @@ test.describe('SmartCommerce commerce sync contract', () => {
     expect(body.products.length).toBeGreaterThan(0);
     const p = body.products[0];
     expect(p).toHaveProperty('sku');
+    expect(p).toHaveProperty('manufacturer_part_number');
     expect(p).toHaveProperty('price');
     expect(p).toHaveProperty('online_available');
     expect(p).toHaveProperty('branches');
     expect(p).not.toHaveProperty('cost');
     for (const branch of p.branches) expect(branch).not.toHaveProperty('cost');
+  });
+
+
+  test('manufacturer part number is searchable and exported for governed SmartCommerce matching', async () => {
+    const cookie = await loginCookie();
+    const suffix = Date.now().toString(36);
+    const sku = `OEM-TEST-${suffix}`;
+    const manufacturerPartNumber = `MFG-${suffix}`;
+
+    const created = await fetch(`${BASE}/api/products`, {
+      method: 'POST',
+      headers: { Cookie: cookie, 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        sku,
+        name: 'SmartCommerce OEM identity test product',
+        manufacturer_part_number: manufacturerPartNumber,
+        price: 10,
+        stock_qty: 2,
+        min_stock: 1,
+        active: 1,
+      }),
+    });
+    expect(created.status).toBe(201);
+    const product = await created.json();
+    expect(product.manufacturer_part_number).toBe(manufacturerPartNumber);
+
+    const search = await fetch(`${BASE}/api/products?search=${encodeURIComponent(manufacturerPartNumber)}`, {
+      headers: { Cookie: cookie },
+    });
+    expect(search.status).toBe(200);
+    const matches = await search.json();
+    expect(matches.some((item) => item.id === product.id && item.manufacturer_part_number === manufacturerPartNumber)).toBe(true);
+
+    const catalog = await fetch(`${BASE}/api/commerce-sync/catalog`, { headers: { Cookie: cookie } });
+    expect(catalog.status).toBe(200);
+    const body = await catalog.json();
+    const exported = body.products.find((item) => item.id === product.id);
+    expect(exported).toBeTruthy();
+    expect(exported.manufacturer_part_number).toBe(manufacturerPartNumber);
+    expect(exported).not.toHaveProperty('cost');
   });
 
   test('availability returns branch stock and online sellable quantity', async () => {
