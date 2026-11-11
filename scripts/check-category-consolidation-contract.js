@@ -18,7 +18,11 @@ check('API exposes preview and controlled consolidation',route.includes("'/categ
 check('promotion writes canonicalize category ids',promo.includes('resolveCanonicalCategory')&&promo.includes('canonical_category_id'));
 check('website sync exports category consolidation mappings',sync.includes('category_consolidations')&&sync.includes('duplicate_category_id')&&sync.includes('survivor_category_id'));
 check('Catalog Health exposes controlled category consolidation action',ui.includes('Consolidate duplicate categories')&&ui.includes('data-category-consolidation')&&ui.includes('executeCategoryConsolidation'));
-check('commerce contract version advanced',sync.includes("CONTRACT_VERSION = '2026-09-20.3'"));
+const syncContractVersion=sync.match(/CONTRACT_VERSION = '([0-9]{4}-[0-9]{2}-[0-9]{2})[.]([0-9]+)'/);
+check('commerce contract version advanced',
+  Boolean(syncContractVersion) && Number.isFinite(Date.parse(syncContractVersion[1])) &&
+  (syncContractVersion[1] > '2026-09-20' ||
+   (syncContractVersion[1] === '2026-09-20' && Number(syncContractVersion[2]) >= 3)));
 check('full syntax wall includes category consolidation',pkg.includes('check:category-consolidation'));
 if(failed){console.error('Category Consolidation contract failed: '+failed);process.exit(1)}
 console.log('Category Consolidation contract passed.');
