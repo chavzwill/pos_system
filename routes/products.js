@@ -586,6 +586,18 @@ router.get('/:id', requireAuth, async (req, res) => {
     }
     if (isSmartCommerceRead(req)) {
       if (!isPublishedProduct(product)) return res.status(404).json({ error: 'Product not found' });
+      if (branch_id) {
+        // Match the branch-tier calculation used by GET /api/products.
+        // The product-detail endpoint must not silently show the global price
+        // while the browse results use the selected branch's authoritative tier.
+        const { rows: [branchPrice] } = await db.execute({
+          sql: `SELECT MAX(0, ROUND(? * (1 + COALESCE(price_tier_percent,0)/100.0), 2)) AS price
+                FROM branches WHERE id=? AND active=1`,
+          args: [product.price, branch_id],
+        });
+        if (!branchPrice) return res.status(404).json({ error: 'Branch not found' });
+        product.price = branchPrice.price;
+      }
       return res.json(publicProduct(product, branch_id));
     }
     res.json(product);
