@@ -5,6 +5,7 @@ const database = fs.readFileSync('database.js', 'utf8');
 const products = fs.readFileSync('routes/products.js', 'utf8');
 const commerce = fs.readFileSync('routes/commerce-sync.js', 'utf8');
 const catalogUi = fs.readFileSync('public/catalog-admin-workspace.js', 'utf8');
+const apiKeyAuth = fs.readFileSync('lib/apiKeyAuth.js', 'utf8');
 
 const checks = [
   [database.includes('manufacturer_part_number TEXT'), 'new databases include manufacturer_part_number'],
@@ -17,6 +18,9 @@ const checks = [
   [commerce.includes("const CONTRACT_VERSION = '2026-11-11.1'"), 'commerce sync contract version is bumped for OEM identity'],
   [catalogUi.includes('name="manufacturer_part_number"'), 'catalog editor exposes manufacturer/OEM part number'],
   [catalogUi.includes('p.manufacturer_part_number].some'), 'catalog UI search includes manufacturer/OEM part number'],
+  [apiKeyAuth.includes("prefix: '/api/branches'") && apiKeyAuth.includes("scope: 'products:read'"), 'read-only integration scope can resolve provider branches'],
+  [apiKeyAuth.includes('SMARTCOMMERCE_READ_API_KEY') && apiKeyAuth.includes('crypto.timingSafeEqual'), 'SmartCommerce machine credential is environment-managed and timing-safe'],
+  [apiKeyAuth.includes("needed !== 'products:read'") && apiKeyAuth.includes('SMARTCOMMERCE_READ_SCOPE_FORBIDDEN'), 'SmartCommerce machine credential fails closed outside products:read'],
 ];
 
 for (const [ok, message] of checks) assert.ok(ok, message);
