@@ -109,6 +109,7 @@ async function _init() {
       id INTEGER PRIMARY KEY AUTOINCREMENT,
       sku TEXT UNIQUE NOT NULL,
       barcode TEXT UNIQUE,
+      manufacturer_part_number TEXT,
       name TEXT NOT NULL,
       description TEXT,
       category_id INTEGER REFERENCES categories(id),
@@ -1258,6 +1259,8 @@ async function _init() {
     'ALTER TABLE customers ADD COLUMN rental_reference_phone TEXT',
     'ALTER TABLE customers ADD COLUMN rental_reference_relationship TEXT',
     'ALTER TABLE products ADD COLUMN model_number TEXT',
+    'ALTER TABLE products ADD COLUMN manufacturer_part_number TEXT',
+    'CREATE INDEX IF NOT EXISTS idx_products_manufacturer_part_number ON products(manufacturer_part_number)',
     'ALTER TABLE products ADD COLUMN size TEXT',
     'ALTER TABLE products ADD COLUMN taxable INTEGER DEFAULT 1',
     // Explicit "the customer will collect this themselves" flag on the New
