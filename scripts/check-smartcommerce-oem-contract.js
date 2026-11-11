@@ -76,6 +76,11 @@ const checks = [
     'SmartCommerce product endpoints enforce published-only response projections'],
   [branches.includes('isSmartCommerceRead(req)') && branches.includes('.map(publicBranch)'),
     'SmartCommerce branches exclude staffing and pricing internals'],
+  [products.includes('category_id || category') && products.includes('if (sku)') && products.includes('if (barcode)'),
+    'POS honors SmartCommerce category, SKU and barcode queries as parameterized exact filters'],
+  [apiKeyAuth.includes('publicQueryKeys') && apiKeyAuth.includes('SMARTCOMMERCE_READ_QUERY_FORBIDDEN') &&
+    !apiKeyAuth.includes("'supplier_id',\n        'page'"),
+    'dedicated catalogue credential rejects supplier and staff-only query filters'],
 ];
 
 for (const [ok, message] of checks) assert.ok(ok, message);
