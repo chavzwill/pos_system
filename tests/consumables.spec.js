@@ -77,20 +77,40 @@ test('separate consumable POs: approvals, partial receipt, allocations and idemp
  const after=await api(admin,'GET','/api/consumables/balances');
  const current=after.body.find(x=>x.consumable_id===cat.body.id&&x.branch_id===branch.id);
  expect(current.qty_on_hand).toBe(10);expect(current.value_cents).toBe(3250);
- const rentalEquipment=await api(admin,'GET','/api/consumables/lookups');
- expect(rentalEquipment.status).toBe(200);
- let rentalProduct=rentalEquipment.body.rental_equipment?.[0];
- if(!rentalProduct){
-  const newProduct=await api(admin,'POST','/api/products',{sku:'CI-RENT-'+stamp,name:'Synthetic Rental Drill '+stamp,price:50,cost:25,stock_qty:0,branch_id:branch.id,is_rental:1,active:1});
-  expect(newProduct.status).toBe(201);
-  rentalProduct={id:newProduct.body.id};
- }
- const rentalIssue=await api(admin,'POST','/api/consumables/issues',{consumable_id:cat.body.id,branch_id:branch.id,quantity:1,allocation_type:'rental',allocation_id:rentalProduct.id,unit_reference:'CI-UNIT-'+stamp,purpose:'Preventive service for rental machine'},key());
- expect(rentalIssue.status).toBe(200);
+ // The POS requires a registered rental asset: a product ID or user-supplied
+ // unit_reference alone is never sufficient for attributable consumables.
+ // Use an isolated, real API-created fixture scoped to the selected branch.
+ const rentalProduct=await api(admin,'POST','/api/products',{
+  sku:'CI-RENT-'+stamp,name:'Synthetic Rental Drill '+stamp,
+  price:50,cost:25,stock_qty:0,branch_id:branch.id,is_rental:1,active:1
+ });
+ expect(rentalProduct.status,JSON.stringify(rentalProduct.body)).toBe(201);
+ const assetNumber='CI-UNIT-'+stamp;
+ const registeredAsset=await api(admin,'POST','/api/inventory-traceability/rental-economics/assets',{
+  product_id:rentalProduct.body.id,branch_id:branch.id,asset_number:assetNumber,
+  acquisition_cost:25,acquisition_date:new Date().toISOString().slice(0,10),
+  acquisition_evidence_ref:'Isolated consumables regression rental fixture'
+ });
+ expect(registeredAsset.status,JSON.stringify(registeredAsset.body)).toBe(201);
+ const issuePayload={
+  consumable_id:cat.body.id,branch_id:branch.id,quantity:1,allocation_type:'rental',
+  allocation_id:rentalProduct.body.id,purpose:'Preventive service for rental machine'
+ };
+ const missingAsset=await api(admin,'POST','/api/consumables/issues',issuePayload,key());
+ expect(missingAsset.status).toBe(400);
+ expect(missingAsset.body.code).toBe('RENTAL_ASSET_REQUIRED');
+ const rentalIssue=await api(admin,'POST','/api/consumables/issues',{
+  ...issuePayload,rental_asset_id:registeredAsset.body.id
+ },key());
+ expect(rentalIssue.status,JSON.stringify(rentalIssue.body)).toBe(200);
+ expect(Number(rentalIssue.body.rental_asset_id)).toBe(Number(registeredAsset.body.id));
+ expect(rentalIssue.body.unit_reference).toBe(assetNumber);
  const log=await api(admin,'GET','/api/consumables/usage');
  expect(log.status).toBe(200);
  expect(log.body.some(x=>x.consumable_id===cat.body.id&&x.department_id===dept.body.id&&x.quantity===2)).toBe(true);
- expect(log.body.some(x=>x.consumable_id===cat.body.id&&x.rental_unit_reference==='CI-UNIT-'+stamp)).toBe(true);
+ expect(log.body.some(x=>x.consumable_id===cat.body.id&&
+  Number(x.rental_asset_id)===Number(registeredAsset.body.id)&&
+  x.rental_asset_number===assetNumber&&x.rental_asset_resolution==='linked')).toBe(true);
  const unchanged=await api(admin,'GET','/api/products/'+ordinary.id);
  expect(unchanged.status).toBe(200);expect(Number(unchanged.body.stock_qty)).toBe(priorStock);
 });
