@@ -168,7 +168,7 @@ router.get('/', requireAuth, async (req, res) => {
       // branch-scoped query (POS cart, quote line default, etc.) reads
       // `price` as-is and gets the tiered value automatically. list_price is
       // the untouched base price, kept for anywhere that wants it.
-      sql = `SELECT p.id, p.sku, p.barcode, p.manufacturer_part_number, p.name, p.description, p.category_id, p.brand_id, p.price as list_price,
+      sql = `SELECT p.id, p.sku, p.barcode, p.manufacturer_part_number, p.model_number, p.size, p.name, p.description, p.category_id, p.brand_id, p.price as list_price,
         MAX(0, ROUND(p.price * (1 + COALESCE(b.price_tier_percent,0)/100.0), 2)) as price,
         p.cost, p.tax_rate, p.active, p.created_at, p.supplier_id, p.image_path, p.is_service, p.unit,
         p.is_rental, p.rental_rate_type, p.rental_rate, p.rental_deposit, p.rental_late_fee_rate, p.replacement_value,
