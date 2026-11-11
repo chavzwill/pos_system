@@ -78,6 +78,9 @@ const checks = [
     'SmartCommerce branches exclude staffing and pricing internals'],
   [products.includes('category_id || category') && products.includes('if (sku)') && products.includes('if (barcode)'),
     'POS honors SmartCommerce category, SKU and barcode queries as parameterized exact filters'],
+  [products.includes("SELECT MAX(0, ROUND(? * (1 + COALESCE(price_tier_percent,0)/100.0), 2)) AS price") &&
+    products.includes("if (!branchPrice) return res.status(404)"),
+    'POS product detail verifies the selected branch and applies the same branch pricing as search'],
   [apiKeyAuth.includes('publicQueryKeys') && apiKeyAuth.includes('SMARTCOMMERCE_READ_QUERY_FORBIDDEN') &&
     !apiKeyAuth.includes("'supplier_id',\n        'page'"),
     'dedicated catalogue credential rejects supplier and staff-only query filters'],
