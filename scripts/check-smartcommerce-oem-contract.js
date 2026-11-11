@@ -20,7 +20,7 @@ assert.equal(requiredScope('POST', '/api/products'), 'products:write', 'product 
 const checks = [
   [database.includes('manufacturer_part_number TEXT'), 'new databases include manufacturer_part_number'],
   [database.includes('ALTER TABLE products ADD COLUMN manufacturer_part_number TEXT'), 'existing databases migrate manufacturer_part_number additively'],
-  [products.includes('manufacturer_part_number, p.name') || products.includes('p.manufacturer_part_number, p.name'), 'branch-scoped product reads expose manufacturer part number'],
+  [products.includes('p.manufacturer_part_number') && products.includes('p.model_number') && products.includes('p.price as list_price'), 'branch-scoped product reads expose manufacturer and model identity'],
   [products.includes('p.manufacturer_part_number LIKE ?'), 'product search can resolve manufacturer/OEM part numbers'],
   [products.includes('manufacturer_part_number||null'), 'product create/update persists manufacturer part number'],
   [products.includes("'manufacturer_part_number'"), 'CSV import/export includes manufacturer part number'],
