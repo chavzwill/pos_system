@@ -7,6 +7,16 @@ const commerce = fs.readFileSync('routes/commerce-sync.js', 'utf8');
 const catalogUi = fs.readFileSync('public/catalog-admin-workspace.js', 'utf8');
 const apiKeyAuth = fs.readFileSync('lib/apiKeyAuth.js', 'utf8');
 
+process.env.SMARTCOMMERCE_READ_API_KEY = 'smartcommerce-read-test-key-0123456789abcdef';
+const {
+  matchesSmartCommerceReadKey,
+  requiredScope,
+} = require('../lib/apiKeyAuth');
+assert.equal(matchesSmartCommerceReadKey(process.env.SMARTCOMMERCE_READ_API_KEY), true, 'configured SmartCommerce read key must match');
+assert.equal(matchesSmartCommerceReadKey('wrong-smartcommerce-read-test-key-0123456789abcdef'), false, 'wrong SmartCommerce read key must fail');
+assert.equal(requiredScope('GET', '/api/branches'), 'products:read', 'branch directory must require products:read');
+assert.equal(requiredScope('POST', '/api/products'), 'products:write', 'product writes must remain products:write');
+
 const checks = [
   [database.includes('manufacturer_part_number TEXT'), 'new databases include manufacturer_part_number'],
   [database.includes('ALTER TABLE products ADD COLUMN manufacturer_part_number TEXT'), 'existing databases migrate manufacturer_part_number additively'],
@@ -21,6 +31,7 @@ const checks = [
   [apiKeyAuth.includes("prefix: '/api/branches'") && apiKeyAuth.includes("scope: 'products:read'"), 'read-only integration scope can resolve provider branches'],
   [apiKeyAuth.includes('SMARTCOMMERCE_READ_API_KEY') && apiKeyAuth.includes('crypto.timingSafeEqual'), 'SmartCommerce machine credential is environment-managed and timing-safe'],
   [apiKeyAuth.includes("needed !== 'products:read'") && apiKeyAuth.includes('SMARTCOMMERCE_READ_SCOPE_FORBIDDEN'), 'SmartCommerce machine credential fails closed outside products:read'],
+  [apiKeyAuth.includes("path.startsWith('/api/branches/')") && apiKeyAuth.includes('disallowedBranchDetail'), 'SmartCommerce machine credential cannot read branch employee/detail routes'],
 ];
 
 for (const [ok, message] of checks) assert.ok(ok, message);
