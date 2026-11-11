@@ -128,7 +128,7 @@
     "check:retail-ticket-runtime": "node --test tests/retail-ticket-pricing.test.cjs",
     "check:retail-return-authorization-runtime": "node scripts/check-retail-return-authorization-runtime.js",
     "test:purchasing-lifecycle": "node scripts/certify-purchasing-lifecycle.cjs",
-    "check:smartcommerce-oem": "node scripts/check-smartcommerce-oem-contract.js"
+    "check:smartcommerce-oem": "node --check routes/products.js && node --check routes/commerce-sync.js && node --check lib/apiKeyAuth.js && node --check public/catalog-admin-workspace.js && node scripts/check-smartcommerce-oem-contract.js"
   },
   "dependencies": {
     "@libsql/client": "^0.14.0",
