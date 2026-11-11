@@ -124,7 +124,7 @@ async function storeProductImage(product,file,validation){
 // GET all products
 router.get('/', requireAuth, async (req, res) => {
   try {
-    const { search, category, active, low_stock, branch_id, supplier_id, is_service, is_rental, is_accessory, is_layaway_eligible, is_non_inventory, online } = req.query;
+    const { search, category, category_id, sku, barcode, active, low_stock, branch_id, supplier_id, is_service, is_rental, is_accessory, is_layaway_eligible, is_non_inventory, online } = req.query;
     const params = [];
     let sql;
 
@@ -150,7 +150,9 @@ router.get('/', requireAuth, async (req, res) => {
         LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN brands br ON p.brand_id = br.id${joinClause}
         WHERE p.active = 1 AND p.online_available = 1`;
       if (search) { onlineSql += ` AND (p.name LIKE ? OR p.sku LIKE ?)`; onlineParams.push(`%${search}%`, `%${search}%`); }
-      if (category) { onlineSql += ` AND p.category_id = ?`; onlineParams.push(category); }
+      if (category || category_id) { onlineSql += ` AND p.category_id = ?`; onlineParams.push(category_id || category); }
+      if (sku) { onlineSql += ` AND p.sku = ?`; onlineParams.push(sku); }
+      if (barcode) { onlineSql += ` AND p.barcode = ?`; onlineParams.push(barcode); }
       onlineSql += ` ORDER BY p.name`;
       const { rows: onlineRows } = await db.execute({ sql: onlineSql, args: onlineParams });
       if (isSmartCommerceRead(req)) {
@@ -207,7 +209,9 @@ router.get('/', requireAuth, async (req, res) => {
       sql += ` AND (p.name LIKE ? OR p.sku LIKE ? OR p.barcode LIKE ? OR p.manufacturer_part_number LIKE ?)`;
       params.push(`%${search}%`, `%${search}%`, `%${search}%`, `%${search}%`);
     }
-    if (category) { sql += ` AND p.category_id = ?`; params.push(category); }
+    if (category || category_id) { sql += ` AND p.category_id = ?`; params.push(category_id || category); }
+    if (sku) { sql += ` AND p.sku = ?`; params.push(sku); }
+    if (barcode) { sql += ` AND p.barcode = ?`; params.push(barcode); }
     if (supplier_id) { sql += ` AND p.supplier_id = ?`; params.push(supplier_id); }
     if (active !== undefined) { sql += ` AND p.active = ?`; params.push(active); }
     if (is_service !== undefined) { sql += ` AND p.is_service = ?`; params.push(is_service); }
