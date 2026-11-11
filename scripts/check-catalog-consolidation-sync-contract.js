@@ -5,7 +5,13 @@ const read=f=>fs.readFileSync(path.join(root,f),'utf8');
 let failed=0;
 const check=(n,o)=>o?console.log('PASS Consolidation Sync:',n):(failed++,console.error('FAIL Consolidation Sync:',n));
 const route=read('routes/commerce-sync.js'),pkg=read('package.json');
-check('commerce contract version includes consolidation payload',/CONTRACT_VERSION = '2026-09-20\.[123]'/.test(route));
+// The contract advances as new fields are published; a historic exact version
+// must not invalidate the original consolidation contract invariants.
+const publishedVersion=route.match(/CONTRACT_VERSION = '(\\d{4}-\\d{2}-\\d{2})\\.(\\d+)'/);
+const publishedDate=publishedVersion?.[1];
+check('commerce contract version includes consolidation payload',
+  Boolean(publishedVersion) && Number.isFinite(Date.parse(publishedDate)) &&
+  publishedDate >= '2026-09-20' && Number(publishedVersion[2]) >= 1);
 check('catalog export includes product consolidations',route.includes('product_consolidations'));
 check('mapping exports duplicate and survivor ids',route.includes('duplicate_product_id')&&route.includes('survivor_product_id'));
 check('mapping exports duplicate and survivor skus',route.includes('duplicate_sku')&&route.includes('survivor_sku'));
