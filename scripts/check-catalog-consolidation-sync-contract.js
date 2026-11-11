@@ -7,7 +7,7 @@ const check=(n,o)=>o?console.log('PASS Consolidation Sync:',n):(failed++,console
 const route=read('routes/commerce-sync.js'),pkg=read('package.json');
 // The contract advances as new fields are published; a historic exact version
 // must not invalidate the original consolidation contract invariants.
-const publishedVersion=route.match(/CONTRACT_VERSION = '(\\d{4}-\\d{2}-\\d{2})\\.(\\d+)'/);
+const publishedVersion=route.match(/CONTRACT_VERSION = '([0-9]{4}-[0-9]{2}-[0-9]{2})[.]([0-9]+)'/);
 const publishedDate=publishedVersion?.[1];
 check('commerce contract version includes consolidation payload',
   Boolean(publishedVersion) && Number.isFinite(Date.parse(publishedDate)) &&
