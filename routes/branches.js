@@ -2,6 +2,7 @@ const express = require('express');
 const router = express.Router();
 const { db } = require('../database');
 const { requireAuth, requirePermission } = require('../lib/permissions');
+const { isSmartCommerceRead, publicBranch } = require('../lib/smartcommerceReadProjection');
 
 // requireAuth only — branches are used as a dropdown/lookup across nearly
 // every form in the app (employees, products, POS branch bar, etc.), not
@@ -15,6 +16,11 @@ router.get('/', requireAuth, async (req, res) => {
     const countByBranch = {};
     for (const row of counts) countByBranch[row.branch_id] = Number(row.c);
     for (const b of branches) b.employee_count = countByBranch[b.id] || 0;
+    if (isSmartCommerceRead(req)) {
+      return res.json(branches
+        .filter((branch) => Number(branch.active) !== 0)
+        .map(publicBranch));
+    }
     res.json(branches);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });

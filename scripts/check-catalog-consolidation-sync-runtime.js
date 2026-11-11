@@ -34,7 +34,10 @@ async function run(){
   try{
     const catalog=await request(base,'/api/commerce-sync/catalog');
     assert.equal(catalog.status,200);
-    assert.equal(catalog.body.contract_version,'2026-09-20.3');
+    const contractVersion=String(catalog.body.contract_version || '').match(/^([0-9]{4}-[0-9]{2}-[0-9]{2})[.]([0-9]+)$/);
+    assert.ok(contractVersion && (contractVersion[1] > '2026-09-20' ||
+      (contractVersion[1] === '2026-09-20' && Number(contractVersion[2]) >= 3)),
+      'current commerce contract must include earlier governed catalogue features');
     assert.ok(catalog.body.products.some(p=>Number(p.id)===survivor));
     assert.ok(!catalog.body.products.some(p=>Number(p.id)===duplicate));
     const mapping=catalog.body.product_consolidations.find(x=>Number(x.duplicate_product_id)===duplicate);

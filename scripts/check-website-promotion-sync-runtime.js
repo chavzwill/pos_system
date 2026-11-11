@@ -66,7 +66,10 @@ async function run(){
 
     const projection=await request(base,'/api/commerce-sync/promotions');
     assert.equal(projection.status,200);
-    assert.equal(projection.body.contract_version,'2026-09-20.3');
+    const contractVersion=String(projection.body.contract_version || '').match(/^([0-9]{4}-[0-9]{2}-[0-9]{2})[.]([0-9]+)$/);
+    assert.ok(contractVersion && (contractVersion[1] > '2026-09-20' ||
+      (contractVersion[1] === '2026-09-20' && Number(contractVersion[2]) >= 3)),
+      'current commerce contract must include earlier governed catalogue features');
     assert.equal(projection.body.checkout_authoritative,true);
     const livePromo=projection.body.promotions.find(x=>Number(x.id)===liveId);
     assert.ok(livePromo);assert.equal(livePromo.status,'live');
