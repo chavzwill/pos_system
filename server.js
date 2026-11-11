@@ -224,6 +224,7 @@ app.use('/api/accounting-ledger', require('./routes/accounting-ledger'));
 app.use('/api/accounting-source-sync', require('./routes/accounting-source-sync'));
 app.use('/api/erp-intelligence', require('./routes/erp-intelligence'));
 app.use('/api/settings', require('./routes/settings'));
+app.use('/api/appearance', require('./routes/appearance'));
 app.use('/api/branches', require('./routes/branches'));
 app.use('/api/suppliers', require('./routes/suppliers'));
 app.use('/api/consumables/recovery', require('./routes/consumable-recovery'));

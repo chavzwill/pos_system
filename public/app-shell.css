@@ -164,3 +164,32 @@ body.tt-app-offline .shell-app{height:calc(100dvh - var(--tt-connection-height,4
 #tt-app-dialog .tt-app-note{font-size:13px;margin-bottom:0}
 @media(display-mode:standalone){.shell-global-header{padding-top:env(safe-area-inset-top)}.shell-sidebar{padding-bottom:max(16px,env(safe-area-inset-bottom))}.shell-main{padding-bottom:env(safe-area-inset-bottom)}}
 @media(max-width:600px){#tt-app-connection{text-align:left;font-size:13px;padding-inline:16px}#tt-app-dialog{padding:20px}}
+
+:root{--tt-brand-primary:#0B7A3E;--tt-brand-secondary:#075C31;--tt-brand-accent:#F2D11F}
+.shell-mark.pos-brand-logo{overflow:hidden}
+.shell-mark.pos-brand-logo img{display:block;width:100%;height:100%;object-fit:contain;background:#fff;border-radius:8px;padding:3px}
+:root[data-pos-density="compact"]{--tt-control-h:38px;--tt-space-4:12px;--tt-space-6:18px;--tt-header-height:62px}
+:root[data-pos-density="compact"] .shell-content{padding-top:16px}
+:root[data-pos-mode="dark"]{
+ --tt-bg:#101715;--tt-surface:#1B2420;--tt-surface-soft:#202D27;--tt-border:#39473F;--tt-border-strong:#526257;
+ --tt-text:#F5F8F5;--tt-text-2:#C2CFC7;--tt-text-3:#B1C0B6;--tt-green-soft:#18382A;--tt-yellow-soft:#39351D;
+ color-scheme:dark;
+}
+:root[data-pos-mode="dark"] body,:root[data-pos-mode="dark"] .shell-global-header,
+:root[data-pos-mode="dark"] .shell-sidebar,:root[data-pos-mode="dark"] .shell-content{background:var(--tt-bg);color:var(--tt-text)}
+.pos-appearance-overlay{position:fixed;inset:0;z-index:2200;display:grid;place-items:center;padding:16px;font-family:var(--tt-font);color:var(--tt-text)}
+.pos-appearance-shade{position:absolute;inset:0;background:#09150bc2;backdrop-filter:blur(5px)}
+.pos-appearance-panel{position:relative;width:min(100%,460px);display:grid;gap:16px;border:1px solid var(--tt-border);border-radius:22px;background:var(--tt-surface);padding:24px;box-shadow:0 20px 80px #0004}
+.pos-appearance-panel header{display:flex;justify-content:space-between;align-items:flex-start;gap:16px}
+.pos-appearance-panel header h2{margin:2px 0;font-size:24px}
+.pos-appearance-panel header p{font-size:13px;margin:5px 0;color:var(--tt-text-2)}
+.pos-appearance-panel header small{font-size:11px;letter-spacing:.08em;font-weight:750;color:var(--tt-green)}
+.pos-appearance-panel header button{min-height:44px;min-width:44px;border-radius:12px;border:1px solid var(--tt-border);background:var(--tt-surface);font-size:23px}
+.pos-appearance-panel label{display:grid;gap:7px;font-size:13px;font-weight:700}
+.pos-appearance-panel select{width:100%;min-height:48px;padding:8px 12px;border:1px solid var(--tt-border-strong);border-radius:12px;background:var(--tt-surface);font-weight:500}
+.pos-appearance-panel footer{display:flex;justify-content:flex-end;gap:8px}
+.pos-appearance-panel footer button{min-height:44px;padding:0 16px;border-radius:12px;border:1px solid var(--tt-border)}
+.pos-appearance-panel footer button[type=submit]{background:var(--tt-green);color:white;border-color:var(--tt-green);font-weight:750}
+.pos-appearance-error{color:#CE453F;font-size:13px;min-height:0}
+@media(max-width:520px){.pos-appearance-panel{padding:18px}.pos-appearance-panel footer button{flex:1}}
+@media(prefers-reduced-motion:reduce){.pos-appearance-overlay *{transition:none!important}}

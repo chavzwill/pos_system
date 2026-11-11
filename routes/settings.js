@@ -10,6 +10,7 @@ const { SECRET_SETTING_KEYS, protectSettingValue, secretValuesEqual } = require(
 const { cloudUpload, cloudDestroy } = require('../lib/cloudinary');
 const { requireDurableProvider } = require('../lib/mediaDurability');
 const { validateMemoryUpload, imageMulterFilter } = require('../lib/uploadSecurity');
+const { BRAND_KEYS, validateBrandValue, normalizePublicBrand, appManifest } = require('../lib/brand-config');
 
 const upload = multer({
   storage: multer.memoryStorage(),
@@ -34,7 +35,7 @@ const INTEGRATION_KEYS = new Set([
   'woo_url','woo_consumer_key','woo_consumer_secret','woo_pos_url','woo_sync_branch_id','woo_sync_interval','woocommerce_consumer_key','woocommerce_consumer_secret','woocommerce_webhook_secret',
   'stripe_secret_key','stripe_webhook_secret','twilio_auth_token','whatsapp_access_token','openai_api_key'
 ]);
-const COMPANY_KEYS = new Set(['store_name','store_phone','store_email','store_address','currency','receipt_footer']);
+const COMPANY_KEYS = new Set(['store_name','store_phone','store_email','store_address','currency','receipt_footer',...BRAND_KEYS]);
 const TAX_KEYS = new Set(['tax_rate']);
 const MANAGED_KEYS = new Set([
   ...COMPANY_KEYS,...TAX_KEYS,
@@ -126,13 +127,24 @@ router.get('/manage', requirePermission('settings'), async (req,res)=>{
   } catch(e){ res.status(500).json({error:'Unable to load managed settings'}); }
 });
 
+async function readPublicBrand(){
+  const keys=['store_name','company_logo_url','store_phone','store_email','store_address','receipt_footer',...BRAND_KEYS];
+  const placeholders=keys.map(()=>'?').join(',');
+  const { rows }=await db.execute({sql:'SELECT key,value FROM settings WHERE key IN ('+placeholders+')',args:keys});
+  const settings=Object.fromEntries(rows.map(row=>[row.key,row.value]));
+  return {...normalizePublicBrand(settings),
+    store_phone:String(settings.store_phone||'').slice(0,80),
+    store_email:String(settings.store_email||'').slice(0,120),
+    store_address:String(settings.store_address||'').slice(0,240),
+    receipt_footer:String(settings.receipt_footer||'').slice(0,240)};
+}
 router.get('/public', async (req, res) => {
-  try {
-    const { rows } = await db.execute({ sql: "SELECT key, value FROM settings WHERE key IN ('store_name','company_logo_url')", args: [] });
-    const settings = {};
-    rows.forEach(r => { settings[r.key] = r.value; });
-    res.json(settings);
-  } catch(e) { res.status(500).json({ error: 'Unable to load public settings' }); }
+  try {res.set('Cache-Control','no-store');res.json(await readPublicBrand());}
+  catch(e){res.status(500).json({error:'Unable to load public settings'});}
+});
+router.get('/manifest.webmanifest', async (req,res)=>{
+  try{res.set('Cache-Control','no-store');res.type('application/manifest+json').send(JSON.stringify(appManifest(await readPublicBrand())));}
+  catch(e){res.status(503).json({error:'Application branding is unavailable'});}
 });
 
 router.put('/', requirePermission('settings'), async (req, res) => {
@@ -140,6 +152,9 @@ router.put('/', requirePermission('settings'), async (req, res) => {
   try {
     const body=req.body||{};
     const entries=Object.entries(body).filter(([key])=>MANAGED_KEYS.has(key));
+    for(const [key,value] of entries){
+      if(BRAND_KEYS.includes(key) && validateBrandValue(key,value)===null) return res.status(400).json({error:'Invalid value for '+key});
+    }
     if(!entries.length) return res.status(400).json({error:'No supported settings supplied'});
     for(const [key] of entries){
       if(canManageKey(req,key)) continue;
@@ -167,7 +182,7 @@ router.put('/', requirePermission('settings'), async (req, res) => {
       const changedKeys=[];
       for(const [key,value] of entries){
         if(SECRET_KEYS.has(key) && (value==='••••••••' || value==='')) continue;
-        const rawNext=value==null?'':String(value);
+        const rawNext=BRAND_KEYS.includes(key)?validateBrandValue(key,value):(value==null?'':String(value));
         const previous=existing.has(key)?existing.get(key):null;
         if(secretValuesEqual(key,previous,rawNext)) continue;
         const next=SECRET_KEYS.has(key)?protectSettingValue(key,rawNext):rawNext;
@@ -198,7 +213,9 @@ router.post('/logo', requirePermission('settings'), upload.single('logo'), async
   if (!validation.ok) return res.status(415).json({ error: validation.error });
   try {
     const { rows: [existing] } = await db.execute({ sql: "SELECT value FROM settings WHERE key = 'company_logo_url'", args: [] });
-    const result = await cloudUpload(req.file.buffer, { folder: 'pos-system/branding', public_id: 'company-logo', overwrite: true, resource_type: 'image' });
+    const instanceId=String(process.env.POS_INSTANCE_ID||'').trim();
+    if(process.env.NODE_ENV==='production' && !/^[a-z0-9][a-z0-9-]{2,50}$/.test(instanceId)) return res.status(503).json({error:'A unique POS_INSTANCE_ID must be configured before company logos can be saved'});
+    const result = await cloudUpload(req.file.buffer, { folder: 'pos-system/branding/'+(instanceId||'local-dev'), public_id: 'company-logo', overwrite: true, resource_type: 'image' });
     requireDurableProvider(result);
     let logoUrl;
     if (result) logoUrl = result.secure_url;

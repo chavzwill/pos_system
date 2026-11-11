@@ -21,8 +21,11 @@
   const dialog = document.createElement('dialog');
   dialog.id = 'tt-app-dialog';
   dialog.setAttribute('aria-labelledby', 'tt-app-dialog-title');
-  dialog.innerHTML = '<form method="dialog"><header><span class="shell-mark" aria-hidden="true">TT</span><button aria-label="Close app options">&times;</button></header><h2 id="tt-app-dialog-title">Total Tools app</h2><p>Keep your daily workspace one tap away.</p><div data-install-help><p>Install Total Tools to open it in its own window, using your existing sign-in and branch access.</p><ul><li><strong>iPhone or iPad:</strong> Open in Safari, tap Share, then Add to Home Screen.</li><li><strong>Other devices:</strong> Use Install app or Add to Home screen in your browser menu.</li></ul></div><p data-app-installed hidden>You are using the installed app.</p><button type="button" data-install hidden>Install Total Tools</button><div class="tt-app-update"><p data-update-status role="status">Updates apply after all Total Tools windows are closed. Finish and save your work first.</p><button type="button" data-check-update>Check for updates</button></div><p class="tt-app-note">A live connection is required for sales, stock changes and financial posting.</p></form>';
+  dialog.innerHTML = '<form method="dialog"><header><span class="shell-mark pos-brand-logo" aria-hidden="true">POS</span><button aria-label="Close app options">&times;</button></header><h2 id="tt-app-dialog-title">Business POS app</h2><p>Keep your daily workspace one tap away.</p><div data-install-help><p>Install the business POS to open it in its own window, using your existing sign-in and branch access.</p><ul><li><strong>iPhone or iPad:</strong> Open in Safari, tap Share, then Add to Home Screen.</li><li><strong>Other devices:</strong> Use Install app or Add to Home screen in your browser menu.</li></ul></div><p data-app-installed hidden>You are using the installed app.</p><button type="button" data-install hidden>Install the business POS</button><div class="tt-app-update"><p data-update-status role="status">Updates apply after all app windows are closed. Finish and save your work first.</p><button type="button" data-check-update>Check for updates</button></div><p class="tt-app-note">A live connection is required for sales, stock changes and financial posting.</p></form>';
   document.body.append(dialog);
+  function syncBrand(){const business=window.PosBranding?.name?.()||'Business POS';const title=dialog.querySelector('#tt-app-dialog-title');if(title)title.textContent=business+' app';const install=dialog.querySelector('[data-install]');if(install)install.textContent='Install '+business;const help=dialog.querySelector('[data-install-help] > p');if(help)help.textContent='Install '+business+' to open it in its own window, using your existing sign-in and branch access.';}
+  document.addEventListener('pos-branding-updated',syncBrand);
+  syncBrand();window.PosBranding?.apply?.();
   const status = dialog.querySelector('[data-update-status]');
   function syncInstall() {
     dialog.querySelector('[data-install]').hidden = !installPrompt || standalone();
@@ -31,7 +34,7 @@
   }
   function markUpdateReady() {
     updateReady = true;
-    status.textContent = 'Update ready. Finish and save your work, then close all Total Tools windows and reopen the app.';
+    status.textContent = 'Update ready. Finish and save your work, then close all app windows and reopen the app.';
     mountOptions();
   }
   function mountOptions() {
@@ -61,7 +64,7 @@
     installPrompt = null;
     syncInstall();
     try { const requestInstall = prompt.prompt.bind(prompt); await requestInstall(); await prompt.userChoice; }
-    catch (_) { status.textContent = 'Use your browser menu to install Total Tools.'; }
+    catch (_) { status.textContent = 'Use your browser menu to install the business POS.'; }
   });
   dialog.querySelector('[data-check-update]').addEventListener('click', async event => {
     if (!registration) { status.textContent = 'App updates are unavailable here. Try again with a connection in a supported browser.'; return; }

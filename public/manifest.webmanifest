@@ -1,8 +1,8 @@
 {
   "id": "/",
-  "name": "Total Tools POS",
-  "short_name": "Total Tools",
-  "description": "Sales, purchasing, inventory and dispatch for Total Tools staff.",
+  "name": "Business POS",
+  "short_name": "Business POS",
+  "description": "Sales, purchasing, inventory and dispatch for your team.",
   "lang": "en",
   "start_url": "/",
   "scope": "/",
