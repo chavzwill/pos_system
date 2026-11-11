@@ -13,6 +13,7 @@ const { archiveProduct, assertProductNotConsolidated, resolveCanonicalProduct } 
 const { validateMemoryUpload, imageMulterFilter } = require('../lib/uploadSecurity');
 const { recordSecurityAudit } = require('../lib/securityAudit');
 const { sanitizeSkuForFilename, planBulkImages } = require('../lib/product-media');
+const { isSmartCommerceRead, isPublishedProduct, publicProduct } = require('../lib/smartcommerceReadProjection');
 
 // CSV cells for money/quantity fields often carry currency symbols, thousands
 // separators, or stray whitespace (e.g. "$15.00", "1,000") — bare parseFloat/
@@ -141,7 +142,7 @@ router.get('/', requireAuth, async (req, res) => {
       }
       let onlineSql = `SELECT p.id, p.sku, p.name, p.description, p.category_id, p.price, p.cost,
         p.tax_rate, p.active, p.image_path, p.is_service, p.unit,
-        p.online_available, p.web_allotment, p.stock_qty as global_stock_qty,
+        p.model_number, p.manufacturer_part_number, p.online_available, p.web_allotment, p.stock_qty as global_stock_qty,
         ${stockExpr} as stock_qty,
         c.name as category_name, br.name as brand_name,
         (SELECT COUNT(*) FROM product_variations WHERE product_id = p.id AND active = 1) as has_variations
@@ -152,6 +153,9 @@ router.get('/', requireAuth, async (req, res) => {
       if (category) { onlineSql += ` AND p.category_id = ?`; onlineParams.push(category); }
       onlineSql += ` ORDER BY p.name`;
       const { rows: onlineRows } = await db.execute({ sql: onlineSql, args: onlineParams });
+      if (isSmartCommerceRead(req)) {
+        return res.json(onlineRows.filter(isPublishedProduct).map((row) => publicProduct(row, branch_id)));
+      }
       return res.json(onlineRows);
     }
 
@@ -170,13 +174,14 @@ router.get('/', requireAuth, async (req, res) => {
       // the untouched base price, kept for anywhere that wants it.
       sql = `SELECT p.id, p.sku, p.barcode, p.manufacturer_part_number, p.model_number, p.size, p.name, p.description, p.category_id, p.brand_id, p.price as list_price,
         MAX(0, ROUND(p.price * (1 + COALESCE(b.price_tier_percent,0)/100.0), 2)) as price,
-        p.cost, p.tax_rate, p.active, p.created_at, p.supplier_id, p.image_path, p.is_service, p.unit,
+        p.cost, p.tax_rate, p.active, p.online_available, p.created_at, p.supplier_id, p.image_path, p.is_service, p.unit,
         p.is_rental, p.rental_rate_type, p.rental_rate, p.rental_deposit, p.rental_late_fee_rate, p.replacement_value,
         p.rental_classification, p.rental_weekly_rate, p.rental_monthly_rate, p.rental_hourly_rate, p.is_accessory, p.is_layaway_eligible, p.is_non_inventory,
         COALESCE(bi.stock_qty, 0) as stock_qty,
         COALESCE(bi.min_stock, p.min_stock) as min_stock,
         p.stock_qty as global_stock_qty,
         c.name as category_name, br.name as brand_name,
+        (SELECT survivor_product_id FROM catalog_product_consolidations WHERE duplicate_product_id = p.id LIMIT 1) as consolidated_into_product_id,
         (SELECT COUNT(*) FROM product_variations WHERE product_id = p.id AND active = 1) as has_variations,
         ${rentalOutstandingExpr(true)}
         FROM products p
@@ -220,6 +225,9 @@ router.get('/', requireAuth, async (req, res) => {
     sql += ` ORDER BY p.name`;
 
     const { rows } = await db.execute({ sql, args: params });
+    if (isSmartCommerceRead(req)) {
+      return res.json(rows.filter(isPublishedProduct).map((row) => publicProduct(row, branch_id)));
+    }
     res.json(rows);
   } catch(e) { res.status(500).json({ error: e.message }); }
 });
@@ -546,12 +554,16 @@ router.get('/:id', requireAuth, async (req, res) => {
       const { rows: [product] } = await db.execute({
         sql: `SELECT p.id, p.sku, p.name, p.description, p.category_id, p.brand_id, p.price, p.cost, p.tax_rate,
           p.active, p.image_path, p.is_service, p.unit,
-          p.online_available, p.web_allotment, p.stock_qty as global_stock_qty,
+          p.model_number, p.manufacturer_part_number, p.online_available, p.web_allotment, p.stock_qty as global_stock_qty,
           ${stockExpr} as stock_qty, c.name as category_name, br.name as brand_name
           FROM products p LEFT JOIN categories c ON p.category_id = c.id LEFT JOIN brands br ON p.brand_id = br.id${joinClause} WHERE p.id = ?`,
         args: onlineParams
       });
       if (!product) return res.status(404).json({ error: 'Product not found' });
+      if (isSmartCommerceRead(req)) {
+        if (!isPublishedProduct(product)) return res.status(404).json({ error: 'Product not found' });
+        return res.json(publicProduct(product, branch_id));
+      }
       return res.json(product);
     }
     const { rows: [product] } = await db.execute({ sql: `SELECT p.*, c.name as category_name, br.name as brand_name,
@@ -567,6 +579,10 @@ router.get('/:id', requireAuth, async (req, res) => {
       const { rows: [bi] } = await db.execute({ sql: 'SELECT stock_qty, min_stock FROM branch_inventory WHERE product_id = ? AND branch_id = ?', args: [req.params.id, branch_id] });
       product.branch_stock_qty = bi ? bi.stock_qty : 0;
       product.branch_min_stock = bi ? bi.min_stock : product.min_stock;
+    }
+    if (isSmartCommerceRead(req)) {
+      if (!isPublishedProduct(product)) return res.status(404).json({ error: 'Product not found' });
+      return res.json(publicProduct(product, branch_id));
     }
     res.json(product);
   } catch(e) { res.status(500).json({ error: e.message }); }
