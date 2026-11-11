@@ -1,38 +1,39 @@
-# Total Tools POS
+# White-Label Commercial POS
 
-A single-company retail and operations platform with sales, purchasing, inventory, rentals, repairs, dispatch, customer accounts, and related workflows.
+A customizable business point-of-sale and operations platform derived from the existing operational POS codebase. Designed for **separate, independently configured business installations**.
 
-## Production state and quality gates
+## Features
 
-The current hosted POS uses **Vercel** with a persistent remote **Turso/libSQL** database. The repository also contains a separate **Docker + local SQLite** deployment profile; its cutover runbook is a *candidate deployment plan*, not proof that this is the active production host.
+The underlying platform includes sales, held orders, inventory, purchasing, purchase requests and approvals, receiving, supplier invoices, warehouse transfers, rentals, repairs, dispatch, customer management, and reporting. Workflows must be acceptance-tested for each customer's deployment.
 
-- Live hostname: `https://pos-system-rouge-ten.vercel.app/`.
-- `vercel.json` disables automatic Git deployment. A GitHub merge alone **does not** update production; a release operator must deploy the exact certified commit and verify the production alias.
-- Before production release, run the `Runtime Certification / release-gate` workflow on the exact candidate commit, confirm it succeeded, and review any outstanding P0/P1 risks in `docs/COMMERCIAL_GRADE_AUDIT_2026-10-22.md`.
-- Vercel `READY` means a build completed; it does not establish healthy authenticated workflows, database backups, recovery, visual quality, or business acceptance.
-- Database persistence, uploaded evidence, backups, restore drills, and maintenance windows depend on the actual selected host. A backup for Docker's `data/` and `uploads/` cannot be assumed to protect a Vercel/Turso installation.
+The white-label layer adds:
 
-## Security: first-time administrator
+- Company name, logo upload/removal, primary/secondary/accent colours, typography and default appearance
+- Live appearance preview in Administration → System Configuration → Branding & appearance
+- Company identity on the main application shell, login, browser/app title, PWA manifest, supported receipts and printable report/dispatch outputs
+- Employee-specific UI preferences saved by staff account, separate from company branding
+- Company-authorized configuration changes with validation and existing security auditing
 
-**Never use demonstration credentials on a real business deployment.** Production credential initialization is guarded by `scripts/production-credential-preflight.js`; a fresh production administrator cannot authenticate until securely provisioned. Configure the documented bootstrap credentials via secure environment variables and follow the preflight/certification scripts. Do not commit environment values or real customer data.
+## Isolated customer deployment
 
-The automated tests use isolated, synthetic credentials and an isolated test database. Their settings are **not production login instructions**.
+**Never connect a buyer's POS to the Total Tools production database, uploads or integrations.** Create a fresh database and independent secrets, file storage, brand, URL and release project. Never export an existing business's customer, employee, supplier, inventory, sales or invoice records.
 
-## Docker / local SQLite alternative
+The underlying application remains single-company. The commercial edition uses **one installation per customer**. It is **not** yet a shared-database multi-tenant SaaS.
 
-For a specifically approved self-hosted environment, follow `docs/PRODUCTION_HOST_PROFILE.md`, `docs/PRODUCTION_CUTOVER_INPUTS.md` and `docs/PRODUCTION_CUTOVER_RUNBOOK.md`. `docker-compose.yml` is configured for local SQLite with persistent `data/` and `uploads/` mounts by default.
+For production logo storage, set a distinct `POS_INSTANCE_ID` for each installation and configure durable media storage. Use a fresh administrator provisioned with real secret credentials, not a demo login.
 
-```bash
-docker compose up -d --build
+See `docs/WHITE_LABEL_COMMERCIAL_EDITION.md` for setup steps, security boundaries and release gates.
+
+## Development and validation
+
+Install dependencies with `npm ci`. Review the environment-variable examples, initialize a **new** local database and staff credentials following the production credential-preflight instructions, then run `npm start`.
+
+Selected quality checks:
+
+```sh
+node --test tests/white-label-branding.test.js
+npm run check:client-syntax
+npm run check:unified-ui
 ```
 
-**Destructive test-only reset:** Deleting SQLite database files or uploaded records destroys business data and must never be treated as a routine production maintenance action. Use the recovery procedure and a verified backup; do not delete live transactional records merely to reset a demo environment.
-
-## Release evidence and commercial-readiness assessment
-
-- `docs/POS_RELEASE_GATE.md` — code release and exact-commit certification policy.
-- `docs/POS_INVARIANT_REGISTRY.md` — financial, inventory, authorization, and operational invariants.
-- `docs/POS_BENCHMARK_MATRIX.md` — comparison goals, not claims of superiority.
-- `docs/COMMERCIAL_GRADE_AUDIT_2026-10-22.md` — current risk-ranked audit and acceptance checklist.
-
-Do not describe this POS as globally competitive, production-certified, WCAG-conformant, PCI-certified, or business-ready solely because automated tests or a deployment report `READY`. Those claims require independent evidence.
+This code is a **commercialization foundation**, not a guarantee of full production certification. Remaining company-specific templates and integration references must be reviewed and removed or parameterized before delivery to a paying customer. Do not deploy over the Total Tools POS environment.
