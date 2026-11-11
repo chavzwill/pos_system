@@ -9,7 +9,7 @@ const { resolveCanonicalProduct } = require('../lib/catalog-integrity');
 router.use(requirePermission('inventory'));
 router.use('/catalog-cleanup-dependencies', require('./catalog-cleanup-dependencies'));
 
-const CONTRACT_VERSION = '2026-09-20.3';
+const CONTRACT_VERSION = '2026-11-11.1';
 
 function publicProduct(p) {
   return {
@@ -20,7 +20,8 @@ function publicProduct(p) {
     stock_qty: Number(p.stock_qty) || 0, min_stock: Number(p.min_stock) || 0,
     active: Number(p.active) !== 0, catalog_status: p.catalog_status || 'active', online_available: Number(p.online_available || 0) !== 0,
     web_allotment: p.web_allotment == null ? null : Number(p.web_allotment), image_path: p.image_path || null,
-    model_number: p.model_number || null, size: p.size || null, unit: p.unit || null,
+    model_number: p.model_number || null, manufacturer_part_number: p.manufacturer_part_number || null,
+    size: p.size || null, unit: p.unit || null,
     is_service: Number(p.is_service || 0) !== 0, is_rental: Number(p.is_rental || 0) !== 0,
     is_layaway_eligible: Number(p.is_layaway_eligible || 0) !== 0,
     consolidated_into_product_id: p.consolidated_into_product_id == null ? null : Number(p.consolidated_into_product_id),
