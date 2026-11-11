@@ -15,7 +15,8 @@ check('commerce sync exposes promotions route',sync.includes("router.get('/promo
 const promotionContractVersion=sync.match(/CONTRACT_VERSION = '([0-9]{4}-[0-9]{2}-[0-9]{2})[.]([0-9]+)'/);
 check('commerce contract version includes promotion sync',
   Boolean(promotionContractVersion) && Number.isFinite(Date.parse(promotionContractVersion[1])) &&
-  promotionContractVersion[1] >= '2026-09-20' && Number(promotionContractVersion[2]) >= 2);
+  (promotionContractVersion[1] > '2026-09-20' ||
+    (promotionContractVersion[1] === '2026-09-20' && Number(promotionContractVersion[2]) >= 2)));
 check('promotion export declares checkout authority',sync.includes('checkout_authoritative:true'));
 check('promotion export derives live scheduled ended status',sync.includes("'scheduled'")&&sync.includes("'ended'")&&sync.includes("'live'"));
 check('promotion export supports inactive reconciliation',sync.includes('include_inactive'));
