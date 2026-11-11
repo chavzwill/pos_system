@@ -154,7 +154,7 @@ router.get('/', requireAuth, async (req, res) => {
       onlineSql += ` ORDER BY p.name`;
       const { rows: onlineRows } = await db.execute({ sql: onlineSql, args: onlineParams });
       if (isSmartCommerceRead(req)) {
-        return res.json(onlineRows.filter(isPublishedProduct).map((row) => publicProduct(row, branch_id)));
+        return res.json(onlineRows.filter(isPublishedProduct).map((row) => publicProduct(row)));
       }
       return res.json(onlineRows);
     }
@@ -562,7 +562,7 @@ router.get('/:id', requireAuth, async (req, res) => {
       if (!product) return res.status(404).json({ error: 'Product not found' });
       if (isSmartCommerceRead(req)) {
         if (!isPublishedProduct(product)) return res.status(404).json({ error: 'Product not found' });
-        return res.json(publicProduct(product, branch_id));
+        return res.json(publicProduct(product));
       }
       return res.json(product);
     }
