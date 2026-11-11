@@ -113,6 +113,7 @@ async function _init() {
       description TEXT,
       category_id INTEGER REFERENCES categories(id),
       brand_id INTEGER REFERENCES brands(id),
+      manufacturer_part_number TEXT,
       price REAL NOT NULL DEFAULT 0,
       cost REAL NOT NULL DEFAULT 0,
       tax_rate REAL NOT NULL DEFAULT 8.5,
@@ -1258,6 +1259,7 @@ async function _init() {
     'ALTER TABLE customers ADD COLUMN rental_reference_phone TEXT',
     'ALTER TABLE customers ADD COLUMN rental_reference_relationship TEXT',
     'ALTER TABLE products ADD COLUMN model_number TEXT',
+    'ALTER TABLE products ADD COLUMN manufacturer_part_number TEXT',
     'ALTER TABLE products ADD COLUMN size TEXT',
     'ALTER TABLE products ADD COLUMN taxable INTEGER DEFAULT 1',
     // Explicit "the customer will collect this themselves" flag on the New
