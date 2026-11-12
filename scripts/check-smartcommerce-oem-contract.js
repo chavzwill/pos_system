@@ -100,8 +100,9 @@ const checks = [
     products.includes("if (!branchPrice) return res.status(404)"),
     'POS product detail verifies the selected branch and applies the same branch pricing as search'],
   [apiKeyAuth.includes('publicQueryKeys') && apiKeyAuth.includes('SMARTCOMMERCE_READ_QUERY_FORBIDDEN') &&
-    !apiKeyAuth.includes("'supplier_id',\n        'page'"),
-    'dedicated catalogue credential rejects supplier and staff-only query filters'],
+    !apiKeyAuth.includes("'supplier_id',\n        'page'") &&
+    !apiKeyAuth.includes("'page', 'limit', 'online'"),
+    'dedicated catalogue credential rejects supplier, Woo-only online and staff-only query filters'],
 ];
 
 for (const [ok, message] of checks) assert.ok(ok, message);
