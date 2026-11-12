@@ -128,6 +128,16 @@ router.get('/', requireAuth, async (req, res) => {
     const params = [];
     let sql;
 
+    // A public stock request must reference an existing, active POS branch.
+    // Unknown branch IDs must not silently receive a base price and 0 stock.
+    if (isSmartCommerceRead(req) && branch_id) {
+      const { rows: [requestedBranch] } = await db.execute({
+        sql: 'SELECT id FROM branches WHERE id = ? AND active = 1',
+        args: [branch_id],
+      });
+      if (!requestedBranch) return res.status(404).json({ error: 'Branch not found' });
+    }
+
     if (online === '1' || online === 'true') {
       const { rows: [setting] } = await db.execute({ sql: "SELECT value FROM settings WHERE key='woo_sync_branch_id'", args: [] });
       const syncBranchId = setting?.value;
@@ -181,6 +191,9 @@ router.get('/', requireAuth, async (req, res) => {
         p.rental_classification, p.rental_weekly_rate, p.rental_monthly_rate, p.rental_hourly_rate, p.is_accessory, p.is_layaway_eligible, p.is_non_inventory,
         COALESCE(bi.stock_qty, 0) as stock_qty,
         COALESCE(bi.min_stock, p.min_stock) as min_stock,
+        -- Public catalog projection requires explicit branch fields.
+        COALESCE(bi.stock_qty, 0) as branch_stock_qty,
+        COALESCE(bi.min_stock, p.min_stock) as branch_min_stock,
         p.stock_qty as global_stock_qty,
         c.name as category_name, br.name as brand_name,
         (SELECT survivor_product_id FROM catalog_product_consolidations WHERE duplicate_product_id = p.id LIMIT 1) as consolidated_into_product_id,
