@@ -40,6 +40,18 @@ assert.equal(projectedProduct.branch_id, '7');
 assert.equal(projectedProduct.branch_stock_qty, 0, 'branch out-of-stock must override global stock 40');
 assert.equal(projectedProduct.branch_min_stock, 3);
 assert.equal(projectedProduct.price, 250);
+// A global stock figure must never turn into a verified branch quantity.
+const missingBranchRow = { ...rawProduct };
+delete missingBranchRow.branch_stock_qty;
+delete missingBranchRow.branch_min_stock;
+const unverifiedBranch = projection.publicProduct(missingBranchRow, '7');
+assert.equal(Object.hasOwn(unverifiedBranch, 'branch_stock_qty'), false,
+  'global quantity must never substitute for unreturned branch stock');
+assert.equal(Object.hasOwn(unverifiedBranch, 'branch_min_stock'), false,
+  'global minimum must never masquerade as a branch minimum');
+const explicitZero = projection.publicProduct({ ...rawProduct, branch_stock_qty: 0 }, '7');
+assert.equal(explicitZero.branch_stock_qty, 0, 'zero branch stock must be preserved');
+
 for (const field of ['cost', 'supplier_id', 'supplier_price', 'internal_note', 'customer_credit',
   'stock_qty', 'rental_replacement_value']) {
   assert.equal(Object.hasOwn(projectedProduct, field), false, `${field} must not reach read-only SmartCommerce`);
@@ -78,6 +90,12 @@ const checks = [
     'SmartCommerce branches exclude staffing and pricing internals'],
   [products.includes('category_id || category') && products.includes('if (sku)') && products.includes('if (barcode)'),
     'POS honors SmartCommerce category, SKU and barcode queries as parameterized exact filters'],
+  [products.includes("COALESCE(bi.stock_qty, 0) as branch_stock_qty") &&
+    products.includes("COALESCE(bi.min_stock, p.min_stock) as branch_min_stock"),
+    'branch-scoped POS product queries explicitly carry branch inventory fields'],
+  [products.includes("SELECT id FROM branches WHERE id = ? AND active = 1") &&
+    products.includes("if (!requestedBranch) return res.status(404)"),
+    'dedicated catalogue credential rejects unknown or inactive requested branches'],
   [products.includes("SELECT MAX(0, ROUND(? * (1 + COALESCE(price_tier_percent,0)/100.0), 2)) AS price") &&
     products.includes("if (!branchPrice) return res.status(404)"),
     'POS product detail verifies the selected branch and applies the same branch pricing as search'],
